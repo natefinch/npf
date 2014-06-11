@@ -18,7 +18,7 @@ import (
 	"labix.org/v2/mgo/bson"
 	gc "launchpad.net/gocheck"
 
-	"github.com/juju/juju/store"
+	"github.com/juju/charmstore"
 )
 
 func (s *StoreSuite) prepareServer(c *gc.C) (*store.Server, *charm.URL) {

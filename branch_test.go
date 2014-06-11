@@ -17,7 +17,7 @@ import (
 	charmtesting "github.com/juju/charm/testing"
 	gc "launchpad.net/gocheck"
 
-	"github.com/juju/juju/store"
+	"github.com/juju/charmstore"
 )
 
 func (s *StoreSuite) dummyBranch(c *gc.C, suffix string) bzrDir {

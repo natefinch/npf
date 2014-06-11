@@ -11,7 +11,7 @@ import (
 	"github.com/juju/testing"
 	gc "launchpad.net/gocheck"
 
-	"github.com/juju/juju/store"
+	"github.com/juju/charmstore"
 )
 
 type ConfigSuite struct {

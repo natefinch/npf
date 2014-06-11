@@ -11,7 +11,7 @@ import (
 	gc "launchpad.net/gocheck"
 	"launchpad.net/lpad"
 
-	"github.com/juju/juju/store"
+	"github.com/juju/charmstore"
 )
 
 var jsonType = map[string]string{

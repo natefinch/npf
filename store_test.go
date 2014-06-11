@@ -20,7 +20,7 @@ import (
 	"labix.org/v2/mgo/bson"
 	gc "launchpad.net/gocheck"
 
-	"github.com/juju/juju/store"
+	"github.com/juju/charmstore"
 )
 
 func Test(t *testing.T) {
