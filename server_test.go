@@ -1,7 +1,7 @@
 // Copyright 2012, 2013 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package store_test
+package charmstore_test
 
 import (
 	"encoding/json"
@@ -21,14 +21,14 @@ import (
 	"github.com/juju/charmstore"
 )
 
-func (s *StoreSuite) prepareServer(c *gc.C) (*store.Server, *charm.URL) {
+func (s *StoreSuite) prepareServer(c *gc.C) (*charmstore.Server, *charm.URL) {
 	curl := charm.MustParseURL("cs:precise/wordpress")
 	pub, err := s.store.CharmPublisher([]*charm.URL{curl}, "some-digest")
 	c.Assert(err, gc.IsNil)
 	err = pub.Publish(&FakeCharmDir{})
 	c.Assert(err, gc.IsNil)
 
-	server, err := store.NewServer(s.store)
+	server, err := charmstore.NewServer(s.store)
 	c.Assert(err, gc.IsNil)
 	return server, curl
 }
@@ -86,30 +86,30 @@ func (s *StoreSuite) TestServerCharmEvent(c *gc.C) {
 	url2 := charm.MustParseURL("cs:oneiric/mysql")
 	urls := []*charm.URL{url1, url2}
 
-	event1 := &store.CharmEvent{
-		Kind:     store.EventPublished,
+	event1 := &charmstore.CharmEvent{
+		Kind:     charmstore.EventPublished,
 		Revision: 42,
 		Digest:   "revKey1",
 		URLs:     urls,
 		Warnings: []string{"A warning."},
 		Time:     time.Unix(1, 0),
 	}
-	event2 := &store.CharmEvent{
-		Kind:     store.EventPublished,
+	event2 := &charmstore.CharmEvent{
+		Kind:     charmstore.EventPublished,
 		Revision: 43,
 		Digest:   "revKey2",
 		URLs:     urls,
 		Time:     time.Unix(2, 0),
 	}
-	event3 := &store.CharmEvent{
-		Kind:   store.EventPublishError,
+	event3 := &charmstore.CharmEvent{
+		Kind:   charmstore.EventPublishError,
 		Digest: "revKey3",
 		Errors: []string{"An error."},
 		URLs:   urls[:1],
 		Time:   time.Unix(3, 0),
 	}
 
-	for _, event := range []*store.CharmEvent{event1, event2, event3} {
+	for _, event := range []*charmstore.CharmEvent{event1, event2, event3} {
 		err := s.store.LogCharmEvent(event)
 		c.Assert(err, gc.IsNil)
 	}
@@ -218,7 +218,7 @@ func (s *StoreSuite) TestServerCharmEvent(c *gc.C) {
 }
 
 func (s *StoreSuite) TestSeriesNotFound(c *gc.C) {
-	server, err := store.NewServer(s.store)
+	server, err := charmstore.NewServer(s.store)
 	req, err := http.NewRequest("GET", "/charm-info?charms=cs:not-found", nil)
 	c.Assert(err, gc.IsNil)
 	rec := httptest.NewRecorder()
@@ -244,7 +244,7 @@ func (s *StoreSuite) checkCounterSum(c *gc.C, key []string, prefix bool, expecte
 	var sum int64
 	for retry := 0; retry < 10; retry++ {
 		time.Sleep(1e8)
-		req := store.CounterRequest{Key: key, Prefix: prefix}
+		req := charmstore.CounterRequest{Key: key, Prefix: prefix}
 		cs, err := s.store.Counters(&req)
 		c.Assert(err, gc.IsNil)
 		if sum = cs[0].Count; sum == expected {
@@ -300,7 +300,7 @@ func (s *StoreSuite) TestDisableStats(c *gc.C) {
 }
 
 func (s *StoreSuite) TestServerStatus(c *gc.C) {
-	server, err := store.NewServer(s.store)
+	server, err := charmstore.NewServer(s.store)
 	c.Assert(err, gc.IsNil)
 	tests := []struct {
 		path string
@@ -325,7 +325,7 @@ func (s *StoreSuite) TestServerStatus(c *gc.C) {
 }
 
 func (s *StoreSuite) TestRootRedirect(c *gc.C) {
-	server, err := store.NewServer(s.store)
+	server, err := charmstore.NewServer(s.store)
 	c.Assert(err, gc.IsNil)
 	req, err := http.NewRequest("GET", "/", nil)
 	c.Assert(err, gc.IsNil)
@@ -456,127 +456,127 @@ func (s *StoreSuite) TestStatsCounterBy(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 
 		// Hack time so counters are assigned to 2012-05-<day>
-		filter := bson.M{"t": bson.M{"$gt": store.TimeToStamp(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))}}
-		stamp := store.TimeToStamp(day(inc.day))
+		filter := bson.M{"t": bson.M{"$gt": charmstore.TimeToStamp(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))}}
+		stamp := charmstore.TimeToStamp(day(inc.day))
 		stamp += int32(i) * 60 // Make every entry unique.
 		err = counters.Update(filter, bson.D{{"$set", bson.D{{"t", stamp}}}})
 		c.Check(err, gc.IsNil)
 	}
 
 	tests := []struct {
-		request store.CounterRequest
+		request charmstore.CounterRequest
 		format  string
 		result  string
 	}{
 		{
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: false,
 				List:   false,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 			},
 			"",
 			"2012-05-01  2\n2012-05-03  1\n",
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: false,
 				List:   false,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 			},
 			"csv",
 			"2012-05-01,2\n2012-05-03,1\n",
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: false,
 				List:   false,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 			},
 			"json",
 			`[["2012-05-01",2],["2012-05-03",1]]`,
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   false,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 			},
 			"",
 			"2012-05-01  2\n2012-05-03  1\n2012-05-09  3\n",
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   false,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 				Start:  time.Date(2012, 5, 2, 0, 0, 0, 0, time.UTC),
 			},
 			"",
 			"2012-05-03  1\n2012-05-09  3\n",
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   false,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 				Stop:   time.Date(2012, 5, 4, 0, 0, 0, 0, time.UTC),
 			},
 			"",
 			"2012-05-01  2\n2012-05-03  1\n",
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   false,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 				Start:  time.Date(2012, 5, 3, 0, 0, 0, 0, time.UTC),
 				Stop:   time.Date(2012, 5, 3, 0, 0, 0, 0, time.UTC),
 			},
 			"",
 			"2012-05-03  1\n",
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   true,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 			},
 			"",
 			"a:b    2012-05-01  1\na:c    2012-05-01  1\na:b    2012-05-03  1\na:c:*  2012-05-09  3\n",
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   false,
-				By:     store.ByWeek,
+				By:     charmstore.ByWeek,
 			},
 			"",
 			"2012-05-06  3\n2012-05-13  3\n",
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   true,
-				By:     store.ByWeek,
+				By:     charmstore.ByWeek,
 			},
 			"",
 			"a:b    2012-05-06  2\na:c    2012-05-06  1\na:c:*  2012-05-13  3\n",
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   true,
-				By:     store.ByWeek,
+				By:     charmstore.ByWeek,
 			},
 			"csv",
 			"a:b,2012-05-06,2\na:c,2012-05-06,1\na:c:*,2012-05-13,3\n",
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   true,
-				By:     store.ByWeek,
+				By:     charmstore.ByWeek,
 			},
 			"json",
 			`[["a:b","2012-05-06",2],["a:c","2012-05-06",1],["a:c:*","2012-05-13",3]]`,
@@ -604,9 +604,9 @@ func (s *StoreSuite) TestStatsCounterBy(c *gc.C) {
 			req.Form.Set("stop", test.request.Stop.Format("2006-01-02"))
 		}
 		switch test.request.By {
-		case store.ByDay:
+		case charmstore.ByDay:
 			req.Form.Set("by", "day")
-		case store.ByWeek:
+		case charmstore.ByWeek:
 			req.Form.Set("by", "week")
 		}
 		rec := httptest.NewRecorder()

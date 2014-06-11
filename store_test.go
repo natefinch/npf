@@ -1,7 +1,7 @@
 // Copyright 2011, 2012, 2013 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package store_test
+package charmstore_test
 
 import (
 	"flag"
@@ -34,7 +34,7 @@ type StoreSuite struct {
 	gitjujutesting.MgoSuite
 	gitjujutesting.HTTPSuite
 	gitjujutesting.FakeHomeSuite
-	store *store.Store
+	store *charmstore.Store
 }
 
 var noTestMongoJs *bool = flag.Bool("notest-mongojs", false, "Disable MongoDB tests that require javascript")
@@ -62,7 +62,7 @@ func (s *StoreSuite) SetUpTest(c *gc.C) {
 	s.MgoSuite.SetUpTest(c)
 	s.HTTPSuite.SetUpTest(c)
 	var err error
-	s.store, err = store.Open(gitjujutesting.MgoServer.Addr())
+	s.store, err = charmstore.Open(gitjujutesting.MgoServer.Addr())
 	c.Assert(err, gc.IsNil)
 }
 
@@ -246,7 +246,7 @@ func (s *StoreSuite) TestCharmPublishError(c *gc.C) {
 
 func (s *StoreSuite) TestCharmInfoNotFound(c *gc.C) {
 	info, err := s.store.CharmInfo(charm.MustParseURL("cs:oneiric/wordpress"))
-	c.Assert(err, gc.Equals, store.ErrNotFound)
+	c.Assert(err, gc.Equals, charmstore.ErrNotFound)
 	c.Assert(info, gc.IsNil)
 }
 
@@ -289,7 +289,7 @@ func (s *StoreSuite) TestRevisioning(c *gc.C) {
 	}
 
 	info, rc, err := s.store.OpenCharm(urlA.WithRevision(1))
-	c.Assert(err, gc.Equals, store.ErrNotFound)
+	c.Assert(err, gc.Equals, charmstore.ErrNotFound)
 	c.Assert(info, gc.IsNil)
 	c.Assert(rc, gc.IsNil)
 }
@@ -305,7 +305,7 @@ func (s *StoreSuite) TestLockUpdates(c *gc.C) {
 
 	// Partially conflicts with locked update above.
 	lock2, err := s.store.LockUpdates(urls)
-	c.Check(err, gc.Equals, store.ErrUpdateConflict)
+	c.Check(err, gc.Equals, charmstore.ErrUpdateConflict)
 	c.Check(lock2, gc.IsNil)
 
 	lock1.Unlock()
@@ -328,7 +328,7 @@ func (s *StoreSuite) TestLockUpdatesExpires(c *gc.C) {
 	// Hack time to force an expiration.
 	locks := s.Session.DB("juju").C("locks")
 	selector := bson.M{"_id": urlB.String()}
-	update := bson.M{"time": bson.Now().Add(-store.UpdateTimeout - 10e9)}
+	update := bson.M{"time": bson.Now().Add(-charmstore.UpdateTimeout - 10e9)}
 	err = locks.Update(selector, update)
 	c.Check(err, gc.IsNil)
 
@@ -344,7 +344,7 @@ func (s *StoreSuite) TestLockUpdatesExpires(c *gc.C) {
 	// The above statement was a NOOP and lock2 is still in effect,
 	// so attempting another lock must necessarily fail.
 	lock3, err := s.store.LockUpdates(urls)
-	c.Check(err, gc.Equals, store.ErrUpdateConflict)
+	c.Check(err, gc.Equals, charmstore.ErrUpdateConflict)
 	c.Check(lock3, gc.IsNil)
 }
 
@@ -474,7 +474,7 @@ func (s *StoreSuite) TestConflictingUpdate(c *gc.C) {
 	// since it lost the race and the given revision is already
 	// in place.
 	err = pub1.Publish(&FakeCharmDir{})
-	c.Assert(err, gc.Equals, store.ErrUpdateConflict)
+	c.Assert(err, gc.Equals, charmstore.ErrUpdateConflict)
 }
 
 func (s *StoreSuite) TestRedundantUpdate(c *gc.C) {
@@ -491,7 +491,7 @@ func (s *StoreSuite) TestRedundantUpdate(c *gc.C) {
 	// All charms are already on digest-0.
 	pub, err = s.store.CharmPublisher(urls, "digest-0")
 	c.Assert(err, gc.ErrorMatches, "charm is up-to-date")
-	c.Assert(err, gc.Equals, store.ErrRedundantUpdate)
+	c.Assert(err, gc.Equals, charmstore.ErrRedundantUpdate)
 	c.Assert(pub, gc.IsNil)
 
 	// Now add a second revision just for wordpress-b.
@@ -532,8 +532,8 @@ func (s *StoreSuite) TestCharmBundleData(c *gc.C) {
 
 func (s *StoreSuite) TestLogCharmEventWithRevisionedURL(c *gc.C) {
 	url := charm.MustParseURL("cs:oneiric/wordpress-0")
-	event := &store.CharmEvent{
-		Kind:   store.EventPublishError,
+	event := &charmstore.CharmEvent{
+		Kind:   charmstore.EventPublishError,
 		Digest: "some-digest",
 		URLs:   []*charm.URL{url},
 	}
@@ -551,29 +551,29 @@ func (s *StoreSuite) TestLogCharmEvent(c *gc.C) {
 	url2 := charm.MustParseURL("cs:oneiric/mysql")
 	urls := []*charm.URL{url1, url2}
 
-	event1 := &store.CharmEvent{
-		Kind:     store.EventPublished,
+	event1 := &charmstore.CharmEvent{
+		Kind:     charmstore.EventPublished,
 		Revision: 42,
 		Digest:   "revKey1",
 		URLs:     urls,
 		Warnings: []string{"A warning."},
 		Time:     time.Unix(1, 0),
 	}
-	event2 := &store.CharmEvent{
-		Kind:     store.EventPublished,
+	event2 := &charmstore.CharmEvent{
+		Kind:     charmstore.EventPublished,
 		Revision: 42,
 		Digest:   "revKey2",
 		URLs:     urls,
 		Time:     time.Unix(1, 0),
 	}
-	event3 := &store.CharmEvent{
-		Kind:   store.EventPublishError,
+	event3 := &charmstore.CharmEvent{
+		Kind:   charmstore.EventPublishError,
 		Digest: "revKey2",
 		Errors: []string{"An error."},
 		URLs:   urls[:1],
 	}
 
-	for _, event := range []*store.CharmEvent{event1, event2, event3} {
+	for _, event := range []*charmstore.CharmEvent{event1, event2, event3} {
 		err := s.store.LogCharmEvent(event)
 		c.Assert(err, gc.IsNil)
 	}
@@ -583,13 +583,13 @@ func (s *StoreSuite) TestLogCharmEvent(c *gc.C) {
 
 	err := events.Find(bson.M{"digest": "revKey1"}).One(&s1)
 	c.Assert(err, gc.IsNil)
-	c.Assert(s1["kind"], gc.Equals, int(store.EventPublished))
+	c.Assert(s1["kind"], gc.Equals, int(charmstore.EventPublished))
 	c.Assert(s1["urls"], gc.DeepEquals, []interface{}{"cs:oneiric/wordpress", "cs:oneiric/mysql"})
 	c.Assert(s1["warnings"], gc.DeepEquals, []interface{}{"A warning."})
 	c.Assert(s1["errors"], gc.IsNil)
 	c.Assert(s1["time"], gc.DeepEquals, time.Unix(1, 0))
 
-	err = events.Find(bson.M{"digest": "revKey2", "kind": store.EventPublishError}).One(&s2)
+	err = events.Find(bson.M{"digest": "revKey2", "kind": charmstore.EventPublishError}).One(&s2)
 	c.Assert(err, gc.IsNil)
 	c.Assert(s2["urls"], gc.DeepEquals, []interface{}{"cs:oneiric/wordpress"})
 	c.Assert(s2["warnings"], gc.IsNil)
@@ -609,7 +609,7 @@ func (s *StoreSuite) TestLogCharmEvent(c *gc.C) {
 	c.Assert(event, gc.DeepEquals, event1)
 
 	event, err = s.store.CharmEvent(urls[1], "revKeyX")
-	c.Assert(err, gc.Equals, store.ErrNotFound)
+	c.Assert(err, gc.Equals, charmstore.ErrNotFound)
 	c.Assert(event, gc.IsNil)
 }
 
@@ -618,10 +618,10 @@ func (s *StoreSuite) TestSumCounters(c *gc.C) {
 		c.Skip("MongoDB javascript not available")
 	}
 
-	req := store.CounterRequest{Key: []string{"a"}}
+	req := charmstore.CounterRequest{Key: []string{"a"}}
 	cs, err := s.store.Counters(&req)
 	c.Assert(err, gc.IsNil)
-	c.Assert(cs, gc.DeepEquals, []store.Counter{{Key: req.Key, Count: 0}})
+	c.Assert(cs, gc.DeepEquals, []charmstore.Counter{{Key: req.Key, Count: 0}})
 
 	for i := 0; i < 10; i++ {
 		err := s.store.IncCounter([]string{"a", "b", "c"})
@@ -653,10 +653,10 @@ func (s *StoreSuite) TestSumCounters(c *gc.C) {
 
 	for _, t := range tests {
 		c.Logf("Test: %#v\n", t)
-		req = store.CounterRequest{Key: t.key, Prefix: t.prefix}
+		req = charmstore.CounterRequest{Key: t.key, Prefix: t.prefix}
 		cs, err := s.store.Counters(&req)
 		c.Assert(err, gc.IsNil)
-		c.Assert(cs, gc.DeepEquals, []store.Counter{{Key: t.key, Prefix: t.prefix, Count: t.result}})
+		c.Assert(cs, gc.DeepEquals, []charmstore.Counter{{Key: t.key, Prefix: t.prefix, Count: t.result}})
 	}
 
 	// High-level interface works. Now check that the data is
@@ -679,15 +679,15 @@ func (s *StoreSuite) TestSumCounters(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(docs2, gc.Equals, docs1+1)
 
-	req = store.CounterRequest{Key: []string{"a", "b", "c"}}
+	req = charmstore.CounterRequest{Key: []string{"a", "b", "c"}}
 	cs, err = s.store.Counters(&req)
 	c.Assert(err, gc.IsNil)
-	c.Assert(cs, gc.DeepEquals, []store.Counter{{Key: req.Key, Count: 11}})
+	c.Assert(cs, gc.DeepEquals, []charmstore.Counter{{Key: req.Key, Count: 11}})
 
-	req = store.CounterRequest{Key: []string{"a"}, Prefix: true}
+	req = charmstore.CounterRequest{Key: []string{"a"}, Prefix: true}
 	cs, err = s.store.Counters(&req)
 	c.Assert(err, gc.IsNil)
-	c.Assert(cs, gc.DeepEquals, []store.Counter{{Key: req.Key, Prefix: true, Count: 21}})
+	c.Assert(cs, gc.DeepEquals, []charmstore.Counter{{Key: req.Key, Prefix: true, Count: 21}})
 }
 
 func (s *StoreSuite) TestCountersReadOnlySum(c *gc.C) {
@@ -696,7 +696,7 @@ func (s *StoreSuite) TestCountersReadOnlySum(c *gc.C) {
 	}
 
 	// Summing up an unknown key shouldn't add the key to the database.
-	req := store.CounterRequest{Key: []string{"a", "b", "c"}}
+	req := charmstore.CounterRequest{Key: []string{"a", "b", "c"}}
 	_, err := s.store.Counters(&req)
 	c.Assert(err, gc.IsNil)
 
@@ -712,7 +712,7 @@ func (s *StoreSuite) TestCountersTokenCaching(c *gc.C) {
 	}
 
 	assertSum := func(i int, want int64) {
-		req := store.CounterRequest{Key: []string{strconv.Itoa(i)}}
+		req := charmstore.CounterRequest{Key: []string{strconv.Itoa(i)}}
 		cs, err := s.store.Counters(&req)
 		c.Assert(err, gc.IsNil)
 		c.Assert(cs[0].Count, gc.Equals, want)
@@ -784,7 +784,7 @@ func (s *StoreSuite) TestCounterTokenUniqueness(c *gc.C) {
 	}
 	wg1.Wait()
 
-	req := store.CounterRequest{Key: []string{"a"}}
+	req := charmstore.CounterRequest{Key: []string{"a"}}
 	cs, err := s.store.Counters(&req)
 	c.Assert(err, gc.IsNil)
 	c.Assert(cs[0].Count, gc.Equals, int64(10))
@@ -817,11 +817,11 @@ func (s *StoreSuite) TestListCounters(c *gc.C) {
 
 	tests := []struct {
 		prefix []string
-		result []store.Counter
+		result []charmstore.Counter
 	}{
 		{
 			[]string{"a"},
-			[]store.Counter{
+			[]charmstore.Counter{
 				{Key: []string{"a", "b"}, Prefix: true, Count: 4},
 				{Key: []string{"a", "f"}, Prefix: true, Count: 2},
 				{Key: []string{"a", "b"}, Prefix: false, Count: 1},
@@ -831,24 +831,24 @@ func (s *StoreSuite) TestListCounters(c *gc.C) {
 			},
 		}, {
 			[]string{"a", "b"},
-			[]store.Counter{
+			[]charmstore.Counter{
 				{Key: []string{"a", "b", "c"}, Prefix: false, Count: 2},
 				{Key: []string{"a", "b", "d"}, Prefix: false, Count: 1},
 				{Key: []string{"a", "b", "e"}, Prefix: false, Count: 1},
 			},
 		}, {
 			[]string{"z"},
-			[]store.Counter(nil),
+			[]charmstore.Counter(nil),
 		},
 	}
 
 	// Use a different store to exercise cache filling.
-	st, err := store.Open(gitjujutesting.MgoServer.Addr())
+	st, err := charmstore.Open(gitjujutesting.MgoServer.Addr())
 	c.Assert(err, gc.IsNil)
 	defer st.Close()
 
 	for i := range tests {
-		req := &store.CounterRequest{Key: tests[i].prefix, Prefix: true, List: true}
+		req := &charmstore.CounterRequest{Key: tests[i].prefix, Prefix: true, List: true}
 		result, err := st.Counters(req)
 		c.Assert(err, gc.IsNil)
 		c.Assert(result, gc.DeepEquals, tests[i].result)
@@ -888,108 +888,108 @@ func (s *StoreSuite) TestListCountersBy(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 
 		// Hack time so counters are assigned to 2012-05-<day>
-		filter := bson.M{"t": bson.M{"$gt": store.TimeToStamp(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))}}
-		stamp := store.TimeToStamp(day(inc.day))
+		filter := bson.M{"t": bson.M{"$gt": charmstore.TimeToStamp(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))}}
+		stamp := charmstore.TimeToStamp(day(inc.day))
 		stamp += int32(i) * 60 // Make every entry unique.
 		err = counters.Update(filter, bson.D{{"$set", bson.D{{"t", stamp}}}})
 		c.Check(err, gc.IsNil)
 	}
 
 	tests := []struct {
-		request store.CounterRequest
-		result  []store.Counter
+		request charmstore.CounterRequest
+		result  []charmstore.Counter
 	}{
 		{
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: false,
 				List:   false,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 			},
-			[]store.Counter{
+			[]charmstore.Counter{
 				{Key: []string{"a"}, Prefix: false, Count: 2, Time: day(1)},
 				{Key: []string{"a"}, Prefix: false, Count: 1, Time: day(3)},
 			},
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   false,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 			},
-			[]store.Counter{
+			[]charmstore.Counter{
 				{Key: []string{"a"}, Prefix: true, Count: 2, Time: day(1)},
 				{Key: []string{"a"}, Prefix: true, Count: 1, Time: day(3)},
 				{Key: []string{"a"}, Prefix: true, Count: 3, Time: day(9)},
 			},
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   false,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 				Start:  day(2),
 			},
-			[]store.Counter{
+			[]charmstore.Counter{
 				{Key: []string{"a"}, Prefix: true, Count: 1, Time: day(3)},
 				{Key: []string{"a"}, Prefix: true, Count: 3, Time: day(9)},
 			},
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   false,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 				Stop:   day(4),
 			},
-			[]store.Counter{
+			[]charmstore.Counter{
 				{Key: []string{"a"}, Prefix: true, Count: 2, Time: day(1)},
 				{Key: []string{"a"}, Prefix: true, Count: 1, Time: day(3)},
 			},
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   false,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 				Start:  day(3),
 				Stop:   day(8),
 			},
-			[]store.Counter{
+			[]charmstore.Counter{
 				{Key: []string{"a"}, Prefix: true, Count: 1, Time: day(3)},
 			},
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   true,
-				By:     store.ByDay,
+				By:     charmstore.ByDay,
 			},
-			[]store.Counter{
+			[]charmstore.Counter{
 				{Key: []string{"a", "b"}, Prefix: false, Count: 1, Time: day(1)},
 				{Key: []string{"a", "c"}, Prefix: false, Count: 1, Time: day(1)},
 				{Key: []string{"a", "b"}, Prefix: false, Count: 1, Time: day(3)},
 				{Key: []string{"a", "c"}, Prefix: true, Count: 3, Time: day(9)},
 			},
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   false,
-				By:     store.ByWeek,
+				By:     charmstore.ByWeek,
 			},
-			[]store.Counter{
+			[]charmstore.Counter{
 				{Key: []string{"a"}, Prefix: true, Count: 3, Time: day(6)},
 				{Key: []string{"a"}, Prefix: true, Count: 3, Time: day(13)},
 			},
 		}, {
-			store.CounterRequest{
+			charmstore.CounterRequest{
 				Key:    []string{"a"},
 				Prefix: true,
 				List:   true,
-				By:     store.ByWeek,
+				By:     charmstore.ByWeek,
 			},
-			[]store.Counter{
+			[]charmstore.Counter{
 				{Key: []string{"a", "b"}, Prefix: false, Count: 2, Time: day(6)},
 				{Key: []string{"a", "c"}, Prefix: false, Count: 1, Time: day(6)},
 				{Key: []string{"a", "c"}, Prefix: true, Count: 3, Time: day(13)},
@@ -1005,9 +1005,9 @@ func (s *StoreSuite) TestListCountersBy(c *gc.C) {
 }
 
 func (s *TrivialSuite) TestEventString(c *gc.C) {
-	c.Assert(store.EventPublished, gc.Matches, "published")
-	c.Assert(store.EventPublishError, gc.Matches, "publish-error")
-	for kind := store.CharmEventKind(1); kind < store.EventKindCount; kind++ {
+	c.Assert(charmstore.EventPublished, gc.Matches, "published")
+	c.Assert(charmstore.EventPublishError, gc.Matches, "publish-error")
+	for kind := charmstore.CharmEventKind(1); kind < charmstore.EventKindCount; kind++ {
 		// This guarantees the switch in String is properly
 		// updated with new event kinds.
 		c.Assert(kind.String(), gc.Matches, "[a-z-]+")

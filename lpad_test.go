@@ -1,7 +1,7 @@
 // Copyright 2012, 2013 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package store_test
+package charmstore_test
 
 import (
 	"fmt"
@@ -35,14 +35,14 @@ func (s *StoreSuite) TestPublishCharmDistro(c *gc.C) {
 	gitjujutesting.Server.Response(200, jsonType, []byte(data))
 
 	apiBase := lpad.APIBase(gitjujutesting.Server.URL)
-	err := store.PublishCharmsDistro(s.store, apiBase)
+	err := charmstore.PublishCharmsDistro(s.store, apiBase)
 
 	// Should have a single failure from the trunk branch that doesn't
 	// exist. The redundant update with the known digest should be
 	// ignored, and skip-me isn't a supported branch name so it's
 	// ignored as well.
 	c.Assert(err, gc.ErrorMatches, `1 branch\(es\) failed to be published`)
-	berr := err.(store.PublishBranchErrors)[0]
+	berr := err.(charmstore.PublishBranchErrors)[0]
 	c.Assert(berr.URL, gc.Equals, "file:///non-existent/~jeff/charms/precise/bad/trunk")
 	c.Assert(berr.Err, gc.ErrorMatches, "(?s).*bzr: ERROR: Not a branch.*")
 
@@ -54,7 +54,7 @@ func (s *StoreSuite) TestPublishCharmDistro(c *gc.C) {
 
 	// The known digest should have been ignored, so revision is still at 0.
 	_, err = s.store.CharmInfo(charm.MustParseURL("cs:~joe/oneiric/dummy-1"))
-	c.Assert(err, gc.Equals, store.ErrNotFound)
+	c.Assert(err, gc.Equals, charmstore.ErrNotFound)
 
 	// bare /charms lookup
 	req := gitjujutesting.Server.WaitRequest()
