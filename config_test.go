@@ -1,7 +1,7 @@
 // Copyright 2012, 2013 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package store_test
+package charmstore_test
 
 import (
 	"fmt"
@@ -36,7 +36,7 @@ func (s *ConfigSuite) TestReadConfig(c *gc.C) {
 		fmt.Fprint(f, testConfig)
 	}
 
-	dstr, err := store.ReadConfig(cfgPath)
+	dstr, err := charmstore.ReadConfig(cfgPath)
 	c.Assert(err, gc.IsNil)
 	c.Assert(dstr.MongoURL, gc.Equals, "localhost:23456")
 }

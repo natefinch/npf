@@ -1,7 +1,7 @@
 // Copyright 2012, 2013 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package store_test
+package charmstore_test
 
 import (
 	"bytes"
@@ -67,7 +67,7 @@ func (s *StoreSuite) TestPublish(c *gc.C) {
 	plugin.install(c.MkDir(), `import sys; sys.stderr.write("STDERR STUFF FROM TEST\n")`)
 	defer plugin.uninstall()
 
-	err := store.PublishBazaarBranch(s.store, urls, branch.path(), "wrong-rev")
+	err := charmstore.PublishBazaarBranch(s.store, urls, branch.path(), "wrong-rev")
 	c.Assert(err, gc.IsNil)
 
 	for _, url := range urls {
@@ -89,8 +89,8 @@ func (s *StoreSuite) TestPublish(c *gc.C) {
 	// Attempt to publish the same content again while providing the wrong
 	// tip revision. It must pick the real revision from the branch and
 	// note this was previously published.
-	err = store.PublishBazaarBranch(s.store, urls, branch.path(), "wrong-rev")
-	c.Assert(err, gc.Equals, store.ErrRedundantUpdate)
+	err = charmstore.PublishBazaarBranch(s.store, urls, branch.path(), "wrong-rev")
+	c.Assert(err, gc.Equals, charmstore.ErrRedundantUpdate)
 
 	// Bump the content revision and lie again about the known tip revision.
 	// This time, though, pretend it's the same as the real branch revision
@@ -101,11 +101,11 @@ func (s *StoreSuite) TestPublish(c *gc.C) {
 	// revision is picked in the next scan.
 	digest1 := branch.digest()
 	branch.change()
-	err = store.PublishBazaarBranch(s.store, urls, branch.path(), digest1)
-	c.Assert(err, gc.Equals, store.ErrRedundantUpdate)
+	err = charmstore.PublishBazaarBranch(s.store, urls, branch.path(), digest1)
+	c.Assert(err, gc.Equals, charmstore.ErrRedundantUpdate)
 
 	// Now allow it to publish the new content by providing an unseen revision.
-	err = store.PublishBazaarBranch(s.store, urls, branch.path(), "wrong-rev")
+	err = charmstore.PublishBazaarBranch(s.store, urls, branch.path(), "wrong-rev")
 	c.Assert(err, gc.IsNil)
 	digest2 := branch.digest()
 
@@ -118,11 +118,11 @@ func (s *StoreSuite) TestPublish(c *gc.C) {
 	// The failures are ignored given that they are artifacts of the
 	// publishing mechanism rather than actual problems.
 	_, err = s.store.CharmEvent(urls[0], "wrong-rev")
-	c.Assert(err, gc.Equals, store.ErrNotFound)
+	c.Assert(err, gc.Equals, charmstore.ErrNotFound)
 	for i, digest := range []string{digest1, digest2} {
 		event, err := s.store.CharmEvent(urls[0], digest)
 		c.Assert(err, gc.IsNil)
-		c.Assert(event.Kind, gc.Equals, store.EventPublished)
+		c.Assert(event.Kind, gc.Equals, charmstore.EventPublished)
 		c.Assert(event.Revision, gc.Equals, i)
 		c.Assert(event.Errors, gc.IsNil)
 		c.Assert(event.Warnings, gc.IsNil)
@@ -140,7 +140,7 @@ func (s *StoreSuite) TestPublishErrorFromBzr(c *gc.C) {
 	plugin.install(c.MkDir(), `import sys; sys.stderr.write("STDERR STUFF FROM TEST\n"); sys.exit(1)`)
 	defer plugin.uninstall()
 
-	err := store.PublishBazaarBranch(s.store, urls, branch.path(), "wrong-rev")
+	err := charmstore.PublishBazaarBranch(s.store, urls, branch.path(), "wrong-rev")
 	c.Assert(err, gc.ErrorMatches, "(?s).*STDERR STUFF.*")
 }
 
@@ -152,14 +152,14 @@ func (s *StoreSuite) TestPublishErrorInCharm(c *gc.C) {
 	branch.commit("Removed metadata.yaml.")
 
 	// Attempt to publish the erroneous content.
-	err := store.PublishBazaarBranch(s.store, urls, branch.path(), "wrong-rev")
+	err := charmstore.PublishBazaarBranch(s.store, urls, branch.path(), "wrong-rev")
 	c.Assert(err, gc.ErrorMatches, ".*/metadata.yaml: no such file or directory")
 
 	// The event should be logged as well, since this was an error in the charm
 	// that won't go away and must be communicated to the author.
 	event, err := s.store.CharmEvent(urls[0], branch.digest())
 	c.Assert(err, gc.IsNil)
-	c.Assert(event.Kind, gc.Equals, store.EventPublishError)
+	c.Assert(event.Kind, gc.Equals, charmstore.EventPublishError)
 	c.Assert(event.Revision, gc.Equals, 0)
 	c.Assert(event.Errors, gc.NotNil)
 	c.Assert(event.Errors[0], gc.Matches, ".*/metadata.yaml: no such file or directory")
