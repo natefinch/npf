@@ -4,9 +4,8 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"path"
+	"io/ioutil"
+	"path/filepath"
 
 	"github.com/juju/cmd"
 	"github.com/juju/cmd/cmdtesting"
@@ -14,11 +13,11 @@ import (
 	gc "launchpad.net/gocheck"
 )
 
-type ConfigSuite struct {
+type configSuite struct {
 	gitjujutesting.IsolationSuite
 }
 
-var _ = gc.Suite(&ConfigSuite{})
+var _ = gc.Suite(&configSuite{})
 
 const testConfig = `
 mongo-url: localhost:23456
@@ -26,41 +25,28 @@ foo: 1
 bar: false
 `
 
-func (s *ConfigSuite) SetUpSuite(c *gc.C) {
-	s.IsolationSuite.SetUpSuite(c)
-}
-
-func (s *ConfigSuite) TearDownSuite(c *gc.C) {
-	s.IsolationSuite.TearDownSuite(c)
-}
-
-type SomeConfigCommand struct {
+type someConfigCommand struct {
 	ConfigCommand
 }
 
-func (c *SomeConfigCommand) Info() *cmd.Info {
+func (c *someConfigCommand) Info() *cmd.Info {
 	return &cmd.Info{
 		Name:    "some-cmd",
 		Purpose: "something in particular that requires configuration",
 	}
 }
 
-func (c *SomeConfigCommand) Run(ctx *cmd.Context) error {
+func (c *someConfigCommand) Run(ctx *cmd.Context) error {
 	return c.ReadConfig(ctx)
 }
 
-func (s *ConfigSuite) TestReadConfig(c *gc.C) {
-	confDir := c.MkDir()
-	f, err := os.Create(path.Join(confDir, "charmd.conf"))
+func (s *configSuite) TestReadConfig(c *gc.C) {
+	configPath := filepath.Join(c.MkDir(), "charmd.conf")
+	err := ioutil.WriteFile(configPath, []byte(testConfig), 0666)
 	c.Assert(err, gc.IsNil)
-	cfgPath := f.Name()
-	{
-		defer f.Close()
-		fmt.Fprint(f, testConfig)
-	}
 
-	config := &SomeConfigCommand{}
-	args := []string{"--config", cfgPath}
+	config := &someConfigCommand{}
+	args := []string{"--config", configPath}
 	err = cmdtesting.InitCommand(config, args)
 	c.Assert(err, gc.IsNil)
 	_, err = cmdtesting.RunCommand(c, config, args...)
