@@ -9,12 +9,13 @@ import (
 	"path"
 
 	"github.com/juju/cmd"
-	"github.com/juju/juju/testing"
+	"github.com/juju/cmd/cmdtesting"
+	gitjujutesting "github.com/juju/testing"
 	gc "launchpad.net/gocheck"
 )
 
 type ConfigSuite struct {
-	testing.BaseSuite
+	gitjujutesting.IsolationSuite
 }
 
 var _ = gc.Suite(&ConfigSuite{})
@@ -26,11 +27,11 @@ bar: false
 `
 
 func (s *ConfigSuite) SetUpSuite(c *gc.C) {
-	s.BaseSuite.SetUpSuite(c)
+	s.IsolationSuite.SetUpSuite(c)
 }
 
 func (s *ConfigSuite) TearDownSuite(c *gc.C) {
-	s.BaseSuite.TearDownSuite(c)
+	s.IsolationSuite.TearDownSuite(c)
 }
 
 type SomeConfigCommand struct {
@@ -60,9 +61,9 @@ func (s *ConfigSuite) TestReadConfig(c *gc.C) {
 
 	config := &SomeConfigCommand{}
 	args := []string{"--config", cfgPath}
-	err = testing.InitCommand(config, args)
+	err = cmdtesting.InitCommand(config, args)
 	c.Assert(err, gc.IsNil)
-	_, err = testing.RunCommand(c, config, args...)
+	_, err = cmdtesting.RunCommand(c, config, args...)
 	c.Assert(err, gc.IsNil)
 
 	c.Assert(config.Config, gc.NotNil)
