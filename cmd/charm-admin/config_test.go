@@ -8,10 +8,9 @@ import (
 	"os"
 	"path"
 
-	gc "launchpad.net/gocheck"
-
-	"github.com/juju/juju/cmd"
+	"github.com/juju/cmd"
 	"github.com/juju/juju/testing"
+	gc "launchpad.net/gocheck"
 )
 
 type ConfigSuite struct {

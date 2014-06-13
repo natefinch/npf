@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/juju/juju/cmd"
+	"github.com/juju/cmd"
 )
 
 func main() {

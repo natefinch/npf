@@ -8,8 +8,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/juju/charmstore"
 	"launchpad.net/lpad"
+
+	"github.com/juju/charmstore"
 )
 
 func main() {

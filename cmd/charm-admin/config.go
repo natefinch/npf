@@ -6,10 +6,10 @@ package main
 import (
 	"fmt"
 
-	"github.com/juju/charmstore"
+	"github.com/juju/cmd"
 	"launchpad.net/gnuflag"
 
-	"github.com/juju/juju/cmd"
+	"github.com/juju/charmstore"
 )
 
 // ConfigCommand defines a command which requires a YAML config file.

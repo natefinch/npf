@@ -10,11 +10,11 @@ import (
 
 	"github.com/juju/charm"
 	charmtesting "github.com/juju/charm/testing"
-	"github.com/juju/charmstore"
+	"github.com/juju/juju/testing"
 	gitjujutesting "github.com/juju/testing"
 	gc "launchpad.net/gocheck"
 
-	"github.com/juju/juju/testing"
+	"github.com/juju/charmstore"
 )
 
 type DeleteCharmSuite struct {
