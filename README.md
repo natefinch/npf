@@ -6,7 +6,7 @@ Store and publish Juju charms.
 
 To start using the charm store, run the following:
 
-    go get github.com/juju/charmstore
+    go get -u -v -t github.com/juju/charmstore/...
 
 ## Go dependencies
 
@@ -18,7 +18,7 @@ to the revision specified in the `dependencies.tsv` file with the following:
 
 Use `make create-deps` to update the dependencies file.
 
-## Devlopment environment
+## Development environment
 
 A couple of system packages are required in order to set up a charm store
 development environment. To install them, run the following:
