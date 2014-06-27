@@ -30,25 +30,19 @@ func NewServer(store *Store) (*Server, error) {
 		store: store,
 		mux:   http.NewServeMux(),
 	}
-	s.mux.HandleFunc("/charm-info", func(w http.ResponseWriter, r *http.Request) {
-		s.serveInfo(w, r)
-	})
-	s.mux.HandleFunc("/charm-event", func(w http.ResponseWriter, r *http.Request) {
-		s.serveEvent(w, r)
-	})
-	s.mux.HandleFunc("/charm/", func(w http.ResponseWriter, r *http.Request) {
-		s.serveCharm(w, r)
-	})
-	s.mux.HandleFunc("/stats/counter/", func(w http.ResponseWriter, r *http.Request) {
-		s.serveStats(w, r)
-	})
+	s.handle("/charm-info", s.serveInfo)
+	s.handle("/charm-event", s.serveEvent)
+	s.handle("/charm/", s.serveCharm)
+	s.handle("/stats/counter/", s.serveStats)
 
 	// This is just a validation key to allow blitz.io to run
 	// performance tests against the site.
-	s.mux.HandleFunc("/mu-35700a31-6bf320ca-a800b670-05f845ee", func(w http.ResponseWriter, r *http.Request) {
-		s.serveBlitzKey(w, r)
-	})
+	s.handle("/mu-35700a31-6bf320ca-a800b670-05f845ee", s.serveBlitzKey)
 	return s, nil
+}
+
+func (s *Server) handle(path string, handler http.HandlerFunc) {
+	s.mux.Handle(path, http.StripPrefix(path, handler))
 }
 
 // ServeHTTP serves an http request.
@@ -94,10 +88,6 @@ func (s *Server) resolveURL(url string) (*charm.URL, error) {
 }
 
 func (s *Server) serveInfo(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/charm-info" {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
 	r.ParseForm()
 	response := map[string]*charm.InfoResponse{}
 	for _, url := range r.Form["charms"] {
@@ -138,10 +128,6 @@ func (s *Server) serveInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveEvent(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/charm-event" {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
 	r.ParseForm()
 	response := map[string]*charm.EventResponse{}
 	for _, url := range r.Form["charms"] {
@@ -195,10 +181,7 @@ func (s *Server) serveEvent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveCharm(w http.ResponseWriter, r *http.Request) {
-	if !strings.HasPrefix(r.URL.Path, "/charm/") {
-		panic("serveCharm: bad url")
-	}
-	curl, err := s.resolveURL("cs:" + r.URL.Path[len("/charm/"):])
+	curl, err := s.resolveURL("cs:" + r.URL.Path)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -228,11 +211,7 @@ func (s *Server) serveCharm(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) serveStats(w http.ResponseWriter, r *http.Request) {
 	// TODO: Adopt a smarter mux that simplifies this logic.
-	const dir = "/stats/counter/"
-	if !strings.HasPrefix(r.URL.Path, dir) {
-		panic("bad url")
-	}
-	base := r.URL.Path[len(dir):]
+	base := r.URL.Path
 	if strings.Index(base, "/") > 0 {
 		w.WriteHeader(http.StatusNotFound)
 		return

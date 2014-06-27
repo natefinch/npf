@@ -35,8 +35,6 @@ func (s *StoreSuite) prepareServer(c *gc.C) (*charmstore.Server, *charm.URL) {
 
 func (s *StoreSuite) TestServerCharmInfo(c *gc.C) {
 	server, curl := s.prepareServer(c)
-	req, err := http.NewRequest("GET", "/charm-info", nil)
-	c.Assert(err, gc.IsNil)
 
 	var tests = []struct{ url, canonical, sha, digest, err string }{
 		{curl.String(), curl.String(), fakeRevZeroSha, "some-digest", ""},
@@ -46,7 +44,10 @@ func (s *StoreSuite) TestServerCharmInfo(c *gc.C) {
 		{"gopher:archie-server", "", "", "", `charm URL has invalid schema: "gopher:archie-server"`},
 	}
 
-	for _, t := range tests {
+	for i, t := range tests {
+		c.Logf("test %d: %s", i, t.url)
+		req, err := http.NewRequest("GET", "/charm-info", nil)
+		c.Assert(err, gc.IsNil)
 		req.Form = url.Values{"charms": []string{t.url}}
 		rec := httptest.NewRecorder()
 		server.ServeHTTP(rec, req)
@@ -66,6 +67,7 @@ func (s *StoreSuite) TestServerCharmInfo(c *gc.C) {
 			}
 		}
 		obtained := map[string]interface{}{}
+		c.Logf("got %s\n", rec.Body.Bytes())
 		err = json.NewDecoder(rec.Body).Decode(&obtained)
 		c.Assert(err, gc.IsNil)
 		c.Assert(obtained, gc.DeepEquals, expected, gc.Commentf("URL: %s", t.url))
@@ -79,8 +81,6 @@ func (s *StoreSuite) TestServerCharmInfo(c *gc.C) {
 
 func (s *StoreSuite) TestServerCharmEvent(c *gc.C) {
 	server, _ := s.prepareServer(c)
-	req, err := http.NewRequest("GET", "/charm-event", nil)
-	c.Assert(err, gc.IsNil)
 
 	url1 := charm.MustParseURL("cs:oneiric/wordpress")
 	url2 := charm.MustParseURL("cs:oneiric/mysql")
@@ -148,6 +148,8 @@ func (s *StoreSuite) TestServerCharmEvent(c *gc.C) {
 	}
 
 	for _, t := range tests {
+		req, err := http.NewRequest("GET", "/charm-event", nil)
+		c.Assert(err, gc.IsNil)
 		req.Form = url.Values{"charms": []string{t.query}}
 		rec := httptest.NewRecorder()
 		server.ServeHTTP(rec, req)
@@ -198,6 +200,8 @@ func (s *StoreSuite) TestServerCharmEvent(c *gc.C) {
 		"errors":   []interface{}{"An error."},
 		"time":     "1970-01-01T00:00:03Z"}
 
+	req, err := http.NewRequest("GET", "/charm-event", nil)
+	c.Assert(err, gc.IsNil)
 	req.Form = url.Values{"charms": []string{query1, query3}}
 	rec := httptest.NewRecorder()
 	server.ServeHTTP(rec, req)
@@ -207,6 +211,8 @@ func (s *StoreSuite) TestServerCharmEvent(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(obtained, jc.DeepEquals, expected)
 
+	req, err = http.NewRequest("GET", "/charm-event", nil)
+	c.Assert(err, gc.IsNil)
 	req.Form = url.Values{"charms": []string{query1, query3}, "long_keys": []string{"1"}}
 	rec = httptest.NewRecorder()
 	server.ServeHTTP(rec, req)
