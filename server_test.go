@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/juju/charm.v2"
 	jc "github.com/juju/testing/checkers"
+	"gopkg.in/juju/charm.v2"
 	"labix.org/v2/mgo/bson"
 	gc "launchpad.net/gocheck"
 

@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"gopkg.in/juju/charm.v2"
 	"github.com/juju/loggo"
+	"gopkg.in/juju/charm.v2"
 	"labix.org/v2/mgo"
 	"labix.org/v2/mgo/bson"
 )

@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
+	gitjujutesting "github.com/juju/testing"
 	"gopkg.in/juju/charm.v2"
 	charmtesting "gopkg.in/juju/charm.v2/testing"
-	gitjujutesting "github.com/juju/testing"
 	"labix.org/v2/mgo/bson"
 	gc "launchpad.net/gocheck"
 
