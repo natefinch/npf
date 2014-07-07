@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/juju/charm"
+	"gopkg.in/juju/charm.v2"
 )
 
 const DefaultSeries = "precise"
@@ -102,7 +102,7 @@ func (s *Server) serveInfo(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			skey = charmStatsKey(curl, "charm-info")
 			c.CanonicalURL = curl.String()
-			c.Sha256 = info.BundleSha256()
+			c.Sha256 = info.ArchiveSha256()
 			c.Revision = info.Revision()
 			c.Digest = info.Digest()
 		} else {
@@ -202,7 +202,7 @@ func (s *Server) serveCharm(w http.ResponseWriter, r *http.Request) {
 	defer rc.Close()
 	w.Header().Set("Connection", "close") // No keep-alive for now.
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Length", strconv.FormatInt(info.BundleSize(), 10))
+	w.Header().Set("Content-Length", strconv.FormatInt(info.ArchiveSize(), 10))
 	_, err = io.Copy(w, rc)
 	if err != nil {
 		logger.Errorf("failed to stream charm %q: %v", curl, err)

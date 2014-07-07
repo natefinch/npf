@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/juju/charm"
-	charmtesting "github.com/juju/charm/testing"
 	gitjujutesting "github.com/juju/testing"
+	"gopkg.in/juju/charm.v2"
+	charmtesting "gopkg.in/juju/charm.v2/testing"
 	"labix.org/v2/mgo/bson"
 	gc "launchpad.net/gocheck"
 
@@ -105,7 +105,7 @@ func (d *FakeCharmDir) SetRevision(revision int) {
 	d.revision = revision
 }
 
-func (d *FakeCharmDir) BundleTo(w io.Writer) error {
+func (d *FakeCharmDir) ArchiveTo(w io.Writer) error {
 	if d.error == "beforeWrite" {
 		return fmt.Errorf(d.error)
 	}
@@ -144,7 +144,7 @@ func (s *StoreSuite) TestCharmPublisher(c *gc.C) {
 		c.Check(err, gc.IsNil)
 		err = rc.Close()
 		c.Assert(err, gc.IsNil)
-		bundle, err := charm.ReadBundleBytes(data)
+		bundle, err := charm.ReadCharmArchiveBytes(data)
 		c.Assert(err, gc.IsNil)
 
 		// The same information must be available by reading the
@@ -511,7 +511,7 @@ func (s *StoreSuite) TestRedundantUpdate(c *gc.C) {
 
 const fakeRevZeroSha = "319095521ac8a62fa1e8423351973512ecca8928c9f62025e37de57c9ef07a53"
 
-func (s *StoreSuite) TestCharmBundleData(c *gc.C) {
+func (s *StoreSuite) TestCharmArchiveData(c *gc.C) {
 	url := charm.MustParseURL("cs:oneiric/wordpress")
 	urls := []*charm.URL{url}
 
@@ -524,8 +524,8 @@ func (s *StoreSuite) TestCharmBundleData(c *gc.C) {
 
 	info, rc, err := s.store.OpenCharm(url)
 	c.Assert(err, gc.IsNil)
-	c.Check(info.BundleSha256(), gc.Equals, fakeRevZeroSha)
-	c.Check(info.BundleSize(), gc.Equals, int64(len("charm-revision-0")))
+	c.Check(info.ArchiveSha256(), gc.Equals, fakeRevZeroSha)
+	c.Check(info.ArchiveSize(), gc.Equals, int64(len("charm-revision-0")))
 	err = rc.Close()
 	c.Check(err, gc.IsNil)
 }

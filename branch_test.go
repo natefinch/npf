@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/juju/charm"
-	charmtesting "github.com/juju/charm/testing"
+	"gopkg.in/juju/charm.v2"
+	charmtesting "gopkg.in/juju/charm.v2/testing"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore"
@@ -30,7 +30,7 @@ func (s *StoreSuite) dummyBranch(c *gc.C, suffix string) bzrDir {
 	branch := bzrDir(tmpDir)
 	branch.init()
 
-	copyCharmDir(branch.path(), charmtesting.Charms.Dir("dummy"))
+	copyCharmDir(branch.path(), charmtesting.Charms.CharmDir("dummy"))
 	branch.add()
 	branch.commit("Imported charm.")
 	return branch
@@ -80,7 +80,7 @@ func (s *StoreSuite) TestPublish(c *gc.C) {
 		data, err := ioutil.ReadAll(rc)
 		c.Assert(err, gc.IsNil)
 
-		bundle, err := charm.ReadBundleBytes(data)
+		bundle, err := charm.ReadCharmArchiveBytes(data)
 		c.Assert(err, gc.IsNil)
 		c.Assert(bundle.Revision(), gc.Equals, 0)
 		c.Assert(bundle.Meta().Name, gc.Equals, "dummy")
@@ -226,13 +226,13 @@ func (dir bzrDir) digest() string {
 	return string(f[1])
 }
 
-func copyCharmDir(dst string, dir *charm.Dir) {
+func copyCharmDir(dst string, dir *charm.CharmDir) {
 	var b bytes.Buffer
-	err := dir.BundleTo(&b)
+	err := dir.ArchiveTo(&b)
 	if err != nil {
 		panic(err)
 	}
-	bundle, err := charm.ReadBundleBytes(b.Bytes())
+	bundle, err := charm.ReadCharmArchiveBytes(b.Bytes())
 	if err != nil {
 		panic(err)
 	}

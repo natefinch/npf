@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/juju/charm"
 	"github.com/juju/loggo"
+	"gopkg.in/juju/charm.v2"
 	"labix.org/v2/mgo"
 	"labix.org/v2/mgo/bson"
 )
@@ -520,11 +520,11 @@ type CharmDir interface {
 	Config() *charm.Config
 	Actions() *charm.Actions
 	SetRevision(revision int)
-	BundleTo(w io.Writer) error
+	ArchiveTo(w io.Writer) error
 }
 
 // Statically ensure that *charm.Dir is indeed a CharmDir.
-var _ CharmDir = (*charm.Dir)(nil)
+var _ CharmDir = (*charm.CharmDir)(nil)
 
 // Publish bundles charm and writes it to the store. The written charm
 // bundle will have its revision set to the result of Revision.
@@ -536,9 +536,9 @@ func (p *CharmPublisher) Publish(charm CharmDir) error {
 	}
 	p.w = nil
 	w.charm = charm
-	// TODO: Refactor to BundleTo(w, revision)
+	// TODO: Refactor to ArchiveTo(w, revision)
 	charm.SetRevision(p.revision)
-	err := charm.BundleTo(w)
+	err := charm.ArchiveTo(w)
 	if err == nil {
 		err = w.finish()
 	} else {
@@ -697,13 +697,13 @@ func (ci *CharmInfo) Revision() int {
 	return ci.revision
 }
 
-// BundleSha256 returns the sha256 checksum for the stored charm bundle.
-func (ci *CharmInfo) BundleSha256() string {
+// ArchiveSha256 returns the sha256 checksum for the stored charm bundle.
+func (ci *CharmInfo) ArchiveSha256() string {
 	return ci.sha256
 }
 
-// BundleSize returns the size for the stored charm bundle.
-func (ci *CharmInfo) BundleSize() int64 {
+// ArchiveSize returns the size for the stored charm bundle.
+func (ci *CharmInfo) ArchiveSize() int64 {
 	return ci.size
 }
 
