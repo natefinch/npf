@@ -6,7 +6,7 @@ package charmstore_test
 import (
 	"fmt"
 
-	"github.com/juju/charm"
+	"gopkg.in/juju/charm.v2"
 	gitjujutesting "github.com/juju/testing"
 	gc "launchpad.net/gocheck"
 	"launchpad.net/lpad"

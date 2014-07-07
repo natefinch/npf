@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/juju/charm"
+	"gopkg.in/juju/charm.v2"
 	"launchpad.net/lpad"
 )
 

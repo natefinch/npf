@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/juju/charm"
+	"gopkg.in/juju/charm.v2"
 )
 
 // PublishBazaarBranch checks out the Bazaar branch from burl and
@@ -86,7 +86,7 @@ NewTip:
 		}
 	}
 
-	ch, err := charm.ReadDir(branchDir)
+	ch, err := charm.ReadCharmDir(branchDir)
 	if err == nil {
 		// Hand over the charm to the store for bundling and
 		// streaming its content into the database.
