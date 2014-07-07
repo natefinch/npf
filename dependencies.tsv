@@ -8,7 +8,7 @@ github.com/juju/names	git	b2e06a0ab1c09f138853d1ef6b11f94ca9f7b675
 github.com/juju/schema	git	1887e824896b58a0f376fb8517b5eebb825828b8	
 github.com/juju/testing	git	b0941ff1bf4d3db1ffbbe09f75fa8383eae5764c	
 github.com/juju/utils	git	71ae858adb3bf5cc619c3200dfbdf6762de1a94a	
-gopkg.in/juju/charm.v2	git	f25703ef74b562eae79c057bf3dba4b5cd0f36c4	
+gopkg.in/juju/charm.v2	git	39b1fc10e5b341ef95feee64e12253bc52618693	
 labix.org/v2/mgo	bzr	gustavo@niemeyer.net-20140331185009-fhnh3xzfdpicup0j	273
 launchpad.net/gnuflag	bzr	roger.peppe@canonical.com-20121003093437-zcyyw0lpvj2nifpk	12
 launchpad.net/gocheck	bzr	gustavo@niemeyer.net-20140225173054-xu9zlkf9kxhvow02	87
