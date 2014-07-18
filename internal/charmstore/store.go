@@ -1,19 +1,109 @@
+// Copyright 2014 Canonical Ltd.
+// Licensed under the LGPLv3, see LICENCE file for details.
+
 package charmstore
 
 import (
+	"fmt"
+	"log"
+
+	"gopkg.in/juju/charm.v2"
 	"labix.org/v2/mgo"
+
+	"github.com/juju/charmstore/internal/mongodoc"
 )
 
 type Store struct {
-	db *mgo.Database
+	DB StoreDatabase
 }
 
 func newStore(db *mgo.Database) *Store {
-	return &Store{
-		db: db,
+	s := &Store{
+		DB: StoreDatabase{db},
+	}
+	s.ensureIndexes()
+	return s
+}
+
+func (s *Store) ensureIndexes() error {
+	indexes := []struct {
+		c *mgo.Collection
+		i mgo.Index
+	}{{
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"url", "revision"}, Unique: true},
+	}}
+	for _, idx := range indexes {
+		err := idx.c.EnsureIndex(idx.i)
+		if err != nil {
+			log.Printf("error ensuring %s index: %v", idx.c.Name, err)
+			return err
+		}
+	}
+	return nil
+}
+
+// AddCharm adds a charm to the entities collection
+// associated with the given URL.
+// The charm does not have any associated content.
+// TODO fix this to add content too.
+func (s *Store) AddCharm(url *charm.URL, c charm.Charm) error {
+	return s.DB.Entities().Insert(&mongodoc.Entity{
+		URL:                     url,
+		BaseURL:                 baseURL(url),
+		CharmMeta:               c.Meta(),
+		CharmConfig:             c.Config(),
+		CharmActions:            c.Actions(),
+		CharmProvidedInterfaces: interfacesForRelations(c.Meta().Provides),
+		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
+	})
+}
+
+func interfacesForRelations(rels map[string]charm.Relation) []string {
+	interfaces := make(map[string]bool)
+	for _, rel := range rels {
+		interfaces[rel.Interface] = true
+	}
+	result := make([]string, 0, len(interfaces))
+	for int := range interfaces {
+		result = append(result, int)
+	}
+	// TODO is it worth sorting this?
+	return result
+}
+
+func baseURL(url *charm.URL) *charm.Reference {
+	newURL := url.Reference
+	newURL.Revision = -1
+	return &newURL
+}
+
+var errNotImplemented = fmt.Errorf("not implemented")
+
+// AddBundle adds a bundle to the entities collection
+// associated with the given URL.
+// The bundle does not have any associated content.
+// TODO fix this to add content too.
+func (s *Store) AddBundle(url *charm.URL, b charm.Bundle) error {
+	return errNotImplemented
+}
+
+// StoreDatabase wraps an mgo.DB ands adds a few convenience methods.
+type StoreDatabase struct {
+	*mgo.Database
+}
+
+// Copy copies the StoreDatabase and its underlying mgo session.
+func (s StoreDatabase) Copy() StoreDatabase {
+	return StoreDatabase{
+		&mgo.Database{
+			Name:    s.Name,
+			Session: s.Session.Copy(),
+		},
 	}
 }
 
-func (s *Store) DB() *mgo.Database {
-	return s.db
+// Entities returns the mongo collection where entities are stored.
+func (s StoreDatabase) Entities() *mgo.Collection {
+	return s.C("entities")
 }

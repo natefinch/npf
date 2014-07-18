@@ -13,17 +13,18 @@ type Entity struct {
 	// e.g. cs:precise/wordpress-34, cs:~user/quantal/foo-2
 	URL *charm.URL `bson:"_id"`
 
-	// BaseURL holds the URL of the charm or bundle with the
-	// series and revision omitted.
+	// BaseURL holds the reference URL of the charm or bundle
+	// (this omits the series and revision from URL)
 	// e.g. cs:wordpress, cs:~user/foo
-	BaseURL *charm.URL
+	BaseURL *charm.Reference
 
-	Revision int
-	Sha256   string // This is also used as a blob reference.
-	Size     int64
+	Sha256 string // This is also used as a blob reference.
+	Size   int64
 
 	UploadTime time.Time
 
+	// TODO(rog) verify that all these types marshal to the expected
+	// JSON form.
 	CharmMeta    *charm.Meta
 	CharmConfig  *charm.Config
 	CharmActions *charm.Actions
