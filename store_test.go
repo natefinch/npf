@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	gitjujutesting "github.com/juju/testing"
+	jujutesting "github.com/juju/testing"
 	"gopkg.in/juju/charm.v2"
 	charmtesting "gopkg.in/juju/charm.v2/testing"
 	"labix.org/v2/mgo/bson"
@@ -23,17 +23,17 @@ import (
 	"github.com/juju/charmstore"
 )
 
-func Test(t *testing.T) {
-	gitjujutesting.MgoTestPackage(t, nil)
+func TestPackage(t *testing.T) {
+	jujutesting.MgoTestPackage(t, nil)
 }
 
 var _ = gc.Suite(&StoreSuite{})
 var _ = gc.Suite(&TrivialSuite{})
 
 type StoreSuite struct {
-	gitjujutesting.MgoSuite
-	gitjujutesting.HTTPSuite
-	gitjujutesting.FakeHomeSuite
+	jujutesting.MgoSuite
+	jujutesting.HTTPSuite
+	jujutesting.FakeHomeSuite
 	store *charmstore.Store
 }
 
@@ -45,7 +45,7 @@ func (s *StoreSuite) SetUpSuite(c *gc.C) {
 	s.FakeHomeSuite.SetUpSuite(c)
 	s.MgoSuite.SetUpSuite(c)
 	s.HTTPSuite.SetUpSuite(c)
-	if os.Getenv("JUJU_NOTEST_MONGOJS") == "1" || gitjujutesting.MgoServer.WithoutV8 {
+	if os.Getenv("JUJU_NOTEST_MONGOJS") == "1" || jujutesting.MgoServer.WithoutV8 {
 		c.Log("Tests requiring MongoDB Javascript will be skipped")
 		*noTestMongoJs = true
 	}
@@ -62,7 +62,7 @@ func (s *StoreSuite) SetUpTest(c *gc.C) {
 	s.MgoSuite.SetUpTest(c)
 	s.HTTPSuite.SetUpTest(c)
 	var err error
-	s.store, err = charmstore.Open(gitjujutesting.MgoServer.Addr())
+	s.store, err = charmstore.Open(jujutesting.MgoServer.Addr())
 	c.Assert(err, gc.IsNil)
 }
 
@@ -843,7 +843,7 @@ func (s *StoreSuite) TestListCounters(c *gc.C) {
 	}
 
 	// Use a different store to exercise cache filling.
-	st, err := charmstore.Open(gitjujutesting.MgoServer.Addr())
+	st, err := charmstore.Open(jujutesting.MgoServer.Addr())
 	c.Assert(err, gc.IsNil)
 	defer st.Close()
 
