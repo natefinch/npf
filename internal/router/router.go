@@ -126,8 +126,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	}
 	if handler, ok := r.handlers.Id[key]; ok {
 		req.URL.Path = path
-		handler(url, w, req)
-		return nil
+		return handler(url, w, req)
 	}
 	if key != "meta/" {
 		return ErrNotFound
@@ -161,11 +160,13 @@ func handlerKey(path string) (key, rest string) {
 func (r *Router) serveMeta(id *charm.URL, w http.ResponseWriter, req *http.Request) (interface{}, error) {
 	key, path := handlerKey(req.URL.Path)
 	if key == "" {
-		// $id/meta -> list of all meta endpoints
+		// GET id/meta
+		// http://tinyurl.com/nysdjly
 		return r.metaNames(), nil
 	}
 	if key == "any" {
-		// $id/meta/any -> arbitrary combination of metadata.
+		// GET id/meta/any?[include=meta[&include=meta...]]
+		// http://tinyurl.com/q5vcjpk
 		meta, err := r.GetMetadata(id, req.Form["include"])
 		if err != nil {
 			return nil, err

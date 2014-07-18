@@ -6,12 +6,10 @@ package router
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
-	"strings"
 	"testing"
 
 	jujutesting "github.com/juju/testing"
@@ -20,6 +18,7 @@ import (
 	"labix.org/v2/mgo"
 	gc "launchpad.net/gocheck"
 
+	"github.com/juju/charmstore/internal/storetesting"
 	"github.com/juju/charmstore/params"
 )
 
@@ -28,31 +27,10 @@ func TestPackage(t *testing.T) {
 }
 
 type RouterSuite struct {
-	jujutesting.IsolationSuite
-	jujutesting.MgoSuite
+	storetesting.IsolatedMgoSuite
 }
 
 var _ = gc.Suite(&RouterSuite{})
-
-func (s *RouterSuite) SetUpSuite(c *gc.C) {
-	s.IsolationSuite.SetUpSuite(c)
-	s.MgoSuite.SetUpSuite(c)
-}
-
-func (s *RouterSuite) TearDownSuite(c *gc.C) {
-	s.MgoSuite.TearDownSuite(c)
-	s.IsolationSuite.TearDownSuite(c)
-}
-
-func (s *RouterSuite) SetUpTest(c *gc.C) {
-	s.IsolationSuite.SetUpTest(c)
-	s.MgoSuite.SetUpTest(c)
-}
-
-func (s *RouterSuite) TearDownTest(c *gc.C) {
-	s.MgoSuite.TearDownTest(c)
-	s.IsolationSuite.TearDownTest(c)
-}
 
 func (s *RouterSuite) populateDatabase(c *gc.C) *mgo.Database {
 	// Populate the database with two collections and a couple of
@@ -167,6 +145,18 @@ var routerTests = []struct {
 		Path:     "blah/arble",
 	},
 }, {
+	about: "id handler that returns an error",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo/": errorIdHandler,
+		},
+	},
+	urlStr:     "http://example.com/~joe/precise/wordpress-34/foo/blah/arble",
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "errorIdHandler error",
+	},
+}, {
 	about: "meta handler",
 	handlers: Handlers{
 		Meta: map[string]MetaHandler{
@@ -271,7 +261,7 @@ func (s *RouterSuite) TestRouter(c *gc.C) {
 	for i, test := range routerTests {
 		c.Logf("test %d: %s", i, test.about)
 		router := New(db, &test.handlers)
-		assertJSONCall(c, router, "GET", test.urlStr, "", test.expectCode, test.expectBody)
+		storetesting.AssertJSONCall(c, router, "GET", test.urlStr, "", test.expectCode, test.expectBody)
 	}
 }
 
@@ -460,6 +450,7 @@ func (s *RouterSuite) TestWriteError(c *gc.C) {
 	err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 	c.Assert(err, gc.IsNil)
 	c.Assert(errResp, gc.Equals, params.Error{Message: "an error"})
+	c.Assert(rec.Code, gc.Equals, http.StatusInternalServerError)
 
 	rec = httptest.NewRecorder()
 	errResp0 := params.Error{
@@ -471,6 +462,7 @@ func (s *RouterSuite) TestWriteError(c *gc.C) {
 	err = json.Unmarshal(rec.Body.Bytes(), &errResp1)
 	c.Assert(err, gc.IsNil)
 	c.Assert(errResp1, gc.Equals, errResp0)
+	c.Assert(rec.Code, gc.Equals, http.StatusInternalServerError)
 }
 
 var handlerTests = []struct {
@@ -535,41 +527,8 @@ type Foo struct {
 func (s *RouterSuite) TestHandlers(c *gc.C) {
 	for i, test := range handlerTests {
 		c.Logf("test %d: %s", i, test.about)
-		assertJSONCall(c, test.handler, "GET", "http://example.com", "", test.expectCode, test.expectBody)
+		storetesting.AssertJSONCall(c, test.handler, "GET", "http://example.com", "", test.expectCode, test.expectBody)
 	}
-}
-
-func assertJSONCall(
-	c *gc.C,
-	handler http.Handler,
-	method string,
-	urlStr string,
-	body string,
-	expectCode int,
-	expectBody interface{},
-) {
-	rec := callHandler(c, handler, method, urlStr, body)
-	c.Assert(rec.Code, gc.Equals, expectCode, gc.Commentf("body: %s", rec.Body.Bytes()))
-	if expectBody == nil {
-		c.Assert(rec.Body.Bytes(), gc.HasLen, 0)
-		return
-	}
-	resp := reflect.New(reflect.TypeOf(expectBody))
-	err := json.Unmarshal(rec.Body.Bytes(), resp.Interface())
-	c.Assert(err, gc.IsNil)
-	c.Assert(resp.Elem().Interface(), jc.DeepEquals, expectBody)
-}
-
-func callHandler(c *gc.C, handler http.Handler, method string, urlStr string, body string) *httptest.ResponseRecorder {
-	var r io.Reader
-	if body != "" {
-		r = strings.NewReader(body)
-	}
-	req, err := http.NewRequest(method, urlStr, r)
-	c.Assert(err, gc.IsNil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	return rec
 }
 
 func metaGetItem1(getter ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
@@ -588,6 +547,10 @@ func metaGetItem2(getter ItemGetter, id *charm.URL, path string, flags url.Value
 		return nil, fmt.Errorf("GetItem failure: %v", err)
 	}
 	return item, nil
+}
+
+func errorIdHandler(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
+	return fmt.Errorf("errorIdHandler error")
 }
 
 type idHandlerTestResp struct {
