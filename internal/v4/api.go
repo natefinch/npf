@@ -9,9 +9,10 @@ import (
 	"net/http"
 	"net/url"
 
+	"gopkg.in/juju/charm.v2"
+
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/router"
-	"gopkg.in/juju/charm.v2"
 )
 
 func init() {

@@ -8,10 +8,11 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/juju/charmstore/internal/router"
-	"github.com/juju/charmstore/internal/storetesting"
 	jujutesting "github.com/juju/testing"
 	gc "launchpad.net/gocheck"
+
+	"github.com/juju/charmstore/internal/router"
+	"github.com/juju/charmstore/internal/storetesting"
 )
 
 func TestPackage(t *testing.T) {

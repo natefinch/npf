@@ -7,12 +7,13 @@ import (
 	"net/http"
 	"testing"
 
+	jujutesting "github.com/juju/testing"
+	gc "launchpad.net/gocheck"
+
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/storetesting"
 	_ "github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
-	jujutesting "github.com/juju/testing"
-	gc "launchpad.net/gocheck"
 )
 
 func TestPackage(t *testing.T) {

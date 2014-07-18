@@ -5,13 +5,14 @@ package storetesting
 
 import (
 	"encoding/json"
-	jc "github.com/juju/testing/checkers"
 	"io"
-	gc "launchpad.net/gocheck"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"strings"
+
+	jc "github.com/juju/testing/checkers"
+	gc "launchpad.net/gocheck"
 )
 
 // AssertJSONCall asserts that when the given handler is called with
