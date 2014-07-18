@@ -13,6 +13,6 @@ import (
 
 // NewServer returns a new handler that handles
 // charm store requests and stores its data in the given database.
-func NewServer(db *mgo.Database) (http.Handler, error) {
-	return charmstore.NewServer(db)
+func NewServer(db *mgo.Database, versions ...string) (http.Handler, error) {
+	return charmstore.NewServer(db, versions...)
 }

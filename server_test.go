@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the LGPLv3, see LICENCE file for details.
 
-package charmstore
+package charmstore_test
 
 import (
 	"fmt"
@@ -11,9 +11,13 @@ import (
 	jujutesting "github.com/juju/testing"
 	gc "launchpad.net/gocheck"
 
+	"github.com/juju/charmstore"
+	internalCharmstore "github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/internal/storetesting"
 )
+
+// These tests are copied (almost) verbatim from internal/charmstore/server_test.go
 
 func TestPackage(t *testing.T) {
 	jujutesting.MgoTestPackage(t, nil)
@@ -27,17 +31,17 @@ var _ = gc.Suite(&ServerSuite{})
 
 func (s *ServerSuite) TearDownTest(c *gc.C) {
 	s.IsolatedMgoSuite.TearDownTest(c)
-	ClearAPIVersions()
+	internalCharmstore.ClearAPIVersions()
 }
 
 func (s *ServerSuite) TestNewServerWithNoVersions(c *gc.C) {
-	h, err := NewServer(s.Session.DB("foo"))
+	h, err := charmstore.NewServer(s.Session.DB("foo"))
 	c.Assert(err, gc.ErrorMatches, `charm store server must serve at least one version of the API`)
 	c.Assert(h, gc.IsNil)
 }
 
 func (s *ServerSuite) TestNewServerWithUnregisteredVersion(c *gc.C) {
-	h, err := NewServer(s.Session.DB("foo"), "wrong")
+	h, err := charmstore.NewServer(s.Session.DB("foo"), "wrong")
 	c.Assert(err, gc.ErrorMatches, `API version "wrong" not registered`)
 	c.Assert(h, gc.IsNil)
 }
@@ -49,8 +53,8 @@ type versionResponse struct {
 
 func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	db := s.Session.DB("foo")
-	serveVersion := func(vers string) func(store *Store) http.Handler {
-		return func(store *Store) http.Handler {
+	serveVersion := func(vers string) func(store *internalCharmstore.Store) http.Handler {
+		return func(store *internalCharmstore.Store) http.Handler {
 			c.Assert(store.DB(), gc.Equals, db)
 			return router.HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
 				return versionResponse{
@@ -62,22 +66,22 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	}
 	for i := 1; i < 4; i++ {
 		vers := fmt.Sprintf("version%d", i)
-		RegisterAPIVersion(vers, serveVersion(vers))
+		internalCharmstore.RegisterAPIVersion(vers, serveVersion(vers))
 	}
 
-	h, err := NewServer(db, "version1")
+	h, err := charmstore.NewServer(db, "version1")
 	c.Assert(err, gc.IsNil)
 	assertServesVersion(c, h, "version1")
 	assertDoesNotServeVersion(c, h, "version2")
 	assertDoesNotServeVersion(c, h, "version3")
 
-	h, err = NewServer(db, "version1", "version2")
+	h, err = charmstore.NewServer(db, "version1", "version2")
 	c.Assert(err, gc.IsNil)
 	assertServesVersion(c, h, "version1")
 	assertServesVersion(c, h, "version2")
 	assertDoesNotServeVersion(c, h, "version3")
 
-	h, err = NewServer(db, "version1", "version2", "version3")
+	h, err = charmstore.NewServer(db, "version1", "version2", "version3")
 	c.Assert(err, gc.IsNil)
 	assertServesVersion(c, h, "version1")
 	assertServesVersion(c, h, "version2")

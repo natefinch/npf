@@ -34,6 +34,13 @@ func RegisterAPIVersion(version string, newAPI func(s *Store) http.Handler) {
 	versions[version] = newAPI
 }
 
+// ClearAPIVersions forgets any API versions that have
+// been registered with RegisterAPIVersion. It is provided
+// for testing purposes only.
+func ClearAPIVersions() {
+	versions = make(map[string]func(*Store) http.Handler)
+}
+
 // NewServer returns a handler that serves the given charm store API
 // versions using db to store that charm store data.
 func NewServer(db *mgo.Database, serveVersions ...string) (http.Handler, error) {
