@@ -12,7 +12,7 @@ import (
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/storetesting"
-	_ "github.com/juju/charmstore/internal/v4"
+	"github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
 )
 
@@ -28,7 +28,7 @@ var _ = gc.Suite(&APISuite{})
 
 func (s *APISuite) TestArchive(c *gc.C) {
 	db := s.Session.DB("charmstore")
-	srv, err := charmstore.NewServer(db, "v4")
+	srv, err := charmstore.NewServer(db, map[string]charmstore.NewAPIHandler{"v4": v4.New})
 	c.Assert(err, gc.IsNil)
 	assertNotImplemented(c, srv, "precise/wordpress-23/archive")
 }

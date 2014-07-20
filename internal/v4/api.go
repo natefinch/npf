@@ -15,16 +15,13 @@ import (
 	"github.com/juju/charmstore/internal/router"
 )
 
-func init() {
-	charmstore.RegisterAPIVersion("v4", newHandler)
-}
-
 type handler struct {
 	*router.Router
 	store *charmstore.Store
 }
 
-func newHandler(store *charmstore.Store) http.Handler {
+// New returns a new instance of the v4 API handler.
+func New(store *charmstore.Store) http.Handler {
 	h := &handler{
 		store: store,
 	}

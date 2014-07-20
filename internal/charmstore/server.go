@@ -9,54 +9,26 @@ package charmstore
 import (
 	"fmt"
 	"net/http"
-	"sync"
 
 	"labix.org/v2/mgo"
 )
 
-var (
-	versionMutex sync.Mutex
-	versions     = make(map[string]func(*Store) http.Handler)
-)
-
-// RegisterAPIVersion registers a version of the API so
-// that it can be used with NewServer.
-// The newAPI function will be called with the
-// charm store's Store to create the handler for
-// the API version, which will be served under
-// the /<version> path.
-//
-// The URL paths of requests made to the API's handler
-// will have their initial /<version> prefix stripped off.
-func RegisterAPIVersion(version string, newAPI func(s *Store) http.Handler) {
-	versionMutex.Lock()
-	defer versionMutex.Unlock()
-	versions[version] = newAPI
-}
-
-// ClearAPIVersions forgets any API versions that have
-// been registered with RegisterAPIVersion. It is provided
-// for testing purposes only.
-func ClearAPIVersions() {
-	versions = make(map[string]func(*Store) http.Handler)
-}
+// NewAPIHandler returns a new API handler that
+// uses the given Store.
+type NewAPIHandler func(*Store) http.Handler
 
 // NewServer returns a handler that serves the given charm store API
 // versions using db to store that charm store data.
-func NewServer(db *mgo.Database, serveVersions ...string) (http.Handler, error) {
-	if len(serveVersions) == 0 {
+// The key of the versions map is the version name.
+func NewServer(db *mgo.Database, versions map[string]NewAPIHandler) (http.Handler, error) {
+	if len(versions) == 0 {
 		return nil, fmt.Errorf("charm store server must serve at least one version of the API")
 	}
 	store := newStore(db)
 	mux := http.NewServeMux()
-	for _, version := range serveVersions {
-		newAPI, ok := versions[version]
-		if !ok {
-			return nil, fmt.Errorf("API version %q not registered", version)
-		}
-		handle(mux, "/"+version, newAPI(store))
+	for vers, newAPI := range versions {
+		handle(mux, "/"+vers, newAPI(store))
 	}
-
 	return mux, nil
 }
 
