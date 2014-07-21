@@ -40,15 +40,15 @@ func (s *Store) AddCharm(url *charm.URL, c charm.Charm) error {
 }
 
 func interfacesForRelations(rels map[string]charm.Relation) []string {
+	// Eliminate duplicates by storing interface names into a map.
 	interfaces := make(map[string]bool)
 	for _, rel := range rels {
 		interfaces[rel.Interface] = true
 	}
 	result := make([]string, 0, len(interfaces))
-	for int := range interfaces {
-		result = append(result, int)
+	for iface := range interfaces {
+		result = append(result, iface)
 	}
-	// TODO is it worth sorting this?
 	return result
 }
 

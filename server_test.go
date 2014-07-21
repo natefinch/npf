@@ -55,7 +55,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	db := s.Session.DB("foo")
 	serveVersion := func(vers string) func(store *internalCharmstore.Store) http.Handler {
 		return func(store *internalCharmstore.Store) http.Handler {
-			c.Assert(store.DB(), gc.Equals, db)
+			c.Assert(store.DB.Database, gc.Equals, db)
 			return router.HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
 				return versionResponse{
 					Version: vers,

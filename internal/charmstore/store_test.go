@@ -10,7 +10,6 @@ import (
 	"gopkg.in/juju/charm.v2"
 	"gopkg.in/juju/charm.v2/testing"
 	"labix.org/v2/mgo"
-	"labix.org/v2/mgo/bson"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/mongodoc"
@@ -31,7 +30,7 @@ func (s *StoreSuite) TestAddCharm(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	var doc mongodoc.Entity
-	err = store.DB.Entities().Find(bson.D{{"_id", "cs:precise/wordpress-23"}}).One(&doc)
+	err = store.DB.Entities().FindId("cs:precise/wordpress-23").One(&doc)
 	c.Assert(err, gc.IsNil)
 	sort.Strings(doc.CharmProvidedInterfaces)
 	sort.Strings(doc.CharmRequiredInterfaces)
@@ -46,7 +45,7 @@ func (s *StoreSuite) TestAddCharm(c *gc.C) {
 	})
 
 	// Try inserting the charm again - it should fail because the charm is already
-	// there
+	// there.
 	err = store.AddCharm(url, wordpress)
 	c.Assert(err, jc.Satisfies, mgo.IsDup)
 }
