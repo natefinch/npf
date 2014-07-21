@@ -10,16 +10,20 @@ import (
 	"labix.org/v2/mgo"
 
 	"github.com/juju/charmstore/internal/mongodoc"
+	"github.com/juju/charmstore/internal/router"
 )
 
+// Store represents the underlying charm store data store.
 type Store struct {
 	DB StoreDatabase
 }
 
-func newStore(db *mgo.Database) *Store {
+// NewStore returns a Store that uses the given database.
+func NewStore(db *mgo.Database) *Store {
 	s := &Store{
 		DB: StoreDatabase{db},
 	}
+	router.RegisterCollection(s.DB.Entities().Name, (*mongodoc.Entity)(nil))
 	return s
 }
 
