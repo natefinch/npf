@@ -23,7 +23,7 @@ type StoreSuite struct {
 var _ = gc.Suite(&StoreSuite{})
 
 func (s *StoreSuite) TestAddCharm(c *gc.C) {
-	store := newStore(s.Session.DB("foo"))
+	store := NewStore(s.Session.DB("foo"))
 	url := charm.MustParseURL("cs:precise/wordpress-23")
 	wordpress := testing.Charms.CharmDir("wordpress")
 	err := store.AddCharm(url, wordpress)

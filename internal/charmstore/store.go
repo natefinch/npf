@@ -16,7 +16,7 @@ type Store struct {
 	DB StoreDatabase
 }
 
-func newStore(db *mgo.Database) *Store {
+func NewStore(db *mgo.Database) *Store {
 	s := &Store{
 		DB: StoreDatabase{db},
 	}

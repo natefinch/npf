@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	jujutesting "github.com/juju/testing"
+	"gopkg.in/juju/charm.v2"
+	"gopkg.in/juju/charm.v2/testing"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/charmstore"
@@ -22,15 +24,30 @@ func TestPackage(t *testing.T) {
 
 type APISuite struct {
 	storetesting.IsolatedMgoSuite
+	srv   http.Handler
+	store *charmstore.Store
 }
 
 var _ = gc.Suite(&APISuite{})
 
-func (s *APISuite) TestArchive(c *gc.C) {
+func (s *APISuite) SetUpTest(c *gc.C) {
+	s.IsolatedMgoSuite.SetUpTest(c)
 	db := s.Session.DB("charmstore")
+	s.store = charmstore.NewStore(db)
 	srv, err := charmstore.NewServer(db, map[string]charmstore.NewAPIHandler{"v4": v4.New})
 	c.Assert(err, gc.IsNil)
+	s.srv = srv
+}
+
+func (s *APISuite) TestArchive(c *gc.C) {
 	assertNotImplemented(c, srv, "precise/wordpress-23/archive")
+}
+
+func (s *APISuite) TestMetaCharmConfig(c *gc.C) {
+	url := charm.MustParseURL("cs:precise/wordpress-23")
+	wordpress := testing.Charms.CharmDir("wordpress")
+	err := store.AddCharm(url, wordpress)
+	c.Assert(err, gc.IsNil)
 }
 
 func assertNotImplemented(c *gc.C, h http.Handler, path string) {

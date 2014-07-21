@@ -12,6 +12,7 @@ import (
 	"gopkg.in/juju/charm.v2"
 
 	"github.com/juju/charmstore/internal/charmstore"
+	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/router"
 )
 
@@ -143,7 +144,12 @@ func (h *handler) metaCharmActions(getter router.ItemGetter, id *charm.URL, path
 // GET id/meta/charm-config
 // http://tinyurl.com/oxxyujx
 func (h *handler) metaCharmConfig(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
+	var entity *mongodoc.Entity
+	err := getter.GetItem(id, &entity, "charmconfig")
+	if err != nil {
+		return nil, err
+	}
+	return entity.CharmConfig, nil
 }
 
 // GET id/meta/color
