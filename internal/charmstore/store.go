@@ -5,7 +5,6 @@ package charmstore
 
 import (
 	"fmt"
-	"log"
 
 	"gopkg.in/juju/charm.v2"
 	"labix.org/v2/mgo"
@@ -21,26 +20,7 @@ func newStore(db *mgo.Database) *Store {
 	s := &Store{
 		DB: StoreDatabase{db},
 	}
-	s.ensureIndexes()
 	return s
-}
-
-func (s *Store) ensureIndexes() error {
-	indexes := []struct {
-		c *mgo.Collection
-		i mgo.Index
-	}{{
-		s.DB.Entities(),
-		mgo.Index{Key: []string{"url", "revision"}, Unique: true},
-	}}
-	for _, idx := range indexes {
-		err := idx.c.EnsureIndex(idx.i)
-		if err != nil {
-			log.Printf("error ensuring %s index: %v", idx.c.Name, err)
-			return err
-		}
-	}
-	return nil
 }
 
 // AddCharm adds a charm to the entities collection

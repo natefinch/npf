@@ -9,6 +9,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	"gopkg.in/juju/charm.v2"
 	"gopkg.in/juju/charm.v2/testing"
+	"labix.org/v2/mgo"
 	"labix.org/v2/mgo/bson"
 	gc "launchpad.net/gocheck"
 
@@ -43,6 +44,11 @@ func (s *StoreSuite) TestAddCharm(c *gc.C) {
 		CharmProvidedInterfaces: []string{"http", "logging", "monitoring"},
 		CharmRequiredInterfaces: []string{"mysql", "varnish"},
 	})
+
+	// Try inserting the charm again - it should fail because the charm is already
+	// there
+	err = store.AddCharm(url, wordpress)
+	c.Assert(err, jc.Satisfies, mgo.IsDup)
 }
 
 func mustParseReference(urlStr string) *charm.Reference {
