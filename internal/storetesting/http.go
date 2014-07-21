@@ -36,7 +36,7 @@ func AssertJSONCall(
 	resp := reflect.New(reflect.TypeOf(expectBody))
 	err := json.Unmarshal(rec.Body.Bytes(), resp.Interface())
 	c.Assert(err, gc.IsNil)
-	c.Assert(resp.Elem().Interface(), jc.DeepEquals, expectBody)
+	c.Assert(resp.Elem().Interface(), jc.DeepEquals, expectBody, gc.Commentf("actual JSON response: %q", rec.Body.Bytes()))
 }
 
 // DoRequest invokes a request on the given handler with the given
