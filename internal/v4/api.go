@@ -26,7 +26,7 @@ func New(store *charmstore.Store) http.Handler {
 	h := &handler{
 		store: store,
 	}
-	h.Router = router.New(nil, &router.Handlers{
+	h.Router = router.New(store.DB.Database, &router.Handlers{
 		Global: map[string]http.Handler{
 			"stats/counter":      http.HandlerFunc(h.serveStatsCounter),
 			"search":             http.HandlerFunc(h.serveSearch),
@@ -120,7 +120,14 @@ func (h *handler) serveArchiveFile(charmId *charm.URL, w http.ResponseWriter, re
 // GET id/meta/charm-metadata
 // http://tinyurl.com/poeoulw
 func (h *handler) metaCharmMetadata(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
+	var doc *mongodoc.Entity
+	err := getter.GetItem(id, &doc, "charmmeta")
+	if err != nil {
+		return nil, err
+	}
+	// TODO(rog) When we have bundles, check whether the id is a bundle
+	// and return ErrMetadataNotRelevant if so.
+	return doc.CharmMeta, nil
 }
 
 // GET id/meta/bundle-metadata
