@@ -4,7 +4,6 @@
 package charmstore
 
 import (
-	"fmt"
 	"net/http"
 	"testing"
 
@@ -25,20 +24,9 @@ type ServerSuite struct {
 
 var _ = gc.Suite(&ServerSuite{})
 
-func (s *ServerSuite) TearDownTest(c *gc.C) {
-	s.IsolatedMgoSuite.TearDownTest(c)
-	ClearAPIVersions()
-}
-
 func (s *ServerSuite) TestNewServerWithNoVersions(c *gc.C) {
-	h, err := NewServer(s.Session.DB("foo"))
+	h, err := NewServer(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.ErrorMatches, `charm store server must serve at least one version of the API`)
-	c.Assert(h, gc.IsNil)
-}
-
-func (s *ServerSuite) TestNewServerWithUnregisteredVersion(c *gc.C) {
-	h, err := NewServer(s.Session.DB("foo"), "wrong")
-	c.Assert(err, gc.ErrorMatches, `API version "wrong" not registered`)
 	c.Assert(h, gc.IsNil)
 }
 
@@ -60,24 +48,29 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 			})
 		}
 	}
-	for i := 1; i < 4; i++ {
-		vers := fmt.Sprintf("version%d", i)
-		RegisterAPIVersion(vers, serveVersion(vers))
-	}
 
-	h, err := NewServer(db, "version1")
+	h, err := NewServer(db, map[string]NewAPIHandler{
+		"version1": serveVersion("version1"),
+	})
 	c.Assert(err, gc.IsNil)
 	assertServesVersion(c, h, "version1")
 	assertDoesNotServeVersion(c, h, "version2")
 	assertDoesNotServeVersion(c, h, "version3")
 
-	h, err = NewServer(db, "version1", "version2")
+	h, err = NewServer(db, map[string]NewAPIHandler{
+		"version1": serveVersion("version1"),
+		"version2": serveVersion("version2"),
+	})
 	c.Assert(err, gc.IsNil)
 	assertServesVersion(c, h, "version1")
 	assertServesVersion(c, h, "version2")
 	assertDoesNotServeVersion(c, h, "version3")
 
-	h, err = NewServer(db, "version1", "version2", "version3")
+	h, err = NewServer(db, map[string]NewAPIHandler{
+		"version1": serveVersion("version1"),
+		"version2": serveVersion("version2"),
+		"version3": serveVersion("version3"),
+	})
 	c.Assert(err, gc.IsNil)
 	assertServesVersion(c, h, "version1")
 	assertServesVersion(c, h, "version2")
