@@ -14,6 +14,7 @@ import (
 	"github.com/juju/charmstore/internal/v4"
 )
 
+// Versions of the API that can be served.
 const (
 	V4 = "v4"
 )
@@ -22,6 +23,7 @@ var versions = map[string]func(*charmstore.Store) http.Handler{
 	V4: v4.New,
 }
 
+// Versions returns all known API versions.
 func Versions() []string {
 	vs := make([]string, 0, len(versions))
 	for v := range versions {
