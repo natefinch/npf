@@ -9,7 +9,7 @@ import (
 
 	jujutesting "github.com/juju/testing"
 	"gopkg.in/juju/charm.v2"
-	"gopkg.in/juju/charm.v2/testing"
+	charmtesting "gopkg.in/juju/charm.v2/testing"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/charmstore"
@@ -40,13 +40,13 @@ func (s *APISuite) SetUpTest(c *gc.C) {
 }
 
 func (s *APISuite) TestArchive(c *gc.C) {
-	assertNotImplemented(c, srv, "precise/wordpress-23/archive")
+	assertNotImplemented(c, s.srv, "precise/wordpress-23/archive")
 }
 
 func (s *APISuite) TestMetaCharmConfig(c *gc.C) {
 	url := charm.MustParseURL("cs:precise/wordpress-23")
-	wordpress := testing.Charms.CharmDir("wordpress")
-	err := store.AddCharm(url, wordpress)
+	wordpress := charmtesting.Charms.CharmDir("wordpress")
+	err := s.store.AddCharm(url, wordpress)
 	c.Assert(err, gc.IsNil)
 }
 
