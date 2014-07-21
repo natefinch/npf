@@ -23,7 +23,7 @@ var versions = map[string]func(*charmstore.Store) http.Handler{
 	V4: v4.New,
 }
 
-// Versions returns all known API versions.
+// Versions returns all known API version strings in alphabetical order.
 func Versions() []string {
 	vs := make([]string, 0, len(versions))
 	for v := range versions {
