@@ -165,10 +165,23 @@ var routerTests = []struct {
 		},
 	},
 	urlStr:     "http://example.com/~joe/wordpress/foo",
-	resolveURL: resolveURL("precise", 34),
+	resolveURL: newResolveURL("precise", 34),
 	expectCode: http.StatusOK,
 	expectBody: idHandlerTestResp{
 		CharmURL: "cs:~joe/precise/wordpress-34",
+	},
+}, {
+	about: "id with error on resolving",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:     "http://example.com/wordpress/meta",
+	resolveURL: resolveURLError,
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "resolve URL error",
 	},
 }, {
 	about: "meta handler",
@@ -269,10 +282,10 @@ var routerTests = []struct {
 	},
 }}
 
-// resolveURL returns a URL resolver that resolves
+// newResolveURL returns a URL resolver that resolves
 // unspecified series and revision to the given series
 // and revision.
-func resolveURL(series string, revision int) func(*charm.URL) error {
+func newResolveURL(series string, revision int) func(*charm.URL) error {
 	return func(url *charm.URL) error {
 		if url.Series == "" {
 			url.Series = series
