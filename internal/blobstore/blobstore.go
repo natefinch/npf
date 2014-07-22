@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"strconv"
 
 	"labix.org/v2/mgo"
 
@@ -53,10 +54,10 @@ func NewHash() hash.Hash {
 	return multihash.New(md5.New(), sha256.New())
 }
 
-// Prove can be used by a client to responsd to a content
+// NewContentChallengeResponse can be used by a client to respond to a content
 // challenge. The returned value should be passed to BlobStorage.Put
 // when the client retries the request.
-func Prove(chal *ContentChallenge, r io.ReadSeeker) (*ContentChallengeResponse, error) {
+func NewContentChallengeResponse(chal *ContentChallenge, r io.ReadSeeker) (*ContentChallengeResponse, error) {
 	_, err := r.Seek(chal.RangeStart, 0)
 	if err != nil {
 		return nil, err
@@ -75,16 +76,28 @@ func Prove(chal *ContentChallenge, r io.ReadSeeker) (*ContentChallengeResponse, 
 	}, nil
 }
 
-// Store stores data blobs in mongodb.
+// Store stores data blobs in mongodb, de-duplicating by
+// blob hash.
 type Store struct {
 	mstore blobstore.ManagedStorage
 }
 
+// New returns a new blob store that writes to the given database,
+// prefixing its collections with the given prefix.
 func New(db *mgo.Database, prefix string) *Store {
 	rs := blobstore.NewGridFS(db.Name, prefix, db.Session)
 	return &Store{
 		mstore: blobstore.NewManagedStorage(db, rs),
 	}
+}
+
+func (s *Store) challengeResponse(resp *ContentChallengeResponse) error {
+	id, err := strconv.ParseInt(resp.RequestId, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid request id %q", id)
+	}
+	rh := newResourceHash(resp.Hash)
+	return s.mstore.ProofOfAccessResponse(blobstore.NewPutResponse(id, rh.MD5Hash, rh.SHA256Hash))
 }
 
 // Put tries to stream the content from the given reader into blob
@@ -94,12 +107,25 @@ func New(db *mgo.Database, prefix string) *Store {
 // that they have access to the content. If the proof has already been
 // acquired, it should be passed in as the proof argument.
 func (s *Store) Put(r io.Reader, size int64, hash string, proof *ContentChallengeResponse) (*ContentChallenge, error) {
+	if proof != nil {
+		err := s.challengeResponse(proof)
+		if err == nil {
+			return nil, nil
+		}
+		if err != blobstore.ErrResourceDeleted {
+			return nil, err
+		}
+		// The blob has been deleted since the challenge
+		// was created, so continue on with uploading
+		// the content as if there was no previous challenge.
+	}
 	resp, err := s.mstore.PutForEnvironmentRequest("", hash, *newResourceHash(hash))
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if err := s.mstore.PutForEnvironment("", hash, r, size); err != nil {
 				return nil, err
 			}
+			return nil, nil
 		}
 		return nil, err
 	}
