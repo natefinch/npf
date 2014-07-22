@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 
 	jc "github.com/juju/testing/checkers"
@@ -33,10 +32,21 @@ func AssertJSONCall(
 		c.Assert(rec.Body.Bytes(), gc.HasLen, 0)
 		return
 	}
-	resp := reflect.New(reflect.TypeOf(expectBody))
-	err := json.Unmarshal(rec.Body.Bytes(), resp.Interface())
+	// Rather than unmarshaling into something of the expected
+	// body type, we reform the expected body in JSON and
+	// back to interface{}, so we can check the whole content.
+	// Otherwise we lose information when unmarshaling.
+	expectBodyBytes, err := json.Marshal(expectBody)
 	c.Assert(err, gc.IsNil)
-	c.Assert(resp.Elem().Interface(), jc.DeepEquals, expectBody, gc.Commentf("actual JSON response: %q", rec.Body.Bytes()))
+	var expectBodyVal interface{}
+	err = json.Unmarshal(expectBodyBytes, &expectBodyVal)
+	c.Assert(err, gc.IsNil)
+
+	var gotBodyVal interface{}
+	err = json.Unmarshal(rec.Body.Bytes(), &gotBodyVal)
+	c.Assert(err, gc.IsNil)
+
+	c.Assert(gotBodyVal, jc.DeepEquals, expectBodyVal)
 }
 
 // DoRequest invokes a request on the given handler with the given
