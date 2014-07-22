@@ -147,7 +147,7 @@ func (s *Store) Open(hashSum string) (ReadSeekCloser, int64, error) {
 
 // newResourceHash returns a ResourceHash equivalent to the
 // given hashSum. It does not complain if hashSum is invalid - the
-// lower levels will bowl that out.
+// lower levels will fail appropriately.
 func newResourceHash(hashSum string) *blobstore.ResourceHash {
 	p := hex.EncodedLen(md5.Size)
 	if len(hashSum) < p {
