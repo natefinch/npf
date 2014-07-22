@@ -69,17 +69,23 @@ type Handlers struct {
 
 // Router represents a charm store HTTP request router.
 type Router struct {
-	handlers *Handlers
-	db       *mgo.Database
-	handler  http.Handler
+	handlers   *Handlers
+	db         *mgo.Database
+	handler    http.Handler
+	resolveURL func(url *charm.URL) error
 }
 
 // New returns a charm store router that will route requests to
 // the given handlers and retrieve metadata from the given database.
-func New(db *mgo.Database, handlers *Handlers) *Router {
+//
+// The resolveURL function will be called to resolve ids in
+// router paths - it should fill in the Series and Revision
+// fields of its argument URL if they are not specified.
+func New(db *mgo.Database, handlers *Handlers, resolveURL func(url *charm.URL) error) *Router {
 	r := &Router{
-		handlers: handlers,
-		db:       db,
+		handlers:   handlers,
+		db:         db,
+		resolveURL: resolveURL,
 	}
 	mux := http.NewServeMux()
 	for path, handler := range r.handlers.Global {
@@ -116,9 +122,8 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if url.Series == "" || url.Revision == -1 {
-		// TODO(rog) look up charm URL
-		return fmt.Errorf("imprecise charm URLs not yet supported")
+	if err := r.resolveURL(url); err != nil {
+		return err
 	}
 	key, path := handlerKey(path)
 	if key == "" {

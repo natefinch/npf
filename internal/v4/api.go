@@ -52,8 +52,15 @@ func New(store *charmstore.Store) http.Handler {
 			"charm-related":       h.metaCharmRelated,
 			"archive-upload-time": h.metaArchiveUploadTime,
 		},
-	})
+	}, h.resolveURL)
 	return h
+}
+
+func (h *handler) resolveURL(url *charm.URL) error {
+	if url.Series == "" || url.Revision == -1 {
+		return fmt.Errorf("id resolving not implemented yet")
+	}
+	return nil
 }
 
 var errNotImplemented = fmt.Errorf("method not implemented")
