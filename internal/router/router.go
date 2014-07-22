@@ -215,7 +215,7 @@ func RegisterCollection(collectionName string, docType interface{}) {
 	// so store that type in the collections map.
 	t = reflect.PtrTo(t)
 	for typ, name := range collections {
-		if name == collectionName && typ != docType {
+		if name == collectionName && typ != t {
 			panic(fmt.Errorf("duplicate type registered for collection %q", collectionName))
 		}
 	}
