@@ -14,6 +14,7 @@ import (
 
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
+	"github.com/juju/charmstore/params"
 )
 
 type StoreSuite struct {
@@ -35,8 +36,8 @@ func (s *StoreSuite) TestAddCharm(c *gc.C) {
 	sort.Strings(doc.CharmProvidedInterfaces)
 	sort.Strings(doc.CharmRequiredInterfaces)
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
-		URL:                     url,
-		BaseURL:                 mustParseReference("cs:wordpress"),
+		URL:                     (*params.CharmURL)(url),
+		BaseURL:                 mustParseURL("cs:wordpress"),
 		CharmMeta:               wordpress.Meta(),
 		CharmActions:            wordpress.Actions(),
 		CharmConfig:             wordpress.Config(),
@@ -50,10 +51,39 @@ func (s *StoreSuite) TestAddCharm(c *gc.C) {
 	c.Assert(err, jc.Satisfies, mgo.IsDup)
 }
 
-func mustParseReference(urlStr string) *charm.Reference {
+func (s *StoreSuite) TestAddBundle(c *gc.C) {
+	store := NewStore(s.Session.DB("foo"))
+	url := charm.MustParseURL("cs:bundle/wordpress-simple-42")
+	bundle := testing.Charms.BundleDir("wordpress")
+	err := store.AddBundle(url, bundle)
+	c.Assert(err, gc.IsNil)
+
+	var doc mongodoc.Entity
+	err = store.DB.Entities().FindId("cs:bundle/wordpress-simple-42").One(&doc)
+	c.Assert(err, gc.IsNil)
+	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
+		URL:          (*params.CharmURL)(url),
+		BaseURL:      mustParseURL("cs:wordpress-simple"),
+		BundleData:   bundle.Data(),
+		BundleReadMe: bundle.ReadMe(),
+		BundleCharms: []*params.CharmURL{
+			mustParseURL("wordpress"),
+			mustParseURL("mysql"),
+		},
+	})
+
+	// Try inserting the bundle again - it should fail because the bundle is
+	// already there.
+	err = store.AddBundle(url, bundle)
+	c.Assert(err, jc.Satisfies, mgo.IsDup)
+}
+
+func mustParseURL(urlStr string) *params.CharmURL {
 	ref, _, err := charm.ParseReference(urlStr)
 	if err != nil {
 		panic(err)
 	}
-	return &ref
+	return &params.CharmURL{
+		Reference: ref,
+	}
 }
