@@ -58,6 +58,7 @@ var routerTests = []struct {
 	urlStr     string
 	expectCode int
 	expectBody interface{}
+	resolveURL func(*charm.URL) error
 }{{
 	about: "global handler",
 	handlers: Handlers{
@@ -155,6 +156,32 @@ var routerTests = []struct {
 	expectCode: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "errorIdHandler error",
+	},
+}, {
+	about: "id with unspecified series and revision, resolved",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:     "http://example.com/~joe/wordpress/foo",
+	resolveURL: newResolveURL("precise", 34),
+	expectCode: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		CharmURL: "cs:~joe/precise/wordpress-34",
+	},
+}, {
+	about: "id with error on resolving",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:     "http://example.com/wordpress/meta",
+	resolveURL: resolveURLError,
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "resolve URL error",
 	},
 }, {
 	about: "meta handler",
@@ -255,12 +282,39 @@ var routerTests = []struct {
 	},
 }}
 
+// newResolveURL returns a URL resolver that resolves
+// unspecified series and revision to the given series
+// and revision.
+func newResolveURL(series string, revision int) func(*charm.URL) error {
+	return func(url *charm.URL) error {
+		if url.Series == "" {
+			url.Series = series
+		}
+		if url.Revision == -1 {
+			url.Revision = revision
+		}
+		return nil
+	}
+}
+
+func resolveURLError(*charm.URL) error {
+	return fmt.Errorf("resolve URL error")
+}
+
+func noResolveURL(*charm.URL) error {
+	return nil
+}
+
 func (s *RouterSuite) TestRouter(c *gc.C) {
 	db := s.populateDatabase(c)
 
 	for i, test := range routerTests {
 		c.Logf("test %d: %s", i, test.about)
-		router := New(db, &test.handlers)
+		resolve := noResolveURL
+		if test.resolveURL != nil {
+			resolve = test.resolveURL
+		}
+		router := New(db, &test.handlers, resolve)
 		storetesting.AssertJSONCall(c, router, "GET", test.urlStr, "", test.expectCode, test.expectBody)
 	}
 }
@@ -305,7 +359,7 @@ func (s *RouterSuite) TestGetMetadata(c *gc.C) {
 				"item2": metaGetItem2,
 				"test":  testMetaHandler,
 			},
-		})
+		}, noResolveURL)
 		id := charm.MustParseURL(test.id)
 		result, err := router.GetMetadata(id, test.includes)
 		if test.expectError != "" {
