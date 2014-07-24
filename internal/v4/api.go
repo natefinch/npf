@@ -14,6 +14,7 @@ import (
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/router"
+	"github.com/juju/charmstore/params"
 )
 
 type handler struct {
@@ -64,6 +65,7 @@ func (h *handler) resolveURL(url *charm.URL) error {
 	return nil
 }
 
+var ErrMetadataNotRelevant = fmt.Errorf("metadata not relevant for the given entity")
 var errNotImplemented = fmt.Errorf("method not implemented")
 
 // GET stats/counter/key[:key]...?[by=unit]&start=date][&stop=date][&list=1]
@@ -127,20 +129,29 @@ func (h *handler) serveArchiveFile(charmId *charm.URL, w http.ResponseWriter, re
 // GET id/meta/charm-metadata
 // http://tinyurl.com/poeoulw
 func (h *handler) metaCharmMetadata(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+	if params.IsBundle(id) {
+		return nil, ErrMetadataNotRelevant
+	}
 	var doc *mongodoc.Entity
 	err := getter.GetItem(id, &doc, "charmmeta")
 	if err != nil {
 		return nil, err
 	}
-	// TODO(rog) When we have bundles, check whether the id is a bundle
-	// and return ErrMetadataNotRelevant if so.
 	return doc.CharmMeta, nil
 }
 
 // GET id/meta/bundle-metadata
 // http://tinyurl.com/ozshbtb
 func (h *handler) metaBundleMetadata(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
+	if !params.IsBundle(id) {
+		return nil, ErrMetadataNotRelevant
+	}
+	var doc *mongodoc.Entity
+	err := getter.GetItem(id, &doc, "bundledata")
+	if err != nil {
+		return nil, err
+	}
+	return doc.BundleData, nil
 }
 
 // GET id/meta/manifest
@@ -158,6 +169,9 @@ func (h *handler) metaCharmActions(getter router.ItemGetter, id *charm.URL, path
 // GET id/meta/charm-config
 // http://tinyurl.com/oxxyujx
 func (h *handler) metaCharmConfig(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+	if params.IsBundle(id) {
+		return nil, ErrMetadataNotRelevant
+	}
 	var entity *mongodoc.Entity
 	err := getter.GetItem(id, &entity, "charmconfig")
 	if err != nil {

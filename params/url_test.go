@@ -8,6 +8,7 @@ import (
 
 	"github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
+	"gopkg.in/juju/charm.v2"
 	"labix.org/v2/mgo/bson"
 	gc "launchpad.net/gocheck"
 
@@ -97,4 +98,9 @@ func (s *urlSuite) TestParseURLError(c *gc.C) {
 	url, err := params.ParseURL("bad:wordpress")
 	c.Assert(url, gc.IsNil)
 	c.Assert(err, gc.ErrorMatches, `charm URL has invalid schema: "bad:wordpress"`)
+}
+
+func (s *urlSuite) TestIsBundle(c *gc.C) {
+	c.Assert(params.IsBundle(charm.MustParseURL("cs:trusty/wordpress-42")), jc.IsFalse)
+	c.Assert(params.IsBundle(charm.MustParseURL("cs:bundle/wordpress-simple-2")), jc.IsTrue)
 }
