@@ -37,7 +37,7 @@ func (s *StoreSuite) TestAddCharm(c *gc.C) {
 	sort.Strings(doc.CharmRequiredInterfaces)
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
 		URL:                     (*params.CharmURL)(url),
-		BaseURL:                 mustParseURL("cs:wordpress"),
+		BaseURL:                 (*params.CharmURL)(mustParseURL("cs:wordpress")),
 		CharmMeta:               wordpress.Meta(),
 		CharmActions:            wordpress.Actions(),
 		CharmConfig:             wordpress.Config(),
@@ -63,12 +63,12 @@ func (s *StoreSuite) TestAddBundle(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
 		URL:          (*params.CharmURL)(url),
-		BaseURL:      mustParseURL("cs:wordpress-simple"),
+		BaseURL:      (*params.CharmURL)(mustParseURL("cs:wordpress-simple")),
 		BundleData:   bundle.Data(),
 		BundleReadMe: bundle.ReadMe(),
 		BundleCharms: []*params.CharmURL{
-			mustParseURL("wordpress"),
-			mustParseURL("mysql"),
+			(*params.CharmURL)(mustParseURL("wordpress")),
+			(*params.CharmURL)(mustParseURL("mysql")),
 		},
 	})
 
@@ -163,15 +163,5 @@ func mustParseURL(s string) *charm.URL {
 	return &charm.URL{
 		Reference: ref,
 		Series:    series,
-	}
-}
-
-func mustParseReference(urlStr string) *charm.Reference {
-	ref, _, err := charm.ParseReference(urlStr)
-	if err != nil {
-		panic(err)
-	}
-	return &params.CharmURL{
-		Reference: ref,
 	}
 }

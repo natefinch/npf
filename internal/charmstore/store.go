@@ -50,14 +50,15 @@ func (s *Store) AddCharm(url *charm.URL, c charm.Charm) error {
 func (s *Store) ExpandURL(url *charm.URL) ([]*charm.URL, error) {
 	var docs []mongodoc.Entity
 	err := s.DB.Entities().Find(bson.D{{
-		}}).Select(bson.D{{"_id", 1}}).All(&docs)
+		"baseurl", baseURL((*params.CharmURL)(url)),
+	}}).Select(bson.D{{"_id", 1}}).All(&docs)
 	if err != nil {
 		return nil, err
 	}
 	urls := make([]*charm.URL, 0, len(docs))
 	for _, doc := range docs {
-		if matchURL(doc.URL, url) {
-			urls = append(urls, doc.URL)
+		if matchURL((*charm.URL)(doc.URL), url) {
+			urls = append(urls, (*charm.URL)(doc.URL))
 		}
 	}
 	return urls, nil
