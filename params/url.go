@@ -10,6 +10,11 @@ import (
 	"labix.org/v2/mgo/bson"
 )
 
+// IsBundle reports whether the given URL represents a bundle.
+func IsBundle(url *charm.URL) bool {
+	return url.Series == "bundle"
+}
+
 // CharmURL represents a charm or bundle URL. In the charm case, the URL may
 // not include the series part.
 // TODO(frankban): this type can be removed after changing charm.URL to be
