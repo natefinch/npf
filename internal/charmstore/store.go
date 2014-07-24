@@ -11,6 +11,7 @@ import (
 
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/router"
+	"github.com/juju/charmstore/params"
 )
 
 // Store represents the underlying charm store data store.
@@ -32,9 +33,10 @@ func NewStore(db *mgo.Database) *Store {
 // The charm does not have any associated content.
 // TODO fix this to add content too.
 func (s *Store) AddCharm(url *charm.URL, c charm.Charm) error {
+	charmUrl := (*params.CharmURL)(url)
 	return s.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                     url,
-		BaseURL:                 baseURL(url),
+		URL:                     charmUrl,
+		BaseURL:                 baseURL(charmUrl),
 		CharmMeta:               c.Meta(),
 		CharmConfig:             c.Config(),
 		CharmActions:            c.Actions(),
@@ -56,9 +58,10 @@ func interfacesForRelations(rels map[string]charm.Relation) []string {
 	return result
 }
 
-func baseURL(url *charm.URL) *charm.Reference {
-	newURL := url.Reference
+func baseURL(url *params.CharmURL) *params.CharmURL {
+	newURL := *url
 	newURL.Revision = -1
+	newURL.Series = ""
 	return &newURL
 }
 
@@ -69,7 +72,37 @@ var errNotImplemented = fmt.Errorf("not implemented")
 // The bundle does not have any associated content.
 // TODO fix this to add content too.
 func (s *Store) AddBundle(url *charm.URL, b charm.Bundle) error {
-	return errNotImplemented
+	charmUrl := (*params.CharmURL)(url)
+	bundleData := b.Data()
+	urls, err := bundleCharms(bundleData)
+	if err != nil {
+		return err
+	}
+	return s.DB.Entities().Insert(&mongodoc.Entity{
+		URL:          charmUrl,
+		BaseURL:      baseURL(charmUrl),
+		BundleData:   bundleData,
+		BundleReadMe: b.ReadMe(),
+		BundleCharms: urls,
+	})
+}
+
+func bundleCharms(data *charm.BundleData) ([]*params.CharmURL, error) {
+	// Use a map to de-duplicate the URL list: a bundle can include services
+	// deployed by the same charm.
+	urlMap := make(map[string]*params.CharmURL)
+	for _, service := range data.Services {
+		url, err := params.ParseURL(service.Charm)
+		if err != nil {
+			return nil, err
+		}
+		urlMap[url.String()] = url
+	}
+	urls := make([]*params.CharmURL, 0, len(urlMap))
+	for _, url := range urlMap {
+		urls = append(urls, url)
+	}
+	return urls, nil
 }
 
 // StoreDatabase wraps an mgo.DB ands adds a few convenience methods.
