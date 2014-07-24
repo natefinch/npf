@@ -16,54 +16,62 @@ import (
 
 type urlSuite struct {
 	testing.IsolationSuite
-	charmURL *params.CharmURL
 }
 
 var _ = gc.Suite(&urlSuite{})
 
 type urlDoc struct {
-	URL *params.CharmURL
+	URL *params.CharmURL `json:"url" bson:"url"`
 }
 
-var urlCodecs = []struct {
+var marshalTests = []struct {
 	name      string
-	data      string
+	url       string
+	data      map[string]interface{}
 	marshal   func(interface{}) ([]byte, error)
 	unmarshal func([]byte, interface{}) error
 }{{
 	name:      "bson",
-	data:      "cs:trusty/wordpress-42",
+	url:       "cs:trusty/wordpress-42",
+	data:      map[string]interface{}{"url": "cs:trusty/wordpress-42"},
 	marshal:   bson.Marshal,
 	unmarshal: bson.Unmarshal,
 }, {
 	name:      "json",
-	data:      `{"URL":"cs:trusty/wordpress-42"}`,
+	url:       "cs:trusty/wordpress-42",
+	data:      map[string]interface{}{"url": "cs:trusty/wordpress-42"},
+	marshal:   json.Marshal,
+	unmarshal: json.Unmarshal,
+}, {
+	name:      "bson no series",
+	url:       "django",
+	data:      map[string]interface{}{"url": "cs:django"},
+	marshal:   bson.Marshal,
+	unmarshal: bson.Unmarshal,
+}, {
+	name:      "json no series",
+	url:       "django",
+	data:      map[string]interface{}{"url": "cs:django"},
 	marshal:   json.Marshal,
 	unmarshal: json.Unmarshal,
 }}
 
-func (s *urlSuite) SetUpSuite(c *gc.C) {
-	s.IsolationSuite.SetUpSuite(c)
-	charmURL, err := params.ParseURL("cs:trusty/wordpress-42")
-	c.Assert(err, gc.IsNil)
-	s.charmURL = charmURL
-}
-
 func (s *urlSuite) TestMarshal(c *gc.C) {
-	for i, codec := range urlCodecs {
-		c.Logf("%d: codec %s", i, codec.name)
+	for i, test := range marshalTests {
+		c.Logf("%d: codec %s", i, test.name)
+
+		charmURL, err := params.ParseURL(test.url)
+		c.Assert(err, gc.IsNil)
 
 		// Check serialization.
-		sourceDoc := urlDoc{s.charmURL}
-		serialized, err := codec.marshal(sourceDoc)
+		serialized, err := test.marshal(urlDoc{charmURL})
 		c.Assert(err, gc.IsNil)
-		c.Assert(string(serialized), jc.Contains, codec.data)
 
 		// Check de-serialization.
-		var targetDoc urlDoc
-		err = codec.unmarshal(serialized, &targetDoc)
+		var gotData map[string]interface{}
+		err = test.unmarshal(serialized, &gotData)
 		c.Assert(err, gc.IsNil)
-		c.Assert(targetDoc, jc.DeepEquals, sourceDoc)
+		c.Assert(gotData, jc.DeepEquals, test.data)
 	}
 }
 
