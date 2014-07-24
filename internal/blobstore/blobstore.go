@@ -9,11 +9,11 @@ import (
 	"io"
 	"strconv"
 
+	"github.com/juju/blobstore"
+	"github.com/juju/errors"
 	"labix.org/v2/mgo"
 
-	"github.com/juju/blobstore"
 	"github.com/juju/charmstore/internal/multihash"
-	"github.com/juju/errors"
 )
 
 type ReadSeekCloser interface {

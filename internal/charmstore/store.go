@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/juju/charm.v2"
 	"labix.org/v2/mgo"
+	"labix.org/v2/mgo/bson"
 
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/router"
@@ -43,6 +44,33 @@ func (s *Store) AddCharm(url *charm.URL, c charm.Charm) error {
 		CharmProvidedInterfaces: interfacesForRelations(c.Meta().Provides),
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
 	})
+}
+
+// ExpandURL returns all the URLs that the given URL may refer to.
+func (s *Store) ExpandURL(url *charm.URL) ([]*charm.URL, error) {
+	var docs []mongodoc.Entity
+	err := s.DB.Entities().Find(bson.D{{
+		}}).Select(bson.D{{"_id", 1}}).All(&docs)
+	if err != nil {
+		return nil, err
+	}
+	urls := make([]*charm.URL, 0, len(docs))
+	for _, doc := range docs {
+		if matchURL(doc.URL, url) {
+			urls = append(urls, doc.URL)
+		}
+	}
+	return urls, nil
+}
+
+func matchURL(url, pattern *charm.URL) bool {
+	if pattern.Series != "" && url.Series != pattern.Series {
+		return false
+	}
+	if pattern.Revision != -1 && url.Revision != pattern.Revision {
+		return false
+	}
+	return true
 }
 
 func interfacesForRelations(rels map[string]charm.Relation) []string {

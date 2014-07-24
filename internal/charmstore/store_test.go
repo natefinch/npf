@@ -78,7 +78,95 @@ func (s *StoreSuite) TestAddBundle(c *gc.C) {
 	c.Assert(err, jc.Satisfies, mgo.IsDup)
 }
 
-func mustParseURL(urlStr string) *params.CharmURL {
+var expandURLTests = []struct {
+	inStore []string
+	expand  string
+	expect  []string
+}{{
+	inStore: []string{"cs:precise/wordpress-23"},
+	expand:  "wordpress",
+	expect:  []string{"cs:precise/wordpress-23"},
+}, {
+	inStore: []string{"cs:precise/wordpress-23", "cs:precise/wordpress-24"},
+	expand:  "wordpress",
+	expect:  []string{"cs:precise/wordpress-23", "cs:precise/wordpress-24"},
+}, {
+	inStore: []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-24"},
+	expand:  "precise/wordpress",
+	expect:  []string{"cs:precise/wordpress-23"},
+}, {
+	inStore: []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-24", "cs:foo/bar-434"},
+	expand:  "wordpress",
+	expect:  []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-24"},
+}, {
+	inStore: []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-23", "cs:trusty/wordpress-24"},
+	expand:  "wordpress-23",
+	expect:  []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-23"},
+}, {
+	inStore: []string{"cs:~user/precise/wordpress-23", "cs:~user/trusty/wordpress-23"},
+	expand:  "~user/precise/wordpress",
+	expect:  []string{"cs:~user/precise/wordpress-23"},
+}, {
+	inStore: []string{"cs:~user/precise/wordpress-23", "cs:~user/trusty/wordpress-23"},
+	expand:  "~user/wordpress",
+	expect:  []string{"cs:~user/precise/wordpress-23", "cs:~user/trusty/wordpress-23"},
+}}
+
+func (s *StoreSuite) TestExpandURL(c *gc.C) {
+	wordpress := testing.Charms.CharmDir("wordpress")
+	for i, test := range expandURLTests {
+		c.Logf("test %d: %q from %q", i, test.expand, test.inStore)
+		store := NewStore(s.Session.DB("foo"))
+		_, err := store.DB.Entities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+		urls := mustParseURLs(test.inStore)
+		for _, url := range urls {
+			err := store.AddCharm(url, wordpress)
+			c.Assert(err, gc.IsNil)
+		}
+		gotURLs, err := store.ExpandURL(mustParseURL(test.expand))
+		c.Assert(err, gc.IsNil)
+
+		gotURLStrs := urlStrings(gotURLs)
+		sort.Strings(gotURLStrs)
+		c.Assert(gotURLStrs, jc.DeepEquals, test.expect)
+	}
+}
+
+func urlStrings(urls []*charm.URL) []string {
+	urlStrs := make([]string, len(urls))
+	for i, url := range urls {
+		urlStrs[i] = url.String()
+	}
+	return urlStrs
+}
+
+func mustParseURLs(urlStrs []string) []*charm.URL {
+	urls := make([]*charm.URL, len(urlStrs))
+	for i, u := range urlStrs {
+		var err error
+		urls[i], err = charm.ParseURL(u)
+		if err != nil {
+			panic(err)
+		}
+	}
+	return urls
+}
+
+// mustParseURL is like charm.MustParseURL except
+// that it allows an unspecified series.
+func mustParseURL(s string) *charm.URL {
+	ref, series, err := charm.ParseReference(s)
+	if err != nil {
+		panic(err)
+	}
+	return &charm.URL{
+		Reference: ref,
+		Series:    series,
+	}
+}
+
+func mustParseReference(urlStr string) *charm.Reference {
 	ref, _, err := charm.ParseReference(urlStr)
 	if err != nil {
 		panic(err)
