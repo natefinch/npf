@@ -71,7 +71,10 @@ func matchURL(url, pattern *charm.URL) bool {
 	if pattern.Revision != -1 && url.Revision != pattern.Revision {
 		return false
 	}
-	return true
+	// Check the name for completness only - the
+	// query should only be returning URLs with
+	// matching names.
+	return url.Name == pattern.Name
 }
 
 func interfacesForRelations(rels map[string]charm.Relation) []string {

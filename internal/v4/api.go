@@ -57,7 +57,8 @@ func New(store *charmstore.Store) http.Handler {
 }
 
 // ResolveURL resolves the series and revision of the given URL
-// if unspecified.
+// if either is unspecified by filling them out with information retrieved
+// from the store.
 func ResolveURL(store *charmstore.Store, url *charm.URL) error {
 	if url.Series != "" && url.Revision != -1 {
 		return nil

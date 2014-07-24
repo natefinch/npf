@@ -61,14 +61,15 @@ func (s *StoreSuite) TestAddBundle(c *gc.C) {
 	var doc mongodoc.Entity
 	err = store.DB.Entities().FindId("cs:bundle/wordpress-simple-42").One(&doc)
 	c.Assert(err, gc.IsNil)
+	sort.Sort(orderedURLs(doc.BundleCharms))
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
 		URL:          (*params.CharmURL)(url),
 		BaseURL:      (*params.CharmURL)(mustParseURL("cs:wordpress-simple")),
 		BundleData:   bundle.Data(),
 		BundleReadMe: bundle.ReadMe(),
 		BundleCharms: []*params.CharmURL{
-			(*params.CharmURL)(mustParseURL("wordpress")),
 			(*params.CharmURL)(mustParseURL("mysql")),
+			(*params.CharmURL)(mustParseURL("wordpress")),
 		},
 	})
 
@@ -76,6 +77,20 @@ func (s *StoreSuite) TestAddBundle(c *gc.C) {
 	// already there.
 	err = store.AddBundle(url, bundle)
 	c.Assert(err, jc.Satisfies, mgo.IsDup)
+}
+
+type orderedURLs []*params.CharmURL
+
+func (o orderedURLs) Less(i, j int) bool {
+	return o[i].String() < o[j].String()
+}
+
+func (o orderedURLs) Swap(i, j int) {
+	o[i], o[j] = o[j], o[i]
+}
+
+func (o orderedURLs) Len() int {
+	return len(o)
 }
 
 var expandURLTests = []struct {
@@ -110,6 +125,14 @@ var expandURLTests = []struct {
 	inStore: []string{"cs:~user/precise/wordpress-23", "cs:~user/trusty/wordpress-23"},
 	expand:  "~user/wordpress",
 	expect:  []string{"cs:~user/precise/wordpress-23", "cs:~user/trusty/wordpress-23"},
+}, {
+	inStore: []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-24", "cs:foo/bar-434"},
+	expand:  "precise/wordpress-23",
+	expect:  []string{"cs:precise/wordpress-23"},
+}, {
+	inStore: []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-24", "cs:foo/bar-434"},
+	expand:  "arble",
+	expect:  []string{},
 }}
 
 func (s *StoreSuite) TestExpandURL(c *gc.C) {
