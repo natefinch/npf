@@ -10,7 +10,7 @@ import (
 	"labix.org/v2/mgo/bson"
 )
 
-// IsBundle returns whether the given URL represents a bundle.
+// IsBundle reports whether the given URL represents a bundle.
 func IsBundle(url *charm.URL) bool {
 	return url.Series == "bundle"
 }
