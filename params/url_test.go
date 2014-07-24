@@ -32,7 +32,7 @@ var urlCodecs = []struct {
 	unmarshal func([]byte, interface{}) error
 }{{
 	name:      "bson",
-	data:      "%\x00\x00\x00\x02url\x00\x17\x00\x00\x00cs:trusty/wordpress-42\x00\x00",
+	data:      "cs:trusty/wordpress-42",
 	marshal:   bson.Marshal,
 	unmarshal: bson.Unmarshal,
 }, {
@@ -50,21 +50,20 @@ func (s *urlSuite) SetUpSuite(c *gc.C) {
 }
 
 func (s *urlSuite) TestMarshal(c *gc.C) {
-	for _, codec := range urlCodecs {
-		c.Logf("codec %s", codec.name)
-		serialized, err := codec.marshal(urlDoc{s.charmURL})
-		c.Assert(err, gc.IsNil)
-		c.Assert(string(serialized), gc.Equals, codec.data)
-	}
-}
+	for i, codec := range urlCodecs {
+		c.Logf("%d: codec %s", i, codec.name)
 
-func (s *urlSuite) TestUnmarshal(c *gc.C) {
-	for _, codec := range urlCodecs {
-		c.Logf("codec %s", codec.name)
-		var doc urlDoc
-		err := codec.unmarshal([]byte(codec.data), &doc)
+		// Check serialization.
+		sourceDoc := urlDoc{s.charmURL}
+		serialized, err := codec.marshal(sourceDoc)
 		c.Assert(err, gc.IsNil)
-		c.Assert(doc.URL, jc.DeepEquals, s.charmURL)
+		c.Assert(string(serialized), jc.Contains, codec.data)
+
+		// Check de-serialization.
+		var targetDoc urlDoc
+		err = codec.unmarshal(serialized, &targetDoc)
+		c.Assert(err, gc.IsNil)
+		c.Assert(targetDoc, jc.DeepEquals, sourceDoc)
 	}
 }
 

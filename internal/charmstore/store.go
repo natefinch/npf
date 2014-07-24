@@ -88,12 +88,18 @@ func (s *Store) AddBundle(url *charm.URL, b charm.Bundle) error {
 }
 
 func bundleCharms(data *charm.BundleData) ([]*params.CharmURL, error) {
-	urls := make([]*params.CharmURL, 0, len(data.Services))
+	// Use a map to de-duplicate the URL list: a bundle can include services
+	// deployed by the same charm.
+	urlMap := make(map[string]*params.CharmURL)
 	for _, service := range data.Services {
 		url, err := params.ParseURL(service.Charm)
 		if err != nil {
 			return nil, err
 		}
+		urlMap[url.String()] = url
+	}
+	urls := make([]*params.CharmURL, 0, len(urlMap))
+	for _, url := range urlMap {
 		urls = append(urls, url)
 	}
 	return urls, nil
