@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"math/rand"
 	"strconv"
+	"time"
 
 	"labix.org/v2/mgo"
 
@@ -48,6 +50,15 @@ type ContentChallengeResponse struct {
 	RequestId string
 	Hash      string
 }
+
+func getTrustedChallengeResponse() *ContentChallengeResponse {
+	rand.Seed(time.Now().UnixNano())
+	return &ContentChallengeResponse{strconv.Itoa(rand.Int()), strconv.Itoa(rand.Int())}
+}
+
+// Trusted is a challenge response we trust.
+// When a trusted proof is provided, the associated content is always uploaded.
+var Trusted = getTrustedChallengeResponse()
 
 // NewHash is used to calculate checksums for the blob store.
 func NewHash() hash.Hash {
@@ -107,7 +118,7 @@ func (s *Store) challengeResponse(resp *ContentChallengeResponse) error {
 // that they have access to the content. If the proof has already been
 // acquired, it should be passed in as the proof argument.
 func (s *Store) Put(r io.Reader, size int64, hash string, proof *ContentChallengeResponse) (*ContentChallenge, error) {
-	if proof != nil {
+	if proof != nil && proof != Trusted {
 		err := s.challengeResponse(proof)
 		if err == nil {
 			return nil, nil
@@ -128,6 +139,9 @@ func (s *Store) Put(r io.Reader, size int64, hash string, proof *ContentChalleng
 			return nil, nil
 		}
 		return nil, err
+	}
+	if proof == Trusted {
+		return nil, nil
 	}
 	return &ContentChallenge{
 		RequestId:   fmt.Sprint(resp.RequestId),
