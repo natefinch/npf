@@ -94,7 +94,7 @@ var routerTests = []struct {
 	expectCode: http.StatusOK,
 	expectBody: idHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-34",
-		Path:     "blah/arble",
+		Path:     "/blah/arble",
 	},
 }, {
 	about: "id handler with allowed extra path but none given",
@@ -143,7 +143,7 @@ var routerTests = []struct {
 	expectCode: http.StatusOK,
 	expectBody: idHandlerTestResp{
 		CharmURL: "cs:~joe/precise/wordpress-34",
-		Path:     "blah/arble",
+		Path:     "/blah/arble",
 	},
 }, {
 	about: "id handler that returns an error",
@@ -206,7 +206,7 @@ var routerTests = []struct {
 	expectCode: http.StatusOK,
 	expectBody: metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
-		Path:     "bar/baz",
+		Path:     "/bar/baz",
 	},
 }, {
 	about: "meta handler with params",
@@ -265,20 +265,160 @@ var routerTests = []struct {
 	expectBody: params.MetaAnyResponse{
 		Id: charm.MustParseURL("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
-			"item1": map[string]interface{}{
-				"Id":   float64(1),
-				"Name": "item1.1",
+			"item1": testItem1{
+				Id:   1,
+				Name: "item1.1",
 			},
-			"item2": map[string]interface{}{
-				"Id":    float64(3),
-				"Count": float64(888),
+			"item2": testItem2{
+				Id:    3,
+				Count: 888,
 			},
-			"test": map[string]interface{}{
-				"CharmURL": "cs:precise/wordpress-42",
-				"Path":     "",
-				"Flags":    nil,
+			"test": metaHandlerTestResp{
+				CharmURL: "cs:precise/wordpress-42",
 			},
 		},
+	},
+}, {
+	about:  "meta/any, includes with additional path elements",
+	urlStr: "http://example.com/precise/wordpress-42/meta/any?include=item1/foo&include=item2/bar&include=item1",
+	handlers: Handlers{
+		Meta: map[string]MetaHandler{
+			"item1/": testMetaHandler,
+			"item2/": testMetaHandler,
+			"item1":  testMetaHandler,
+		},
+	},
+	expectCode: http.StatusOK,
+	expectBody: params.MetaAnyResponse{
+		Id: charm.MustParseURL("cs:precise/wordpress-42"),
+		Meta: map[string]interface{}{
+			"item1/foo": metaHandlerTestResp{
+				CharmURL: "cs:precise/wordpress-42",
+				Path:     "/foo",
+			},
+			"item1": metaHandlerTestResp{
+				CharmURL: "cs:precise/wordpress-42",
+			},
+			"item2/bar": metaHandlerTestResp{
+				CharmURL: "cs:precise/wordpress-42",
+				Path:     "/bar",
+			},
+		},
+	},
+}, {
+	about:  "bulk meta handler, single id",
+	urlStr: "http://example.com/meta/foo?id=precise/wordpress-42",
+	handlers: Handlers{
+		Meta: map[string]MetaHandler{
+			"foo": testMetaHandler,
+		},
+	},
+	expectCode: http.StatusOK,
+	expectBody: map[string]metaHandlerTestResp{
+		"precise/wordpress-42": {
+			CharmURL: "cs:precise/wordpress-42",
+		},
+	},
+}, {
+	about:  "bulk meta handler, several ids",
+	urlStr: "http://example.com/meta/foo?id=precise/wordpress-42&id=quantal/foo-32",
+	handlers: Handlers{
+		Meta: map[string]MetaHandler{
+			"foo": testMetaHandler,
+		},
+	},
+	expectCode: http.StatusOK,
+	expectBody: map[string]metaHandlerTestResp{
+		"precise/wordpress-42": {
+			CharmURL: "cs:precise/wordpress-42",
+		},
+		"quantal/foo-32": {
+			CharmURL: "cs:quantal/foo-32",
+		},
+	},
+}, {
+	about:  "bulk meta/any handler, several ids",
+	urlStr: "http://example.com/meta/any?id=precise/wordpress-42&id=quantal/foo-32&include=foo&include=bar/something",
+	handlers: Handlers{
+		Meta: map[string]MetaHandler{
+			"foo":  testMetaHandler,
+			"bar/": testMetaHandler,
+		},
+	},
+	expectCode: http.StatusOK,
+	expectBody: map[string]params.MetaAnyResponse{
+		"precise/wordpress-42": {
+			Id: charm.MustParseURL("cs:precise/wordpress-42"),
+			Meta: map[string]interface{}{
+				"foo": metaHandlerTestResp{
+					CharmURL: "cs:precise/wordpress-42",
+				},
+				"bar/something": metaHandlerTestResp{
+					CharmURL: "cs:precise/wordpress-42",
+					Path:     "/something",
+				},
+			},
+		},
+		"quantal/foo-32": {
+			Id: charm.MustParseURL("cs:quantal/foo-32"),
+			Meta: map[string]interface{}{
+				"foo": metaHandlerTestResp{
+					CharmURL: "cs:quantal/foo-32",
+				},
+				"bar/something": metaHandlerTestResp{
+					CharmURL: "cs:quantal/foo-32",
+					Path:     "/something",
+				},
+			},
+		},
+	},
+}, {
+	about:  "bulk meta handler with unresolved id",
+	urlStr: "http://example.com/meta/foo/bar?id=wordpress",
+	handlers: Handlers{
+		Meta: map[string]MetaHandler{
+			"foo/": testMetaHandler,
+		},
+	},
+	resolveURL: newResolveURL("precise", 100),
+	expectCode: http.StatusOK,
+	expectBody: map[string]metaHandlerTestResp{
+		"wordpress": {
+			CharmURL: "cs:precise/wordpress-100",
+			Path:     "/bar",
+		},
+	},
+}, {
+	about:  "bulk meta handler with extra flags",
+	urlStr: "http://example.com/meta/foo/bar?id=wordpress&arble=bletch&z=w&z=p",
+	handlers: Handlers{
+		Meta: map[string]MetaHandler{
+			"foo/": testMetaHandler,
+		},
+	},
+	resolveURL: newResolveURL("precise", 100),
+	expectCode: http.StatusOK,
+	expectBody: map[string]metaHandlerTestResp{
+		"wordpress": {
+			CharmURL: "cs:precise/wordpress-100",
+			Path:     "/bar",
+			Flags: url.Values{
+				"arble": {"bletch"},
+				"z":     {"w", "p"},
+			},
+		},
+	},
+}, {
+	about:  "bulk meta handler with no ids",
+	urlStr: "http://example.com/meta/foo/bar",
+	handlers: Handlers{
+		Meta: map[string]MetaHandler{
+			"foo/": testMetaHandler,
+		},
+	},
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "no ids specified in meta request",
 	},
 }}
 
@@ -412,36 +552,40 @@ func (s *RouterSuite) TestSplitId(c *gc.C) {
 		url, rest, err = splitId(test.path + "/some/more")
 		c.Assert(err, gc.Equals, nil)
 		c.Assert(url.String(), gc.Equals, test.expectURL)
-		c.Assert(rest, gc.Equals, "some/more")
+		c.Assert(rest, gc.Equals, "/some/more")
 	}
 }
 
 var handlerKeyTests = []struct {
-	key        string
+	path       string
 	expectKey  string
 	expectRest string
 }{{
-	key:        "foo/bar",
+	path:       "/foo/bar",
 	expectKey:  "foo/",
-	expectRest: "bar",
+	expectRest: "/bar",
 }, {
-	key:        "foo",
+	path:       "/foo",
 	expectKey:  "foo",
 	expectRest: "",
 }, {
-	key:        "foo/bar/baz",
+	path:       "/foo/bar/baz",
 	expectKey:  "foo/",
-	expectRest: "bar/baz",
+	expectRest: "/bar/baz",
 }, {
-	key:        "foo/",
+	path:       "/foo/",
+	expectKey:  "foo",
+	expectRest: "",
+}, {
+	path:       "foo/",
 	expectKey:  "foo",
 	expectRest: "",
 }}
 
 func (s *RouterSuite) TestHandlerKey(c *gc.C) {
 	for i, test := range handlerKeyTests {
-		c.Logf("test %d: %s", i, test.key)
-		key, rest := handlerKey(test.key)
+		c.Logf("test %d: %s", i, test.path)
+		key, rest := handlerKey(test.path)
 		c.Assert(key, gc.Equals, test.expectKey)
 		c.Assert(rest, gc.Equals, test.expectRest)
 	}
@@ -453,26 +597,30 @@ var splitPathTests = []struct {
 	expectElem string
 	expectRest string
 }{{
+	path:       "/foo/bar",
+	expectElem: "foo",
+	expectRest: "/bar",
+}, {
 	path:       "foo/bar",
 	expectElem: "foo",
-	expectRest: "bar",
+	expectRest: "/bar",
 }, {
 	path:       "foo/",
 	expectElem: "foo",
+	expectRest: "/",
+}, {
+	path:       "/foo/bar/baz",
+	expectElem: "foo",
+	expectRest: "/bar/baz",
+}, {
+	path:       "/foo",
+	expectElem: "foo",
 	expectRest: "",
 }, {
-	path:       "foo/bar/baz",
-	expectElem: "foo",
-	expectRest: "bar/baz",
-}, {
-	path:       "foo",
-	expectElem: "foo",
-	expectRest: "",
-}, {
-	path:       "foo/bar/baz",
+	path:       "/foo/bar/baz",
 	index:      4,
 	expectElem: "bar",
-	expectRest: "baz",
+	expectRest: "/baz",
 }}
 
 func (s *RouterSuite) TestSplitPath(c *gc.C) {

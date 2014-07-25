@@ -61,6 +61,7 @@ func (s *StoreSuite) TestAddBundle(c *gc.C) {
 	var doc mongodoc.Entity
 	err = store.DB.Entities().FindId("cs:bundle/wordpress-simple-42").One(&doc)
 	c.Assert(err, gc.IsNil)
+	// TODO sort doc.BundleCharms to prevent the test sporadically failing.
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
 		URL:          (*params.CharmURL)(url),
 		BaseURL:      mustParseURL("cs:wordpress-simple"),

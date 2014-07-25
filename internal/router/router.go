@@ -88,6 +88,7 @@ func New(db *mgo.Database, handlers *Handlers, resolveURL func(url *charm.URL) e
 		resolveURL: resolveURL,
 	}
 	mux := http.NewServeMux()
+	mux.Handle("/meta/", http.StripPrefix("/meta", HandleJSON(r.serveBulkMeta)))
 	for path, handler := range r.handlers.Global {
 		mux.Handle("/"+path, handler)
 	}
@@ -115,9 +116,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 		return err
 	}
 	// TODO(rog) can we really just always ignore a trailing slash ?
-	path := req.URL.Path
-	path = strings.TrimSuffix(path, "/")
-	path = strings.TrimPrefix(path, "/")
+	path := strings.TrimSuffix(req.URL.Path, "/")
 	url, path, err := splitId(path)
 	if err != nil {
 		return err
@@ -137,7 +136,8 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 		return ErrNotFound
 	}
 	req.URL.Path = path
-	resp, err := r.serveMeta(url, w, req)
+	// TODO remove ResponseWriter argument from function passed to JSONHandler
+	resp, err := r.serveMeta(url, req)
 	if err != nil {
 		return err
 	}
@@ -149,20 +149,21 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 // given path, and the remaining path elements. If there is no possible
 // key, the returned key is empty.
 func handlerKey(path string) (key, rest string) {
+	path = strings.TrimPrefix(path, "/")
 	key, i := splitPath(path, 0)
 	if key == "" {
 		// TODO what *should* we get if we GET just an id?
 		return "", rest
 	}
-	if i != len(path) {
+	if i < len(path)-1 {
 		// There are more elements, so include the / character
 		// that terminates the element.
-		return path[0:i], path[i:]
+		return path[0 : i+1], path[i:]
 	}
 	return key, ""
 }
 
-func (r *Router) serveMeta(id *charm.URL, w http.ResponseWriter, req *http.Request) (interface{}, error) {
+func (r *Router) serveMeta(id *charm.URL, req *http.Request) (interface{}, error) {
 	key, path := handlerKey(req.URL.Path)
 	if key == "" {
 		// GET id/meta
@@ -193,6 +194,37 @@ func (r *Router) metaNames() []string {
 		names = append(names, strings.TrimSuffix(name, "/"))
 	}
 	return names
+}
+
+// serveBulkMeta serves the "bulk" metadata retrieval endpoint
+// that can return information on several ids at once.
+//
+// GET meta/$endpoint?id=$id0[&id=$id1...][$otherflags]
+// http://tinyurl.com/kdrly9f
+func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+	// TODO get the metadata concurrently for each id
+	req.ParseForm()
+	ids := req.Form["id"]
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("no ids specified in meta request")
+	}
+	delete(req.Form, "id")
+	result := make(map[string]interface{})
+	for _, id := range ids {
+		url, err := parseURL(id)
+		if err != nil {
+			return nil, err
+		}
+		if err := r.resolveURL(url); err != nil {
+			return nil, err
+		}
+		meta, err := r.serveMeta(url, req)
+		if err != nil {
+			return nil, err
+		}
+		result[id] = meta
+	}
+	return result, nil
 }
 
 var (
@@ -278,11 +310,12 @@ func (r *Router) GetMetadata(id *charm.URL, includes []string) (map[string]inter
 	getter := getterFunc(r.getter)
 	results := make(map[string]interface{})
 	for _, include := range includes {
-		handler := r.handlers.Meta[include]
+		key, path := handlerKey(include)
+		handler := r.handlers.Meta[key]
 		if handler == nil {
 			return nil, fmt.Errorf("unrecognized metadata name %q", include)
 		}
-		result, err := handler(getter, id, "", nil)
+		result, err := handler(getter, id, path, nil)
 		if err != nil {
 			// TODO(rog) If error is "inappropriate metadata", then
 			// just omit the result.
@@ -318,17 +351,22 @@ func (r *Router) getter(id interface{}, val interface{}, fields ...string) error
 // after path[i:] and the start of the next
 // element.
 //
-// For example, splitPath("foo/bar/bzr", 4) returns ("bar", 8).
+// For example, splitPath("/foo/bar/bzr", 4) returns ("bar", 7).
 func splitPath(path string, i int) (elem string, nextIndex int) {
+	if i < len(path) && path[i] == '/' {
+		i++
+	}
 	j := strings.Index(path[i:], "/")
 	if j == -1 {
 		return path[i:], len(path)
 	}
 	j += i
-	return path[i:j], j + 1
+	return path[i:j], j
 }
 
 func splitId(path string) (url *charm.URL, rest string, err error) {
+	path = strings.TrimPrefix(path, "/")
+
 	part, i := splitPath(path, 0)
 
 	// skip ~<username>
@@ -345,13 +383,20 @@ func splitId(path string) (url *charm.URL, rest string, err error) {
 	// charm id.
 
 	urlStr := strings.TrimSuffix(path[0:i], "/")
-	ref, series, err := charm.ParseReference(urlStr)
+	url, err = parseURL(urlStr)
 	if err != nil {
 		return nil, "", err
 	}
-	url = &charm.URL{
+	return url, path[i:], nil
+}
+
+func parseURL(urlStr string) (*charm.URL, error) {
+	ref, series, err := charm.ParseReference(urlStr)
+	if err != nil {
+		return nil, err
+	}
+	return &charm.URL{
 		Reference: ref,
 		Series:    series,
-	}
-	return url, path[i:], nil
+	}, nil
 }
