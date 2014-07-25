@@ -42,9 +42,7 @@ func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (string, int64, err
 		return "", 0, err
 	}
 	blobHash := fmt.Sprintf("%x", hash.Sum(nil))
-	// TODO(frankban): blobstore.Put should return just an error
-	// (a challenge is a special error).
-	if _, err = s.BlobDB.Put(archive, size, blobHash, blobstore.Trusted); err != nil {
+	if err = s.BlobDB.PutUnchallenged(archive, size, blobHash); err != nil {
 		return "", 0, err
 	}
 	return blobHash, size, nil

@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"math/rand"
 	"strconv"
-	"time"
 
 	"labix.org/v2/mgo"
 
@@ -50,15 +48,6 @@ type ContentChallengeResponse struct {
 	RequestId string
 	Hash      string
 }
-
-func getTrustedChallengeResponse() *ContentChallengeResponse {
-	rand.Seed(time.Now().UnixNano())
-	return &ContentChallengeResponse{strconv.Itoa(rand.Int()), strconv.Itoa(rand.Int())}
-}
-
-// Trusted is a challenge response we trust.
-// When a trusted proof is provided, the associated content is always uploaded.
-var Trusted = getTrustedChallengeResponse()
 
 // NewHash is used to calculate checksums for the blob store.
 func NewHash() hash.Hash {
@@ -118,7 +107,7 @@ func (s *Store) challengeResponse(resp *ContentChallengeResponse) error {
 // that they have access to the content. If the proof has already been
 // acquired, it should be passed in as the proof argument.
 func (s *Store) Put(r io.Reader, size int64, hash string, proof *ContentChallengeResponse) (*ContentChallenge, error) {
-	if proof != nil && proof != Trusted {
+	if proof != nil {
 		err := s.challengeResponse(proof)
 		if err == nil {
 			return nil, nil
@@ -140,14 +129,18 @@ func (s *Store) Put(r io.Reader, size int64, hash string, proof *ContentChalleng
 		}
 		return nil, err
 	}
-	if proof == Trusted {
-		return nil, nil
-	}
 	return &ContentChallenge{
 		RequestId:   fmt.Sprint(resp.RequestId),
 		RangeStart:  resp.RangeStart,
 		RangeLength: resp.RangeLength,
 	}, nil
+}
+
+// PutUnchallenged stream the content from the given reader into blob
+// storage. The content should have the given size and hash. In this case
+// a challenge is never returned and a proof is not required.
+func (s *Store) PutUnchallenged(r io.Reader, size int64, hash string) error {
+	return s.mstore.PutForEnvironment("", hash, r, size)
 }
 
 // Open opens the blob with the given hash.
