@@ -18,20 +18,6 @@ type archiverTo interface {
 	ArchiveTo(io.Writer) error
 }
 
-type nopCloser struct {
-	io.ReadSeeker
-}
-
-func (nopCloser) Close() error {
-	return nil
-}
-
-// NopCloser returns a blobstore.ReadSeekCloser with a no-op Close method
-// wrapping the provided ReadSeeker r.
-func NopCloser(r io.ReadSeeker) blobstore.ReadSeekCloser {
-	return nopCloser{r}
-}
-
 // getArchive is used to turn the current charm and bundle implementations
 // into ReadSeekClosers for the corresponding archive.
 func getArchive(c interface{}) (blobstore.ReadSeekCloser, error) {
@@ -43,7 +29,7 @@ func getArchive(c interface{}) (blobstore.ReadSeekCloser, error) {
 		if err := c.ArchiveTo(&buffer); err != nil {
 			return nil, err
 		}
-		return NopCloser(bytes.NewReader(buffer.Bytes())), nil
+		return nopCloser(bytes.NewReader(buffer.Bytes())), nil
 	case *charm.BundleArchive:
 		path = c.Path
 	case *charm.CharmArchive:
@@ -56,4 +42,18 @@ func getArchive(c interface{}) (blobstore.ReadSeekCloser, error) {
 		return nil, err
 	}
 	return file, nil
+}
+
+type nopCloserReadSeeker struct {
+	io.ReadSeeker
+}
+
+func (nopCloserReadSeeker) Close() error {
+	return nil
+}
+
+// nopCloser returns a blobstore.ReadSeekCloser with a no-op Close method
+// wrapping the provided ReadSeeker r.
+func nopCloser(r io.ReadSeeker) blobstore.ReadSeekCloser {
+	return nopCloserReadSeeker{r}
 }
