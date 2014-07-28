@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"gopkg.in/juju/charm.v2"
-	"gopkg.in/mgo.v2"
+	"labix.org/v2/mgo"
 
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/router"

@@ -9,7 +9,7 @@ import (
 	"github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	"gopkg.in/juju/charm.v2"
-	"gopkg.in/mgo.v2/bson"
+	"labix.org/v2/mgo/bson"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/params"
