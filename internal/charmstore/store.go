@@ -18,15 +18,15 @@ import (
 
 // Store represents the underlying charm and blob data stores.
 type Store struct {
-	DB     StoreDatabase
-	BlobDB *blobstore.Store
+	DB        StoreDatabase
+	BlobStore *blobstore.Store
 }
 
 // NewStore returns a Store that uses the given database.
 func NewStore(db *mgo.Database) *Store {
 	s := &Store{
-		DB:     StoreDatabase{db},
-		BlobDB: blobstore.New(db, "entitystore"),
+		DB:        StoreDatabase{db},
+		BlobStore: blobstore.New(db, "entitystore"),
 	}
 	router.RegisterCollection(s.DB.Entities().Name, (*mongodoc.Entity)(nil))
 	return s
@@ -42,7 +42,7 @@ func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (string, int64, err
 		return "", 0, err
 	}
 	blobHash := fmt.Sprintf("%x", hash.Sum(nil))
-	if err = s.BlobDB.PutUnchallenged(archive, size, blobHash); err != nil {
+	if err = s.BlobStore.PutUnchallenged(archive, size, blobHash); err != nil {
 		return "", 0, err
 	}
 	return blobHash, size, nil

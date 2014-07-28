@@ -19,12 +19,12 @@ type archiverTo interface {
 }
 
 // getArchive is used to turn the current charm and bundle implementations
-// into ReadSeekClosers for the corresponding archive.
+// into ReadSeekClosers for their corresponding archive.
 func getArchive(c interface{}) (blobstore.ReadSeekCloser, error) {
 	var path string
 	switch c := c.(type) {
 	case archiverTo:
-		// E.g. charm.CharmDir or charm.BundleDir.
+		// For example: charm.CharmDir or charm.BundleDir.
 		var buffer bytes.Buffer
 		if err := c.ArchiveTo(&buffer); err != nil {
 			return nil, err
