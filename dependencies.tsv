@@ -8,7 +8,7 @@ github.com/juju/gojsonschema	git	33fa79718fa9b24e2a04122f91a75496c0f77098
 github.com/juju/loggo	git	158009fb40c4a52b3d2c23eb56e72859cfc5321a	
 github.com/juju/names	git	dcbff5554ce4e75cbce298a5283883eaca0b2444	
 github.com/juju/schema	git	1887e824896b58a0f376fb8517b5eebb825828b8	
-github.com/juju/testing	git	b0941ff1bf4d3db1ffbbe09f75fa8383eae5764c	
+github.com/juju/testing	git	8bdbb45d87dd9724c254eb6afeacd84b127d7e76	
 github.com/juju/txn	git	ee0346875f2ae9a21442f3ff64409f750f37afbc	
 github.com/juju/utils	git	71ae858adb3bf5cc619c3200dfbdf6762de1a94a	
 gopkg.in/juju/charm.v2	git	72fd4e827c9bed2d46290884443f1eaf559c23e3	
