@@ -65,13 +65,9 @@ func (s *APISuite) TestMetaCharmConfig(c *gc.C) {
 	url, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/charm-config", "", http.StatusOK, wordpress.Config())
 
-	type includeMetadata struct {
-		Id   *charm.URL
-		Meta map[string]*charm.Config
-	}
-	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/any?include=charm-config", "", http.StatusOK, &includeMetadata{
+	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/any?include=charm-config", "", http.StatusOK, &params.MetaAnyResponse{
 		Id: url,
-		Meta: map[string]*charm.Config{
+		Meta: map[string]interface{}{
 			"charm-config": wordpress.Config(),
 		},
 	})
@@ -81,14 +77,40 @@ func (s *APISuite) TestMetaCharmMetadata(c *gc.C) {
 	url, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/charm-metadata", "", http.StatusOK, wordpress.Meta())
 
-	type includeMetadata struct {
-		Id   *charm.URL
-		Meta map[string]*charm.Meta
-	}
-	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/any?include=charm-metadata", "", http.StatusOK, &includeMetadata{
+	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/any?include=charm-metadata", "", http.StatusOK, params.MetaAnyResponse{
 		Id: url,
-		Meta: map[string]*charm.Meta{
+		Meta: map[string]interface{}{
 			"charm-metadata": wordpress.Meta(),
+		},
+	})
+}
+
+func (s *APISuite) TestBulkMeta(c *gc.C) {
+	_, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
+	_, mysql := s.addCharm(c, "mysql", "cs:precise/mysql-10")
+	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/meta/charm-metadata?id=precise/wordpress-23&id=precise/mysql-10", "", http.StatusOK, map[string]*charm.Meta{
+		"precise/wordpress-23": wordpress.Meta(),
+		"precise/mysql-10":     mysql.Meta(),
+	})
+}
+
+func (s *APISuite) TestBulkMetaAny(c *gc.C) {
+	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
+	mysqlURL, mysql := s.addCharm(c, "mysql", "cs:precise/mysql-10")
+	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/meta/any?include=charm-metadata&include=charm-config&id=precise/wordpress-23&id=precise/mysql-10", "", http.StatusOK, map[string]params.MetaAnyResponse{
+		"precise/wordpress-23": {
+			Id: wordpressURL,
+			Meta: map[string]interface{}{
+				"charm-config":   wordpress.Config(),
+				"charm-metadata": wordpress.Meta(),
+			},
+		},
+		"precise/mysql-10": {
+			Id: mysqlURL,
+			Meta: map[string]interface{}{
+				"charm-config":   mysql.Config(),
+				"charm-metadata": mysql.Meta(),
+			},
 		},
 	})
 }
@@ -113,15 +135,11 @@ func (s *APISuite) TestMetaBundleMetadata(c *gc.C) {
 		"http://0.1.2.3/v4/bundle/wordpress-simple-42/meta/bundle-metadata",
 		"", http.StatusOK, bundle.Data())
 
-	type includeMetadata struct {
-		Id   *charm.URL
-		Meta map[string]*charm.BundleData
-	}
 	storetesting.AssertJSONCall(c, s.srv, "GET",
 		"http://0.1.2.3/v4/bundle/wordpress-simple-42/meta/any?include=bundle-metadata",
-		"", http.StatusOK, &includeMetadata{
+		"", http.StatusOK, params.MetaAnyResponse{
 			Id: url,
-			Meta: map[string]*charm.BundleData{
+			Meta: map[string]interface{}{
 				"bundle-metadata": bundle.Data(),
 			},
 		})
