@@ -115,7 +115,11 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	if err := req.ParseForm(); err != nil {
 		return err
 	}
-	// TODO(rog) can we really just always ignore a trailing slash ?
+	// We can ignore a trailing / because we do not return any
+	// relative URLs. If we start to return relative URL redirects,
+	// we will need to redirect non-slash-terminated URLs
+	// to slash-terminated URLs.
+	// http://cdivilly.wordpress.com/2014/03/11/why-trailing-slashes-on-uris-are-important/
 	path := strings.TrimSuffix(req.URL.Path, "/")
 	url, path, err := splitId(path)
 	if err != nil {
@@ -136,7 +140,6 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 		return ErrNotFound
 	}
 	req.URL.Path = path
-	// TODO remove ResponseWriter argument from function passed to JSONHandler
 	resp, err := r.serveMeta(url, req)
 	if err != nil {
 		return err
@@ -202,7 +205,7 @@ func (r *Router) metaNames() []string {
 // GET meta/$endpoint?id=$id0[&id=$id1...][$otherflags]
 // http://tinyurl.com/kdrly9f
 func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interface{}, error) {
-	// TODO get the metadata concurrently for each id
+	// TODO get the metadata concurrently for each id.
 	req.ParseForm()
 	ids := req.Form["id"]
 	if len(ids) == 0 {
@@ -351,7 +354,7 @@ func (r *Router) getter(id interface{}, val interface{}, fields ...string) error
 // after path[i:] and the start of the next
 // element.
 //
-// For example, splitPath("/foo/bar/bzr", 4) returns ("bar", 7).
+// For example, splitPath("/foo/bar/bzr", 4) returns ("bar", 8).
 func splitPath(path string, i int) (elem string, nextIndex int) {
 	if i < len(path) && path[i] == '/' {
 		i++
