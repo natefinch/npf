@@ -5,7 +5,6 @@ package v4
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 
@@ -58,14 +57,62 @@ func New(store *charmstore.Store) http.Handler {
 	return h
 }
 
-func (h *handler) resolveURL(url *charm.URL) error {
-	if url.Series == "" || url.Revision == -1 {
-		return fmt.Errorf("id resolving not implemented yet")
+// ResolveURL resolves the series and revision of the given URL
+// if either is unspecified by filling them out with information retrieved
+// from the store.
+func ResolveURL(store *charmstore.Store, url *charm.URL) error {
+	if url.Series != "" && url.Revision != -1 {
+		return nil
 	}
+	urls, err := store.ExpandURL(url)
+	if err != nil {
+		return err
+	}
+	if len(urls) == 0 {
+		return fmt.Errorf("no matching charm or bundle for %q", url)
+	}
+	*url = *selectPreferredURL(urls)
 	return nil
 }
 
+func (h *handler) resolveURL(url *charm.URL) error {
+	return ResolveURL(h.store, url)
+}
+
+var ltsReleases = map[string]bool{
+	"lucid":   true,
+	"precise": true,
+	"trusty":  true,
+}
+
+func selectPreferredURL(urls []*charm.URL) *charm.URL {
+	best := urls[0]
+	for _, url := range urls {
+		if preferredURL(url, best) {
+			best = url
+		}
+	}
+	return best
+}
+
+// preferredURL reports whether url0 is preferred over url1.
+func preferredURL(url0, url1 *charm.URL) bool {
+	if url0.Series == url1.Series {
+		return url0.Revision > url1.Revision
+	}
+	if url0.Series == "bundle" || url1.Series == "bundle" {
+		// One of the URLs refers to a bundle. Choose
+		// a charm by preference.
+		return url0.Series != "bundle"
+	}
+	if ltsReleases[url0.Series] == ltsReleases[url1.Series] {
+		return url0.Series > url1.Series
+	}
+	return ltsReleases[url0.Series]
+}
+
 var ErrMetadataNotRelevant = fmt.Errorf("metadata not relevant for the given entity")
+
 var errNotImplemented = fmt.Errorf("method not implemented")
 
 // GET stats/counter/key[:key]...?[by=unit]&start=date][&stop=date][&list=1]
@@ -116,7 +163,6 @@ func (h *handler) serveExpandId(charmId *charm.URL, w http.ResponseWriter, req *
 // POST id/archive?sha256=hash
 // http://tinyurl.com/lzrzrgb
 func (h *handler) serveArchive(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
-	log.Printf("in serveArchive")
 	return errNotImplemented
 }
 

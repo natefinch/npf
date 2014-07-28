@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/juju/charm.v2"
 	"labix.org/v2/mgo"
+	"labix.org/v2/mgo/bson"
 
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/mongodoc"
@@ -75,6 +76,37 @@ func (s *Store) AddCharm(url *charm.URL, c charm.Charm) error {
 		CharmProvidedInterfaces: interfacesForRelations(c.Meta().Provides),
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
 	})
+}
+
+// ExpandURL returns all the URLs that the given URL may refer to.
+func (s *Store) ExpandURL(url *charm.URL) ([]*charm.URL, error) {
+	var docs []mongodoc.Entity
+	err := s.DB.Entities().Find(bson.D{{
+		"baseurl", baseURL((*params.CharmURL)(url)),
+	}}).Select(bson.D{{"_id", 1}}).All(&docs)
+	if err != nil {
+		return nil, err
+	}
+	urls := make([]*charm.URL, 0, len(docs))
+	for _, doc := range docs {
+		if matchURL((*charm.URL)(doc.URL), url) {
+			urls = append(urls, (*charm.URL)(doc.URL))
+		}
+	}
+	return urls, nil
+}
+
+func matchURL(url, pattern *charm.URL) bool {
+	if pattern.Series != "" && url.Series != pattern.Series {
+		return false
+	}
+	if pattern.Revision != -1 && url.Revision != pattern.Revision {
+		return false
+	}
+	// Check the name for completness only - the
+	// query should only be returning URLs with
+	// matching names.
+	return url.Name == pattern.Name
 }
 
 func interfacesForRelations(rels map[string]charm.Relation) []string {
