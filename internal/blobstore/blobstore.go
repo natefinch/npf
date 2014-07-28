@@ -9,7 +9,7 @@ import (
 	"io"
 	"strconv"
 
-	"gopkg.in/mgo.v2"
+	"labix.org/v2/mgo"
 
 	"github.com/juju/blobstore"
 	"github.com/juju/charmstore/internal/multihash"

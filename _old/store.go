@@ -21,8 +21,8 @@ import (
 
 	"github.com/juju/loggo"
 	"gopkg.in/juju/charm.v2"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
+	"labix.org/v2/mgo"
+	"labix.org/v2/mgo/bson"
 )
 
 var logger = loggo.GetLogger("juju.store")
@@ -64,7 +64,7 @@ type Store struct {
 
 // Open creates a new session with the store. It connects to the MongoDB
 // server at the given address (as expected by the Mongo function in the
-// gopkg.in/mgo.v2 package).
+// labix.org/v2/mgo package).
 func Open(mongoAddr string) (store *Store, err error) {
 	logger.Infof("store opened, connecting to: %s", mongoAddr)
 	store = &Store{}
