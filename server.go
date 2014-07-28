@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"sort"
 
-	"labix.org/v2/mgo"
+	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/v4"
