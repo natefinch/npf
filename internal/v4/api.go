@@ -9,6 +9,7 @@ import (
 	"net/url"
 
 	"gopkg.in/juju/charm.v2"
+	"labix.org/v2/mgo/bson"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"
@@ -26,7 +27,7 @@ func New(store *charmstore.Store) http.Handler {
 	h := &handler{
 		store: store,
 	}
-	h.Router = router.New(store.DB.Database, &router.Handlers{
+	h.Router = router.New(&router.Handlers{
 		Global: map[string]http.Handler{
 			"stats/counter":      http.HandlerFunc(h.serveStatsCounter),
 			"search":             http.HandlerFunc(h.serveSearch),
@@ -39,19 +40,21 @@ func New(store *charmstore.Store) http.Handler {
 			"archive/":  h.serveArchiveFile,
 			"expand-id": h.serveExpandId,
 		},
-		Meta: map[string]router.MetaHandler{
-			"charm-metadata":      h.metaCharmMetadata,
-			"bundle-metadata":     h.metaBundleMetadata,
-			"manifest":            h.metaManifest,
-			"charm-actions":       h.metaCharmActions,
-			"charm-config":        h.metaCharmConfig,
-			"color":               h.metaColor,
-			"archive-size":        h.metaArchiveSize,
-			"bundles-containing":  h.metaBundlesContaining,
-			"extra-info":          h.metaExtraInfo,
-			"extra-info/":         h.metaExtraInfoWithKey,
-			"charm-related":       h.metaCharmRelated,
-			"archive-upload-time": h.metaArchiveUploadTime,
+		Meta: map[string]router.BulkIncludeHandler{
+			"charm-metadata":  h.entityHandler(h.metaCharmMetadata, "charmmeta"),
+			"bundle-metadata": h.entityHandler(h.metaBundleMetadata, "bundledata"),
+			"charm-config":    h.entityHandler(h.metaCharmConfig, "charmconfig"),
+
+			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
+			"manifest":            router.SingleIncludeHandler(h.metaManifest),
+			"charm-actions":       router.SingleIncludeHandler(h.metaCharmActions),
+			"color":               router.SingleIncludeHandler(h.metaColor),
+			"archive-size":        router.SingleIncludeHandler(h.metaArchiveSize),
+			"bundles-containing":  router.SingleIncludeHandler(h.metaBundlesContaining),
+			"extra-info":          router.SingleIncludeHandler(h.metaExtraInfo),
+			"extra-info/":         router.SingleIncludeHandler(h.metaExtraInfoWithKey),
+			"charm-related":       router.SingleIncludeHandler(h.metaCharmRelated),
+			"archive-upload-time": router.SingleIncludeHandler(h.metaArchiveUploadTime),
 		},
 	}, h.resolveURL)
 	return h
@@ -77,6 +80,35 @@ func ResolveURL(store *charmstore.Store, url *charm.URL) error {
 
 func (h *handler) resolveURL(url *charm.URL) error {
 	return ResolveURL(h.store, url)
+}
+
+type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error)
+
+// entityHandler returns a handler that calls f with a *mongodoc.Entity that
+// contains at least the given fields.
+func (h *handler) entityHandler(f entityHandlerFunc, fields ...string) router.BulkIncludeHandler {
+	type entityHandlerKey struct{}
+	return router.FieldIncludeHandler(
+		entityHandlerKey{},
+		h.entityQuery,
+		fields,
+		func(doc interface{}, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+			edoc := doc.(*mongodoc.Entity)
+			return f(edoc, id, path, flags)
+		},
+	)
+}
+
+func (h *handler) entityQuery(id *charm.URL, selector map[string]int) (interface{}, error) {
+	var val mongodoc.Entity
+	err := h.store.DB.Entities().
+		Find(bson.D{{"_id", id}}).
+		Select(selector).
+		One(&val)
+	if err != nil {
+		return nil, err
+	}
+	return &val, nil
 }
 
 var ltsReleases = map[string]bool{
@@ -174,108 +206,87 @@ func (h *handler) serveArchiveFile(charmId *charm.URL, w http.ResponseWriter, re
 
 // GET id/meta/charm-metadata
 // http://tinyurl.com/poeoulw
-func (h *handler) metaCharmMetadata(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaCharmMetadata(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error) {
 	if params.IsBundle(id) {
 		return nil, ErrMetadataNotRelevant
 	}
-	var doc *mongodoc.Entity
-	err := getter.GetItem(id, &doc, "charmmeta")
-	if err != nil {
-		return nil, err
-	}
-	return doc.CharmMeta, nil
+	return entity.CharmMeta, nil
 }
 
 // GET id/meta/bundle-metadata
 // http://tinyurl.com/ozshbtb
-func (h *handler) metaBundleMetadata(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error) {
 	if !params.IsBundle(id) {
 		return nil, ErrMetadataNotRelevant
 	}
-	var doc *mongodoc.Entity
-	err := getter.GetItem(id, &doc, "bundledata")
-	if err != nil {
-		return nil, err
-	}
-	return doc.BundleData, nil
+	return entity.BundleData, nil
 }
 
 // GET id/meta/manifest
 // http://tinyurl.com/p3xdcto
-func (h *handler) metaManifest(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaManifest(id *charm.URL, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/charm-actions
 // http://tinyurl.com/kfd2h34
-func (h *handler) metaCharmActions(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaCharmActions(id *charm.URL, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/charm-config
 // http://tinyurl.com/oxxyujx
-func (h *handler) metaCharmConfig(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaCharmConfig(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error) {
 	if params.IsBundle(id) {
 		return nil, ErrMetadataNotRelevant
-	}
-	var entity *mongodoc.Entity
-	err := getter.GetItem(id, &entity, "charmconfig")
-	if err != nil {
-		return nil, err
 	}
 	return entity.CharmConfig, nil
 }
 
 // GET id/meta/color
 // http://tinyurl.com/o2t3j4p
-func (h *handler) metaColor(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
-}
-
-// GET id/meta/revision-info
-// http://tinyurl.com/q6xos7f
-func (h *handler) revisionInfo(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaColor(id *charm.URL, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/archive-size
 // http://tinyurl.com/m8b9geq
-func (h *handler) metaArchiveSize(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaArchiveSize(id *charm.URL, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/stats/
 // http://tinyurl.com/lvyp2l5
-func (h *handler) metaStats(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaStats(id *charm.URL, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/bundles-containing[?include=meta[&include=meta…]]
 // http://tinyurl.com/oqc386r
-func (h *handler) metaBundlesContaining(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaBundlesContaining(id *charm.URL, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/extra-info
 // http://tinyurl.com/keos7wd
-func (h *handler) metaExtraInfo(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaExtraInfo(id *charm.URL, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/extra-info/key
 // http://tinyurl.com/polrbn7
-func (h *handler) metaExtraInfoWithKey(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaExtraInfoWithKey(id *charm.URL, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/charm-related[?include=meta[&include=meta…]]
 // http://tinyurl.com/q7vdmzl
-func (h *handler) metaCharmRelated(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaCharmRelated(id *charm.URL, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/archive-upload-time
 // http://tinyurl.com/nmujuqk
-func (h *handler) metaArchiveUploadTime(getter router.ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaArchiveUploadTime(id *charm.URL, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }

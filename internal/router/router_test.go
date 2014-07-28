@@ -9,13 +9,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"reflect"
+	"sync/atomic"
 	"testing"
 
 	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	"gopkg.in/juju/charm.v2"
-	"labix.org/v2/mgo"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/storetesting"
@@ -23,42 +22,23 @@ import (
 )
 
 func TestPackage(t *testing.T) {
-	jujutesting.MgoTestPackage(t, nil)
+	gc.TestingT(t)
 }
 
 type RouterSuite struct {
-	storetesting.IsolatedMgoSuite
+	jujutesting.IsolationSuite
 }
 
 var _ = gc.Suite(&RouterSuite{})
 
-func (s *RouterSuite) populateDatabase(c *gc.C) *mgo.Database {
-	// Populate the database with two collections and a couple of
-	// items each.
-	db := s.Session.DB("testing")
-	c1 := db.C("c1")
-	err := c1.Insert(&testItem1{1, "item1.1"}, &testItem1{2, "item1.2"})
-	c.Assert(err, gc.IsNil)
-	c2 := db.C("c2")
-	err = c2.Insert(&testItem2{3, 888}, &testItem2{4, 999})
-	c.Assert(err, gc.IsNil)
-
-	// Register the two collections.
-	RegisterCollection("c1", (*testItem1)(nil))
-	RegisterCollection("c2", (*testItem2)(nil))
-	s.AddCleanup(func(c *gc.C) {
-		collections = make(map[reflect.Type]string)
-	})
-	return db
-}
-
 var routerTests = []struct {
-	about      string
-	handlers   Handlers
-	urlStr     string
-	expectCode int
-	expectBody interface{}
-	resolveURL func(*charm.URL) error
+	about            string
+	handlers         Handlers
+	urlStr           string
+	expectCode       int
+	expectBody       interface{}
+	expectQueryCount int32
+	resolveURL       func(*charm.URL) error
 }{{
 	about: "global handler",
 	handlers: Handlers{
@@ -186,7 +166,7 @@ var routerTests = []struct {
 }, {
 	about: "meta handler",
 	handlers: Handlers{
-		Meta: map[string]MetaHandler{
+		Meta: map[string]BulkIncludeHandler{
 			"foo": testMetaHandler,
 		},
 	},
@@ -198,7 +178,7 @@ var routerTests = []struct {
 }, {
 	about: "meta handler with additional elements",
 	handlers: Handlers{
-		Meta: map[string]MetaHandler{
+		Meta: map[string]BulkIncludeHandler{
 			"foo/": testMetaHandler,
 		},
 	},
@@ -211,7 +191,7 @@ var routerTests = []struct {
 }, {
 	about: "meta handler with params",
 	handlers: Handlers{
-		Meta: map[string]MetaHandler{
+		Meta: map[string]BulkIncludeHandler{
 			"foo": testMetaHandler,
 		},
 	},
@@ -232,17 +212,22 @@ var routerTests = []struct {
 		Message: "not found",
 	},
 }, {
-	about:  "meta handler that gets something",
+	about:  "meta handler with field selector",
 	urlStr: "http://example.com/precise/wordpress-42/meta/foo",
 	handlers: Handlers{
-		Meta: map[string]MetaHandler{
-			"foo": metaGetItem1,
+		Meta: map[string]BulkIncludeHandler{
+			"foo": fieldSelectHandler("handler1", 0, "field1", "field2"),
 		},
 	},
-	expectCode: http.StatusOK,
-	expectBody: testItem1{
-		Id:   1,
-		Name: "item1.1",
+	expectCode:       http.StatusOK,
+	expectQueryCount: 1,
+	expectBody: fieldSelectHandleInfo{
+		HandlerId: "handler1",
+		Doc: fieldSelectQueryInfo{
+			Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+			Selector: map[string]int{"field1": 1, "field2": 1},
+		},
+		Id: charm.MustParseURL("cs:precise/wordpress-42"),
 	},
 }, {
 	about:      "meta/any, no includes",
@@ -252,29 +237,43 @@ var routerTests = []struct {
 		Id: charm.MustParseURL("cs:precise/wordpress-42"),
 	},
 }, {
-	about:  "meta/any, some includes",
-	urlStr: "http://example.com/precise/wordpress-42/meta/any?include=item1&include=item2&include=test",
+	about:  "meta/any, some includes all using same key",
+	urlStr: "http://example.com/precise/wordpress-42/meta/any?include=field1-1&include=field2&include=field1-2",
 	handlers: Handlers{
-		Meta: map[string]MetaHandler{
-			"item1": metaGetItem1,
-			"item2": metaGetItem2,
-			"test":  testMetaHandler,
+		Meta: map[string]BulkIncludeHandler{
+			"field1-1": fieldSelectHandler("handler1", 0, "field1"),
+			"field2":   fieldSelectHandler("handler2", 0, "field2"),
+			"field1-2": fieldSelectHandler("handler3", 0, "field1"),
 		},
 	},
-	expectCode: http.StatusOK,
+	expectQueryCount: 1,
+	expectCode:       http.StatusOK,
 	expectBody: params.MetaAnyResponse{
 		Id: charm.MustParseURL("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
-			"item1": testItem1{
-				Id:   1,
-				Name: "item1.1",
+			"field1-1": fieldSelectHandleInfo{
+				HandlerId: "handler1",
+				Doc: fieldSelectQueryInfo{
+					Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+					Selector: map[string]int{"field1": 1, "field2": 1},
+				},
+				Id: charm.MustParseURL("cs:precise/wordpress-42"),
 			},
-			"item2": testItem2{
-				Id:    3,
-				Count: 888,
+			"field2": fieldSelectHandleInfo{
+				HandlerId: "handler2",
+				Doc: fieldSelectQueryInfo{
+					Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+					Selector: map[string]int{"field1": 1, "field2": 1},
+				},
+				Id: charm.MustParseURL("cs:precise/wordpress-42"),
 			},
-			"test": metaHandlerTestResp{
-				CharmURL: "cs:precise/wordpress-42",
+			"field1-2": fieldSelectHandleInfo{
+				HandlerId: "handler3",
+				Doc: fieldSelectQueryInfo{
+					Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+					Selector: map[string]int{"field1": 1, "field2": 1},
+				},
+				Id: charm.MustParseURL("cs:precise/wordpress-42"),
 			},
 		},
 	},
@@ -282,26 +281,42 @@ var routerTests = []struct {
 	about:  "meta/any, includes with additional path elements",
 	urlStr: "http://example.com/precise/wordpress-42/meta/any?include=item1/foo&include=item2/bar&include=item1",
 	handlers: Handlers{
-		Meta: map[string]MetaHandler{
-			"item1/": testMetaHandler,
-			"item2/": testMetaHandler,
-			"item1":  testMetaHandler,
+		Meta: map[string]BulkIncludeHandler{
+			"item1/": fieldSelectHandler("handler1", 0, "field1"),
+			"item2/": fieldSelectHandler("handler2", 0, "field2"),
+			"item1":  fieldSelectHandler("handler3", 0, "field3"),
 		},
 	},
-	expectCode: http.StatusOK,
+	expectQueryCount: 1,
+	expectCode:       http.StatusOK,
 	expectBody: params.MetaAnyResponse{
 		Id: charm.MustParseURL("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
-			"item1/foo": metaHandlerTestResp{
-				CharmURL: "cs:precise/wordpress-42",
-				Path:     "/foo",
+			"item1/foo": fieldSelectHandleInfo{
+				HandlerId: "handler1",
+				Doc: fieldSelectQueryInfo{
+					Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
+				},
+				Id:   charm.MustParseURL("cs:precise/wordpress-42"),
+				Path: "/foo",
 			},
-			"item1": metaHandlerTestResp{
-				CharmURL: "cs:precise/wordpress-42",
+			"item2/bar": fieldSelectHandleInfo{
+				HandlerId: "handler2",
+				Doc: fieldSelectQueryInfo{
+					Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
+				},
+				Id:   charm.MustParseURL("cs:precise/wordpress-42"),
+				Path: "/bar",
 			},
-			"item2/bar": metaHandlerTestResp{
-				CharmURL: "cs:precise/wordpress-42",
-				Path:     "/bar",
+			"item1": fieldSelectHandleInfo{
+				HandlerId: "handler3",
+				Doc: fieldSelectQueryInfo{
+					Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
+				},
+				Id: charm.MustParseURL("cs:precise/wordpress-42"),
 			},
 		},
 	},
@@ -309,7 +324,7 @@ var routerTests = []struct {
 	about:  "bulk meta handler, single id",
 	urlStr: "http://example.com/meta/foo?id=precise/wordpress-42",
 	handlers: Handlers{
-		Meta: map[string]MetaHandler{
+		Meta: map[string]BulkIncludeHandler{
 			"foo": testMetaHandler,
 		},
 	},
@@ -323,7 +338,7 @@ var routerTests = []struct {
 	about:  "bulk meta handler, several ids",
 	urlStr: "http://example.com/meta/foo?id=precise/wordpress-42&id=quantal/foo-32",
 	handlers: Handlers{
-		Meta: map[string]MetaHandler{
+		Meta: map[string]BulkIncludeHandler{
 			"foo": testMetaHandler,
 		},
 	},
@@ -340,7 +355,7 @@ var routerTests = []struct {
 	about:  "bulk meta/any handler, several ids",
 	urlStr: "http://example.com/meta/any?id=precise/wordpress-42&id=quantal/foo-32&include=foo&include=bar/something",
 	handlers: Handlers{
-		Meta: map[string]MetaHandler{
+		Meta: map[string]BulkIncludeHandler{
 			"foo":  testMetaHandler,
 			"bar/": testMetaHandler,
 		},
@@ -376,7 +391,7 @@ var routerTests = []struct {
 	about:  "bulk meta handler with unresolved id",
 	urlStr: "http://example.com/meta/foo/bar?id=wordpress",
 	handlers: Handlers{
-		Meta: map[string]MetaHandler{
+		Meta: map[string]BulkIncludeHandler{
 			"foo/": testMetaHandler,
 		},
 	},
@@ -392,7 +407,7 @@ var routerTests = []struct {
 	about:  "bulk meta handler with extra flags",
 	urlStr: "http://example.com/meta/foo/bar?id=wordpress&arble=bletch&z=w&z=p",
 	handlers: Handlers{
-		Meta: map[string]MetaHandler{
+		Meta: map[string]BulkIncludeHandler{
 			"foo/": testMetaHandler,
 		},
 	},
@@ -412,7 +427,7 @@ var routerTests = []struct {
 	about:  "bulk meta handler with no ids",
 	urlStr: "http://example.com/meta/foo/bar",
 	handlers: Handlers{
-		Meta: map[string]MetaHandler{
+		Meta: map[string]BulkIncludeHandler{
 			"foo/": testMetaHandler,
 		},
 	},
@@ -446,16 +461,16 @@ func noResolveURL(*charm.URL) error {
 }
 
 func (s *RouterSuite) TestRouter(c *gc.C) {
-	db := s.populateDatabase(c)
-
 	for i, test := range routerTests {
 		c.Logf("test %d: %s", i, test.about)
 		resolve := noResolveURL
 		if test.resolveURL != nil {
 			resolve = test.resolveURL
 		}
-		router := New(db, &test.handlers, resolve)
+		router := New(&test.handlers, resolve)
+		queryCount = 0
 		storetesting.AssertJSONCall(c, router, "GET", test.urlStr, "", test.expectCode, test.expectBody)
+		c.Assert(queryCount, gc.Equals, test.expectQueryCount)
 	}
 }
 
@@ -465,19 +480,28 @@ var getMetadataTests = []struct {
 	expectResult map[string]interface{}
 	expectError  string
 }{{
-	id:       "precise/wordpress-34",
-	includes: []string{},
+	id:           "precise/wordpress-34",
+	includes:     []string{},
+	expectResult: map[string]interface{}{},
 }, {
 	id:       "~rog/precise/wordpress-2",
 	includes: []string{"item1", "item2", "test"},
 	expectResult: map[string]interface{}{
-		"item1": &testItem1{
-			Id:   1,
-			Name: "item1.1",
+		"item1": fieldSelectHandleInfo{
+			HandlerId: "handler1",
+			Doc: fieldSelectQueryInfo{
+				Id:       charm.MustParseURL("cs:~rog/precise/wordpress-2"),
+				Selector: map[string]int{"item1": 1, "item2": 1},
+			},
+			Id: charm.MustParseURL("cs:~rog/precise/wordpress-2"),
 		},
-		"item2": &testItem2{
-			Id:    3,
-			Count: 888,
+		"item2": fieldSelectHandleInfo{
+			HandlerId: "handler2",
+			Doc: fieldSelectQueryInfo{
+				Id:       charm.MustParseURL("cs:~rog/precise/wordpress-2"),
+				Selector: map[string]int{"item1": 1, "item2": 1},
+			},
+			Id: charm.MustParseURL("cs:~rog/precise/wordpress-2"),
 		},
 		"test": &metaHandlerTestResp{
 			CharmURL: "cs:~rog/precise/wordpress-2",
@@ -490,13 +514,12 @@ var getMetadataTests = []struct {
 }}
 
 func (s *RouterSuite) TestGetMetadata(c *gc.C) {
-	db := s.populateDatabase(c)
 	for i, test := range getMetadataTests {
 		c.Logf("test %d: %q", i, test.includes)
-		router := New(db, &Handlers{
-			Meta: map[string]MetaHandler{
-				"item1": metaGetItem1,
-				"item2": metaGetItem2,
+		router := New(&Handlers{
+			Meta: map[string]BulkIncludeHandler{
+				"item1": fieldSelectHandler("handler1", 0, "item1"),
+				"item2": fieldSelectHandler("handler2", 0, "item2"),
 				"test":  testMetaHandler,
 			},
 		}, noResolveURL)
@@ -733,24 +756,6 @@ func (s *RouterSuite) TestHandlers(c *gc.C) {
 	}
 }
 
-func metaGetItem1(getter ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
-	var item *testItem1
-	err := getter.GetItem(1, &item, "id", "name")
-	if err != nil {
-		return nil, fmt.Errorf("GetItem failure: %v", err)
-	}
-	return item, nil
-}
-
-func metaGetItem2(getter ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
-	var item *testItem2
-	err := getter.GetItem(3, &item, "id", "count")
-	if err != nil {
-		return nil, fmt.Errorf("GetItem failure: %v", err)
-	}
-	return item, nil
-}
-
 func errorIdHandler(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
 	return fmt.Errorf("errorIdHandler error")
 }
@@ -774,23 +779,58 @@ type metaHandlerTestResp struct {
 	Flags    url.Values
 }
 
-func testMetaHandler(getter ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error) {
-	if len(flags) == 0 {
-		flags = nil
+var testMetaHandler = SingleIncludeHandler(
+	func(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+		if len(flags) == 0 {
+			flags = nil
+		}
+		return &metaHandlerTestResp{
+			CharmURL: id.String(),
+			Path:     path,
+			Flags:    flags,
+		}, nil
+	},
+)
+
+type fieldSelectQueryInfo struct {
+	Id       *charm.URL
+	Selector map[string]int
+}
+
+type fieldSelectHandleInfo struct {
+	HandlerId string
+	Doc       fieldSelectQueryInfo
+	Id        *charm.URL
+	Path      string
+	Flags     url.Values
+}
+
+var queryCount int32
+
+// fieldSelectHandler returns a BulkIncludeHandler that returns
+// information about the call for testing purposes.
+// When the handler is invoked, it returns a fieldSelectHandleInfo value
+// with the given handlerId. Key holds the grouping key,
+// and fields holds the fields to select.
+func fieldSelectHandler(handlerId string, key interface{}, fields ...string) BulkIncludeHandler {
+	query := func(id *charm.URL, selector map[string]int) (interface{}, error) {
+		atomic.AddInt32(&queryCount, 1)
+		return fieldSelectQueryInfo{
+			Id:       id,
+			Selector: selector,
+		}, nil
 	}
-	return &metaHandlerTestResp{
-		CharmURL: id.String(),
-		Path:     path,
-		Flags:    flags,
-	}, nil
-}
-
-type testItem1 struct {
-	Id   int `bson:"_id"`
-	Name string
-}
-
-type testItem2 struct {
-	Id    int `bson:"_id"`
-	Count int
+	handle := func(doc interface{}, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+		if len(flags) == 0 {
+			flags = nil
+		}
+		return fieldSelectHandleInfo{
+			HandlerId: handlerId,
+			Doc:       doc.(fieldSelectQueryInfo),
+			Id:        id,
+			Path:      path,
+			Flags:     flags,
+		}, nil
+	}
+	return FieldIncludeHandler(key, query, fields, handle)
 }
