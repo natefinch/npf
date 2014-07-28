@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"labix.org/v2/mgo"
+	"gopkg.in/mgo.v2"
 )
 
 // NewAPIHandler returns a new API handler that
