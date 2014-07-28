@@ -25,6 +25,9 @@ func HandleErrors(handle func(http.ResponseWriter, *http.Request) error) http.Ha
 
 // HandleJSON returns a Handler that calls the given function.
 // The result is formatted as JSON.
+// TODO(rog) remove ResponseWriter argument from function argument.
+// It is redundant (and possibly dangerous) if used in combination with the interface{}
+// return.
 func HandleJSON(handle func(http.ResponseWriter, *http.Request) (interface{}, error)) http.Handler {
 	f := func(w http.ResponseWriter, req *http.Request) error {
 		val, err := handle(w, req)
