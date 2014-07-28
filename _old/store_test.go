@@ -17,7 +17,7 @@ import (
 	jujutesting "github.com/juju/testing"
 	"gopkg.in/juju/charm.v2"
 	charmtesting "gopkg.in/juju/charm.v2/testing"
-	"gopkg.in/mgo.v2/bson"
+	"labix.org/v2/mgo/bson"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore"
