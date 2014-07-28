@@ -49,6 +49,14 @@ func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.URL, charm.
 	return url, wordpress
 }
 
+func (s *APISuite) addBundle(c *gc.C, bundleName string, curl string) (*charm.URL, charm.Bundle) {
+	url := charm.MustParseURL(curl)
+	bundle := charmtesting.Charms.BundleDir(bundleName)
+	err := s.store.AddBundle(url, bundle)
+	c.Assert(err, gc.IsNil)
+	return url, bundle
+}
+
 func (s *APISuite) TestArchive(c *gc.C) {
 	assertNotImplemented(c, s.srv, "precise/wordpress-23/archive")
 }
@@ -67,11 +75,6 @@ func (s *APISuite) TestMetaCharmConfig(c *gc.C) {
 			"charm-config": wordpress.Config(),
 		},
 	})
-}
-
-func (s *APISuite) TestMetaCharmConfigFails(c *gc.C) {
-	expected := params.Error{Message: router.ErrNotFound.Error()}
-	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/charm-config", "", http.StatusInternalServerError, expected)
 }
 
 func (s *APISuite) TestMetaCharmMetadata(c *gc.C) {
@@ -102,6 +105,65 @@ func (s *APISuite) TestIdsAreResolved(c *gc.C) {
 func (s *APISuite) TestMetaCharmMetadataFails(c *gc.C) {
 	expected := params.Error{Message: router.ErrNotFound.Error()}
 	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/charm-metadata", "", http.StatusInternalServerError, expected)
+}
+
+func (s *APISuite) TestMetaBundleMetadata(c *gc.C) {
+	url, bundle := s.addBundle(c, "wordpress", "cs:bundle/wordpress-simple-42")
+	storetesting.AssertJSONCall(c, s.srv, "GET",
+		"http://0.1.2.3/v4/bundle/wordpress-simple-42/meta/bundle-metadata",
+		"", http.StatusOK, bundle.Data())
+
+	type includeMetadata struct {
+		Id   *charm.URL
+		Meta map[string]*charm.BundleData
+	}
+	storetesting.AssertJSONCall(c, s.srv, "GET",
+		"http://0.1.2.3/v4/bundle/wordpress-simple-42/meta/any?include=bundle-metadata",
+		"", http.StatusOK, &includeMetadata{
+			Id: url,
+			Meta: map[string]*charm.BundleData{
+				"bundle-metadata": bundle.Data(),
+			},
+		})
+}
+
+var errorTests = []struct {
+	name     string
+	expected error
+	path     string
+}{{
+	name:     "MetaCharmConfig: charm not found",
+	expected: router.ErrNotFound,
+	path:     "/precise/wordpress-23/meta/charm-config",
+}, {
+	name:     "MetaCharmConfig: not relevant",
+	expected: v4.ErrMetadataNotRelevant,
+	path:     "/bundle/wordpress-simple-42/meta/charm-config",
+}, {
+	name:     "MetaCharmMetadata: charm not found",
+	expected: router.ErrNotFound,
+	path:     "/precise/wordpress-23/meta/charm-metadata",
+}, {
+	name:     "MetaCharmMetadata: not relevant",
+	expected: v4.ErrMetadataNotRelevant,
+	path:     "/bundle/wordpress-simple-42/meta/charm-config",
+}, {
+	name:     "MetaBundleMetadata: bundle not found",
+	expected: router.ErrNotFound,
+	path:     "/bundle/django-app-23/meta/bundle-metadata",
+}, {
+	name:     "MetaBundleMetadata: not relevant",
+	expected: v4.ErrMetadataNotRelevant,
+	path:     "/trusty/django-42/meta/bundle-metadata",
+}}
+
+func (s *APISuite) TestError(c *gc.C) {
+	for i, test := range errorTests {
+		c.Logf("%d: %s", i, test.name)
+		expectedError := params.Error{Message: test.expected.Error()}
+		storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4"+test.path,
+			"", http.StatusInternalServerError, expectedError)
+	}
 }
 
 var resolveURLTests = []struct {

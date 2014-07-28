@@ -20,8 +20,8 @@ type Entity struct {
 	// e.g. cs:wordpress, cs:~user/foo
 	BaseURL *params.CharmURL
 
-	Sha256 string // This is also used as a blob reference.
-	Size   int64
+	BlobHash string // This is also used as a blob reference.
+	Size     int64
 
 	UploadTime time.Time
 

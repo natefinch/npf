@@ -136,6 +136,13 @@ func (s *Store) Put(r io.Reader, size int64, hash string, proof *ContentChalleng
 	}, nil
 }
 
+// PutUnchallenged stream the content from the given reader into blob
+// storage. The content should have the given size and hash. In this case
+// a challenge is never returned and a proof is not required.
+func (s *Store) PutUnchallenged(r io.Reader, size int64, hash string) error {
+	return s.mstore.PutForEnvironment("", hash, r, size)
+}
+
 // Open opens the blob with the given hash.
 func (s *Store) Open(hashSum string) (ReadSeekCloser, int64, error) {
 	r, length, err := s.mstore.GetForEnvironment("", hashSum)
