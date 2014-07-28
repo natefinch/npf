@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 
 	"gopkg.in/juju/charm.v2"
-	"labix.org/v2/mgo/bson"
+	"gopkg.in/mgo.v2/bson"
 )
 
 // IsBundle reports whether the given URL represents a bundle.

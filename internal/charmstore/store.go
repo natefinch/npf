@@ -8,7 +8,7 @@ import (
 	"io"
 
 	"gopkg.in/juju/charm.v2"
-	"labix.org/v2/mgo"
+	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/mongodoc"
