@@ -85,6 +85,22 @@ func (s *APISuite) TestMetaCharmMetadata(c *gc.C) {
 	})
 }
 
+func (s *APISuite) TestMetaCharmActions(c *gc.C) {
+	url, dummy := s.addCharm(c, "dummy", "cs:precise/dummy-10")
+	storetesting.AssertJSONCall(c, s.srv,
+		"GET", "http://0.1.2.3/v4/precise/dummy-10/meta/charm-actions", "",
+		http.StatusOK, dummy.Actions())
+
+	storetesting.AssertJSONCall(c, s.srv,
+		"GET", "http://0.1.2.3/v4/precise/dummy-10/meta/any?include=charm-actions", "",
+		http.StatusOK, params.MetaAnyResponse{
+			Id: url,
+			Meta: map[string]interface{}{
+				"charm-actions": dummy.Actions(),
+			},
+		})
+}
+
 func (s *APISuite) TestBulkMeta(c *gc.C) {
 	_, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	_, mysql := s.addCharm(c, "mysql", "cs:precise/mysql-10")
