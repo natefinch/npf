@@ -11,7 +11,7 @@ import (
 type FieldQueryFunc func(id *charm.URL, selector map[string]int) (interface{}, error)
 
 // A FieldHandlerFunc returns some data from the given document. The
-// document will have been returned from an earlier call totp the
+// document will have been returned from an earlier call to the
 // associated QueryFunc.
 type FieldHandlerFunc func(doc interface{}, id *charm.URL, path string, flags url.Values) (interface{}, error)
 

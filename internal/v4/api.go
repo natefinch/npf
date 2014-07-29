@@ -87,15 +87,16 @@ type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.URL, path string,
 // entityHandler returns a handler that calls f with a *mongodoc.Entity that
 // contains at least the given fields.
 func (h *handler) entityHandler(f entityHandlerFunc, fields ...string) router.BulkIncludeHandler {
+	handle := func(doc interface{}, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+		edoc := doc.(*mongodoc.Entity)
+		return f(edoc, id, path, flags)
+	}
 	type entityHandlerKey struct{}
 	return router.FieldIncludeHandler(
 		entityHandlerKey{},
 		h.entityQuery,
 		fields,
-		func(doc interface{}, id *charm.URL, path string, flags url.Values) (interface{}, error) {
-			edoc := doc.(*mongodoc.Entity)
-			return f(edoc, id, path, flags)
-		},
+		handle,
 	)
 }
 
