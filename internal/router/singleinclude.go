@@ -1,0 +1,34 @@
+package router
+
+import (
+	"net/url"
+
+	"gopkg.in/juju/charm.v2"
+)
+
+var _ BulkIncludeHandler = SingleIncludeHandler(nil)
+
+// SingleIncludeHandler implements BulkMetaHander for a non-batching
+// metadata retrieval function.
+type SingleIncludeHandler func(id *charm.URL, path string, flags url.Values) (interface{}, error)
+
+// Key implements BulkMetadataHander.Key
+func (h SingleIncludeHandler) Key() interface{} {
+	type singleMetaHandlerKey int
+	return singleMetaHandlerKey(0)
+}
+
+// Handle implements BulkMetadataHander.Handle
+func (h SingleIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.URL, paths []string, flags url.Values) ([]interface{}, error) {
+	results := make([]interface{}, len(hs))
+	for i, h := range hs {
+		h := h.(SingleIncludeHandler)
+		result, err := h(id, paths[i], flags)
+		if err != nil {
+			// TODO(rog) include index of failed handler
+			return nil, err
+		}
+		results[i] = result
+	}
+	return results, nil
+}
