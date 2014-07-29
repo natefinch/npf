@@ -14,7 +14,6 @@ import (
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/router"
-	"github.com/juju/charmstore/params"
 )
 
 type handler struct {
@@ -144,8 +143,6 @@ func preferredURL(url0, url1 *charm.URL) bool {
 	return ltsReleases[url0.Series]
 }
 
-var ErrMetadataNotRelevant = fmt.Errorf("metadata not relevant for the given entity")
-
 var errNotImplemented = fmt.Errorf("method not implemented")
 
 // GET stats/counter/key[:key]...?[by=unit]&start=date][&stop=date][&list=1]
@@ -208,18 +205,12 @@ func (h *handler) serveArchiveFile(charmId *charm.URL, w http.ResponseWriter, re
 // GET id/meta/charm-metadata
 // http://tinyurl.com/poeoulw
 func (h *handler) metaCharmMetadata(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error) {
-	if params.IsBundle(id) {
-		return nil, ErrMetadataNotRelevant
-	}
 	return entity.CharmMeta, nil
 }
 
 // GET id/meta/bundle-metadata
 // http://tinyurl.com/ozshbtb
 func (h *handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error) {
-	if !params.IsBundle(id) {
-		return nil, ErrMetadataNotRelevant
-	}
 	return entity.BundleData, nil
 }
 
@@ -232,18 +223,12 @@ func (h *handler) metaManifest(id *charm.URL, path string, flags url.Values) (in
 // GET id/meta/charm-actions
 // http://tinyurl.com/kfd2h34
 func (h *handler) metaCharmActions(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error) {
-	if params.IsBundle(id) {
-		return nil, ErrMetadataNotRelevant
-	}
 	return entity.CharmActions, nil
 }
 
 // GET id/meta/charm-config
 // http://tinyurl.com/oxxyujx
 func (h *handler) metaCharmConfig(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error) {
-	if params.IsBundle(id) {
-		return nil, ErrMetadataNotRelevant
-	}
 	return entity.CharmConfig, nil
 }
 

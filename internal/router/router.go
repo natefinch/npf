@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -210,12 +211,25 @@ func (r *Router) serveMeta(id *charm.URL, req *http.Request) (interface{}, error
 			return nil, err
 		}
 		result := results[0]
-		if result == nil {
+		if isNull(result) {
 			return nil, ErrDataNotFound
 		}
 		return results[0], nil
 	}
 	return nil, ErrNotFound
+}
+
+// isNull reports whether the given value will encode to
+// a null JSON value.
+func isNull(val interface{}) bool {
+	if val == nil {
+		return true
+	}
+	v := reflect.ValueOf(val)
+	if kind := v.Kind(); kind != reflect.Map && kind != reflect.Ptr && kind != reflect.Slice {
+		return false
+	}
+	return v.IsNil()
 }
 
 func (r *Router) metaNames() []string {
@@ -310,9 +324,11 @@ func (r *Router) GetMetadata(id *charm.URL, includes []string) (map[string]inter
 			return nil, err
 		}
 		for i, result := range groupResults {
-			// Omit nil results from map.
+			// Omit nil results from map. Note: omit statically typed
+			// nil results too to make it easy for handlers to return
+			// possibly nil data with a static type.
 			// http://tinyurl.com/o5ptfkk
-			if result != nil {
+			if !isNull(result) {
 				results[groupIncludes[i]] = result
 			}
 		}
