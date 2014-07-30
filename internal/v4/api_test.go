@@ -85,6 +85,8 @@ func (s *APISuite) TestMetaCharmMetadata(c *gc.C) {
 	})
 }
 
+// In this test we rely on the charm.v2 testing repo package and
+// dummy charm that has actions included.
 func (s *APISuite) TestMetaCharmActions(c *gc.C) {
 	url, dummy := s.addCharm(c, "dummy", "cs:precise/dummy-10")
 	storetesting.AssertJSONCall(c, s.srv,
