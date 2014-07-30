@@ -4,10 +4,10 @@
 package v4
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 
+	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -68,10 +68,10 @@ func ResolveURL(store *charmstore.Store, url *charm.URL) error {
 	}
 	urls, err := store.ExpandURL(url)
 	if err != nil {
-		return err
+		return errgo.Mask(err)
 	}
 	if len(urls) == 0 {
-		return fmt.Errorf("no matching charm or bundle for %q", url)
+		return errgo.Newf("no matching charm or bundle for %q", url)
 	}
 	*url = *selectPreferredURL(urls)
 	return nil
@@ -106,7 +106,7 @@ func (h *handler) entityQuery(id *charm.URL, selector map[string]int) (interface
 		Select(selector).
 		One(&val)
 	if err != nil {
-		return nil, err
+		return nil, errgo.Mask(err)
 	}
 	return &val, nil
 }
@@ -143,7 +143,7 @@ func preferredURL(url0, url1 *charm.URL) bool {
 	return ltsReleases[url0.Series]
 }
 
-var errNotImplemented = fmt.Errorf("method not implemented")
+var errNotImplemented = errgo.Newf("method not implemented")
 
 // GET stats/counter/key[:key]...?[by=unit]&start=date][&stop=date][&list=1]
 // http://tinyurl.com/nkdovcf

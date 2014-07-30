@@ -3,6 +3,7 @@ package router
 import (
 	"net/url"
 
+	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v2"
 )
 
@@ -61,9 +62,10 @@ func (h *fieldIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.URL, pat
 	// Make the single query.
 	doc, err := h.query(id, selector)
 	if err != nil {
-		return nil, err
+		// Call all the handlers with the resulting query document.
+		return nil, errgo.Mask(err)
 	}
-	// Call all the handlers with the resulting query document.
+
 	results := make([]interface{}, len(hs))
 	for i, f := range funcs {
 		var err error
@@ -72,7 +74,7 @@ func (h *fieldIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.URL, pat
 			// TODO correlate error with handler (perhaps return
 			// an error that identifies the slice position of the handler that
 			// failed).
-			return nil, err
+			return nil, errgo.Mask(err)
 		}
 	}
 	return results, nil

@@ -7,10 +7,10 @@
 package charmstore
 
 import (
-	"fmt"
 	"net/http"
 
 	"gopkg.in/mgo.v2"
+	"github.com/juju/errgo"
 )
 
 // NewAPIHandler returns a new API handler that
@@ -22,7 +22,7 @@ type NewAPIHandler func(*Store) http.Handler
 // The key of the versions map is the version name.
 func NewServer(db *mgo.Database, versions map[string]NewAPIHandler) (http.Handler, error) {
 	if len(versions) == 0 {
-		return nil, fmt.Errorf("charm store server must serve at least one version of the API")
+		return nil, errgo.Newf("charm store server must serve at least one version of the API")
 	}
 	store := NewStore(db)
 	mux := http.NewServeMux()

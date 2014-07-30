@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/juju/blobstore"
+	"github.com/juju/errgo"
 	"github.com/juju/errors"
 	"gopkg.in/mgo.v2"
 
@@ -60,15 +61,15 @@ func NewHash() hash.Hash {
 func NewContentChallengeResponse(chal *ContentChallenge, r io.ReadSeeker) (*ContentChallengeResponse, error) {
 	_, err := r.Seek(chal.RangeStart, 0)
 	if err != nil {
-		return nil, err
+		return nil, errgo.Mask(err)
 	}
 	hash := NewHash()
 	nw, err := io.CopyN(hash, r, chal.RangeLength)
 	if err != nil {
-		return nil, err
+		return nil, errgo.Mask(err)
 	}
 	if nw != chal.RangeLength {
-		return nil, fmt.Errorf("content is not long enough")
+		return nil, errgo.Newf("content is not long enough")
 	}
 	return &ContentChallengeResponse{
 		RequestId: chal.RequestId,
@@ -94,7 +95,7 @@ func New(db *mgo.Database, prefix string) *Store {
 func (s *Store) challengeResponse(resp *ContentChallengeResponse) error {
 	id, err := strconv.ParseInt(resp.RequestId, 10, 64)
 	if err != nil {
-		return fmt.Errorf("invalid request id %q", id)
+		return errgo.Newf("invalid request id %q", id)
 	}
 	rh := newResourceHash(resp.Hash)
 	return s.mstore.ProofOfAccessResponse(blobstore.NewPutResponse(id, rh.MD5Hash, rh.SHA256Hash))
@@ -113,7 +114,7 @@ func (s *Store) Put(r io.Reader, size int64, hash string, proof *ContentChalleng
 			return nil, nil
 		}
 		if err != blobstore.ErrResourceDeleted {
-			return nil, err
+			return nil, errgo.Mask(err)
 		}
 		// The blob has been deleted since the challenge
 		// was created, so continue on with uploading
@@ -123,7 +124,7 @@ func (s *Store) Put(r io.Reader, size int64, hash string, proof *ContentChalleng
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if err := s.mstore.PutForEnvironment("", hash, r, size); err != nil {
-				return nil, err
+				return nil, errgo.Mask(err)
 			}
 			return nil, nil
 		}
@@ -147,7 +148,7 @@ func (s *Store) PutUnchallenged(r io.Reader, size int64, hash string) error {
 func (s *Store) Open(hashSum string) (ReadSeekCloser, int64, error) {
 	r, length, err := s.mstore.GetForEnvironment("", hashSum)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, errgo.Mask(err)
 	}
 	return r.(ReadSeekCloser), length, nil
 }

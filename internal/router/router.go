@@ -6,13 +6,13 @@
 package router
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 	"reflect"
 	"sort"
 	"strings"
 
+	"github.com/juju/errgo"
 	charm "gopkg.in/juju/charm.v2"
 
 	"github.com/juju/charmstore/params"
@@ -115,8 +115,8 @@ func New(handlers *Handlers, resolveURL func(url *charm.URL) error) *Router {
 }
 
 var (
-	ErrNotFound     = fmt.Errorf("not found")
-	ErrDataNotFound = fmt.Errorf("metadata not found")
+	ErrNotFound     = errgo.Newf("not found")
+	ErrDataNotFound = errgo.Newf("metadata not found")
 )
 
 // ServeHTTP implements http.Handler.ServeHTTP.
@@ -133,20 +133,21 @@ func (r *Router) Handlers() *Handlers {
 // serveIds serves requests that may be rooted at a charm or bundle id.
 func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	if err := req.ParseForm(); err != nil {
-		return err
+		// We can ignore a trailing / because we do not return any
+		// relative URLs. If we start to return relative URL redirects,
+		// we will need to redirect non-slash-terminated URLs
+		// to slash-terminated URLs.
+		// http://cdivilly.wordpress.com/2014/03/11/why-trailing-slashes-on-uris-are-important/
+		return errgo.Mask(err)
 	}
-	// We can ignore a trailing / because we do not return any
-	// relative URLs. If we start to return relative URL redirects,
-	// we will need to redirect non-slash-terminated URLs
-	// to slash-terminated URLs.
-	// http://cdivilly.wordpress.com/2014/03/11/why-trailing-slashes-on-uris-are-important/
+
 	path := strings.TrimSuffix(req.URL.Path, "/")
 	url, path, err := splitId(path)
 	if err != nil {
-		return err
+		return errgo.Mask(err)
 	}
 	if err := r.resolveURL(url); err != nil {
-		return err
+		return errgo.Mask(err)
 	}
 	key, path := handlerKey(path)
 	if key == "" {
@@ -162,7 +163,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	req.URL.Path = path
 	resp, err := r.serveMeta(url, req)
 	if err != nil {
-		return err
+		return errgo.Mask(err)
 	}
 	WriteJSON(w, http.StatusOK, resp)
 	return nil
@@ -198,7 +199,7 @@ func (r *Router) serveMeta(id *charm.URL, req *http.Request) (interface{}, error
 		// http://tinyurl.com/q5vcjpk
 		meta, err := r.GetMetadata(id, req.Form["include"])
 		if err != nil {
-			return nil, err
+			return nil, errgo.Mask(err)
 		}
 		return params.MetaAnyResponse{
 			Id:   id,
@@ -208,7 +209,7 @@ func (r *Router) serveMeta(id *charm.URL, req *http.Request) (interface{}, error
 	if handler := r.handlers.Meta[key]; handler != nil {
 		results, err := handler.Handle([]BulkIncludeHandler{handler}, id, []string{path}, req.Form)
 		if err != nil {
-			return nil, err
+			return nil, errgo.Mask(err)
 		}
 		result := results[0]
 		if isNull(result) {
@@ -251,17 +252,17 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interf
 	req.ParseForm()
 	ids := req.Form["id"]
 	if len(ids) == 0 {
-		return nil, fmt.Errorf("no ids specified in meta request")
+		return nil, errgo.Newf("no ids specified in meta request")
 	}
 	delete(req.Form, "id")
 	result := make(map[string]interface{})
 	for _, id := range ids {
 		url, err := parseURL(id)
 		if err != nil {
-			return nil, err
+			return nil, errgo.Mask(err)
 		}
 		if err := r.resolveURL(url); err != nil {
-			if err == ErrNotFound {
+			if errgo.Cause(err) == ErrNotFound {
 				// URLs not found will be omitted from the result.
 				// http://tinyurl.com/o5ptfkk
 				continue
@@ -269,13 +270,13 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interf
 			return nil, err
 		}
 		meta, err := r.serveMeta(url, req)
-		if err == ErrDataNotFound {
+		if errgo.Cause(err) == ErrDataNotFound {
 			// The relevant data does not exist.
 			// http://tinyurl.com/o5ptfkk
 			continue
 		}
 		if err != nil {
-			return nil, err
+			return nil, errgo.Mask(err)
 		}
 		result[id] = meta
 	}
@@ -292,7 +293,7 @@ func (r *Router) GetMetadata(id *charm.URL, includes []string) (map[string]inter
 		includeKey, _ := handlerKey(include)
 		handler := r.handlers.Meta[includeKey]
 		if handler == nil {
-			return nil, fmt.Errorf("unrecognized metadata name %q", include)
+			return nil, errgo.Newf("unrecognized metadata name %q", include)
 		}
 
 		// Get the key that lets us group this handler into the
@@ -321,7 +322,7 @@ func (r *Router) GetMetadata(id *charm.URL, includes []string) (map[string]inter
 			// TODO(rog) if it's a BulkError, attach
 			// the original include path to error (the BulkError
 			// should contain the index of the failed one).
-			return nil, err
+			return nil, errgo.Mask(err)
 		}
 		for i, result := range groupResults {
 			// Omit nil results from map. Note: omit statically typed
@@ -374,7 +375,7 @@ func splitId(path string) (url *charm.URL, rest string, err error) {
 	urlStr := strings.TrimSuffix(path[0:i], "/")
 	url, err = parseURL(urlStr)
 	if err != nil {
-		return nil, "", err
+		return nil, "", errgo.Mask(err)
 	}
 	return url, path[i:], nil
 }
@@ -382,7 +383,7 @@ func splitId(path string) (url *charm.URL, rest string, err error) {
 func parseURL(urlStr string) (*charm.URL, error) {
 	ref, series, err := charm.ParseReference(urlStr)
 	if err != nil {
-		return nil, err
+		return nil, errgo.Mask(err)
 	}
 	return &charm.URL{
 		Reference: ref,

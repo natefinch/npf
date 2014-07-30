@@ -5,10 +5,10 @@ package charmstore
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"os"
 
+	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v2"
 
 	"github.com/juju/charmstore/internal/blobstore"
@@ -27,7 +27,7 @@ func getArchive(c interface{}) (blobstore.ReadSeekCloser, error) {
 		// For example: charm.CharmDir or charm.BundleDir.
 		var buffer bytes.Buffer
 		if err := c.ArchiveTo(&buffer); err != nil {
-			return nil, err
+			return nil, errgo.Mask(err)
 		}
 		return nopCloser(bytes.NewReader(buffer.Bytes())), nil
 	case *charm.BundleArchive:
@@ -35,11 +35,11 @@ func getArchive(c interface{}) (blobstore.ReadSeekCloser, error) {
 	case *charm.CharmArchive:
 		path = c.Path
 	default:
-		return nil, fmt.Errorf("cannot get the archive for charm type %T", c)
+		return nil, errgo.Newf("cannot get the archive for charm type %T", c)
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, errgo.Mask(err)
 	}
 	return file, nil
 }
