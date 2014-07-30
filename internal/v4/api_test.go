@@ -166,32 +166,34 @@ var errorTests = []struct {
 	expected error
 	path     string
 }{{
-	name:     "MetaCharmConfig: charm not found",
+	name:     "charm-config: charm not found",
 	expected: router.ErrNotFound,
-	path:     "/precise/wordpress-23/meta/charm-config",
+	path:     "/precise/nothing-23/meta/charm-config",
 }, {
-	name:     "MetaCharmConfig: not relevant",
+	name:     "charm-config: not relevant",
 	expected: v4.ErrMetadataNotRelevant,
 	path:     "/bundle/wordpress-simple-42/meta/charm-config",
 }, {
-	name:     "MetaCharmMetadata: charm not found",
+	name:     "charm-metadata: charm not found",
 	expected: router.ErrNotFound,
-	path:     "/precise/wordpress-23/meta/charm-metadata",
+	path:     "/precise/nothing-23/meta/charm-metadata",
 }, {
-	name:     "MetaCharmMetadata: not relevant",
+	name:     "charm-config: not relevant",
 	expected: v4.ErrMetadataNotRelevant,
 	path:     "/bundle/wordpress-simple-42/meta/charm-config",
 }, {
-	name:     "MetaBundleMetadata: bundle not found",
+	name:     "bundle-metadata: bundle not found",
 	expected: router.ErrNotFound,
 	path:     "/bundle/django-app-23/meta/bundle-metadata",
 }, {
-	name:     "MetaBundleMetadata: not relevant",
+	name:     "bundle-metadata: not relevant",
 	expected: v4.ErrMetadataNotRelevant,
-	path:     "/trusty/django-42/meta/bundle-metadata",
+	path:     "/precise/wordpress-23/meta/bundle-metadata",
 }}
 
 func (s *APISuite) TestError(c *gc.C) {
+	s.addBundle(c, "wordpress", "cs:bundle/wordpress-simple-42")
+	s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	for i, test := range errorTests {
 		c.Logf("%d: %s", i, test.name)
 		expectedError := params.Error{Message: test.expected.Error()}

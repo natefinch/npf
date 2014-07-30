@@ -13,7 +13,6 @@ import (
 
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/mongodoc"
-	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/params"
 )
 
@@ -25,12 +24,10 @@ type Store struct {
 
 // NewStore returns a Store that uses the given database.
 func NewStore(db *mgo.Database) *Store {
-	s := &Store{
+	return &Store{
 		DB:        StoreDatabase{db},
 		BlobStore: blobstore.New(db, "entitystore"),
 	}
-	router.RegisterCollection(s.DB.Entities().Name, (*mongodoc.Entity)(nil))
-	return s
 }
 
 func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (string, int64, error) {

@@ -9,13 +9,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"reflect"
 	"strings"
-	"sync"
 
 	charm "gopkg.in/juju/charm.v2"
-	"labix.org/v2/mgo"
-	"labix.org/v2/mgo/bson"
 
 	"github.com/juju/charmstore/params"
 )
@@ -30,12 +26,33 @@ var knownSeries = map[string]bool{
 	"utopic":  true,
 }
 
-// MetaHandler retrieves metadata for the given id. The path provides
-// the full name of the metadata endpoint (for example, "charm-metadata"
-// or "extra-info/"), and the flags holds all the url query values.
+// BulkIncludeHandler represents a metadata handler that can
+// handle multiple metadata "include" requests in a single batch.
 //
-// The getter can be used to retrieve items from mongo.
-type MetaHandler func(getter ItemGetter, id *charm.URL, path string, flags url.Values) (interface{}, error)
+// For simple metadata handlers that cannot be
+// efficiently combined, see SingleIncludeHandler,
+type BulkIncludeHandler interface {
+	// Key returns a value that will be used to group handlers
+	// together in preparation for a call to Handle.
+	// The key should be comparable for equality.
+	// Please do not return NaN. That would be silly, OK?
+	Key() interface{}
+
+	// Handle returns the results of invoking all the given handlers
+	// on the given charm or bundle id. Each result is held in
+	// the respective element of the returned slice.
+	//
+	// All of the handlers' Keys will be equal to the receiving handler's
+	// Key.
+	//
+	// Each item in paths holds the remaining metadata path
+	// for the handler in the corresponding position
+	// in hs after the prefix in Handlers.Meta has been stripped,
+	// and flags holds all the url query values.
+	//
+	// TODO(rog) document indexed errors
+	Handle(hs []BulkIncludeHandler, id *charm.URL, paths []string, flags url.Values) ([]interface{}, error)
+}
 
 // IdHandler handles a charm store request rooted at the given id.
 // The request path (req.URL.Path) holds the URL path after
@@ -64,13 +81,12 @@ type Handlers struct {
 	// endpoint. The map key holds the first element of the path,
 	// which may end in a trailing slash (/) to indicate that longer
 	// paths are allowed too.
-	Meta map[string]MetaHandler
+	Meta map[string]BulkIncludeHandler
 }
 
 // Router represents a charm store HTTP request router.
 type Router struct {
 	handlers   *Handlers
-	db         *mgo.Database
 	handler    http.Handler
 	resolveURL func(url *charm.URL) error
 }
@@ -81,10 +97,9 @@ type Router struct {
 // The resolveURL function will be called to resolve ids in
 // router paths - it should fill in the Series and Revision
 // fields of its argument URL if they are not specified.
-func New(db *mgo.Database, handlers *Handlers, resolveURL func(url *charm.URL) error) *Router {
+func New(handlers *Handlers, resolveURL func(url *charm.URL) error) *Router {
 	r := &Router{
 		handlers:   handlers,
-		db:         db,
 		resolveURL: resolveURL,
 	}
 	mux := http.NewServeMux()
@@ -186,7 +201,11 @@ func (r *Router) serveMeta(id *charm.URL, req *http.Request) (interface{}, error
 		}, nil
 	}
 	if handler := r.handlers.Meta[key]; handler != nil {
-		return handler(getterFunc(r.getter), id, path, req.Form)
+		results, err := handler.Handle([]BulkIncludeHandler{handler}, id, []string{path}, req.Form)
+		if err != nil {
+			return nil, err
+		}
+		return results[0], nil
 	}
 	return nil, ErrNotFound
 }
@@ -230,124 +249,43 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interf
 	return result, nil
 }
 
-var (
-	collectionMutex sync.Mutex
-	collections     = make(map[reflect.Type]string)
-)
-
-// RegisterCollection registers the type of docType as document type for
-// a given collection, so documents of that type can be retrieved using
-// ItemGetter's GetItem method.
-//
-// The document type must be a pointer to a struct or map type suitable
-// for unmarshalling with mgo/bson.
-func RegisterCollection(collectionName string, docType interface{}) {
-	collectionMutex.Lock()
-	defer collectionMutex.Unlock()
-	t := reflect.TypeOf(docType)
-	if t.Kind() != reflect.Ptr {
-		panic(fmt.Errorf("RegisterCollection called with non-pointer type %T", docType))
-	}
-	if k := t.Elem().Kind(); k != reflect.Struct && k != reflect.Map {
-		panic(fmt.Errorf("RegisterCollection called with invalid type %T", docType))
-	}
-	// The type that's passed to GetItem is a pointer to a pointer,
-	// so store that type in the collections map.
-	t = reflect.PtrTo(t)
-	for typ, name := range collections {
-		if name == collectionName && typ != t {
-			panic(fmt.Errorf("duplicate type registered for collection %q", collectionName))
-		}
-	}
-	collections[t] = collectionName
-}
-
-func collectionForValue(val interface{}) (string, error) {
-	collectionMutex.Lock()
-	defer collectionMutex.Unlock()
-	if coll := collections[reflect.TypeOf(val)]; coll != "" {
-		return coll, nil
-	}
-	return "", fmt.Errorf("no collection found for value of type %T", val)
-}
-
-// The ItemGetter interface allows the retrieval of a document from
-// mongo, filling fields as specified (the field names refer to the bson
-// field names in the marshalled form of the document).
-//
-// The actual collection retrieved from is determined by the type of
-// val, which should be a pointer to a type registered with
-// RegisterCollection.
-//
-// For example, if RegisterCollection("charms", (*EntityDoc)(nil)) has
-// been called, then:
-//
-//     var item *EntityDoc			// Note: it's a pointer.
-//     err := getter.GetItem(charmId, &item, "charmmeta")
-//
-// will retrieve the document with _id=charmId from the charms
-// collection and set item to an EntityDoc with at least its CharmMeta
-// field set.
-//
-// Note that the retrieved item should not be modified - it may be in
-// use concurrently by other goroutines.
-type ItemGetter interface {
-	GetItem(id interface{}, val interface{}, fields ...string) error
-}
-
-type getterFunc func(id interface{}, val interface{}, fields ...string) error
-
-func (f getterFunc) GetItem(id interface{}, val interface{}, fields ...string) error {
-	return f(id, val, fields...)
-}
-
 // GetMetadata retrieves metadata for the given charm or bundle id,
 // including information as specified by the includes slice.
 func (r *Router) GetMetadata(id *charm.URL, includes []string) (map[string]interface{}, error) {
-	if len(includes) == 0 {
-		return nil, nil
-	}
-	// TODO(rog) optimize this to avoid making a db round trip
-	// for every piece of metadata and to cache previously
-	// fetched results.
-	getter := getterFunc(r.getter)
-	results := make(map[string]interface{})
+	groups := make(map[interface{}][]BulkIncludeHandler)
+	includesByGroup := make(map[interface{}][]string)
 	for _, include := range includes {
-		key, path := handlerKey(include)
-		handler := r.handlers.Meta[key]
+		includeKey, _ := handlerKey(include)
+		handler := r.handlers.Meta[includeKey]
 		if handler == nil {
 			return nil, fmt.Errorf("unrecognized metadata name %q", include)
 		}
-		result, err := handler(getter, id, path, nil)
-		if err != nil {
-			// TODO(rog) If error is "inappropriate metadata", then
-			// just omit the result.
-			return nil, fmt.Errorf("cannot get meta/%q: %v", include, err)
+		key := handler.Key()
+		groups[key] = append(groups[key], handler)
+		includesByGroup[key] = append(includesByGroup[key], include)
+	}
+	results := make(map[string]interface{})
+	for _, g := range groups {
+		groupIncludes := includesByGroup[g[0].Key()]
+		paths := make([]string, len(g))
+		for i, include := range groupIncludes {
+			_, paths[i] = handlerKey(include)
 		}
-		results[include] = result
+		groupResults, err := g[0].Handle(g, id, paths, nil)
+		if err != nil {
+			// TODO(rog) if it's a BulkError, attach
+			// the original include path to error (the BulkError
+			// should contain the index of the failed one)
+			return nil, err
+		}
+		for i, result := range groupResults {
+			// Note: omit nil results.
+			if result != nil {
+				results[groupIncludes[i]] = result
+			}
+		}
 	}
 	return results, nil
-}
-
-func (r *Router) getter(id interface{}, val interface{}, fields ...string) error {
-	if len(fields) == 0 {
-		return fmt.Errorf("no fields specified in GetItem")
-	}
-	collection, err := collectionForValue(val)
-	if err != nil {
-		return err
-	}
-	selector := make(bson.D, len(fields))
-	for i, field := range fields {
-		selector[i] = bson.DocElem{
-			Name:  field,
-			Value: 1,
-		}
-	}
-	return r.db.C(collection).
-		Find(bson.D{{"_id", id}}).
-		Select(selector).
-		One(val)
 }
 
 // splitPath returns the first path element
