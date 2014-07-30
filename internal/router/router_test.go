@@ -164,6 +164,17 @@ var routerTests = []struct {
 		Message: "resolve URL error",
 	},
 }, {
+	about: "meta list",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler,
+			"bar": testMetaHandler,
+		},
+	},
+	urlStr:     "http://example.com/precise/wordpress-42/meta",
+	expectCode: http.StatusOK,
+	expectBody: []string{"foo", "bar"},
+}, {
 	about: "meta handler",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
@@ -210,6 +221,18 @@ var routerTests = []struct {
 	expectCode: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "not found",
+	},
+}, {
+	about: "meta handler with nil data",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": nilMetaHandler,
+		},
+	},
+	urlStr:     "http://example.com/precise/wordpress-42/meta/foo",
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "metadata not found",
 	},
 }, {
 	about:  "meta handler with field selector",
@@ -317,6 +340,24 @@ var routerTests = []struct {
 					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
 				},
 				Id: charm.MustParseURL("cs:precise/wordpress-42"),
+			},
+		},
+	},
+}, {
+	about:  "meta/any, nil metadata omitted",
+	urlStr: "http://example.com/precise/wordpress-42/meta/any?include=ok&include=nil",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"ok":  testMetaHandler,
+			"nil": nilMetaHandler,
+		},
+	},
+	expectCode: http.StatusOK,
+	expectBody: params.MetaAnyResponse{
+		Id: charm.MustParseURL("cs:precise/wordpress-42"),
+		Meta: map[string]interface{}{
+			"ok": metaHandlerTestResp{
+				CharmURL: "cs:precise/wordpress-42",
 			},
 		},
 	},
@@ -434,6 +475,58 @@ var routerTests = []struct {
 	expectCode: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "no ids specified in meta request",
+	},
+}, {
+	about:  "bulk meta handler with unresolvable id",
+	urlStr: "http://example.com/meta/foo?id=unresolved&id=precise/wordpress-23",
+	resolveURL: func(url *charm.URL) error {
+		if url.Name == "unresolved" {
+			return ErrNotFound
+		}
+		return nil
+	},
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler,
+		},
+	},
+	expectCode: http.StatusOK,
+	expectBody: map[string]metaHandlerTestResp{
+		"precise/wordpress-23": {
+			CharmURL: "cs:precise/wordpress-23",
+		},
+	},
+}, {
+	about:  "bulk meta handler with id resolution error",
+	urlStr: "http://example.com/meta/foo?id=resolveerror&id=precise/wordpress-23",
+	resolveURL: func(url *charm.URL) error {
+		if url.Name == "resolveerror" {
+			return fmt.Errorf("an error")
+		}
+		return nil
+	},
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler,
+		},
+	},
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "an error",
+	},
+}, {
+	about:  "bulk meta handler with some nil data",
+	urlStr: "http://example.com/meta/foo?id=bundle/something-24&id=precise/wordpress-23",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": selectiveIdHandler(map[string]interface{}{
+				"cs:bundle/something-24": "bundlefoo",
+			}),
+		},
+	},
+	expectCode: http.StatusOK,
+	expectBody: map[string]string{
+		"bundle/something-24": "bundlefoo",
 	},
 }}
 
@@ -794,6 +887,12 @@ var testMetaHandler = SingleIncludeHandler(
 	},
 )
 
+var nilMetaHandler = SingleIncludeHandler(
+	func(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+		return nil, nil
+	},
+)
+
 type fieldSelectQueryInfo struct {
 	Id       *charm.URL
 	Selector map[string]int
@@ -835,4 +934,12 @@ func fieldSelectHandler(handlerId string, key interface{}, fields ...string) Bul
 		}, nil
 	}
 	return FieldIncludeHandler(key, query, fields, handle)
+}
+
+// selectiveIdHandler handles metadata by returning the
+// data found in the map for the requested id.
+func selectiveIdHandler(m map[string]interface{}) BulkIncludeHandler {
+	return SingleIncludeHandler(func(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+		return m[id.String()], nil
+	})
 }
