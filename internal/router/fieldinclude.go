@@ -25,6 +25,8 @@ type FieldHandlerFunc func(doc interface{}, id *charm.URL, path string, flags ur
 // The fields specify which fields are required by the given handler.
 // The fields passed to the query will be the union of all fields found
 // in all the handlers in the bulk request.
+//
+// See in ../v4/api.go for an example of its use.
 func FieldIncludeHandler(key interface{}, q FieldQueryFunc, fields []string, handle FieldHandlerFunc) BulkIncludeHandler {
 	return &fieldIncludeHandler{
 		key:    key,
@@ -61,7 +63,7 @@ func (h *fieldIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.URL, pat
 	if err != nil {
 		return nil, err
 	}
-	// Call all the handlers with the resulting query document
+	// Call all the handlers with the resulting query document.
 	results := make([]interface{}, len(hs))
 	for i, f := range funcs {
 		var err error
@@ -69,7 +71,7 @@ func (h *fieldIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.URL, pat
 		if err != nil {
 			// TODO correlate error with handler (perhaps return
 			// an error that identifies the slice position of the handler that
-			// failed
+			// failed).
 			return nil, err
 		}
 	}

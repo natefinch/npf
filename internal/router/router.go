@@ -50,7 +50,7 @@ type BulkIncludeHandler interface {
 	// in hs after the prefix in Handlers.Meta has been stripped,
 	// and flags holds all the url query values.
 	//
-	// TODO(rog) document indexed errors
+	// TODO(rog) document indexed errors.
 	Handle(hs []BulkIncludeHandler, id *charm.URL, paths []string, flags url.Values) ([]interface{}, error)
 }
 
@@ -238,10 +238,14 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interf
 			return nil, err
 		}
 		if err := r.resolveURL(url); err != nil {
+			// TODO(rog) if the error is because the id was
+			// not found, then just omit from result.
 			return nil, err
 		}
 		meta, err := r.serveMeta(url, req)
 		if err != nil {
+			// TODO(rog) if the error is because the id was
+			// not found, then just omit from result.
 			return nil, err
 		}
 		result[id] = meta
@@ -255,18 +259,30 @@ func (r *Router) GetMetadata(id *charm.URL, includes []string) (map[string]inter
 	groups := make(map[interface{}][]BulkIncludeHandler)
 	includesByGroup := make(map[interface{}][]string)
 	for _, include := range includes {
+		// Get the key that lets us choose the include handler.
 		includeKey, _ := handlerKey(include)
 		handler := r.handlers.Meta[includeKey]
 		if handler == nil {
 			return nil, fmt.Errorf("unrecognized metadata name %q", include)
 		}
+
+		// Get the key that lets us group this handler into the
+		// correct bulk group.
 		key := handler.Key()
 		groups[key] = append(groups[key], handler)
 		includesByGroup[key] = append(includesByGroup[key], include)
 	}
 	results := make(map[string]interface{})
 	for _, g := range groups {
+		// We know that we must have at least one element in the
+		// slice here. We could use any member of the slice to
+		// actually handle the request, so arbitrarily choose
+		// g[0]. Note that g[0].Key() is equal to g[i].Key() for
+		// every i in the slice.
 		groupIncludes := includesByGroup[g[0].Key()]
+
+		// Paths contains all the path elements after
+		// the handler key has been stripped off.
 		paths := make([]string, len(g))
 		for i, include := range groupIncludes {
 			_, paths[i] = handlerKey(include)
@@ -275,7 +291,7 @@ func (r *Router) GetMetadata(id *charm.URL, includes []string) (map[string]inter
 		if err != nil {
 			// TODO(rog) if it's a BulkError, attach
 			// the original include path to error (the BulkError
-			// should contain the index of the failed one)
+			// should contain the index of the failed one).
 			return nil, err
 		}
 		for i, result := range groupResults {
