@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	charm "gopkg.in/juju/charm.v2"
@@ -112,7 +113,10 @@ func New(handlers *Handlers, resolveURL func(url *charm.URL) error) *Router {
 	return r
 }
 
-var ErrNotFound = fmt.Errorf("not found")
+var (
+	ErrNotFound     = fmt.Errorf("not found")
+	ErrDataNotFound = fmt.Errorf("metadata not found")
+)
 
 // ServeHTTP implements http.Handler.ServeHTTP.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -151,7 +155,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 		req.URL.Path = path
 		return handler(url, w, req)
 	}
-	if key != "meta/" {
+	if key != "meta/" && key != "meta" {
 		return ErrNotFound
 	}
 	req.URL.Path = path
@@ -205,6 +209,10 @@ func (r *Router) serveMeta(id *charm.URL, req *http.Request) (interface{}, error
 		if err != nil {
 			return nil, err
 		}
+		result := results[0]
+		if result == nil {
+			return nil, ErrDataNotFound
+		}
 		return results[0], nil
 	}
 	return nil, ErrNotFound
@@ -215,6 +223,7 @@ func (r *Router) metaNames() []string {
 	for name := range r.handlers.Meta {
 		names = append(names, strings.TrimSuffix(name, "/"))
 	}
+	sort.Strings(names)
 	return names
 }
 
@@ -238,14 +247,20 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interf
 			return nil, err
 		}
 		if err := r.resolveURL(url); err != nil {
-			// TODO(rog) if the error is because the id was
-			// not found, then just omit from result.
+			if err == ErrNotFound {
+				// URLs not found will be omitted from the result.
+				// http://tinyurl.com/o5ptfkk
+				continue
+			}
 			return nil, err
 		}
 		meta, err := r.serveMeta(url, req)
+		if err == ErrDataNotFound {
+			// The relevant data does not exist.
+			// http://tinyurl.com/o5ptfkk
+			continue
+		}
 		if err != nil {
-			// TODO(rog) if the error is because the id was
-			// not found, then just omit from result.
 			return nil, err
 		}
 		result[id] = meta
@@ -295,7 +310,8 @@ func (r *Router) GetMetadata(id *charm.URL, includes []string) (map[string]inter
 			return nil, err
 		}
 		for i, result := range groupResults {
-			// Note: omit nil results.
+			// Omit nil results from map.
+			// http://tinyurl.com/o5ptfkk
 			if result != nil {
 				results[groupIncludes[i]] = result
 			}
