@@ -21,8 +21,8 @@ import (
 
 	"github.com/juju/loggo"
 	"gopkg.in/juju/charm.v2"
-	"labix.org/v2/mgo"
-	"labix.org/v2/mgo/bson"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
 var logger = loggo.GetLogger("juju.store")

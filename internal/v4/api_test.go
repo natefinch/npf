@@ -4,15 +4,21 @@
 package v4_test
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"reflect"
+	"strings"
 	"testing"
 
 	jujutesting "github.com/juju/testing"
 	"gopkg.in/juju/charm.v2"
 	charmtesting "gopkg.in/juju/charm.v2/testing"
+	"gopkg.in/mgo.v2/bson"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/charmstore"
+	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/internal/storetesting"
 	"github.com/juju/charmstore/internal/v4"
@@ -40,49 +46,157 @@ func (s *APISuite) SetUpTest(c *gc.C) {
 	s.srv = srv
 }
 
-func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.URL, charm.Charm) {
-	url, err := charm.ParseURL(curl)
-	c.Assert(err, gc.IsNil)
-	wordpress := charmtesting.Charms.CharmDir(charmName)
-	err = s.store.AddCharm(url, wordpress)
-	c.Assert(err, gc.IsNil)
-	return url, wordpress
+type metaEndpoint struct {
+	name       string
+	exclusive  int
+	bundleOnly bool
+	get        func(*charmstore.Store, *charm.URL) (interface{}, error)
+
+	// checkURL holds one URL to sanity check data against.
+	checkURL string
+	// assertCheckData holds a function that will be used to check that
+	// the get function returns sane data for checkURL.
+	assertCheckData func(c *gc.C, data interface{})
 }
 
-func (s *APISuite) addBundle(c *gc.C, bundleName string, curl string) (*charm.URL, charm.Bundle) {
-	url := charm.MustParseURL(curl)
-	bundle := charmtesting.Charms.BundleDir(bundleName)
-	err := s.store.AddBundle(url, bundle)
-	c.Assert(err, gc.IsNil)
-	return url, bundle
+const (
+	charmOnly = iota + 1
+	bundleOnly
+)
+
+var metaEndpoints = []metaEndpoint{{
+	name:      "charm-config",
+	exclusive: charmOnly,
+	get:       entityFieldGetter("CharmConfig"),
+	checkURL:  "cs:precise/wordpress-23",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data.(*charm.Config).Options["blog-title"].Default, gc.Equals, "My Title")
+	},
+}, {
+	name:      "charm-metadata",
+	exclusive: charmOnly,
+	get:       entityFieldGetter("CharmMeta"),
+	checkURL:  "cs:precise/wordpress-23",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data.(*charm.Meta).Summary, gc.Equals, "Blog engine")
+	},
+}, {
+	name:      "bundle-metadata",
+	exclusive: bundleOnly,
+	get:       entityFieldGetter("BundleData"),
+	checkURL:  "cs:bundle/wordpress-42",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data.(*charm.BundleData).Services["wordpress"].Charm, gc.Equals, "wordpress")
+	},
+}, {
+	name:      "charm-actions",
+	exclusive: charmOnly,
+	get:       entityFieldGetter("CharmActions"),
+	checkURL:  "cs:precise/dummy-10",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data.(*charm.Actions).ActionSpecs["snapshot"].Description, gc.Equals, "Take a snapshot of the database.")
+	},
+}}
+
+// TestEndpointGet tries to ensure that the endpoint
+// test data getters correspond with reality.
+func (s *APISuite) TestEndpointGet(c *gc.C) {
+	s.addTestEntities(c)
+	for i, ep := range metaEndpoints {
+		c.Logf("test %d: %s\n", i, ep.name)
+		data, err := ep.get(s.store, charm.MustParseURL(ep.checkURL))
+		c.Assert(err, gc.IsNil)
+		ep.assertCheckData(c, data)
+	}
 }
 
 func (s *APISuite) TestArchive(c *gc.C) {
 	assertNotImplemented(c, s.srv, "precise/wordpress-23/archive")
 }
 
-func (s *APISuite) TestMetaCharmConfig(c *gc.C) {
-	url, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
-	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/charm-config", "", http.StatusOK, wordpress.Config())
-
-	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/any?include=charm-config", "", http.StatusOK, &params.MetaAnyResponse{
-		Id: url,
-		Meta: map[string]interface{}{
-			"charm-config": wordpress.Config(),
-		},
-	})
+var testEntities = []string{
+	// A stock charm.
+	"cs:precise/wordpress-23",
+	// A stock bundle.
+	"cs:bundle/wordpress-42",
+	// A charm with some actions.
+	"cs:precise/dummy-10",
 }
 
-func (s *APISuite) TestMetaCharmMetadata(c *gc.C) {
-	url, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
-	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/charm-metadata", "", http.StatusOK, wordpress.Meta())
+func (s *APISuite) addTestEntities(c *gc.C) []*charm.URL {
+	urls := make([]*charm.URL, len(testEntities))
+	for i, e := range testEntities {
+		url := charm.MustParseURL(e)
+		if url.Series == "bundle" {
+			s.addBundle(c, url.Name, e)
+		} else {
+			s.addCharm(c, url.Name, e)
+		}
+		urls[i] = url
+	}
+	return urls
+}
 
-	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/any?include=charm-metadata", "", http.StatusOK, params.MetaAnyResponse{
-		Id: url,
-		Meta: map[string]interface{}{
-			"charm-metadata": wordpress.Meta(),
-		},
-	})
+func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
+	urls := s.addTestEntities(c)
+	for i, ep := range metaEndpoints {
+		c.Logf("test %d. %s", i, ep.name)
+		tested := false
+		for _, url := range urls {
+			charmId := strings.TrimPrefix(url.String(), "cs:")
+			storeURL := "http://0.1.2.3/v4/" + charmId + "/meta/" + ep.name
+			expectData, err := ep.get(s.store, url)
+			c.Assert(err, gc.IsNil)
+			c.Logf("	expected data for %q: %#v", url, expectData)
+			if isNull(expectData) {
+				storetesting.AssertJSONCall(c, s.srv, "GET", storeURL, "", http.StatusInternalServerError, params.Error{
+					Message: router.ErrDataNotFound.Error(),
+				})
+				continue
+			}
+			tested = true
+			storetesting.AssertJSONCall(c, s.srv, "GET", storeURL, "", http.StatusOK, expectData)
+		}
+		if !tested {
+			c.Errorf("endpoint %q is null for all endpoints, so is not properly tested", ep.name)
+		}
+	}
+}
+
+func isNull(v interface{}) bool {
+	data, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return string(data) == "null"
+}
+
+func (s *APISuite) TestMetaEndpointsAny(c *gc.C) {
+	urls := s.addTestEntities(c)
+	for _, url := range urls {
+		charmId := strings.TrimPrefix(url.String(), "cs:")
+		var flags []string
+		expectData := params.MetaAnyResponse{
+			Id:   url,
+			Meta: make(map[string]interface{}),
+		}
+		for _, ep := range metaEndpoints {
+			flags = append(flags, "include="+ep.name)
+			isBundle := url.Series == "bundle"
+			if ep.exclusive != 0 && isBundle != (ep.exclusive == bundleOnly) {
+				// endpoint not relevant.
+				continue
+			}
+			val, err := ep.get(s.store, url)
+			c.Assert(err, gc.IsNil)
+			if val != nil {
+				expectData.Meta[ep.name] = val
+			}
+		}
+		storeURL := "http://0.1.2.3/v4/" + charmId + "/meta/any?" + strings.Join(flags, "&")
+		storetesting.AssertJSONCall(c, s.srv, "GET", storeURL, "",
+			http.StatusOK, expectData)
+	}
 }
 
 // In this test we rely on the charm.v2 testing repo package and
@@ -104,6 +218,10 @@ func (s *APISuite) TestMetaCharmActions(c *gc.C) {
 }
 
 func (s *APISuite) TestBulkMeta(c *gc.C) {
+	// We choose an arbitrary set of ids and metadata here, just to smoke-test
+	// whether the meta/any logic is hooked up correctly.
+	// Detailed tests for this feature are in the router package.
+
 	_, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	_, mysql := s.addCharm(c, "mysql", "cs:precise/mysql-10")
 	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/meta/charm-metadata?id=precise/wordpress-23&id=precise/mysql-10", "", http.StatusOK, map[string]*charm.Meta{
@@ -113,6 +231,10 @@ func (s *APISuite) TestBulkMeta(c *gc.C) {
 }
 
 func (s *APISuite) TestBulkMetaAny(c *gc.C) {
+	// We choose an arbitrary set of metadata here, just to smoke-test
+	// whether the meta/any logic is hooked up correctly.
+	// Detailed tests for this feature are in the router package.
+
 	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	mysqlURL, mysql := s.addCharm(c, "mysql", "cs:precise/mysql-10")
 	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/meta/any?include=charm-metadata&include=charm-config&id=precise/wordpress-23&id=precise/mysql-10", "", http.StatusOK, map[string]params.MetaAnyResponse{
@@ -142,65 +264,10 @@ func (s *APISuite) TestIdsAreResolved(c *gc.C) {
 	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/wordpress/meta/charm-metadata", "", http.StatusOK, wordpress.Meta())
 }
 
-func (s *APISuite) TestMetaCharmMetadataFails(c *gc.C) {
+func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
 	expected := params.Error{Message: router.ErrNotFound.Error()}
-	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/charm-metadata", "", http.StatusInternalServerError, expected)
-}
-
-func (s *APISuite) TestMetaBundleMetadata(c *gc.C) {
-	url, bundle := s.addBundle(c, "wordpress", "cs:bundle/wordpress-simple-42")
-	storetesting.AssertJSONCall(c, s.srv, "GET",
-		"http://0.1.2.3/v4/bundle/wordpress-simple-42/meta/bundle-metadata",
-		"", http.StatusOK, bundle.Data())
-
-	storetesting.AssertJSONCall(c, s.srv, "GET",
-		"http://0.1.2.3/v4/bundle/wordpress-simple-42/meta/any?include=bundle-metadata",
-		"", http.StatusOK, params.MetaAnyResponse{
-			Id: url,
-			Meta: map[string]interface{}{
-				"bundle-metadata": bundle.Data(),
-			},
-		})
-}
-
-var errorTests = []struct {
-	name     string
-	expected error
-	path     string
-}{{
-	name:     "charm-config: charm not found",
-	expected: router.ErrNotFound,
-	path:     "/precise/nothing-23/meta/charm-config",
-}, {
-	name:     "charm-config: not relevant",
-	expected: v4.ErrMetadataNotRelevant,
-	path:     "/bundle/wordpress-simple-42/meta/charm-config",
-}, {
-	name:     "charm-metadata: charm not found",
-	expected: router.ErrNotFound,
-	path:     "/precise/nothing-23/meta/charm-metadata",
-}, {
-	name:     "charm-config: not relevant",
-	expected: v4.ErrMetadataNotRelevant,
-	path:     "/bundle/wordpress-simple-42/meta/charm-config",
-}, {
-	name:     "bundle-metadata: bundle not found",
-	expected: router.ErrNotFound,
-	path:     "/bundle/django-app-23/meta/bundle-metadata",
-}, {
-	name:     "bundle-metadata: not relevant",
-	expected: v4.ErrMetadataNotRelevant,
-	path:     "/precise/wordpress-23/meta/bundle-metadata",
-}}
-
-func (s *APISuite) TestError(c *gc.C) {
-	s.addBundle(c, "wordpress", "cs:bundle/wordpress-simple-42")
-	s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
-	for i, test := range errorTests {
-		c.Logf("%d: %s", i, test.name)
-		expectedError := params.Error{Message: test.expected.Error()}
-		storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4"+test.path,
-			"", http.StatusInternalServerError, expectedError)
+	for _, ep := range metaEndpoints {
+		storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/"+ep.name, "", http.StatusInternalServerError, expected)
 	}
 }
 
@@ -276,4 +343,42 @@ func assertNotImplemented(c *gc.C, h http.Handler, path string) {
 	storetesting.AssertJSONCall(c, h, "GET", "http://0.1.2.3/v4/"+path, "", http.StatusInternalServerError, params.Error{
 		Message: "method not implemented",
 	})
+}
+
+func entityFieldGetter(fieldName string) func(*charmstore.Store, *charm.URL) (interface{}, error) {
+	return entityGetter(func(entity *mongodoc.Entity) interface{} {
+		field := reflect.ValueOf(entity).Elem().FieldByName(fieldName)
+		if !field.IsValid() {
+			panic(fmt.Errorf("entity has no field %q", fieldName))
+		}
+		return field.Interface()
+	})
+}
+
+func entityGetter(get func(*mongodoc.Entity) interface{}) func(*charmstore.Store, *charm.URL) (interface{}, error) {
+	return func(store *charmstore.Store, url *charm.URL) (interface{}, error) {
+		var doc mongodoc.Entity
+		err := store.DB.Entities().Find(bson.D{{"_id", url}}).One(&doc)
+		if err != nil {
+			return nil, err
+		}
+		return get(&doc), nil
+	}
+}
+
+func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.URL, charm.Charm) {
+	url, err := charm.ParseURL(curl)
+	c.Assert(err, gc.IsNil)
+	wordpress := charmtesting.Charms.CharmDir(charmName)
+	err = s.store.AddCharm(url, wordpress)
+	c.Assert(err, gc.IsNil)
+	return url, wordpress
+}
+
+func (s *APISuite) addBundle(c *gc.C, bundleName string, curl string) (*charm.URL, charm.Bundle) {
+	url := charm.MustParseURL(curl)
+	bundle := charmtesting.Charms.BundleDir(bundleName)
+	err := s.store.AddBundle(url, bundle)
+	c.Assert(err, gc.IsNil)
+	return url, bundle
 }

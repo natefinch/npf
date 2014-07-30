@@ -226,7 +226,19 @@ var routerTests = []struct {
 	about: "meta handler with nil data",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": nilMetaHandler,
+			"foo": constMetaHandler(nil),
+		},
+	},
+	urlStr:     "http://example.com/precise/wordpress-42/meta/foo",
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "metadata not found",
+	},
+}, {
+	about: "meta handler with typed nil data",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": constMetaHandler((*struct{})(nil)),
 		},
 	},
 	urlStr:     "http://example.com/precise/wordpress-42/meta/foo",
@@ -348,8 +360,9 @@ var routerTests = []struct {
 	urlStr: "http://example.com/precise/wordpress-42/meta/any?include=ok&include=nil",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"ok":  testMetaHandler,
-			"nil": nilMetaHandler,
+			"ok":       testMetaHandler,
+			"nil":      constMetaHandler(nil),
+			"typednil": constMetaHandler((*struct{})(nil)),
 		},
 	},
 	expectCode: http.StatusOK,
@@ -887,11 +900,15 @@ var testMetaHandler = SingleIncludeHandler(
 	},
 )
 
-var nilMetaHandler = SingleIncludeHandler(
-	func(id *charm.URL, path string, flags url.Values) (interface{}, error) {
-		return nil, nil
-	},
-)
+// constMetaHandler returns a handler that always returns the given
+// value.
+func constMetaHandler(val interface{}) BulkIncludeHandler {
+	return SingleIncludeHandler(
+		func(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+			return val, nil
+		},
+	)
+}
 
 type fieldSelectQueryInfo struct {
 	Id       *charm.URL
