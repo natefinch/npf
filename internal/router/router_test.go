@@ -173,7 +173,7 @@ var routerTests = []struct {
 	},
 	urlStr:     "http://example.com/precise/wordpress-42/meta",
 	expectCode: http.StatusOK,
-	expectBody: []string{"foo", "bar"},
+	expectBody: []string{"bar", "foo"},
 }, {
 	about: "meta handler",
 	handlers: Handlers{

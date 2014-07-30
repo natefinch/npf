@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	charm "gopkg.in/juju/charm.v2"
@@ -222,6 +223,7 @@ func (r *Router) metaNames() []string {
 	for name := range r.handlers.Meta {
 		names = append(names, strings.TrimSuffix(name, "/"))
 	}
+	sort.Strings(names)
 	return names
 }
 
