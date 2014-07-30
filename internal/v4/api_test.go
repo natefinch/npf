@@ -14,7 +14,7 @@ import (
 	jujutesting "github.com/juju/testing"
 	"gopkg.in/juju/charm.v2"
 	charmtesting "gopkg.in/juju/charm.v2/testing"
-	"labix.org/v2/mgo/bson"
+	"gopkg.in/mgo.v2/bson"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/charmstore"
@@ -51,6 +51,12 @@ type metaEndpoint struct {
 	exclusive  int
 	bundleOnly bool
 	get        func(*charmstore.Store, *charm.URL) (interface{}, error)
+
+	// checkURL holds one URL to sanity check data against.
+	checkURL string
+	// assertCheckData holds a function that will be used to check that
+	// the get function returns sane data for checkURL.
+	assertCheckData func(c *gc.C, data interface{})
 }
 
 const (
@@ -62,19 +68,47 @@ var metaEndpoints = []metaEndpoint{{
 	name:      "charm-config",
 	exclusive: charmOnly,
 	get:       entityFieldGetter("CharmConfig"),
+	checkURL:  "cs:precise/wordpress-23",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data.(*charm.Config).Options["blog-title"].Default, gc.Equals, "My Title")
+	},
 }, {
 	name:      "charm-metadata",
 	exclusive: charmOnly,
 	get:       entityFieldGetter("CharmMeta"),
+	checkURL:  "cs:precise/wordpress-23",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data.(*charm.Meta).Summary, gc.Equals, "Blog engine")
+	},
 }, {
 	name:      "bundle-metadata",
 	exclusive: bundleOnly,
 	get:       entityFieldGetter("BundleData"),
+	checkURL:  "cs:bundle/wordpress-42",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data.(*charm.BundleData).Services["wordpress"].Charm, gc.Equals, "wordpress")
+	},
 }, {
 	name:      "charm-actions",
 	exclusive: charmOnly,
 	get:       entityFieldGetter("CharmActions"),
+	checkURL:  "cs:precise/dummy-10",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data.(*charm.Actions).ActionSpecs["snapshot"].Description, gc.Equals, "Take a snapshot of the database.")
+	},
 }}
+
+// TestEndpointGet tries to ensure that the endpoint
+// test data getters correspond with reality.
+func (s *APISuite) TestEndpointGet(c *gc.C) {
+	s.addTestEntities(c)
+	for i, ep := range metaEndpoints {
+		c.Logf("test %d: %s\n", i, ep.name)
+		data, err := ep.get(s.store, charm.MustParseURL(ep.checkURL))
+		c.Assert(err, gc.IsNil)
+		ep.assertCheckData(c, data)
+	}
+}
 
 func (s *APISuite) TestArchive(c *gc.C) {
 	assertNotImplemented(c, s.srv, "precise/wordpress-23/archive")

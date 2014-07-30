@@ -360,8 +360,8 @@ var routerTests = []struct {
 	urlStr: "http://example.com/precise/wordpress-42/meta/any?include=ok&include=nil",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"ok":  testMetaHandler,
-			"nil": constMetaHandler(nil),
+			"ok":       testMetaHandler,
+			"nil":      constMetaHandler(nil),
 			"typednil": constMetaHandler((*struct{})(nil)),
 		},
 	},

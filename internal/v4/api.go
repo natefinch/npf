@@ -9,7 +9,7 @@ import (
 	"net/url"
 
 	"gopkg.in/juju/charm.v2"
-	"labix.org/v2/mgo/bson"
+	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"

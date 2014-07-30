@@ -1,17 +1,17 @@
-code.google.com/p/go.crypto	hg	5478be1963aafa9025e9bf0837aff6013eb92e5b	199
-github.com/juju/blobstore	git	95a336cf8665ad6a7369cb620d1d2fd06f175a3a	
-github.com/juju/errgo	git	26caa7d4884f6048c5687fa44c410e5d5d95e554	
-github.com/juju/errors	git	075df0417dbcc39d24ee18248d2f8d6e3eed598b	
+code.google.com/p/go.crypto	hg	aa2644fe4aa50e3b38d75187b4799b1f0c9ddcef	212
+github.com/juju/blobstore	git	cb12cc93f02a9b83d4f8cc635b505d8423be4181	
+github.com/juju/errgo	git	2cf7b553faddc588f903020c33e71c527d5e0838	
+github.com/juju/errors	git	11f260fcce20d158a2c68d6d2a7fb6b98e83b658	
 github.com/juju/gojsonpointer	git	0154bf5a168b672d8c97d8dd83a54cb60cd088e8	
 github.com/juju/gojsonreference	git	0673d58f64bacac2db34c7d1e87a599d58923981	
 github.com/juju/gojsonschema	git	33fa79718fa9b24e2a04122f91a75496c0f77098	
-github.com/juju/loggo	git	7e8c70b24b80b95b2284f09306aac0bd93588db8	
-github.com/juju/names	git	dcbff5554ce4e75cbce298a5283883eaca0b2444	
-github.com/juju/schema	git	1887e824896b58a0f376fb8517b5eebb825828b8	
-github.com/juju/testing	git	b0941ff1bf4d3db1ffbbe09f75fa8383eae5764c	
-github.com/juju/txn	git	5694f17794c492e3c8a83908f0e8b9a7cff9b9f8	
-github.com/juju/utils	git	71ae858adb3bf5cc619c3200dfbdf6762de1a94a	
-gopkg.in/juju/charm.v2	git	72fd4e827c9bed2d46290884443f1eaf559c23e3	
-labix.org/v2/mgo	bzr	gustavo@niemeyer.net-20140331185009-fhnh3xzfdpicup0j	273
+github.com/juju/loggo	git	158009fb40c4a52b3d2c23eb56e72859cfc5321a	
+github.com/juju/names	git	93fc8cbf8111c11d4ff47e603f668a0e29fb7cec	
+github.com/juju/schema	git	27a52be50766490a6fd3531865095fda6c0eeb6d	
+github.com/juju/testing	git	8bdbb45d87dd9724c254eb6afeacd84b127d7e76	
+github.com/juju/txn	git	ee0346875f2ae9a21442f3ff64409f750f37afbc	
+github.com/juju/utils	git	7f3110a0b4f01e5800e72b50cc92c8e9de4ea658	
+gopkg.in/juju/charm.v2	git	ffe7392a3c6128c088b05d681fad336c4d3a8c22	
+gopkg.in/mgo.v2	git	d6023fc8b7c4dee09548b307d611aad734796e3b	
 launchpad.net/gocheck	bzr	gustavo@niemeyer.net-20140225173054-xu9zlkf9kxhvow02	87
 launchpad.net/goyaml	bzr	gustavo@niemeyer.net-20131114120802-abe042syx64z2m7s	50

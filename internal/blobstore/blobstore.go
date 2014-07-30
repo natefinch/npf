@@ -11,7 +11,7 @@ import (
 
 	"github.com/juju/blobstore"
 	"github.com/juju/errors"
-	"labix.org/v2/mgo"
+	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/internal/multihash"
 )
