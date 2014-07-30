@@ -5,13 +5,13 @@ package router
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"sync/atomic"
 	"testing"
 
+	"github.com/juju/errgo"
 	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	"gopkg.in/juju/charm.v2"
@@ -514,7 +514,7 @@ var routerTests = []struct {
 	urlStr: "http://example.com/meta/foo?id=resolveerror&id=precise/wordpress-23",
 	resolveURL: func(url *charm.URL) error {
 		if url.Name == "resolveerror" {
-			return fmt.Errorf("an error")
+			return errgo.Newf("an error")
 		}
 		return nil
 	},
@@ -559,7 +559,7 @@ func newResolveURL(series string, revision int) func(*charm.URL) error {
 }
 
 func resolveURLError(*charm.URL) error {
-	return fmt.Errorf("resolve URL error")
+	return errgo.Newf("resolve URL error")
 }
 
 func noResolveURL(*charm.URL) error {
@@ -778,7 +778,7 @@ func (s *RouterSuite) TestWriteJSON(c *gc.C) {
 
 func (s *RouterSuite) TestWriteError(c *gc.C) {
 	rec := httptest.NewRecorder()
-	WriteError(rec, fmt.Errorf("an error"))
+	WriteError(rec, errgo.Newf("an error"))
 	var errResp params.Error
 	err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 	c.Assert(err, gc.IsNil)
@@ -807,7 +807,7 @@ var handlerTests = []struct {
 }{{
 	about: "handleErrors, normal error",
 	handler: HandleErrors(func(http.ResponseWriter, *http.Request) error {
-		return fmt.Errorf("an error")
+		return errgo.Newf("an error")
 	}),
 	urlStr:     "http://example.com",
 	expectCode: http.StatusInternalServerError,
@@ -845,7 +845,7 @@ var handlerTests = []struct {
 }, {
 	about: "handleJSON, error case",
 	handler: HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
-		return nil, fmt.Errorf("an error")
+		return nil, errgo.Newf("an error")
 	}),
 	expectCode: http.StatusInternalServerError,
 	expectBody: params.Error{
@@ -865,7 +865,7 @@ func (s *RouterSuite) TestHandlers(c *gc.C) {
 }
 
 func errorIdHandler(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
-	return fmt.Errorf("errorIdHandler error")
+	return errgo.Newf("errorIdHandler error")
 }
 
 type idHandlerTestResp struct {

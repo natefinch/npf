@@ -3,6 +3,7 @@ package router
 import (
 	"net/url"
 
+	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v2"
 )
 
@@ -28,7 +29,7 @@ func (h SingleIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.URL, pat
 		result, err := h(id, paths[i], flags)
 		if err != nil {
 			// TODO(rog) include index of failed handler.
-			return nil, err
+			return nil, errgo.Mask(err)
 		}
 		results[i] = result
 	}

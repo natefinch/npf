@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/juju/errgo"
+
 	"github.com/juju/charmstore/params"
 )
 
@@ -32,7 +34,7 @@ func HandleJSON(handle func(http.ResponseWriter, *http.Request) (interface{}, er
 	f := func(w http.ResponseWriter, req *http.Request) error {
 		val, err := handle(w, req)
 		if err != nil {
-			return err
+			return errgo.Mask(err)
 		}
 		return WriteJSON(w, http.StatusOK, val)
 	}
@@ -48,7 +50,7 @@ func WriteError(w http.ResponseWriter, err error) {
 	errResp := &params.Error{
 		Message: err.Error(),
 	}
-	if err, ok := err.(params.ErrorCoder); ok {
+	if err, ok := errgo.Cause(err).(params.ErrorCoder); ok {
 		errResp.Code = err.ErrorCode()
 	}
 	// TODO log writeJSON error if it happens?
@@ -66,7 +68,7 @@ func WriteJSON(w http.ResponseWriter, code int, val interface{}) error {
 		// TODO(rog) log an error if this fails and lose the
 		// error return, because most callers will need
 		// to do that anyway.
-		return err
+		return errgo.Mask(err)
 	}
 	w.Header().Set("content-type", "application/json")
 	w.WriteHeader(code)

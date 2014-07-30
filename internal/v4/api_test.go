@@ -5,12 +5,12 @@ package v4_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/juju/errgo"
 	jujutesting "github.com/juju/testing"
 	"gopkg.in/juju/charm.v2"
 	charmtesting "gopkg.in/juju/charm.v2/testing"
@@ -349,7 +349,7 @@ func entityFieldGetter(fieldName string) func(*charmstore.Store, *charm.URL) (in
 	return entityGetter(func(entity *mongodoc.Entity) interface{} {
 		field := reflect.ValueOf(entity).Elem().FieldByName(fieldName)
 		if !field.IsValid() {
-			panic(fmt.Errorf("entity has no field %q", fieldName))
+			panic(errgo.Newf("entity has no field %q", fieldName))
 		}
 		return field.Interface()
 	})
@@ -360,7 +360,7 @@ func entityGetter(get func(*mongodoc.Entity) interface{}) func(*charmstore.Store
 		var doc mongodoc.Entity
 		err := store.DB.Entities().Find(bson.D{{"_id", url}}).One(&doc)
 		if err != nil {
-			return nil, err
+			return nil, errgo.Mask(err)
 		}
 		return get(&doc), nil
 	}

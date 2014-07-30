@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v2"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -34,14 +35,14 @@ func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (string, int64, err
 	hash := blobstore.NewHash()
 	size, err := io.Copy(hash, archive)
 	if err != nil {
-		return "", 0, err
+		return "", 0, errgo.Mask(err)
 	}
 	if _, err = archive.Seek(0, 0); err != nil {
-		return "", 0, err
+		return "", 0, errgo.Mask(err)
 	}
 	blobHash := fmt.Sprintf("%x", hash.Sum(nil))
 	if err = s.BlobStore.PutUnchallenged(archive, size, blobHash); err != nil {
-		return "", 0, err
+		return "", 0, errgo.Mask(err)
 	}
 	return blobHash, size, nil
 }
@@ -52,12 +53,12 @@ func (s *Store) AddCharm(url *charm.URL, c charm.Charm) error {
 	// Insert the charm archive into the blob store.
 	archive, err := getArchive(c)
 	if err != nil {
-		return err
+		return errgo.Mask(err)
 	}
 	defer archive.Close()
 	blobHash, size, err := s.putArchive(archive)
 	if err != nil {
-		return err
+		return errgo.Mask(err)
 	}
 
 	// Add charm metadata to the entities collection.
@@ -82,7 +83,7 @@ func (s *Store) ExpandURL(url *charm.URL) ([]*charm.URL, error) {
 		"baseurl", baseURL((*params.CharmURL)(url)),
 	}}).Select(bson.D{{"_id", 1}}).All(&docs)
 	if err != nil {
-		return nil, err
+		return nil, errgo.Mask(err)
 	}
 	urls := make([]*charm.URL, 0, len(docs))
 	for _, doc := range docs {
@@ -126,7 +127,7 @@ func baseURL(url *params.CharmURL) *params.CharmURL {
 	return &newURL
 }
 
-var errNotImplemented = fmt.Errorf("not implemented")
+var errNotImplemented = errgo.Newf("not implemented")
 
 // AddBundle adds a bundle to the blob store and to the entities collection
 // associated with the given URL.
@@ -134,20 +135,20 @@ func (s *Store) AddBundle(url *charm.URL, b charm.Bundle) error {
 	// Insert the bundle archive into the blob store.
 	archive, err := getArchive(b)
 	if err != nil {
-		return err
+		return errgo.Mask(err)
 	}
 	defer archive.Close()
 	blobHash, size, err := s.putArchive(archive)
 	if err != nil {
-		return err
+		return errgo.Mask(err)
 	}
 
-	// Add charm metadata to the entities collection.
+	// Add bundle metadata to the entities collection.
 	charmUrl := (*params.CharmURL)(url)
 	bundleData := b.Data()
 	urls, err := bundleCharms(bundleData)
 	if err != nil {
-		return err
+		return errgo.Mask(err)
 	}
 	return s.DB.Entities().Insert(&mongodoc.Entity{
 		URL:          charmUrl,
@@ -167,7 +168,7 @@ func bundleCharms(data *charm.BundleData) ([]*params.CharmURL, error) {
 	for _, service := range data.Services {
 		url, err := params.ParseURL(service.Charm)
 		if err != nil {
-			return nil, err
+			return nil, errgo.Mask(err)
 		}
 		urlMap[url.String()] = url
 	}
