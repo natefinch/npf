@@ -44,10 +44,10 @@ func New(store *charmstore.Store) http.Handler {
 			"charm-metadata":  h.entityHandler(h.metaCharmMetadata, "charmmeta"),
 			"bundle-metadata": h.entityHandler(h.metaBundleMetadata, "bundledata"),
 			"charm-config":    h.entityHandler(h.metaCharmConfig, "charmconfig"),
+			"charm-actions":   h.entityHandler(h.metaCharmActions, "charmactions"),
 
 			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
 			"manifest":            router.SingleIncludeHandler(h.metaManifest),
-			"charm-actions":       router.SingleIncludeHandler(h.metaCharmActions),
 			"color":               router.SingleIncludeHandler(h.metaColor),
 			"archive-size":        router.SingleIncludeHandler(h.metaArchiveSize),
 			"bundles-containing":  router.SingleIncludeHandler(h.metaBundlesContaining),
@@ -231,8 +231,11 @@ func (h *handler) metaManifest(id *charm.URL, path string, flags url.Values) (in
 
 // GET id/meta/charm-actions
 // http://tinyurl.com/kfd2h34
-func (h *handler) metaCharmActions(id *charm.URL, path string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
+func (h *handler) metaCharmActions(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+	if params.IsBundle(id) {
+		return nil, ErrMetadataNotRelevant
+	}
+	return entity.CharmActions, nil
 }
 
 // GET id/meta/charm-config
