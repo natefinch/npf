@@ -468,6 +468,8 @@ func (s *RouterSuite) TestRouter(c *gc.C) {
 			resolve = test.resolveURL
 		}
 		router := New(&test.handlers, resolve)
+		// Note that fieldSelectHandler increments this each time
+		// a query is made.
 		queryCount = 0
 		storetesting.AssertJSONCall(c, router, "GET", test.urlStr, "", test.expectCode, test.expectBody)
 		c.Assert(queryCount, gc.Equals, test.expectQueryCount)
