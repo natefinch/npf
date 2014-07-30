@@ -9,8 +9,8 @@ package charmstore
 import (
 	"net/http"
 
-	"gopkg.in/mgo.v2"
 	"github.com/juju/errgo"
+	"gopkg.in/mgo.v2"
 )
 
 // NewAPIHandler returns a new API handler that

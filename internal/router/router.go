@@ -133,14 +133,14 @@ func (r *Router) Handlers() *Handlers {
 // serveIds serves requests that may be rooted at a charm or bundle id.
 func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	if err := req.ParseForm(); err != nil {
-		// We can ignore a trailing / because we do not return any
-		// relative URLs. If we start to return relative URL redirects,
-		// we will need to redirect non-slash-terminated URLs
-		// to slash-terminated URLs.
-		// http://cdivilly.wordpress.com/2014/03/11/why-trailing-slashes-on-uris-are-important/
 		return errgo.Mask(err)
 	}
 
+	// We can ignore a trailing / because we do not return any
+	// relative URLs. If we start to return relative URL redirects,
+	// we will need to redirect non-slash-terminated URLs
+	// to slash-terminated URLs.
+	// http://cdivilly.wordpress.com/2014/03/11/why-trailing-slashes-on-uris-are-important/
 	path := strings.TrimSuffix(req.URL.Path, "/")
 	url, path, err := splitId(path)
 	if err != nil {

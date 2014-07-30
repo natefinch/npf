@@ -62,10 +62,10 @@ func (h *fieldIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.URL, pat
 	// Make the single query.
 	doc, err := h.query(id, selector)
 	if err != nil {
-		// Call all the handlers with the resulting query document.
 		return nil, errgo.Mask(err)
 	}
 
+	// Call all the handlers with the resulting query document.
 	results := make([]interface{}, len(hs))
 	for i, f := range funcs {
 		var err error

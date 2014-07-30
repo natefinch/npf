@@ -58,10 +58,10 @@ func (s *Store) AddCharm(url *charm.URL, c charm.Charm) error {
 	defer archive.Close()
 	blobHash, size, err := s.putArchive(archive)
 	if err != nil {
-		// Add charm metadata to the entities collection.
 		return errgo.Mask(err)
 	}
 
+	// Add charm metadata to the entities collection.
 	charmUrl := (*params.CharmURL)(url)
 	return s.DB.Entities().Insert(&mongodoc.Entity{
 		URL:                     charmUrl,
@@ -140,10 +140,10 @@ func (s *Store) AddBundle(url *charm.URL, b charm.Bundle) error {
 	defer archive.Close()
 	blobHash, size, err := s.putArchive(archive)
 	if err != nil {
-		// Add charm metadata to the entities collection.
 		return errgo.Mask(err)
 	}
 
+	// Add bundle metadata to the entities collection.
 	charmUrl := (*params.CharmURL)(url)
 	bundleData := b.Data()
 	urls, err := bundleCharms(bundleData)
