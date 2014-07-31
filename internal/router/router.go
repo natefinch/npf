@@ -114,11 +114,6 @@ func New(handlers *Handlers, resolveURL func(url *charm.URL) error) *Router {
 	return r
 }
 
-var (
-	ErrNotFound     = errgo.Newf("not found")
-	ErrDataNotFound = errgo.Newf("metadata not found")
-)
-
 // ServeHTTP implements http.Handler.ServeHTTP.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.handler.ServeHTTP(w, req)
@@ -151,19 +146,20 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	}
 	key, path := handlerKey(path)
 	if key == "" {
-		return ErrNotFound
+		return params.ErrNotFound
 	}
 	if handler, ok := r.handlers.Id[key]; ok {
 		req.URL.Path = path
-		return handler(url, w, req)
+		err := handler(url, w, req)
+		return errgo.Mask(err, errgo.Any)
 	}
 	if key != "meta/" && key != "meta" {
-		return ErrNotFound
+		return params.ErrNotFound
 	}
 	req.URL.Path = path
 	resp, err := r.serveMeta(url, req)
 	if err != nil {
-		return errgo.Mask(err)
+		return errgo.Mask(err, errgo.Any)
 	}
 	WriteJSON(w, http.StatusOK, resp)
 	return nil
@@ -199,7 +195,7 @@ func (r *Router) serveMeta(id *charm.URL, req *http.Request) (interface{}, error
 		// http://tinyurl.com/q5vcjpk
 		meta, err := r.GetMetadata(id, req.Form["include"])
 		if err != nil {
-			return nil, errgo.Mask(err)
+			return nil, errgo.Mask(err, errgo.Any)
 		}
 		return params.MetaAnyResponse{
 			Id:   id,
@@ -209,15 +205,15 @@ func (r *Router) serveMeta(id *charm.URL, req *http.Request) (interface{}, error
 	if handler := r.handlers.Meta[key]; handler != nil {
 		results, err := handler.Handle([]BulkIncludeHandler{handler}, id, []string{path}, req.Form)
 		if err != nil {
-			return nil, errgo.Mask(err)
+			return nil, errgo.Mask(err, errgo.Any)
 		}
 		result := results[0]
 		if isNull(result) {
-			return nil, ErrDataNotFound
+			return nil, params.ErrMetadataNotFound
 		}
 		return results[0], nil
 	}
-	return nil, ErrNotFound
+	return nil, params.ErrNotFound
 }
 
 // isNull reports whether the given value will encode to
@@ -262,7 +258,7 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interf
 			return nil, errgo.Mask(err)
 		}
 		if err := r.resolveURL(url); err != nil {
-			if errgo.Cause(err) == ErrNotFound {
+			if errgo.Cause(err) == params.ErrNotFound {
 				// URLs not found will be omitted from the result.
 				// http://tinyurl.com/o5ptfkk
 				continue
@@ -270,7 +266,7 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interf
 			return nil, err
 		}
 		meta, err := r.serveMeta(url, req)
-		if errgo.Cause(err) == ErrDataNotFound {
+		if errgo.Cause(err) == params.ErrMetadataNotFound {
 			// The relevant data does not exist.
 			// http://tinyurl.com/o5ptfkk
 			continue

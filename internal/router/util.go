@@ -45,16 +45,19 @@ func HandleJSON(handle func(http.ResponseWriter, *http.Request) (interface{}, er
 // given ResponseWriter and sets an appropriate
 // HTTP status.
 func WriteError(w http.ResponseWriter, err error) {
-	// TODO(rog) determine appropriate http status
-	// from error rather than always using 500.
 	errResp := &params.Error{
 		Message: err.Error(),
 	}
-	if err, ok := errgo.Cause(err).(params.ErrorCoder); ok {
-		errResp.Code = err.ErrorCode()
+	if err, ok := errgo.Cause(err).(params.ErrorCode); ok {
+		errResp.Code = err
+	}
+	status := http.StatusInternalServerError
+	switch errResp.Code {
+	case params.ErrNotFound, params.ErrMetadataNotFound:
+		status = http.StatusNotFound
 	}
 	// TODO log writeJSON error if it happens?
-	WriteJSON(w, http.StatusInternalServerError, errResp)
+	WriteJSON(w, status, errResp)
 }
 
 // WriteJSON writes the given value to the ResponseWriter

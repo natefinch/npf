@@ -84,8 +84,9 @@ var routerTests = []struct {
 		},
 	},
 	urlStr:     "http://example.com/precise/wordpress-34/foo",
-	expectCode: http.StatusInternalServerError,
+	expectCode: http.StatusNotFound,
 	expectBody: params.Error{
+		Code:    params.ErrNotFound,
 		Message: "not found",
 	},
 }, {
@@ -96,8 +97,9 @@ var routerTests = []struct {
 		},
 	},
 	urlStr:     "http://example.com/precise/wordpress-34/foo/blah",
-	expectCode: http.StatusInternalServerError,
+	expectCode: http.StatusNotFound,
 	expectBody: params.Error{
+		Code:    params.ErrNotFound,
 		Message: "not found",
 	},
 }, {
@@ -136,6 +138,36 @@ var routerTests = []struct {
 	expectCode: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "errorIdHandler error",
+	},
+}, {
+	about: "id handler that returns a not-found error",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": func(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
+				return params.ErrNotFound
+			},
+		},
+	},
+	urlStr:     "http://example.com/~joe/precise/wordpress-34/foo",
+	expectCode: http.StatusNotFound,
+	expectBody: params.Error{
+		Message: "not found",
+		Code:    params.ErrNotFound,
+	},
+}, {
+	about: "id handler that returns some other kind of coded error",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": func(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
+				return errgo.WithCausef(nil, params.ErrorCode("foo"), "a message")
+			},
+		},
+	},
+	urlStr:     "http://example.com/~joe/precise/wordpress-34/foo",
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "a message",
+		Code:    "foo",
 	},
 }, {
 	about: "id with unspecified series and revision, resolved",
@@ -218,8 +250,9 @@ var routerTests = []struct {
 }, {
 	about:      "meta handler that's not found",
 	urlStr:     "http://example.com/precise/wordpress-42/meta/foo",
-	expectCode: http.StatusInternalServerError,
+	expectCode: http.StatusNotFound,
 	expectBody: params.Error{
+		Code:    params.ErrNotFound,
 		Message: "not found",
 	},
 }, {
@@ -230,8 +263,9 @@ var routerTests = []struct {
 		},
 	},
 	urlStr:     "http://example.com/precise/wordpress-42/meta/foo",
-	expectCode: http.StatusInternalServerError,
+	expectCode: http.StatusNotFound,
 	expectBody: params.Error{
+		Code:    params.ErrMetadataNotFound,
 		Message: "metadata not found",
 	},
 }, {
@@ -242,8 +276,9 @@ var routerTests = []struct {
 		},
 	},
 	urlStr:     "http://example.com/precise/wordpress-42/meta/foo",
-	expectCode: http.StatusInternalServerError,
+	expectCode: http.StatusNotFound,
 	expectBody: params.Error{
+		Code:    params.ErrMetadataNotFound,
 		Message: "metadata not found",
 	},
 }, {
@@ -494,7 +529,7 @@ var routerTests = []struct {
 	urlStr: "http://example.com/meta/foo?id=unresolved&id=precise/wordpress-23",
 	resolveURL: func(url *charm.URL) error {
 		if url.Name == "unresolved" {
-			return ErrNotFound
+			return params.ErrNotFound
 		}
 		return nil
 	},
@@ -835,6 +870,27 @@ var handlerTests = []struct {
 		return nil
 	}),
 	expectCode: http.StatusTeapot,
+}, {
+	about: "handlerErrors, params error",
+	handler: HandleErrors(func(w http.ResponseWriter, req *http.Request) error {
+		return params.ErrMetadataNotFound
+	}),
+	expectCode: http.StatusNotFound,
+	expectBody: params.Error{
+		Message: "metadata not found",
+		Code:    params.ErrMetadataNotFound,
+	},
+}, {
+	about: "handlerErrors, wrapped params error",
+	handler: HandleErrors(func(w http.ResponseWriter, req *http.Request) error {
+		err := params.ErrMetadataNotFound
+		return errgo.NoteMask(err, "annotation", errgo.Is(params.ErrMetadataNotFound))
+	}),
+	expectCode: http.StatusNotFound,
+	expectBody: params.Error{
+		Message: "annotation: metadata not found",
+		Code:    params.ErrMetadataNotFound,
+	},
 }, {
 	about: "handleJSON, normal case",
 	handler: HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {

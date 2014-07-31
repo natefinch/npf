@@ -10,32 +10,6 @@ import (
 	"gopkg.in/juju/charm.v2"
 )
 
-// Error represents an error - it is returned for any response
-// that fails.
-// See http://tinyurl.com/knr3csp .
-type Error struct {
-	Message string
-	Code    string
-}
-
-// Error implements error.Error.
-func (e *Error) Error() string {
-	return e.Message
-}
-
-// ErrorCode holds the class of the error in
-// machine readable format.
-// TODO list of possible error codes.
-func (e *Error) ErrorCode() string {
-	return e.Code
-}
-
-// ErrorCoder is the type of any error that is
-// associated with an error code.
-type ErrorCoder interface {
-	ErrorCode() string
-}
-
 // MetaAnyResponse holds the result of a meta/any
 // request. See http://tinyurl.com/q5vcjpk
 type MetaAnyResponse struct {

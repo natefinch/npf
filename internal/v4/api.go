@@ -9,11 +9,13 @@ import (
 
 	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v2"
+	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/router"
+	"github.com/juju/charmstore/params"
 )
 
 type handler struct {
@@ -105,6 +107,9 @@ func (h *handler) entityQuery(id *charm.URL, selector map[string]int) (interface
 		Find(bson.D{{"_id", id}}).
 		Select(selector).
 		One(&val)
+	if err == mgo.ErrNotFound {
+		return nil, params.ErrNotFound
+	}
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}

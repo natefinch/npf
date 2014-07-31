@@ -62,7 +62,7 @@ func (h *fieldIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.URL, pat
 	// Make the single query.
 	doc, err := h.query(id, selector)
 	if err != nil {
-		return nil, errgo.Mask(err)
+		return nil, errgo.Mask(err, errgo.Any)
 	}
 
 	// Call all the handlers with the resulting query document.
@@ -74,7 +74,7 @@ func (h *fieldIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.URL, pat
 			// TODO correlate error with handler (perhaps return
 			// an error that identifies the slice position of the handler that
 			// failed).
-			return nil, errgo.Mask(err)
+			return nil, errgo.Mask(err, errgo.Any)
 		}
 	}
 	return results, nil
