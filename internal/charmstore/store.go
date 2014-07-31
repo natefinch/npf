@@ -8,13 +8,12 @@ import (
 	"io"
 
 	"github.com/juju/errgo"
-	"gopkg.in/juju/charm.v2"
+	"gopkg.in/juju/charm.v3"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/mongodoc"
-	"github.com/juju/charmstore/params"
 )
 
 // Store represents the underlying charm and blob data stores.
@@ -49,7 +48,7 @@ func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (string, int64, err
 
 // AddCharm adds a charm to the blob store and to the entities collection
 // associated with the given URL.
-func (s *Store) AddCharm(url *charm.URL, c charm.Charm) error {
+func (s *Store) AddCharm(url *charm.Reference, c charm.Charm) error {
 	// Insert the charm archive into the blob store.
 	archive, err := getArchive(c)
 	if err != nil {
@@ -62,10 +61,9 @@ func (s *Store) AddCharm(url *charm.URL, c charm.Charm) error {
 	}
 
 	// Add charm metadata to the entities collection.
-	charmUrl := (*params.CharmURL)(url)
 	return s.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                     charmUrl,
-		BaseURL:                 baseURL(charmUrl),
+		URL:                     url,
+		BaseURL:                 baseURL(url),
 		BlobHash:                blobHash,
 		Size:                    size,
 		CharmMeta:               c.Meta(),
@@ -77,24 +75,24 @@ func (s *Store) AddCharm(url *charm.URL, c charm.Charm) error {
 }
 
 // ExpandURL returns all the URLs that the given URL may refer to.
-func (s *Store) ExpandURL(url *charm.URL) ([]*charm.URL, error) {
+func (s *Store) ExpandURL(url *charm.Reference) ([]*charm.Reference, error) {
 	var docs []mongodoc.Entity
 	err := s.DB.Entities().Find(bson.D{{
-		"baseurl", baseURL((*params.CharmURL)(url)),
+		"baseurl", baseURL(url),
 	}}).Select(bson.D{{"_id", 1}}).All(&docs)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
-	urls := make([]*charm.URL, 0, len(docs))
+	urls := make([]*charm.Reference, 0, len(docs))
 	for _, doc := range docs {
-		if matchURL((*charm.URL)(doc.URL), url) {
-			urls = append(urls, (*charm.URL)(doc.URL))
+		if matchURL((*charm.Reference)(doc.URL), url) {
+			urls = append(urls, (*charm.Reference)(doc.URL))
 		}
 	}
 	return urls, nil
 }
 
-func matchURL(url, pattern *charm.URL) bool {
+func matchURL(url, pattern *charm.Reference) bool {
 	if pattern.Series != "" && url.Series != pattern.Series {
 		return false
 	}
@@ -120,7 +118,7 @@ func interfacesForRelations(rels map[string]charm.Relation) []string {
 	return result
 }
 
-func baseURL(url *params.CharmURL) *params.CharmURL {
+func baseURL(url *charm.Reference) *charm.Reference {
 	newURL := *url
 	newURL.Revision = -1
 	newURL.Series = ""
@@ -131,7 +129,7 @@ var errNotImplemented = errgo.Newf("not implemented")
 
 // AddBundle adds a bundle to the blob store and to the entities collection
 // associated with the given URL.
-func (s *Store) AddBundle(url *charm.URL, b charm.Bundle) error {
+func (s *Store) AddBundle(url *charm.Reference, b charm.Bundle) error {
 	// Insert the bundle archive into the blob store.
 	archive, err := getArchive(b)
 	if err != nil {
@@ -144,15 +142,14 @@ func (s *Store) AddBundle(url *charm.URL, b charm.Bundle) error {
 	}
 
 	// Add bundle metadata to the entities collection.
-	charmUrl := (*params.CharmURL)(url)
 	bundleData := b.Data()
 	urls, err := bundleCharms(bundleData)
 	if err != nil {
 		return errgo.Mask(err)
 	}
 	return s.DB.Entities().Insert(&mongodoc.Entity{
-		URL:          charmUrl,
-		BaseURL:      baseURL(charmUrl),
+		URL:          url,
+		BaseURL:      baseURL(url),
 		BlobHash:     blobHash,
 		Size:         size,
 		BundleData:   bundleData,
@@ -161,18 +158,18 @@ func (s *Store) AddBundle(url *charm.URL, b charm.Bundle) error {
 	})
 }
 
-func bundleCharms(data *charm.BundleData) ([]*params.CharmURL, error) {
+func bundleCharms(data *charm.BundleData) ([]*charm.Reference, error) {
 	// Use a map to de-duplicate the URL list: a bundle can include services
 	// deployed by the same charm.
-	urlMap := make(map[string]*params.CharmURL)
+	urlMap := make(map[string]*charm.Reference)
 	for _, service := range data.Services {
-		url, err := params.ParseURL(service.Charm)
+		url, err := charm.ParseReference(service.Charm)
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}
 		urlMap[url.String()] = url
 	}
-	urls := make([]*params.CharmURL, 0, len(urlMap))
+	urls := make([]*charm.Reference, 0, len(urlMap))
 	for _, url := range urlMap {
 		urls = append(urls, url)
 	}

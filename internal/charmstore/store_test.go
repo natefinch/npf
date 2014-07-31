@@ -12,15 +12,14 @@ import (
 	"sort"
 
 	jc "github.com/juju/testing/checkers"
-	"gopkg.in/juju/charm.v2"
-	"gopkg.in/juju/charm.v2/testing"
+	"gopkg.in/juju/charm.v3"
+	"gopkg.in/juju/charm.v3/testing"
 	"gopkg.in/mgo.v2"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
-	"github.com/juju/charmstore/params"
 )
 
 type StoreSuite struct {
@@ -31,7 +30,7 @@ var _ = gc.Suite(&StoreSuite{})
 
 func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 	store := NewStore(s.Session.DB("foo"))
-	url := charm.MustParseURL("cs:precise/wordpress-23")
+	url := mustParseReference("cs:precise/wordpress-23")
 	err := store.AddCharm(url, ch)
 	c.Assert(err, gc.IsNil)
 
@@ -44,8 +43,8 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 	sort.Strings(doc.CharmProvidedInterfaces)
 	sort.Strings(doc.CharmRequiredInterfaces)
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
-		URL:                     (*params.CharmURL)(url),
-		BaseURL:                 mustParseURL("cs:wordpress"),
+		URL:                     url,
+		BaseURL:                 mustParseReference("cs:wordpress"),
 		BlobHash:                hash,
 		Size:                    size,
 		CharmMeta:               ch.Meta(),
@@ -76,7 +75,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 
 func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 	store := NewStore(s.Session.DB("foo"))
-	url := charm.MustParseURL("cs:bundle/wordpress-simple-42")
+	url := mustParseReference("cs:bundle/wordpress-simple-42")
 	err := store.AddBundle(url, bundle)
 	c.Assert(err, gc.IsNil)
 
@@ -88,15 +87,15 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 	// The entity doc has been correctly added to the mongo collection.
 	size, hash := mustGetSizeAndHash(bundle)
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
-		URL:          (*params.CharmURL)(url),
-		BaseURL:      mustParseURL("cs:wordpress-simple"),
+		URL:          url,
+		BaseURL:      mustParseReference("cs:wordpress-simple"),
 		BlobHash:     hash,
 		Size:         size,
 		BundleData:   bundle.Data(),
 		BundleReadMe: bundle.ReadMe(),
-		BundleCharms: []*params.CharmURL{
-			(*params.CharmURL)(mustParseURL("mysql")),
-			(*params.CharmURL)(mustParseURL("wordpress")),
+		BundleCharms: []*charm.Reference{
+			mustParseReference("mysql"),
+			mustParseReference("wordpress"),
 		},
 	})
 
@@ -117,7 +116,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 	c.Assert(err, jc.Satisfies, mgo.IsDup)
 }
 
-type orderedURLs []*params.CharmURL
+type orderedURLs []*charm.Reference
 
 func (o orderedURLs) Less(i, j int) bool {
 	return o[i].String() < o[j].String()
@@ -180,12 +179,12 @@ func (s *StoreSuite) TestExpandURL(c *gc.C) {
 		store := NewStore(s.Session.DB("foo"))
 		_, err := store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
-		urls := mustParseURLs(test.inStore)
+		urls := mustParseReferences(test.inStore)
 		for _, url := range urls {
 			err := store.AddCharm(url, wordpress)
 			c.Assert(err, gc.IsNil)
 		}
-		gotURLs, err := store.ExpandURL((*charm.URL)(mustParseURL(test.expand)))
+		gotURLs, err := store.ExpandURL((*charm.Reference)(mustParseReference(test.expand)))
 		c.Assert(err, gc.IsNil)
 
 		gotURLStrs := urlStrings(gotURLs)
@@ -194,7 +193,7 @@ func (s *StoreSuite) TestExpandURL(c *gc.C) {
 	}
 }
 
-func urlStrings(urls []*charm.URL) []string {
+func urlStrings(urls []*charm.Reference) []string {
 	urlStrs := make([]string, len(urls))
 	for i, url := range urls {
 		urlStrs[i] = url.String()
@@ -202,14 +201,10 @@ func urlStrings(urls []*charm.URL) []string {
 	return urlStrs
 }
 
-func mustParseURLs(urlStrs []string) []*charm.URL {
-	urls := make([]*charm.URL, len(urlStrs))
+func mustParseReferences(urlStrs []string) []*charm.Reference {
+	urls := make([]*charm.Reference, len(urlStrs))
 	for i, u := range urlStrs {
-		var err error
-		urls[i], err = charm.ParseURL(u)
-		if err != nil {
-			panic(err)
-		}
+		urls[i] = mustParseReference(u)
 	}
 	return urls
 }
@@ -235,19 +230,6 @@ func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
 		verifyConstraints)
 	c.Assert(err, gc.IsNil)
 	s.checkAddBundle(c, bundleArchive)
-}
-
-// mustParseURL is like charm.MustParseURL except
-// that it allows an unspecified series.
-func mustParseURL(urlStr string) *params.CharmURL {
-	ref, series, err := charm.ParseReference(urlStr)
-	if err != nil {
-		panic(err)
-	}
-	return &params.CharmURL{
-		Reference: ref,
-		Series:    series,
-	}
 }
 
 func mustGetSizeAndHash(c interface{}) (int64, string) {
@@ -276,3 +258,11 @@ func mustGetSizeAndHash(c interface{}) (int64, string) {
 }
 
 func verifyConstraints(c string) error { return nil }
+
+func mustParseReference(url string) *charm.Reference {
+	ref, err := charm.ParseReference(url)
+	if err != nil {
+		panic(err)
+	}
+	return ref
+}

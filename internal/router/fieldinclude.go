@@ -4,17 +4,17 @@ import (
 	"net/url"
 
 	"github.com/juju/errgo"
-	"gopkg.in/juju/charm.v2"
+	"gopkg.in/juju/charm.v3"
 )
 
 // A FieldQueryFunc is used to retrieve a metadata document for the given URL,
 // selecting only those fields specified in keys of the given selector.
-type FieldQueryFunc func(id *charm.URL, selector map[string]int) (interface{}, error)
+type FieldQueryFunc func(id *charm.Reference, selector map[string]int) (interface{}, error)
 
 // A FieldHandlerFunc returns some data from the given document. The
 // document will have been returned from an earlier call to the
 // associated QueryFunc.
-type FieldHandlerFunc func(doc interface{}, id *charm.URL, path string, flags url.Values) (interface{}, error)
+type FieldHandlerFunc func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error)
 
 // FieldIncludeHandler returns a BulkIncludeHandler that will perform
 // only a single database query for several requests. The given key is
@@ -48,7 +48,7 @@ func (h *fieldIncludeHandler) Key() interface{} {
 	return h.key
 }
 
-func (h *fieldIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.URL, paths []string, flags url.Values) ([]interface{}, error) {
+func (h *fieldIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error) {
 	funcs := make([]FieldHandlerFunc, len(hs))
 	selector := make(map[string]int)
 	// Extract the handler functions and union all the fields.

@@ -4,14 +4,14 @@ import (
 	"net/url"
 
 	"github.com/juju/errgo"
-	"gopkg.in/juju/charm.v2"
+	"gopkg.in/juju/charm.v3"
 )
 
 var _ BulkIncludeHandler = SingleIncludeHandler(nil)
 
 // SingleIncludeHandler implements BulkMetaHander for a non-batching
 // metadata retrieval function.
-type SingleIncludeHandler func(id *charm.URL, path string, flags url.Values) (interface{}, error)
+type SingleIncludeHandler func(id *charm.Reference, path string, flags url.Values) (interface{}, error)
 
 // Key implements BulkMetadataHander.Key.
 func (h SingleIncludeHandler) Key() interface{} {
@@ -22,7 +22,7 @@ func (h SingleIncludeHandler) Key() interface{} {
 }
 
 // Handle implements BulkMetadataHander.Handle.
-func (h SingleIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.URL, paths []string, flags url.Values) ([]interface{}, error) {
+func (h SingleIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error) {
 	results := make([]interface{}, len(hs))
 	for i, h := range hs {
 		h := h.(SingleIncludeHandler)
