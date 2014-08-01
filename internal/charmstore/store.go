@@ -6,6 +6,7 @@ package charmstore
 import (
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v3"
@@ -20,14 +21,48 @@ import (
 type Store struct {
 	DB        StoreDatabase
 	BlobStore *blobstore.Store
+
+	// Cache for statistics key words (two generations).
+	cacheMu       sync.RWMutex
+	statsIdNew    map[string]int
+	statsIdOld    map[string]int
+	statsTokenNew map[int]string
+	statsTokenOld map[int]string
 }
 
 // NewStore returns a Store that uses the given database.
-func NewStore(db *mgo.Database) *Store {
-	return &Store{
+func NewStore(db *mgo.Database) (*Store, error) {
+	s := &Store{
 		DB:        StoreDatabase{db},
 		BlobStore: blobstore.New(db, "entitystore"),
 	}
+	if err := s.ensureIndexes(); err != nil {
+		return nil, errgo.Notef(err, "cannot ensure indexes")
+	}
+	return s, nil
+}
+
+func (s *Store) ensureIndexes() error {
+	indexes := []struct {
+		c *mgo.Collection
+		i mgo.Index
+	}{{
+		s.DB.StatCounters(),
+		mgo.Index{Key: []string{"k", "t"}, Unique: true},
+	}, {
+		s.DB.StatTokens(),
+		mgo.Index{Key: []string{"t"}, Unique: true},
+	}, {
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"baseurl"}},
+	}}
+	for _, idx := range indexes {
+		err := idx.c.EnsureIndex(idx.i)
+		if err != nil {
+			return errgo.Mask(err)
+		}
+	}
+	return nil
 }
 
 func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (string, int64, error) {
@@ -189,6 +224,11 @@ func (s StoreDatabase) Copy() StoreDatabase {
 			Session: s.Session.Copy(),
 		},
 	}
+}
+
+// Close closes the store database's underlying session.
+func (s StoreDatabase) Close() {
+	s.Session.Close()
 }
 
 // Entities returns the mongo collection where entities are stored.
