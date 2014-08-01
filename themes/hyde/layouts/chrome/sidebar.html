@@ -10,14 +10,16 @@
 
 
     <ul class="sidebar-nav">
+      <li><a href="/post">Posts</a></li>
+      {{ range .Site.Menus.main }}
+        <li><a href="{{.Url}}">{{ .Name }} </a></li>
+      {{end}}
+      <br/>
       {{with .Site.Menus.code}}
+      <li>Code:</li>
         {{ range . }}
           <li><a href="{{.Url}}">{{ .Name }} </a></li>
         {{end}}
-        <br/>
-      {{end}}
-      {{ range .Site.Menus.main }}
-        <li><a href="{{.Url}}">{{ .Name }} </a></li>
       {{end}}
     </ul>
       {{ with .Site.Params.twitter }}<a href="{{.}}"><i class="fa fa-twitter-square"></i></a>&nbsp;&nbsp;{{end}}

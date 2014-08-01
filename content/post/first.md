@@ -10,3 +10,5 @@ programming posts so that people who only want to see the coding stuff don't
 have to see my personal posts, and people that only want to see my personal
 stuff don't have to get inundated with programming posts.
 
+Right now the site is pretty basic, but I will add more features to it, such as post history etc. 
+
