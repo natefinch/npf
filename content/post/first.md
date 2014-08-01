@@ -60,7 +60,35 @@ templates lives in $GOPATH/src/github.com/natefinch/npf.  I created a symbolic
 link under npf called public that points to the natefinch.github.io directory.
 This is the directory that hugo outputs the static site to by default... that
 way Hugo dumps the static content right into the correct directory for me to
-commit and push to github.
+commit and push to github.  I just had to add public to my .gitignore so
+everyone wouldn't get confused.
 
+Then, all I do is got to the npf directory, and run 
 
+	hugo new post/urlofpost.md
+	hugo server --buildDrafts --watch -t hyde
 
+That generates a new content item that'll show up on my site under
+/post/urlofpost.  Then it runs the local webserver so I can watch the content by
+pointing a browser at localhost:1313 on a second monitor as I edit the post in a
+text editor. hyde is the name of the theme I'm using, though I have modified
+it.  Note that hugo will mark the content as a draft by default, so you need
+--buildDrafts for it to get rendered locally, and remember to delete the draft =
+true line in the page's metadata when you're ready to publish, or it won't show
+up on your site.  
+
+When I'm satisfied, kill the server, and run
+
+	hugo -t hyde
+
+to generate the final site output, switch into the public directory, and 
+
+	git commit -am "some new post"
+
+That's it.  Super easy, super fast, and no muss.  Coming from Blogger, this is
+an amazingly better workflow with no wrestling with the WYSIWYG editor to make
+it display stuff in a reasonable fashion.  Plus I can write posts 100% offline
+and publish them when I get back to civilization.
+
+There's a lot more to Hugo, and a lot more I want to do with the site, but that
+will come in time and with more posts :)
