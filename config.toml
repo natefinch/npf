@@ -1,6 +1,7 @@
 baseurl = "http://npf.io"
 languageCode = "en-us"
 title = "npf.io"
+disqusShortname = "npfio"
 
 [params]
 	description = "code by Nate Finch"
