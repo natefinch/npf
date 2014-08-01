@@ -24,7 +24,10 @@ func NewServer(db *mgo.Database, versions map[string]NewAPIHandler) (http.Handle
 	if len(versions) == 0 {
 		return nil, errgo.Newf("charm store server must serve at least one version of the API")
 	}
-	store := NewStore(db)
+	store, err := NewStore(db)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot make store")
+	}
 	mux := http.NewServeMux()
 	for vers, newAPI := range versions {
 		handle(mux, "/"+vers, newAPI(store))

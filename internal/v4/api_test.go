@@ -39,7 +39,9 @@ var _ = gc.Suite(&APISuite{})
 func (s *APISuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
 	db := s.Session.DB("charmstore")
-	s.store = charmstore.NewStore(db)
+	store, err := charmstore.NewStore(db)
+	c.Assert(err, gc.IsNil)
+	s.store = store
 	srv, err := charmstore.NewServer(db, map[string]charmstore.NewAPIHandler{"v4": v4.New})
 	c.Assert(err, gc.IsNil)
 	s.srv = srv

@@ -29,9 +29,10 @@ type StoreSuite struct {
 var _ = gc.Suite(&StoreSuite{})
 
 func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
-	store := NewStore(s.Session.DB("foo"))
+	store, err := NewStore(s.Session.DB("foo"))
+	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:precise/wordpress-23")
-	err := store.AddCharm(url, ch)
+	err = store.AddCharm(url, ch)
 	c.Assert(err, gc.IsNil)
 
 	var doc mongodoc.Entity
@@ -74,9 +75,10 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 }
 
 func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
-	store := NewStore(s.Session.DB("foo"))
+	store, err := NewStore(s.Session.DB("foo"))
+	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:bundle/wordpress-simple-42")
-	err := store.AddBundle(url, bundle)
+	err = store.AddBundle(url, bundle)
 	c.Assert(err, gc.IsNil)
 
 	var doc mongodoc.Entity
@@ -176,8 +178,9 @@ func (s *StoreSuite) TestExpandURL(c *gc.C) {
 	wordpress := testing.Charms.CharmDir("wordpress")
 	for i, test := range expandURLTests {
 		c.Logf("test %d: %q from %q", i, test.expand, test.inStore)
-		store := NewStore(s.Session.DB("foo"))
-		_, err := store.DB.Entities().RemoveAll(nil)
+		store, err := NewStore(s.Session.DB("foo"))
+		c.Assert(err, gc.IsNil)
+		_, err = store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 		urls := mustParseReferences(test.inStore)
 		for _, url := range urls {
