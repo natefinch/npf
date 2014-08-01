@@ -56,7 +56,7 @@ way Hugo dumps the static content right into the correct directory for me to
 commit and push to github.  I just had to add public to my .gitignore so
 everyone wouldn't get confused.
 
-Then, all I do is got to the npf directory, and run 
+Then, all I do is go to the npf directory, and run 
 
 	hugo new post/urlofpost.md
 	hugo server --buildDrafts --watch -t hyde
