@@ -1,0 +1,9 @@
+baseurl = "http://natefinch.github.io"
+languageCode = "en-us"
+title = "npf.io"
+
+[params]
+	description = "code by Nate Finch"
+	twitter = "https://twitter.com/natethefinch"
+	github = "https://github.com/natefinch"
+	gplus = "https://plus.google.com/+NateFinch"

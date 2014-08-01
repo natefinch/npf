@@ -1,0 +1,17 @@
+{{ template "theme/partials/header.html" . }}
+	<ul class="posts">
+	{{ range .Data.Pages }}
+	{{ if eq .Type "post" }}
+	<li>  
+		<div id="article">
+			<div class="article-title"><a href="{{.Permalink}}">{{ .Title }}</a></div>
+	   		<p class="meta"><small>&nbsp;<i class="fa fa-calendar-o"></i> {{ .Date.Format  "2006-01-02" }}</small></p> <hr/>
+	   		<div class="post">
+	     		{{ .Content }}
+	   		</div>
+ 		</div>
+    </li>
+    {{ end }}
+    {{ end }}
+  </ul>
+{{ template "theme/partials/footer.html" }}
