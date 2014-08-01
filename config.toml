@@ -1,10 +1,10 @@
 baseurl = "http://npf.io"
 languageCode = "en-us"
 title = "npf.io"
-disqusShortname = "npfio"
 
 [params]
 	description = "code by Nate Finch"
 	twitter = "https://twitter.com/natethefinch"
 	github = "https://github.com/natefinch"
 	gplus = "https://plus.google.com/+NateFinch"
+	disqus = "npfio"
