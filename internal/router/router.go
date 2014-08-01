@@ -18,7 +18,7 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
-// Implementation node on error handling:
+// Implementation note on error handling:
 //
 // We use errgo.Any only when necessary, so that we can see at a glance
 // which are the possible places that could be returning an error with a
