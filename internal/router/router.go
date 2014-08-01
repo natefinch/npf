@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/juju/errgo"
-	charm "gopkg.in/juju/charm.v2"
+	charm "gopkg.in/juju/charm.v3"
 
 	"github.com/juju/charmstore/params"
 )
@@ -60,13 +60,13 @@ type BulkIncludeHandler interface {
 	// and flags holds all the url query values.
 	//
 	// TODO(rog) document indexed errors.
-	Handle(hs []BulkIncludeHandler, id *charm.URL, paths []string, flags url.Values) ([]interface{}, error)
+	Handle(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error)
 }
 
 // IdHandler handles a charm store request rooted at the given id.
 // The request path (req.URL.Path) holds the URL path after
 // the id has been stripped off.
-type IdHandler func(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error
+type IdHandler func(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error
 
 // Handlers specifies how HTTP requests will be routed
 // by the router. All errors returned by the handlers will
@@ -102,7 +102,7 @@ type Handlers struct {
 type Router struct {
 	handlers   *Handlers
 	handler    http.Handler
-	resolveURL func(url *charm.URL) error
+	resolveURL func(ref *charm.Reference) error
 }
 
 // New returns a charm store router that will route requests to
@@ -113,7 +113,7 @@ type Router struct {
 // fields of its argument URL if they are not specified.
 // The Cause of the resolveURL error will be left unchanged,
 // as for the handlers.
-func New(handlers *Handlers, resolveURL func(url *charm.URL) error) *Router {
+func New(handlers *Handlers, resolveURL func(url *charm.Reference) error) *Router {
 	r := &Router{
 		handlers:   handlers,
 		resolveURL: resolveURL,
@@ -200,7 +200,7 @@ func handlerKey(path string) (key, rest string) {
 	return key, ""
 }
 
-func (r *Router) serveMeta(id *charm.URL, req *http.Request) (interface{}, error) {
+func (r *Router) serveMeta(id *charm.Reference, req *http.Request) (interface{}, error) {
 	key, path := handlerKey(req.URL.Path)
 	if key == "" {
 		// GET id/meta
@@ -272,7 +272,7 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interf
 	delete(req.Form, "id")
 	result := make(map[string]interface{})
 	for _, id := range ids {
-		url, err := parseURL(id)
+		url, err := charm.ParseReference(id)
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}
@@ -301,7 +301,7 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interf
 
 // GetMetadata retrieves metadata for the given charm or bundle id,
 // including information as specified by the includes slice.
-func (r *Router) GetMetadata(id *charm.URL, includes []string) (map[string]interface{}, error) {
+func (r *Router) GetMetadata(id *charm.Reference, includes []string) (map[string]interface{}, error) {
 	groups := make(map[interface{}][]BulkIncludeHandler)
 	includesByGroup := make(map[interface{}][]string)
 	for _, include := range includes {
@@ -370,7 +370,7 @@ func splitPath(path string, i int) (elem string, nextIndex int) {
 	return path[i:j], j
 }
 
-func splitId(path string) (url *charm.URL, rest string, err error) {
+func splitId(path string) (url *charm.Reference, rest string, err error) {
 	path = strings.TrimPrefix(path, "/")
 
 	part, i := splitPath(path, 0)
@@ -389,20 +389,9 @@ func splitId(path string) (url *charm.URL, rest string, err error) {
 	// charm id.
 
 	urlStr := strings.TrimSuffix(path[0:i], "/")
-	url, err = parseURL(urlStr)
+	url, err = charm.ParseReference(urlStr)
 	if err != nil {
 		return nil, "", errgo.Mask(err)
 	}
 	return url, path[i:], nil
-}
-
-func parseURL(urlStr string) (*charm.URL, error) {
-	ref, series, err := charm.ParseReference(urlStr)
-	if err != nil {
-		return nil, errgo.Mask(err)
-	}
-	return &charm.URL{
-		Reference: ref,
-		Series:    series,
-	}, nil
 }

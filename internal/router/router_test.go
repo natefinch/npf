@@ -14,7 +14,7 @@ import (
 	"github.com/juju/errgo"
 	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
-	"gopkg.in/juju/charm.v2"
+	"gopkg.in/juju/charm.v3"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/storetesting"
@@ -38,7 +38,7 @@ var routerTests = []struct {
 	expectCode       int
 	expectBody       interface{}
 	expectQueryCount int32
-	resolveURL       func(*charm.URL) error
+	resolveURL       func(*charm.Reference) error
 }{{
 	about: "global handler",
 	handlers: Handlers{
@@ -308,10 +308,10 @@ var routerTests = []struct {
 	expectBody: fieldSelectHandleInfo{
 		HandlerId: "handler1",
 		Doc: fieldSelectQueryInfo{
-			Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+			Id:       mustParseReference("cs:precise/wordpress-42"),
 			Selector: map[string]int{"field1": 1, "field2": 1},
 		},
-		Id: charm.MustParseURL("cs:precise/wordpress-42"),
+		Id: mustParseReference("cs:precise/wordpress-42"),
 	},
 }, {
 	about:  "meta handler returning error with code",
@@ -331,7 +331,7 @@ var routerTests = []struct {
 	urlStr:     "http://example.com/precise/wordpress-42/meta/any",
 	expectCode: http.StatusOK,
 	expectBody: params.MetaAnyResponse{
-		Id: charm.MustParseURL("cs:precise/wordpress-42"),
+		Id: mustParseReference("cs:precise/wordpress-42"),
 	},
 }, {
 	about:  "meta/any, some includes all using same key",
@@ -346,31 +346,31 @@ var routerTests = []struct {
 	expectQueryCount: 1,
 	expectCode:       http.StatusOK,
 	expectBody: params.MetaAnyResponse{
-		Id: charm.MustParseURL("cs:precise/wordpress-42"),
+		Id: mustParseReference("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
 			"field1-1": fieldSelectHandleInfo{
 				HandlerId: "handler1",
 				Doc: fieldSelectQueryInfo{
-					Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1},
 				},
-				Id: charm.MustParseURL("cs:precise/wordpress-42"),
+				Id: mustParseReference("cs:precise/wordpress-42"),
 			},
 			"field2": fieldSelectHandleInfo{
 				HandlerId: "handler2",
 				Doc: fieldSelectQueryInfo{
-					Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1},
 				},
-				Id: charm.MustParseURL("cs:precise/wordpress-42"),
+				Id: mustParseReference("cs:precise/wordpress-42"),
 			},
 			"field1-2": fieldSelectHandleInfo{
 				HandlerId: "handler3",
 				Doc: fieldSelectQueryInfo{
-					Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1},
 				},
-				Id: charm.MustParseURL("cs:precise/wordpress-42"),
+				Id: mustParseReference("cs:precise/wordpress-42"),
 			},
 		},
 	},
@@ -387,33 +387,33 @@ var routerTests = []struct {
 	expectQueryCount: 1,
 	expectCode:       http.StatusOK,
 	expectBody: params.MetaAnyResponse{
-		Id: charm.MustParseURL("cs:precise/wordpress-42"),
+		Id: mustParseReference("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
 			"item1/foo": fieldSelectHandleInfo{
 				HandlerId: "handler1",
 				Doc: fieldSelectQueryInfo{
-					Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
 				},
-				Id:   charm.MustParseURL("cs:precise/wordpress-42"),
+				Id:   mustParseReference("cs:precise/wordpress-42"),
 				Path: "/foo",
 			},
 			"item2/bar": fieldSelectHandleInfo{
 				HandlerId: "handler2",
 				Doc: fieldSelectQueryInfo{
-					Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
 				},
-				Id:   charm.MustParseURL("cs:precise/wordpress-42"),
+				Id:   mustParseReference("cs:precise/wordpress-42"),
 				Path: "/bar",
 			},
 			"item1": fieldSelectHandleInfo{
 				HandlerId: "handler3",
 				Doc: fieldSelectQueryInfo{
-					Id:       charm.MustParseURL("cs:precise/wordpress-42"),
+					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
 				},
-				Id: charm.MustParseURL("cs:precise/wordpress-42"),
+				Id: mustParseReference("cs:precise/wordpress-42"),
 			},
 		},
 	},
@@ -429,7 +429,7 @@ var routerTests = []struct {
 	},
 	expectCode: http.StatusOK,
 	expectBody: params.MetaAnyResponse{
-		Id: charm.MustParseURL("cs:precise/wordpress-42"),
+		Id: mustParseReference("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
 			"ok": metaHandlerTestResp{
 				CharmURL: "cs:precise/wordpress-42",
@@ -492,7 +492,7 @@ var routerTests = []struct {
 	expectCode: http.StatusOK,
 	expectBody: map[string]params.MetaAnyResponse{
 		"precise/wordpress-42": {
-			Id: charm.MustParseURL("cs:precise/wordpress-42"),
+			Id: mustParseReference("cs:precise/wordpress-42"),
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
 					CharmURL: "cs:precise/wordpress-42",
@@ -504,7 +504,7 @@ var routerTests = []struct {
 			},
 		},
 		"quantal/foo-32": {
-			Id: charm.MustParseURL("cs:quantal/foo-32"),
+			Id: mustParseReference("cs:quantal/foo-32"),
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
 					CharmURL: "cs:quantal/foo-32",
@@ -567,7 +567,7 @@ var routerTests = []struct {
 }, {
 	about:  "bulk meta handler with unresolvable id",
 	urlStr: "http://example.com/meta/foo?id=unresolved&id=precise/wordpress-23",
-	resolveURL: func(url *charm.URL) error {
+	resolveURL: func(url *charm.Reference) error {
 		if url.Name == "unresolved" {
 			return params.ErrNotFound
 		}
@@ -587,7 +587,7 @@ var routerTests = []struct {
 }, {
 	about:  "bulk meta handler with id resolution error",
 	urlStr: "http://example.com/meta/foo?id=resolveerror&id=precise/wordpress-23",
-	resolveURL: func(url *charm.URL) error {
+	resolveURL: func(url *charm.Reference) error {
 		if url.Name == "resolveerror" {
 			return errgo.Newf("an error")
 		}
@@ -621,8 +621,8 @@ var routerTests = []struct {
 // newResolveURL returns a URL resolver that resolves
 // unspecified series and revision to the given series
 // and revision.
-func newResolveURL(series string, revision int) func(*charm.URL) error {
-	return func(url *charm.URL) error {
+func newResolveURL(series string, revision int) func(*charm.Reference) error {
+	return func(url *charm.Reference) error {
 		if url.Series == "" {
 			url.Series = series
 		}
@@ -633,13 +633,13 @@ func newResolveURL(series string, revision int) func(*charm.URL) error {
 	}
 }
 
-func resolveURLError(err error) func(*charm.URL) error {
-	return func(*charm.URL) error {
+func resolveURLError(err error) func(*charm.Reference) error {
+	return func(*charm.Reference) error {
 		return err
 	}
 }
 
-func noResolveURL(*charm.URL) error {
+func noResolveURL(*charm.Reference) error {
 	return nil
 }
 
@@ -675,18 +675,18 @@ var getMetadataTests = []struct {
 		"item1": fieldSelectHandleInfo{
 			HandlerId: "handler1",
 			Doc: fieldSelectQueryInfo{
-				Id:       charm.MustParseURL("cs:~rog/precise/wordpress-2"),
+				Id:       mustParseReference("cs:~rog/precise/wordpress-2"),
 				Selector: map[string]int{"item1": 1, "item2": 1},
 			},
-			Id: charm.MustParseURL("cs:~rog/precise/wordpress-2"),
+			Id: mustParseReference("cs:~rog/precise/wordpress-2"),
 		},
 		"item2": fieldSelectHandleInfo{
 			HandlerId: "handler2",
 			Doc: fieldSelectQueryInfo{
-				Id:       charm.MustParseURL("cs:~rog/precise/wordpress-2"),
+				Id:       mustParseReference("cs:~rog/precise/wordpress-2"),
 				Selector: map[string]int{"item1": 1, "item2": 1},
 			},
-			Id: charm.MustParseURL("cs:~rog/precise/wordpress-2"),
+			Id: mustParseReference("cs:~rog/precise/wordpress-2"),
 		},
 		"test": &metaHandlerTestResp{
 			CharmURL: "cs:~rog/precise/wordpress-2",
@@ -708,7 +708,7 @@ func (s *RouterSuite) TestGetMetadata(c *gc.C) {
 				"test":  testMetaHandler,
 			},
 		}, noResolveURL)
-		id := charm.MustParseURL(test.id)
+		id := mustParseReference(test.id)
 		result, err := router.GetMetadata(id, test.includes)
 		if test.expectError != "" {
 			c.Assert(err, gc.ErrorMatches, test.expectError)
@@ -962,7 +962,7 @@ func (s *RouterSuite) TestHandlers(c *gc.C) {
 	}
 }
 
-func errorIdHandler(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
+func errorIdHandler(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	return errgo.Newf("errorIdHandler error")
 }
 
@@ -971,7 +971,7 @@ type idHandlerTestResp struct {
 	Path     string
 }
 
-func testIdHandler(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
+func testIdHandler(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	WriteJSON(w, http.StatusOK, idHandlerTestResp{
 		CharmURL: charmId.String(),
 		Path:     req.URL.Path,
@@ -986,7 +986,7 @@ type metaHandlerTestResp struct {
 }
 
 var testMetaHandler = SingleIncludeHandler(
-	func(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+	func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 		if len(flags) == 0 {
 			flags = nil
 		}
@@ -1002,7 +1002,7 @@ var testMetaHandler = SingleIncludeHandler(
 // value.
 func constMetaHandler(val interface{}) BulkIncludeHandler {
 	return SingleIncludeHandler(
-		func(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+		func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 			return val, nil
 		},
 	)
@@ -1017,14 +1017,14 @@ func errorMetaHandler(err error) BulkIncludeHandler {
 }
 
 type fieldSelectQueryInfo struct {
-	Id       *charm.URL
+	Id       *charm.Reference
 	Selector map[string]int
 }
 
 type fieldSelectHandleInfo struct {
 	HandlerId string
 	Doc       fieldSelectQueryInfo
-	Id        *charm.URL
+	Id        *charm.Reference
 	Path      string
 	Flags     url.Values
 }
@@ -1037,14 +1037,14 @@ var queryCount int32
 // with the given handlerId. Key holds the grouping key,
 // and fields holds the fields to select.
 func fieldSelectHandler(handlerId string, key interface{}, fields ...string) BulkIncludeHandler {
-	query := func(id *charm.URL, selector map[string]int) (interface{}, error) {
+	query := func(id *charm.Reference, selector map[string]int) (interface{}, error) {
 		atomic.AddInt32(&queryCount, 1)
 		return fieldSelectQueryInfo{
 			Id:       id,
 			Selector: selector,
 		}, nil
 	}
-	handle := func(doc interface{}, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+	handle := func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 		if len(flags) == 0 {
 			flags = nil
 		}
@@ -1062,7 +1062,15 @@ func fieldSelectHandler(handlerId string, key interface{}, fields ...string) Bul
 // selectiveIdHandler handles metadata by returning the
 // data found in the map for the requested id.
 func selectiveIdHandler(m map[string]interface{}) BulkIncludeHandler {
-	return SingleIncludeHandler(func(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+	return SingleIncludeHandler(func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 		return m[id.String()], nil
 	})
+}
+
+func mustParseReference(url string) *charm.Reference {
+	ref, err := charm.ParseReference(url)
+	if err != nil {
+		panic(err)
+	}
+	return ref
 }

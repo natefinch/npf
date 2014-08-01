@@ -8,7 +8,7 @@ import (
 	"net/url"
 
 	"github.com/juju/errgo"
-	"gopkg.in/juju/charm.v2"
+	"gopkg.in/juju/charm.v3"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -64,7 +64,7 @@ func New(store *charmstore.Store) http.Handler {
 // ResolveURL resolves the series and revision of the given URL
 // if either is unspecified by filling them out with information retrieved
 // from the store.
-func ResolveURL(store *charmstore.Store, url *charm.URL) error {
+func ResolveURL(store *charmstore.Store, url *charm.Reference) error {
 	if url.Series != "" && url.Revision != -1 {
 		return nil
 	}
@@ -79,16 +79,16 @@ func ResolveURL(store *charmstore.Store, url *charm.URL) error {
 	return nil
 }
 
-func (h *handler) resolveURL(url *charm.URL) error {
+func (h *handler) resolveURL(url *charm.Reference) error {
 	return ResolveURL(h.store, url)
 }
 
-type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error)
+type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error)
 
 // entityHandler returns a handler that calls f with a *mongodoc.Entity that
 // contains at least the given fields.
 func (h *handler) entityHandler(f entityHandlerFunc, fields ...string) router.BulkIncludeHandler {
-	handle := func(doc interface{}, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+	handle := func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 		edoc := doc.(*mongodoc.Entity)
 		val, err := f(edoc, id, path, flags)
 		return val, errgo.Mask(err, errgo.Any)
@@ -102,7 +102,7 @@ func (h *handler) entityHandler(f entityHandlerFunc, fields ...string) router.Bu
 	)
 }
 
-func (h *handler) entityQuery(id *charm.URL, selector map[string]int) (interface{}, error) {
+func (h *handler) entityQuery(id *charm.Reference, selector map[string]int) (interface{}, error) {
 	var val mongodoc.Entity
 	err := h.store.DB.Entities().
 		Find(bson.D{{"_id", id}}).
@@ -123,7 +123,7 @@ var ltsReleases = map[string]bool{
 	"trusty":  true,
 }
 
-func selectPreferredURL(urls []*charm.URL) *charm.URL {
+func selectPreferredURL(urls []*charm.Reference) *charm.Reference {
 	best := urls[0]
 	for _, url := range urls {
 		if preferredURL(url, best) {
@@ -134,7 +134,7 @@ func selectPreferredURL(urls []*charm.URL) *charm.URL {
 }
 
 // preferredURL reports whether url0 is preferred over url1.
-func preferredURL(url0, url1 *charm.URL) bool {
+func preferredURL(url0, url1 *charm.Reference) bool {
 	if url0.Series == url1.Series {
 		return url0.Revision > url1.Revision
 	}
@@ -183,13 +183,13 @@ func (h *handler) serveDebug(w http.ResponseWriter, req *http.Request) {
 //
 // PUT id/resources/[~user/]series/name.stream-revision/arch?sha256=hash
 // http://tinyurl.com/k8l8kdg
-func (h *handler) serveResources(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
+func (h *handler) serveResources(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	return errNotImplemented
 }
 
 // GET id/expand-id
 // https://docs.google.com/a/canonical.com/document/d/1TgRA7jW_mmXoKH3JiwBbtPvQu7WiM6XMrz1wSrhTMXw/edit#bookmark=id.4xdnvxphb2si
-func (h *handler) serveExpandId(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
+func (h *handler) serveExpandId(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	return errNotImplemented
 }
 
@@ -198,90 +198,90 @@ func (h *handler) serveExpandId(charmId *charm.URL, w http.ResponseWriter, req *
 //
 // POST id/archive?sha256=hash
 // http://tinyurl.com/lzrzrgb
-func (h *handler) serveArchive(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
+func (h *handler) serveArchive(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	return errNotImplemented
 }
 
 // GET id/archive/…
 // http://tinyurl.com/lampm24
-func (h *handler) serveArchiveFile(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
+func (h *handler) serveArchiveFile(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	return errNotImplemented
 }
 
 // GET id/meta/charm-metadata
 // http://tinyurl.com/poeoulw
-func (h *handler) metaCharmMetadata(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaCharmMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return entity.CharmMeta, nil
 }
 
 // GET id/meta/bundle-metadata
 // http://tinyurl.com/ozshbtb
-func (h *handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return entity.BundleData, nil
 }
 
 // GET id/meta/manifest
 // http://tinyurl.com/p3xdcto
-func (h *handler) metaManifest(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaManifest(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/charm-actions
 // http://tinyurl.com/kfd2h34
-func (h *handler) metaCharmActions(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaCharmActions(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return entity.CharmActions, nil
 }
 
 // GET id/meta/charm-config
 // http://tinyurl.com/oxxyujx
-func (h *handler) metaCharmConfig(entity *mongodoc.Entity, id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaCharmConfig(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return entity.CharmConfig, nil
 }
 
 // GET id/meta/color
 // http://tinyurl.com/o2t3j4p
-func (h *handler) metaColor(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaColor(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/archive-size
 // http://tinyurl.com/m8b9geq
-func (h *handler) metaArchiveSize(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaArchiveSize(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/stats/
 // http://tinyurl.com/lvyp2l5
-func (h *handler) metaStats(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaStats(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/bundles-containing[?include=meta[&include=meta…]]
 // http://tinyurl.com/oqc386r
-func (h *handler) metaBundlesContaining(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaBundlesContaining(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/extra-info
 // http://tinyurl.com/keos7wd
-func (h *handler) metaExtraInfo(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaExtraInfo(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/extra-info/key
 // http://tinyurl.com/polrbn7
-func (h *handler) metaExtraInfoWithKey(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaExtraInfoWithKey(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/charm-related[?include=meta[&include=meta…]]
 // http://tinyurl.com/q7vdmzl
-func (h *handler) metaCharmRelated(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaCharmRelated(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/archive-upload-time
 // http://tinyurl.com/nmujuqk
-func (h *handler) metaArchiveUploadTime(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaArchiveUploadTime(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }

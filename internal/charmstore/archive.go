@@ -9,7 +9,7 @@ import (
 	"os"
 
 	"github.com/juju/errgo"
-	"gopkg.in/juju/charm.v2"
+	"gopkg.in/juju/charm.v3"
 
 	"github.com/juju/charmstore/internal/blobstore"
 )

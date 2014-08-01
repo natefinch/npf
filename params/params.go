@@ -7,12 +7,12 @@
 package params
 
 import (
-	"gopkg.in/juju/charm.v2"
+	"gopkg.in/juju/charm.v3"
 )
 
 // MetaAnyResponse holds the result of a meta/any
 // request. See http://tinyurl.com/q5vcjpk
 type MetaAnyResponse struct {
-	Id   *charm.URL
+	Id   *charm.Reference
 	Meta map[string]interface{} `json:",omitempty"`
 }
