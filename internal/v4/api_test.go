@@ -12,8 +12,8 @@ import (
 
 	"github.com/juju/errgo"
 	jujutesting "github.com/juju/testing"
-	"gopkg.in/juju/charm.v2"
-	charmtesting "gopkg.in/juju/charm.v2/testing"
+	"gopkg.in/juju/charm.v3"
+	charmtesting "gopkg.in/juju/charm.v3/testing"
 	"gopkg.in/mgo.v2/bson"
 	gc "launchpad.net/gocheck"
 
@@ -50,7 +50,7 @@ type metaEndpoint struct {
 	name       string
 	exclusive  int
 	bundleOnly bool
-	get        func(*charmstore.Store, *charm.URL) (interface{}, error)
+	get        func(*charmstore.Store, *charm.Reference) (interface{}, error)
 
 	// checkURL holds one URL to sanity check data against.
 	checkURL string
@@ -104,7 +104,7 @@ func (s *APISuite) TestEndpointGet(c *gc.C) {
 	s.addTestEntities(c)
 	for i, ep := range metaEndpoints {
 		c.Logf("test %d: %s\n", i, ep.name)
-		data, err := ep.get(s.store, charm.MustParseURL(ep.checkURL))
+		data, err := ep.get(s.store, mustParseReference(ep.checkURL))
 		c.Assert(err, gc.IsNil)
 		ep.assertCheckData(c, data)
 	}
@@ -123,10 +123,10 @@ var testEntities = []string{
 	"cs:precise/dummy-10",
 }
 
-func (s *APISuite) addTestEntities(c *gc.C) []*charm.URL {
-	urls := make([]*charm.URL, len(testEntities))
+func (s *APISuite) addTestEntities(c *gc.C) []*charm.Reference {
+	urls := make([]*charm.Reference, len(testEntities))
 	for i, e := range testEntities {
-		url := charm.MustParseURL(e)
+		url := mustParseReference(e)
 		if url.Series == "bundle" {
 			s.addBundle(c, url.Name, e)
 		} else {
@@ -317,7 +317,7 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 
 	for i, test := range resolveURLTests {
 		c.Logf("test %d: %s", i, test.url)
-		url := mustParseURL(test.url)
+		url := mustParseReference(test.url)
 		err := v4.ResolveURL(s.store, url)
 		if test.notFound {
 			c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for ".*"`)
@@ -328,24 +328,13 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 	}
 }
 
-func mustParseURL(s string) *charm.URL {
-	ref, series, err := charm.ParseReference(s)
-	if err != nil {
-		panic(err)
-	}
-	return &charm.URL{
-		Reference: ref,
-		Series:    series,
-	}
-}
-
 func assertNotImplemented(c *gc.C, h http.Handler, path string) {
 	storetesting.AssertJSONCall(c, h, "GET", "http://0.1.2.3/v4/"+path, "", http.StatusInternalServerError, params.Error{
 		Message: "method not implemented",
 	})
 }
 
-func entityFieldGetter(fieldName string) func(*charmstore.Store, *charm.URL) (interface{}, error) {
+func entityFieldGetter(fieldName string) func(*charmstore.Store, *charm.Reference) (interface{}, error) {
 	return entityGetter(func(entity *mongodoc.Entity) interface{} {
 		field := reflect.ValueOf(entity).Elem().FieldByName(fieldName)
 		if !field.IsValid() {
@@ -355,8 +344,8 @@ func entityFieldGetter(fieldName string) func(*charmstore.Store, *charm.URL) (in
 	})
 }
 
-func entityGetter(get func(*mongodoc.Entity) interface{}) func(*charmstore.Store, *charm.URL) (interface{}, error) {
-	return func(store *charmstore.Store, url *charm.URL) (interface{}, error) {
+func entityGetter(get func(*mongodoc.Entity) interface{}) func(*charmstore.Store, *charm.Reference) (interface{}, error) {
+	return func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
 		var doc mongodoc.Entity
 		err := store.DB.Entities().Find(bson.D{{"_id", url}}).One(&doc)
 		if err != nil {
@@ -366,19 +355,26 @@ func entityGetter(get func(*mongodoc.Entity) interface{}) func(*charmstore.Store
 	}
 }
 
-func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.URL, charm.Charm) {
-	url, err := charm.ParseURL(curl)
-	c.Assert(err, gc.IsNil)
+func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, charm.Charm) {
+	url := mustParseReference(curl)
 	wordpress := charmtesting.Charms.CharmDir(charmName)
-	err = s.store.AddCharm(url, wordpress)
+	err := s.store.AddCharm(url, wordpress)
 	c.Assert(err, gc.IsNil)
 	return url, wordpress
 }
 
-func (s *APISuite) addBundle(c *gc.C, bundleName string, curl string) (*charm.URL, charm.Bundle) {
-	url := charm.MustParseURL(curl)
+func (s *APISuite) addBundle(c *gc.C, bundleName string, curl string) (*charm.Reference, charm.Bundle) {
+	url := mustParseReference(curl)
 	bundle := charmtesting.Charms.BundleDir(bundleName)
 	err := s.store.AddBundle(url, bundle)
 	c.Assert(err, gc.IsNil)
 	return url, bundle
+}
+
+func mustParseReference(url string) *charm.Reference {
+	ref, err := charm.ParseReference(url)
+	if err != nil {
+		panic(err)
+	}
+	return ref
 }
