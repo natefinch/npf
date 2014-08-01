@@ -19,7 +19,9 @@
   {{end}}
       {{ .Content }}
 
+  {{if ne .Type "page"}}
       {{ template "partials/comments.html" . }}
+  {{end}}
 </div>
 </div>
 
