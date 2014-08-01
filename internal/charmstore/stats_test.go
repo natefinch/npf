@@ -10,11 +10,13 @@ import (
 	"strconv"
 	"sync"
 	"time"
-	"github.com/juju/charmstore/internal/storetesting"
-	"gopkg.in/mgo.v2/bson"
+
 	jujutesting "github.com/juju/testing"
+	"gopkg.in/mgo.v2/bson"
 	gc "launchpad.net/gocheck"
+
 	"github.com/juju/charmstore/internal/charmstore"
+	"github.com/juju/charmstore/internal/storetesting"
 )
 
 type StatsSuite struct {

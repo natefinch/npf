@@ -9,10 +9,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"github.com/juju/charmstore/params"
+
 	"github.com/juju/errgo"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
+
+	"github.com/juju/charmstore/params"
 )
 
 // The stats mechanism uses the following MongoDB collections:
