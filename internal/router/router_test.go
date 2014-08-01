@@ -143,7 +143,7 @@ var routerTests = []struct {
 	about: "id handler that returns a not-found error",
 	handlers: Handlers{
 		Id: map[string]IdHandler{
-			"foo": func(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
+			"foo": func(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 				return params.ErrNotFound
 			},
 		},
@@ -158,7 +158,7 @@ var routerTests = []struct {
 	about: "id handler that returns some other kind of coded error",
 	handlers: Handlers{
 		Id: map[string]IdHandler{
-			"foo": func(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
+			"foo": func(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 				return errgo.WithCausef(nil, params.ErrorCode("foo"), "a message")
 			},
 		},
@@ -1010,7 +1010,7 @@ func constMetaHandler(val interface{}) BulkIncludeHandler {
 
 func errorMetaHandler(err error) BulkIncludeHandler {
 	return SingleIncludeHandler(
-		func(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+		func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 			return nil, err
 		},
 	)
