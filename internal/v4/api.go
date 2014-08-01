@@ -73,7 +73,7 @@ func ResolveURL(store *charmstore.Store, url *charm.URL) error {
 		return errgo.Mask(err)
 	}
 	if len(urls) == 0 {
-		return errgo.Newf("no matching charm or bundle for %q", url)
+		return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
 	}
 	*url = *selectPreferredURL(urls)
 	return nil
@@ -90,7 +90,8 @@ type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.URL, path string,
 func (h *handler) entityHandler(f entityHandlerFunc, fields ...string) router.BulkIncludeHandler {
 	handle := func(doc interface{}, id *charm.URL, path string, flags url.Values) (interface{}, error) {
 		edoc := doc.(*mongodoc.Entity)
-		return f(edoc, id, path, flags)
+		val, err := f(edoc, id, path, flags)
+		return val, errgo.Mask(err, errgo.Any)
 	}
 	type entityHandlerKey struct{}
 	return router.FieldIncludeHandler(

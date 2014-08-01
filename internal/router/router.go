@@ -18,6 +18,13 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
+// Implementation node on error handling:
+//
+// We use errgo.Any only when necessary, so that we can see at a glance
+// which are the possible places that could be returning an error with a
+// Cause (the only kind of error that can end up setting an HTTP status
+// code)
+
 var knownSeries = map[string]bool{
 	"bundle":  true,
 	"precise": true,
@@ -62,7 +69,12 @@ type BulkIncludeHandler interface {
 type IdHandler func(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error
 
 // Handlers specifies how HTTP requests will be routed
-// by the router.
+// by the router. All errors returned by the handlers will
+// be processed by WriteError with their Cause left intact.
+// This means that, for example, if they return an error
+// with a Cause that is params.ErrNotFound, the HTTP
+// status code will reflect that (assuming the error has
+// not been absorbed by the bulk metadata logic).
 type Handlers struct {
 	// Global holds handlers for paths not matched by Meta or Id.
 	// The map key is the path; the value is the handler that will
@@ -99,6 +111,8 @@ type Router struct {
 // The resolveURL function will be called to resolve ids in
 // router paths - it should fill in the Series and Revision
 // fields of its argument URL if they are not specified.
+// The Cause of the resolveURL error will be left unchanged,
+// as for the handlers.
 func New(handlers *Handlers, resolveURL func(url *charm.URL) error) *Router {
 	r := &Router{
 		handlers:   handlers,
@@ -142,7 +156,8 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 		return errgo.Mask(err)
 	}
 	if err := r.resolveURL(url); err != nil {
-		return errgo.Mask(err)
+		// Note: preserve error cause from resolveURL.
+		return errgo.Mask(err, errgo.Any)
 	}
 	key, path := handlerKey(path)
 	if key == "" {
@@ -151,6 +166,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	if handler, ok := r.handlers.Id[key]; ok {
 		req.URL.Path = path
 		err := handler(url, w, req)
+		// Note: preserve error cause from handlers.
 		return errgo.Mask(err, errgo.Any)
 	}
 	if key != "meta/" && key != "meta" {
@@ -159,6 +175,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	req.URL.Path = path
 	resp, err := r.serveMeta(url, req)
 	if err != nil {
+		// Note: preserve error cause from handlers.
 		return errgo.Mask(err, errgo.Any)
 	}
 	WriteJSON(w, http.StatusOK, resp)
@@ -195,6 +212,7 @@ func (r *Router) serveMeta(id *charm.URL, req *http.Request) (interface{}, error
 		// http://tinyurl.com/q5vcjpk
 		meta, err := r.GetMetadata(id, req.Form["include"])
 		if err != nil {
+			// Note: preserve error cause from handlers.
 			return nil, errgo.Mask(err, errgo.Any)
 		}
 		return params.MetaAnyResponse{
@@ -205,6 +223,7 @@ func (r *Router) serveMeta(id *charm.URL, req *http.Request) (interface{}, error
 	if handler := r.handlers.Meta[key]; handler != nil {
 		results, err := handler.Handle([]BulkIncludeHandler{handler}, id, []string{path}, req.Form)
 		if err != nil {
+			// Note: preserve error cause from handlers.
 			return nil, errgo.Mask(err, errgo.Any)
 		}
 		result := results[0]
@@ -263,7 +282,8 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interf
 				// http://tinyurl.com/o5ptfkk
 				continue
 			}
-			return nil, err
+			// Note: preserve error cause from resolveURL.
+			return nil, errgo.Mask(err, errgo.Any)
 		}
 		meta, err := r.serveMeta(url, req)
 		if errgo.Cause(err) == params.ErrMetadataNotFound {
@@ -318,7 +338,7 @@ func (r *Router) GetMetadata(id *charm.URL, includes []string) (map[string]inter
 			// TODO(rog) if it's a BulkError, attach
 			// the original include path to error (the BulkError
 			// should contain the index of the failed one).
-			return nil, errgo.Mask(err)
+			return nil, errgo.Mask(err, errgo.Any)
 		}
 		for i, result := range groupResults {
 			// Omit nil results from map. Note: omit statically typed

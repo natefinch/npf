@@ -265,13 +265,15 @@ func (s *APISuite) TestIdsAreResolved(c *gc.C) {
 }
 
 func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
-	expected := params.Error{
-		Message: params.ErrNotFound.Error(),
-		Code:    params.ErrNotFound,
-	}
 	for i, ep := range metaEndpoints {
 		c.Logf("test %d: %s", i, ep.name)
+		expected := params.Error{
+			Message: params.ErrNotFound.Error(),
+			Code:    params.ErrNotFound,
+		}
 		storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/"+ep.name, "", http.StatusNotFound, expected)
+		expected.Message = `no matching charm or bundle for "cs:wordpress"`
+		storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/wordpress/meta/"+ep.name, "", http.StatusNotFound, expected)
 	}
 }
 
@@ -324,6 +326,7 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 		url := mustParseURL(test.url)
 		err := v4.ResolveURL(s.store, url)
 		if test.notFound {
+			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 			c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for ".*"`)
 			continue
 		}

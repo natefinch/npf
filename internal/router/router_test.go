@@ -190,10 +190,24 @@ var routerTests = []struct {
 		},
 	},
 	urlStr:     "http://example.com/wordpress/meta",
-	resolveURL: resolveURLError,
+	resolveURL: resolveURLError(errgo.New("resolve URL error")),
 	expectCode: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "resolve URL error",
+	},
+}, {
+	about: "id with error on resolving that has a Cause",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:     "http://example.com/wordpress/meta",
+	resolveURL: resolveURLError(params.ErrNotFound),
+	expectCode: http.StatusNotFound,
+	expectBody: params.Error{
+		Message: "not found",
+		Code:    params.ErrNotFound,
 	},
 }, {
 	about: "meta list",
@@ -298,6 +312,19 @@ var routerTests = []struct {
 			Selector: map[string]int{"field1": 1, "field2": 1},
 		},
 		Id: charm.MustParseURL("cs:precise/wordpress-42"),
+	},
+}, {
+	about:  "meta handler returning error with code",
+	urlStr: "http://example.com/precise/wordpress-42/meta/foo",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": errorMetaHandler(errgo.WithCausef(nil, params.ErrorCode("arble"), "a message")),
+		},
+	},
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Code:    "arble",
+		Message: "a message",
 	},
 }, {
 	about:      "meta/any, no includes",
@@ -408,6 +435,19 @@ var routerTests = []struct {
 				CharmURL: "cs:precise/wordpress-42",
 			},
 		},
+	},
+}, {
+	about:  "meta/any, handler returns error with cause",
+	urlStr: "http://example.com/precise/wordpress-42/meta/any?include=error",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"error": errorMetaHandler(errgo.WithCausef(nil, params.ErrorCode("foo"), "a message")),
+		},
+	},
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Code:    "foo",
+		Message: "a message",
 	},
 }, {
 	about:  "bulk meta handler, single id",
@@ -593,8 +633,10 @@ func newResolveURL(series string, revision int) func(*charm.URL) error {
 	}
 }
 
-func resolveURLError(*charm.URL) error {
-	return errgo.Newf("resolve URL error")
+func resolveURLError(err error) func(*charm.URL) error {
+	return func(*charm.URL) error {
+		return err
+	}
 }
 
 func noResolveURL(*charm.URL) error {
@@ -962,6 +1004,14 @@ func constMetaHandler(val interface{}) BulkIncludeHandler {
 	return SingleIncludeHandler(
 		func(id *charm.URL, path string, flags url.Values) (interface{}, error) {
 			return val, nil
+		},
+	)
+}
+
+func errorMetaHandler(err error) BulkIncludeHandler {
+	return SingleIncludeHandler(
+		func(id *charm.URL, path string, flags url.Values) (interface{}, error) {
+			return nil, err
 		},
 	)
 }
