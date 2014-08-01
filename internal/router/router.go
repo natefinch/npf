@@ -18,6 +18,13 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
+// Implementation note on error handling:
+//
+// We use errgo.Any only when necessary, so that we can see at a glance
+// which are the possible places that could be returning an error with a
+// Cause (the only kind of error that can end up setting an HTTP status
+// code)
+
 var knownSeries = map[string]bool{
 	"bundle":  true,
 	"precise": true,
@@ -62,7 +69,12 @@ type BulkIncludeHandler interface {
 type IdHandler func(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error
 
 // Handlers specifies how HTTP requests will be routed
-// by the router.
+// by the router. All errors returned by the handlers will
+// be processed by WriteError with their Cause left intact.
+// This means that, for example, if they return an error
+// with a Cause that is params.ErrNotFound, the HTTP
+// status code will reflect that (assuming the error has
+// not been absorbed by the bulk metadata logic).
 type Handlers struct {
 	// Global holds handlers for paths not matched by Meta or Id.
 	// The map key is the path; the value is the handler that will
@@ -99,6 +111,8 @@ type Router struct {
 // The resolveURL function will be called to resolve ids in
 // router paths - it should fill in the Series and Revision
 // fields of its argument URL if they are not specified.
+// The Cause of the resolveURL error will be left unchanged,
+// as for the handlers.
 func New(handlers *Handlers, resolveURL func(url *charm.Reference) error) *Router {
 	r := &Router{
 		handlers:   handlers,
@@ -113,11 +127,6 @@ func New(handlers *Handlers, resolveURL func(url *charm.Reference) error) *Route
 	r.handler = mux
 	return r
 }
-
-var (
-	ErrNotFound     = errgo.Newf("not found")
-	ErrDataNotFound = errgo.Newf("metadata not found")
-)
 
 // ServeHTTP implements http.Handler.ServeHTTP.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -147,23 +156,27 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 		return errgo.Mask(err)
 	}
 	if err := r.resolveURL(url); err != nil {
-		return errgo.Mask(err)
+		// Note: preserve error cause from resolveURL.
+		return errgo.Mask(err, errgo.Any)
 	}
 	key, path := handlerKey(path)
 	if key == "" {
-		return ErrNotFound
+		return params.ErrNotFound
 	}
 	if handler, ok := r.handlers.Id[key]; ok {
 		req.URL.Path = path
-		return handler(url, w, req)
+		err := handler(url, w, req)
+		// Note: preserve error cause from handlers.
+		return errgo.Mask(err, errgo.Any)
 	}
 	if key != "meta/" && key != "meta" {
-		return ErrNotFound
+		return params.ErrNotFound
 	}
 	req.URL.Path = path
 	resp, err := r.serveMeta(url, req)
 	if err != nil {
-		return errgo.Mask(err)
+		// Note: preserve error cause from handlers.
+		return errgo.Mask(err, errgo.Any)
 	}
 	WriteJSON(w, http.StatusOK, resp)
 	return nil
@@ -199,7 +212,8 @@ func (r *Router) serveMeta(id *charm.Reference, req *http.Request) (interface{},
 		// http://tinyurl.com/q5vcjpk
 		meta, err := r.GetMetadata(id, req.Form["include"])
 		if err != nil {
-			return nil, errgo.Mask(err)
+			// Note: preserve error cause from handlers.
+			return nil, errgo.Mask(err, errgo.Any)
 		}
 		return params.MetaAnyResponse{
 			Id:   id,
@@ -209,15 +223,16 @@ func (r *Router) serveMeta(id *charm.Reference, req *http.Request) (interface{},
 	if handler := r.handlers.Meta[key]; handler != nil {
 		results, err := handler.Handle([]BulkIncludeHandler{handler}, id, []string{path}, req.Form)
 		if err != nil {
-			return nil, errgo.Mask(err)
+			// Note: preserve error cause from handlers.
+			return nil, errgo.Mask(err, errgo.Any)
 		}
 		result := results[0]
 		if isNull(result) {
-			return nil, ErrDataNotFound
+			return nil, params.ErrMetadataNotFound
 		}
 		return results[0], nil
 	}
-	return nil, ErrNotFound
+	return nil, params.ErrNotFound
 }
 
 // isNull reports whether the given value will encode to
@@ -262,15 +277,16 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interf
 			return nil, errgo.Mask(err)
 		}
 		if err := r.resolveURL(url); err != nil {
-			if errgo.Cause(err) == ErrNotFound {
+			if errgo.Cause(err) == params.ErrNotFound {
 				// URLs not found will be omitted from the result.
 				// http://tinyurl.com/o5ptfkk
 				continue
 			}
-			return nil, err
+			// Note: preserve error cause from resolveURL.
+			return nil, errgo.Mask(err, errgo.Any)
 		}
 		meta, err := r.serveMeta(url, req)
-		if errgo.Cause(err) == ErrDataNotFound {
+		if errgo.Cause(err) == params.ErrMetadataNotFound {
 			// The relevant data does not exist.
 			// http://tinyurl.com/o5ptfkk
 			continue
@@ -322,7 +338,7 @@ func (r *Router) GetMetadata(id *charm.Reference, includes []string) (map[string
 			// TODO(rog) if it's a BulkError, attach
 			// the original include path to error (the BulkError
 			// should contain the index of the failed one).
-			return nil, errgo.Mask(err)
+			return nil, errgo.Mask(err, errgo.Any)
 		}
 		for i, result := range groupResults {
 			// Omit nil results from map. Note: omit statically typed

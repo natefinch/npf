@@ -9,11 +9,13 @@ import (
 
 	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v3"
+	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/router"
+	"github.com/juju/charmstore/params"
 )
 
 type handler struct {
@@ -71,7 +73,7 @@ func ResolveURL(store *charmstore.Store, url *charm.Reference) error {
 		return errgo.Mask(err)
 	}
 	if len(urls) == 0 {
-		return errgo.Newf("no matching charm or bundle for %q", url)
+		return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
 	}
 	*url = *selectPreferredURL(urls)
 	return nil
@@ -88,7 +90,8 @@ type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.Reference, path s
 func (h *handler) entityHandler(f entityHandlerFunc, fields ...string) router.BulkIncludeHandler {
 	handle := func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 		edoc := doc.(*mongodoc.Entity)
-		return f(edoc, id, path, flags)
+		val, err := f(edoc, id, path, flags)
+		return val, errgo.Mask(err, errgo.Any)
 	}
 	type entityHandlerKey struct{}
 	return router.FieldIncludeHandler(
@@ -105,6 +108,9 @@ func (h *handler) entityQuery(id *charm.Reference, selector map[string]int) (int
 		Find(bson.D{{"_id", id}}).
 		Select(selector).
 		One(&val)
+	if err == mgo.ErrNotFound {
+		return nil, params.ErrNotFound
+	}
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}

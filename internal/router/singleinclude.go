@@ -29,7 +29,7 @@ func (h SingleIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.Referenc
 		result, err := h(id, paths[i], flags)
 		if err != nil {
 			// TODO(rog) include index of failed handler.
-			return nil, errgo.Mask(err)
+			return nil, errgo.Mask(err, errgo.Any)
 		}
 		results[i] = result
 	}

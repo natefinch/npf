@@ -19,7 +19,6 @@ import (
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"
-	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/internal/storetesting"
 	"github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
@@ -149,8 +148,9 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 			c.Assert(err, gc.IsNil)
 			c.Logf("	expected data for %q: %#v", url, expectData)
 			if isNull(expectData) {
-				storetesting.AssertJSONCall(c, s.srv, "GET", storeURL, "", http.StatusInternalServerError, params.Error{
-					Message: router.ErrDataNotFound.Error(),
+				storetesting.AssertJSONCall(c, s.srv, "GET", storeURL, "", http.StatusNotFound, params.Error{
+					Message: params.ErrMetadataNotFound.Error(),
+					Code:    params.ErrMetadataNotFound,
 				})
 				continue
 			}
@@ -265,9 +265,15 @@ func (s *APISuite) TestIdsAreResolved(c *gc.C) {
 }
 
 func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
-	expected := params.Error{Message: router.ErrNotFound.Error()}
-	for _, ep := range metaEndpoints {
-		storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/"+ep.name, "", http.StatusInternalServerError, expected)
+	for i, ep := range metaEndpoints {
+		c.Logf("test %d: %s", i, ep.name)
+		expected := params.Error{
+			Message: params.ErrNotFound.Error(),
+			Code:    params.ErrNotFound,
+		}
+		storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/"+ep.name, "", http.StatusNotFound, expected)
+		expected.Message = `no matching charm or bundle for "cs:wordpress"`
+		storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/wordpress/meta/"+ep.name, "", http.StatusNotFound, expected)
 	}
 }
 
@@ -320,6 +326,7 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 		url := mustParseReference(test.url)
 		err := v4.ResolveURL(s.store, url)
 		if test.notFound {
+			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 			c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for ".*"`)
 			continue
 		}
