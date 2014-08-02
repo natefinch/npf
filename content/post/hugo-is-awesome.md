@@ -1,6 +1,7 @@
 +++
 date = 2014-08-01T06:45:00Z
 title = "Hugo Is Friggin' Awesome"
+aliases = ["/post/hugo-is-awesome/"]
 +++
 
 This blog is powered by [Hugo](http://hugo.spf13.com), a static site generator
