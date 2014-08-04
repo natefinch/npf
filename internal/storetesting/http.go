@@ -44,7 +44,7 @@ func AssertJSONCall(
 
 	var gotBodyVal interface{}
 	err = json.Unmarshal(rec.Body.Bytes(), &gotBodyVal)
-	c.Assert(err, gc.IsNil)
+	c.Assert(err, gc.IsNil, gc.Commentf("json body: %q", rec.Body.Bytes()))
 
 	c.Assert(gotBodyVal, jc.DeepEquals, expectBodyVal)
 }

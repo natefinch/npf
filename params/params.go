@@ -16,3 +16,11 @@ type MetaAnyResponse struct {
 	Id   *charm.Reference
 	Meta map[string]interface{} `json:",omitempty"`
 }
+
+// Statistic holds one element of a stats/counter
+// response. See http://tinyurl.com/nkdovcf
+type Statistic struct {
+	Key   string `json:",omitempty"`
+	Date  string `json:",omitempty"`
+	Count int64
+}

@@ -4,14 +4,11 @@
 package charmstore_test
 
 import (
-	"flag"
 	"fmt"
-	"os"
 	"strconv"
 	"sync"
 	"time"
 
-	jujutesting "github.com/juju/testing"
 	"gopkg.in/mgo.v2/bson"
 	gc "launchpad.net/gocheck"
 
@@ -24,21 +21,7 @@ type StatsSuite struct {
 	store *charmstore.Store
 }
 
-var noTestMongoJs *bool = flag.Bool("notest-mongojs", false, "Disable MongoDB tests that require javascript")
-
 var _ = gc.Suite(&StatsSuite{})
-
-func (s *StatsSuite) SetUpSuite(c *gc.C) {
-	s.IsolatedMgoSuite.SetUpSuite(c)
-	if os.Getenv("JUJU_NOTEST_MONGOJS") == "1" || jujutesting.MgoServer.WithoutV8 {
-		c.Log("Tests requiring MongoDB Javascript will be skipped")
-		*noTestMongoJs = true
-	}
-}
-
-func (s *StatsSuite) TearDownSuite(c *gc.C) {
-	s.IsolatedMgoSuite.TearDownSuite(c)
-}
 
 func (s *StatsSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
@@ -52,7 +35,7 @@ func (s *StatsSuite) TearDownTest(c *gc.C) {
 }
 
 func (s *StatsSuite) TestSumCounters(c *gc.C) {
-	if *noTestMongoJs {
+	if !storetesting.MongoJSEnabled() {
 		c.Skip("MongoDB javascript not available")
 	}
 
@@ -129,7 +112,7 @@ func (s *StatsSuite) TestSumCounters(c *gc.C) {
 }
 
 func (s *StatsSuite) TestCountersReadOnlySum(c *gc.C) {
-	if *noTestMongoJs {
+	if !storetesting.MongoJSEnabled() {
 		c.Skip("MongoDB javascript not available")
 	}
 
@@ -145,7 +128,7 @@ func (s *StatsSuite) TestCountersReadOnlySum(c *gc.C) {
 }
 
 func (s *StatsSuite) TestCountersTokenCaching(c *gc.C) {
-	if *noTestMongoJs {
+	if !storetesting.MongoJSEnabled() {
 		c.Skip("MongoDB javascript not available")
 	}
 
@@ -204,7 +187,7 @@ func (s *StatsSuite) TestCountersTokenCaching(c *gc.C) {
 }
 
 func (s *StatsSuite) TestCounterTokenUniqueness(c *gc.C) {
-	if *noTestMongoJs {
+	if !storetesting.MongoJSEnabled() {
 		c.Skip("MongoDB javascript not available")
 	}
 
@@ -229,7 +212,7 @@ func (s *StatsSuite) TestCounterTokenUniqueness(c *gc.C) {
 }
 
 func (s *StatsSuite) TestListCounters(c *gc.C) {
-	if *noTestMongoJs {
+	if !storetesting.MongoJSEnabled() {
 		c.Skip("MongoDB javascript not available")
 	}
 
@@ -293,7 +276,7 @@ func (s *StatsSuite) TestListCounters(c *gc.C) {
 }
 
 func (s *StatsSuite) TestListCountersBy(c *gc.C) {
-	if *noTestMongoJs {
+	if !storetesting.MongoJSEnabled() {
 		c.Skip("MongoDB javascript not available")
 	}
 
@@ -319,17 +302,14 @@ func (s *StatsSuite) TestListCountersBy(c *gc.C) {
 		return time.Date(2012, time.May, i, 0, 0, 0, 0, time.UTC)
 	}
 
-	counters := s.store.DB.StatCounters()
 	for i, inc := range incs {
-		err := s.store.IncCounter(inc.key)
-		c.Assert(err, gc.IsNil)
+		t := day(inc.day)
+		// Ensure each entry is unique by adding
+		// a sufficient increment for each test.
+		t = t.Add(time.Duration(i) * charmstore.StatsGranularity)
 
-		// Hack time so counters are assigned to 2012-05-<day>
-		filter := bson.M{"t": bson.M{"$gt": charmstore.TimeToStamp(time.Date(2013, time.January, 1, 0, 0, 0, 0, time.UTC))}}
-		stamp := charmstore.TimeToStamp(day(inc.day))
-		stamp += int32(i) * 60 // Make every entry unique.
-		err = counters.Update(filter, bson.D{{"$set", bson.D{{"t", stamp}}}})
-		c.Check(err, gc.IsNil)
+		err := s.store.IncCounterAtTime(inc.key, t)
+		c.Assert(err, gc.IsNil)
 	}
 
 	tests := []struct {

@@ -17,6 +17,15 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
+// Note that changing the StatsGranularity constant
+// will not change the stats time granularity - it
+// is defined for external code clarity.
+
+// StatsGranularity holds the time granularity of statistics
+// gathering. IncCounter calls within this duration
+// may be aggregated.
+const StatsGranularity = time.Minute
+
 // The stats mechanism uses the following MongoDB collections:
 //
 //     juju.stat.counters - Counters for statistics
@@ -148,6 +157,14 @@ func timeToStamp(t time.Time) int32 {
 
 // IncCounter increases by one the counter associated with the composed key.
 func (s *Store) IncCounter(key []string) error {
+	return s.IncCounterAtTime(key, time.Now())
+}
+
+// IncCounter increases by one the counter associated with the composed key,
+// associating it with the given time, which should be time.Now.
+// This method is exposed for testing purposes only - production
+// code should always call IncCounter.
+func (s *Store) IncCounterAtTime(key []string, t time.Time) error {
 	db := s.DB.Copy()
 	defer db.Close()
 
@@ -156,9 +173,8 @@ func (s *Store) IncCounter(key []string) error {
 		return err
 	}
 
-	t := time.Now().UTC()
 	// Round to the start of the minute so we get one document per minute at most.
-	t = t.Add(-time.Duration(t.Second()) * time.Second)
+	t = t.UTC().Add(-time.Duration(t.Second()) * time.Second)
 	counters := db.StatCounters()
 	_, err = counters.Upsert(bson.D{{"k", skey}, {"t", timeToStamp(t)}}, bson.D{{"$inc", bson.D{{"c", 1}}}})
 	return err
@@ -238,7 +254,11 @@ func (s *Store) Counters(req *CounterRequest) ([]Counter, error) {
 	searchKey, err := s.statsKey(db, req.Key, false)
 	if errgo.Cause(err) == params.ErrNotFound {
 		if !req.List {
-			return []Counter{{Key: req.Key, Prefix: req.Prefix, Count: 0}}, nil
+			return []Counter{{
+				Key:    req.Key,
+				Prefix: req.Prefix,
+				Count:  0,
+			}}, nil
 		}
 		return nil, nil
 	}
