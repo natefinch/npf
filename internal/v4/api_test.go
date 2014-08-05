@@ -57,7 +57,7 @@ type metaEndpoint struct {
 	checkURL string
 	// assertCheckData holds a function that will be used to check that
 	// the get function returns sane data for checkURL.
-	assertCheckData func(c *gc.C, store *charmstore.Store, data interface{})
+	assertCheckData func(c *gc.C, data interface{})
 }
 
 const (
@@ -70,7 +70,7 @@ var metaEndpoints = []metaEndpoint{{
 	exclusive: charmOnly,
 	get:       entityFieldGetter("CharmConfig"),
 	checkURL:  "cs:precise/wordpress-23",
-	assertCheckData: func(c *gc.C, store *charmstore.Store, data interface{}) {
+	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data.(*charm.Config).Options["blog-title"].Default, gc.Equals, "My Title")
 	},
 }, {
@@ -78,7 +78,7 @@ var metaEndpoints = []metaEndpoint{{
 	exclusive: charmOnly,
 	get:       entityFieldGetter("CharmMeta"),
 	checkURL:  "cs:precise/wordpress-23",
-	assertCheckData: func(c *gc.C, store *charmstore.Store, data interface{}) {
+	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data.(*charm.Meta).Summary, gc.Equals, "Blog engine")
 	},
 }, {
@@ -86,7 +86,7 @@ var metaEndpoints = []metaEndpoint{{
 	exclusive: bundleOnly,
 	get:       entityFieldGetter("BundleData"),
 	checkURL:  "cs:bundle/wordpress-42",
-	assertCheckData: func(c *gc.C, store *charmstore.Store, data interface{}) {
+	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data.(*charm.BundleData).Services["wordpress"].Charm, gc.Equals, "wordpress")
 	},
 }, {
@@ -94,30 +94,20 @@ var metaEndpoints = []metaEndpoint{{
 	exclusive: charmOnly,
 	get:       entityFieldGetter("CharmActions"),
 	checkURL:  "cs:precise/dummy-10",
-	assertCheckData: func(c *gc.C, store *charmstore.Store, data interface{}) {
+	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data.(*charm.Actions).ActionSpecs["snapshot"].Description, gc.Equals, "Take a snapshot of the database.")
 	},
 }, {
 	name:            "archive-size", // Charm size.
 	get:             entityFieldGetter("Size"),
 	checkURL:        "cs:precise/wordpress-23",
-	assertCheckData: sizeChecker("cs:precise/wordpress-23"),
+	assertCheckData: sizeChecker,
 }, {
 	name:            "archive-size", // Bundle size.
 	get:             entityFieldGetter("Size"),
 	checkURL:        "cs:bundle/wordpress-42",
-	assertCheckData: sizeChecker("cs:bundle/wordpress-42"),
+	assertCheckData: sizeChecker,
 }}
-
-func sizeChecker(id string) func(c *gc.C, store *charmstore.Store, data interface{}) {
-	return func(c *gc.C, store *charmstore.Store, data interface{}) {
-		var doc mongodoc.Entity
-		err := store.DB.Entities().FindId(id).One(&doc)
-		c.Assert(err, gc.IsNil)
-		c.Assert(data, gc.Equals, doc.Size)
-		c.Assert(doc.Size, gc.Not(gc.Equals), int64(0))
-	}
-}
 
 // TestEndpointGet tries to ensure that the endpoint
 // test data getters correspond with reality.
@@ -127,7 +117,7 @@ func (s *APISuite) TestEndpointGet(c *gc.C) {
 		c.Logf("test %d: %s\n", i, ep.name)
 		data, err := ep.get(s.store, mustParseReference(ep.checkURL))
 		c.Assert(err, gc.IsNil)
-		ep.assertCheckData(c, s.store, data)
+		ep.assertCheckData(c, data)
 	}
 }
 
@@ -382,6 +372,10 @@ func entityGetter(get func(*mongodoc.Entity) interface{}) func(*charmstore.Store
 		}
 		return get(&doc), nil
 	}
+}
+
+func sizeChecker(c *gc.C, data interface{}) {
+	c.Assert(data.(int64), gc.Not(gc.Equals), int64(0))
 }
 
 func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, charm.Charm) {
