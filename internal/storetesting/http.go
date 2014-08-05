@@ -4,10 +4,11 @@
 package storetesting
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 
 	jc "github.com/juju/testing/checkers"
 	gc "launchpad.net/gocheck"
@@ -28,15 +29,20 @@ type JSONCallParams struct {
 	URL string
 
 	// Body holds the body to send in the request.
-	Body string
+	Body io.Reader
 
-	// BodyContentType holds the content type of the
-	// body. If this is empty, the a content type of
-	// "text/plain; charset=utf-8"  is assumed.
-	BodyContentType string
+	// Header specifies the HTTP headers to use when making
+	// the request.
+	Header http.Header
+
+	// ContentLength specifies the length of the body.
+	// It may be zero, in which case the default net/http
+	// content-length behaviour will be used.
+	ContentLength int64
 
 	// ExpectCode holds the expected HTTP status code.
 	// http.StatusOK is assumed if this is zero.
+	// TODO(rog) change this to ExpectStatus
 	ExpectCode int
 
 	// ExpectBody holds the expected JSON body.
@@ -46,13 +52,14 @@ type JSONCallParams struct {
 // AssertJSONCall asserts that when the given handler is called with
 // the given parameters, the result is as specified.
 func AssertJSONCall(c *gc.C, p JSONCallParams) {
+	c.Logf("JSON call, url %q", p.URL)
 	if p.Method == "" {
 		p.Method = "GET"
 	}
 	if p.ExpectCode == 0 {
 		p.ExpectCode = http.StatusOK
 	}
-	rec := DoRequest(c, p.Handler, p.Method, p.URL, p.Body, p.BodyContentType, nil)
+	rec := DoRequest(c, p.Handler, p.Method, p.URL, p.Body, p.ContentLength, p.Header)
 	c.Assert(rec.Code, gc.Equals, p.ExpectCode, gc.Commentf("body: %s", rec.Body.Bytes()))
 	if p.ExpectBody == nil {
 		c.Assert(rec.Body.Bytes(), gc.HasLen, 0)
@@ -76,18 +83,32 @@ func AssertJSONCall(c *gc.C, p JSONCallParams) {
 }
 
 // DoRequest invokes a request on the given handler with the given
-// method, URL, body, body content type and headers.
-func DoRequest(c *gc.C, handler http.Handler, method string, urlStr string, body, bodyContentType string, header map[string][]string) *httptest.ResponseRecorder {
-	req, err := http.NewRequest(method, urlStr, strings.NewReader(body))
+// method, URL, body, content length and headers.
+func DoRequest(c *gc.C, handler http.Handler, method string, urlStr string, body io.Reader, contentLength int64, header map[string][]string) *httptest.ResponseRecorder {
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	urlStr = srv.URL + urlStr
+
+	req, err := http.NewRequest(method, urlStr, body)
 	c.Assert(err, gc.IsNil)
 	if header != nil {
 		req.Header = header
 	}
-	if bodyContentType == "" {
-		bodyContentType = "text/plain; charset=utf-8"
+	if contentLength != 0 {
+		req.ContentLength = contentLength
 	}
-	req.Header.Set("Content-Type", bodyContentType)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-	return rec
+	resp, err := http.DefaultClient.Do(req)
+	c.Assert(err, gc.IsNil)
+	defer resp.Body.Close()
+
+	// TODO(rog) don't return a ResponseRecorder because we're not actually
+	// using httptest.NewRecorder ?
+	var rec httptest.ResponseRecorder
+	rec.HeaderMap = resp.Header
+	rec.Code = resp.StatusCode
+	rec.Body = new(bytes.Buffer)
+	_, err = io.Copy(rec.Body, resp.Body)
+	c.Assert(err, gc.IsNil)
+	return &rec
 }

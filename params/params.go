@@ -24,3 +24,9 @@ type Statistic struct {
 	Date  string `json:",omitempty"`
 	Count int64
 }
+
+// ArchivePostResponse holds the result of
+// a post to /$id/archive. See http://tinyurl.com/lzrzrgb
+type ArchivePostResponse struct {
+	Id *charm.Reference
+}

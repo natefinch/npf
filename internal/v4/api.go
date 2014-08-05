@@ -75,7 +75,7 @@ func ResolveURL(store *charmstore.Store, url *charm.Reference) error {
 	}
 	urls, err := store.ExpandURL(url)
 	if err != nil {
-		return errgo.Mask(err)
+		return errgo.Notef(err, "cannot expand URL")
 	}
 	if len(urls) == 0 {
 		return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
@@ -192,35 +192,10 @@ func (h *handler) serveExpandId(charmId *charm.Reference, w http.ResponseWriter,
 	return errNotImplemented
 }
 
-// GET id/archive
-// http://tinyurl.com/qjrwq53
-//
-// POST id/archive?sha256=hash
-// http://tinyurl.com/lzrzrgb
-func (h *handler) serveArchive(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
-	var entity mongodoc.Entity
-	if err := h.store.DB.Entities().
-		FindId(charmId).
-		Select(bson.D{{"blobhash", 1}}).
-		One(&entity); err != nil {
-		if err == mgo.ErrNotFound {
-			return params.ErrNotFound
-		}
-		return errgo.Notef(err, "cannot get %s", charmId)
-	}
-	r, size, err := h.store.BlobStore.Open(entity.BlobHash)
-	if err != nil {
-		return errgo.Notef(err, "cannot open archive data for %s", charmId)
-	}
-	defer r.Close()
-	serveContent(w, req, size, r)
-	return nil
-}
-
-// GET id/archive/…
-// http://tinyurl.com/lampm24
-func (h *handler) serveArchiveFile(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
-	return errNotImplemented
+func badRequestf(underlying error, f string, a ...interface{}) error {
+	err := errgo.WithCausef(underlying, params.ErrBadRequest, f, a...)
+	err.(*errgo.Err).SetLocation(1)
+	return err
 }
 
 // GET id/meta/charm-metadata

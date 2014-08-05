@@ -11,15 +11,16 @@ import (
 	"os"
 	"sort"
 
+	"github.com/juju/errgo"
 	jc "github.com/juju/testing/checkers"
 	"gopkg.in/juju/charm.v3"
 	"gopkg.in/juju/charm.v3/testing"
-	"gopkg.in/mgo.v2"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
+	"github.com/juju/charmstore/params"
 )
 
 type StoreSuite struct {
@@ -32,7 +33,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 	store, err := NewStore(s.Session.DB("foo"))
 	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:precise/wordpress-23")
-	err = store.AddCharm(url, ch)
+	err = store.UploadCharm(url, ch)
 	c.Assert(err, gc.IsNil)
 
 	var doc mongodoc.Entity
@@ -70,15 +71,15 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 
 	// Try inserting the charm again - it should fail because the charm is
 	// already there.
-	err = store.AddCharm(url, ch)
-	c.Assert(err, jc.Satisfies, mgo.IsDup)
+	err = store.UploadCharm(url, ch)
+	c.Assert(errgo.Cause(err), gc.Equals, params.ErrDuplicateUpload)
 }
 
 func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 	store, err := NewStore(s.Session.DB("foo"))
 	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:bundle/wordpress-simple-42")
-	err = store.AddBundle(url, bundle)
+	err = store.UploadBundle(url, bundle)
 	c.Assert(err, gc.IsNil)
 
 	var doc mongodoc.Entity
@@ -114,8 +115,8 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 
 	// Try inserting the bundle again - it should fail because the bundle is
 	// already there.
-	err = store.AddBundle(url, bundle)
-	c.Assert(err, jc.Satisfies, mgo.IsDup)
+	err = store.UploadBundle(url, bundle)
+	c.Assert(err, gc.Equals, params.ErrDuplicateUpload)
 }
 
 type orderedURLs []*charm.Reference
@@ -184,7 +185,7 @@ func (s *StoreSuite) TestExpandURL(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		urls := mustParseReferences(test.inStore)
 		for _, url := range urls {
-			err := store.AddCharm(url, wordpress)
+			err := store.UploadCharm(url, wordpress)
 			c.Assert(err, gc.IsNil)
 		}
 		gotURLs, err := store.ExpandURL((*charm.Reference)(mustParseReference(test.expand)))

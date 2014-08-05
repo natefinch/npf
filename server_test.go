@@ -56,7 +56,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:    h,
-		URL:        "http://0.1.2.3/v4/debug",
+		URL:        "/v4/debug",
 		ExpectCode: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: "method not implemented",
@@ -68,7 +68,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 func assertServesVersion(c *gc.C, h http.Handler, vers string) {
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler: h,
-		URL:     "http://0.1.2.3/" + vers + "/some/path",
+		URL:     "/" + vers + "/some/path",
 		ExpectBody: versionResponse{
 			Version: vers,
 			Path:    "/some/path",
@@ -79,7 +79,7 @@ func assertServesVersion(c *gc.C, h http.Handler, vers string) {
 func assertDoesNotServeVersion(c *gc.C, h http.Handler, vers string) {
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:    h,
-		URL:        "http://0.1.2.3/" + vers + "/debug",
+		URL:        "/" + vers + "/debug",
 		ExpectCode: http.StatusNotFound,
 		ExpectBody: params.Error{
 			Message: "not found",

@@ -5,7 +5,6 @@ package v4_test
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"reflect"
 	"strings"
@@ -53,7 +52,7 @@ func newServer(c *gc.C, session *mgo.Session) (http.Handler, *charmstore.Store) 
 }
 
 func storeURL(path string) string {
-	return "http://0.1.2.3/v4/" + path
+	return "/v4/" + path
 }
 
 type metaEndpoint struct {
@@ -128,30 +127,6 @@ func (s *APISuite) TestEndpointGet(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		ep.assertCheckData(c, data)
 	}
-}
-
-func (s *APISuite) TestArchiveGet(c *gc.C) {
-	wordpress := charmtesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	url := mustParseReference("cs:precise/wordpress-23")
-	err := s.store.AddCharm(url, wordpress)
-	c.Assert(err, gc.IsNil)
-
-	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
-	c.Assert(err, gc.IsNil)
-
-	rec := storetesting.DoRequest(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/archive", "", "", nil)
-	c.Assert(err, gc.IsNil)
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
-
-	// Check that the HTTP range logic is plugged in OK. If this
-	// is working, we assume that the whole thing is working OK,
-	// as net/http is well-tested.
-	rec = storetesting.DoRequest(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/archive", "", "", http.Header{"Range": {"bytes=10-100"}})
-	c.Assert(err, gc.IsNil)
-	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
-	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
 }
 
 var testEntities = []string{
@@ -453,7 +428,7 @@ func sizeChecker(c *gc.C, data interface{}) {
 func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, charm.Charm) {
 	url := mustParseReference(curl)
 	wordpress := charmtesting.Charms.CharmDir(charmName)
-	err := s.store.AddCharm(url, wordpress)
+	err := s.store.UploadCharm(url, wordpress)
 	c.Assert(err, gc.IsNil)
 	return url, wordpress
 }
@@ -461,7 +436,7 @@ func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, 
 func (s *APISuite) addBundle(c *gc.C, bundleName string, curl string) (*charm.Reference, charm.Bundle) {
 	url := mustParseReference(curl)
 	bundle := charmtesting.Charms.BundleDir(bundleName)
-	err := s.store.AddBundle(url, bundle)
+	err := s.store.UploadBundle(url, bundle)
 	c.Assert(err, gc.IsNil)
 	return url, bundle
 }

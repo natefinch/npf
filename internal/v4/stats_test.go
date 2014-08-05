@@ -83,7 +83,7 @@ func (s *StatsSuite) TestServerStatsStatus(c *gc.C) {
 	}, {
 		path:    "stats/counter/any?by=fortnight",
 		status:  http.StatusBadRequest,
-		message: `invalid 'by' value: "fortnight"`,
+		message: `invalid 'by' value "fortnight"`,
 		code:    params.ErrBadRequest,
 	}, {
 		path:    "stats/counter/any?start=tomorrow",
