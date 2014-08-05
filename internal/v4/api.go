@@ -47,11 +47,11 @@ func New(store *charmstore.Store) http.Handler {
 			"bundle-metadata": h.entityHandler(h.metaBundleMetadata, "bundledata"),
 			"charm-config":    h.entityHandler(h.metaCharmConfig, "charmconfig"),
 			"charm-actions":   h.entityHandler(h.metaCharmActions, "charmactions"),
+			"archive-size":    h.entityHandler(h.metaArchiveSize, "size"),
 
 			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
 			"manifest":            router.SingleIncludeHandler(h.metaManifest),
 			"color":               router.SingleIncludeHandler(h.metaColor),
-			"archive-size":        router.SingleIncludeHandler(h.metaArchiveSize),
 			"bundles-containing":  router.SingleIncludeHandler(h.metaBundlesContaining),
 			"extra-info":          router.SingleIncludeHandler(h.metaExtraInfo),
 			"extra-info/":         router.SingleIncludeHandler(h.metaExtraInfoWithKey),
@@ -261,8 +261,8 @@ func (h *handler) metaColor(id *charm.Reference, path string, flags url.Values) 
 
 // GET id/meta/archive-size
 // http://tinyurl.com/m8b9geq
-func (h *handler) metaArchiveSize(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
+func (h *handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	return entity.Size, nil
 }
 
 // GET id/meta/stats/
