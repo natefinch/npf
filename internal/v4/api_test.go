@@ -126,7 +126,7 @@ func (s *APISuite) TestArchiveGet(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
 
-	// Check that the http range logic is plugged in OK. If this
+	// Check that the HTTP range logic is plugged in OK. If this
 	// is working, we assume that the whole thing is working OK,
 	// as net/http is well-tested.
 	rec = storetesting.DoRequest(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/archive", "", http.Header{"Range": {"bytes=10-100"}})

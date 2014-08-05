@@ -50,7 +50,7 @@ func AssertJSONCall(
 }
 
 // DoRequest invokes a request on the given handler with the given
-// method, URL and body.
+// method, URL, body and headers.
 func DoRequest(c *gc.C, handler http.Handler, method string, urlStr string, body string, header map[string][]string) *httptest.ResponseRecorder {
 	var r io.Reader
 	if body != "" {
