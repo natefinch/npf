@@ -36,7 +36,7 @@ func (s *StatsSuite) TearDownTest(c *gc.C) {
 
 func (s *StatsSuite) TestSumCounters(c *gc.C) {
 	if !storetesting.MongoJSEnabled() {
-		c.Skip("MongoDB javascript not available")
+		c.Skip("MongoDB JavaScript not available")
 	}
 
 	req := charmstore.CounterRequest{Key: []string{"a"}}
@@ -113,7 +113,7 @@ func (s *StatsSuite) TestSumCounters(c *gc.C) {
 
 func (s *StatsSuite) TestCountersReadOnlySum(c *gc.C) {
 	if !storetesting.MongoJSEnabled() {
-		c.Skip("MongoDB javascript not available")
+		c.Skip("MongoDB JavaScript not available")
 	}
 
 	// Summing up an unknown key shouldn't add the key to the database.
@@ -129,7 +129,7 @@ func (s *StatsSuite) TestCountersReadOnlySum(c *gc.C) {
 
 func (s *StatsSuite) TestCountersTokenCaching(c *gc.C) {
 	if !storetesting.MongoJSEnabled() {
-		c.Skip("MongoDB javascript not available")
+		c.Skip("MongoDB JavaScript not available")
 	}
 
 	assertSum := func(i int, want int64) {
@@ -188,7 +188,7 @@ func (s *StatsSuite) TestCountersTokenCaching(c *gc.C) {
 
 func (s *StatsSuite) TestCounterTokenUniqueness(c *gc.C) {
 	if !storetesting.MongoJSEnabled() {
-		c.Skip("MongoDB javascript not available")
+		c.Skip("MongoDB JavaScript not available")
 	}
 
 	var wg0, wg1 sync.WaitGroup
@@ -213,7 +213,7 @@ func (s *StatsSuite) TestCounterTokenUniqueness(c *gc.C) {
 
 func (s *StatsSuite) TestListCounters(c *gc.C) {
 	if !storetesting.MongoJSEnabled() {
-		c.Skip("MongoDB javascript not available")
+		c.Skip("MongoDB JavaScript not available")
 	}
 
 	incs := [][]string{
@@ -277,7 +277,7 @@ func (s *StatsSuite) TestListCounters(c *gc.C) {
 
 func (s *StatsSuite) TestListCountersBy(c *gc.C) {
 	if !storetesting.MongoJSEnabled() {
-		c.Skip("MongoDB javascript not available")
+		c.Skip("MongoDB JavaScript not available")
 	}
 
 	incs := []struct {

@@ -1,3 +1,6 @@
+// Copyright 2014 Canonical Ltd.
+// Licensed under the LGPLv3, see LICENCE file for details.
+
 package storetesting
 
 import (
@@ -7,7 +10,7 @@ import (
 	jujutesting "github.com/juju/testing"
 )
 
-var noTestMongoJs *bool = flag.Bool("notest-mongojs", false, "Disable MongoDB tests that require javascript")
+var noTestMongoJs *bool = flag.Bool("notest-mongojs", false, "Disable MongoDB tests that require JavaScript")
 
 func init() {
 	if os.Getenv("JUJU_NOTEST_MONGOJS") == "1" || jujutesting.MgoServer.WithoutV8 {
@@ -16,7 +19,7 @@ func init() {
 }
 
 // MongoJSEnabled reports whether testing code should run tests
-// that rely on Javascript inside MongoDB.
+// that rely on JavaScript inside MongoDB.
 func MongoJSEnabled() bool {
 	return !*noTestMongoJs
 }

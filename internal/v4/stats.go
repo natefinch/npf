@@ -33,7 +33,7 @@ func (s *handler) serveStatsCounter(w http.ResponseWriter, r *http.Request) (int
 	case "week":
 		by = charmstore.ByWeek
 	default:
-		return nil, errgo.Newf("invalid 'by' value: %q", v)
+		return nil, errgo.WithCausef(nil, params.ErrBadRequest, "invalid 'by' value: %q", v)
 	}
 	req := charmstore.CounterRequest{
 		Key:  strings.Split(base, ":"),
@@ -44,14 +44,14 @@ func (s *handler) serveStatsCounter(w http.ResponseWriter, r *http.Request) (int
 		var err error
 		req.Start, err = time.Parse("2006-01-02", v)
 		if err != nil {
-			return nil, errgo.Newf("invalid 'start' value: %q", v)
+			return nil, errgo.WithCausef(err, params.ErrBadRequest, "invalid 'start' value %q", v)
 		}
 	}
 	if v := r.Form.Get("stop"); v != "" {
 		var err error
 		req.Stop, err = time.Parse("2006-01-02", v)
 		if err != nil {
-			return nil, errgo.Notef(err, "cannot parse 'stop' value %q", v)
+			return nil, errgo.WithCausef(err, params.ErrBadRequest, "invalid 'stop' value %q", v)
 		}
 		// Cover all timestamps within the stop day.
 		req.Stop = req.Stop.Add(24*time.Hour - 1*time.Second)
@@ -65,7 +65,7 @@ func (s *handler) serveStatsCounter(w http.ResponseWriter, r *http.Request) (int
 	}
 	entries, err := s.store.Counters(&req)
 	if err != nil {
-		return nil, errgo.Newf("cannot query counters: %v", err)
+		return nil, errgo.Notef(err, "cannot query counters")
 	}
 
 	var buf []byte

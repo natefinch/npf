@@ -1,5 +1,5 @@
 // Copyright 2012 Canonical Ltd.
-// Licensed under the AGPLv3, see LICENCE file for details.
+// Licensed under the LGPLv3, see LICENCE file for details.
 
 package v4_test
 
@@ -80,6 +80,21 @@ func (s *StatsSuite) TestServerStatsStatus(c *gc.C) {
 		status:  http.StatusNotFound,
 		message: "not found",
 		code:    params.ErrNotFound,
+	}, {
+		path:    "stats/counter/any?by=fortnight",
+		status:  http.StatusBadRequest,
+		message: `invalid 'by' value: "fortnight"`,
+		code:    params.ErrBadRequest,
+	}, {
+		path:    "stats/counter/any?start=tomorrow",
+		status:  http.StatusBadRequest,
+		message: `invalid 'start' value "tomorrow": parsing time "tomorrow" as "2006-01-02": cannot parse "tomorrow" as "2006"`,
+		code:    params.ErrBadRequest,
+	}, {
+		path:    "stats/counter/any?stop=3",
+		status:  http.StatusBadRequest,
+		message: `invalid 'stop' value "3": parsing time "3" as "2006-01-02": cannot parse "3" as "2006"`,
+		code:    params.ErrBadRequest,
 	}}
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.path)
@@ -208,14 +223,6 @@ func (s *StatsSuite) TestStatsCounterList(c *gc.C) {
 		url := storeURL("stats/counter/" + test.key + "?list=1")
 		storetesting.AssertJSONCall(c, s.srv, "GET", url, "", http.StatusOK, test.result)
 	}
-}
-
-// counterEpoch is a copy of charmstore.counterEpoch.
-var counterEpoch = time.Date(2012, 1, 1, 0, 0, 0, 0, time.UTC).Unix()
-
-// timeToStamp is a copy of charmstore.timeToStamp.
-func timeToStamp(t time.Time) int32 {
-	return int32(t.Unix() - counterEpoch)
 }
 
 func (s *StatsSuite) TestStatsCounterBy(c *gc.C) {

@@ -106,8 +106,8 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		mux.ServeMux.ServeHTTP(w, req)
 		return
 	}
-	h, pat := mux.Handler(req)
-	if pat == "" {
+	h, pattern := mux.Handler(req)
+	if pattern == "" {
 		WriteError(w, params.ErrNotFound)
 		return
 	}
