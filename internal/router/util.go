@@ -34,7 +34,7 @@ func HandleJSON(handle func(http.ResponseWriter, *http.Request) (interface{}, er
 	f := func(w http.ResponseWriter, req *http.Request) error {
 		val, err := handle(w, req)
 		if err != nil {
-			return errgo.Mask(err)
+			return errgo.Mask(err, errgo.Any)
 		}
 		return WriteJSON(w, http.StatusOK, val)
 	}
@@ -55,6 +55,10 @@ func WriteError(w http.ResponseWriter, err error) {
 	switch errResp.Code {
 	case params.ErrNotFound, params.ErrMetadataNotFound:
 		status = http.StatusNotFound
+	case params.ErrBadRequest:
+		status = http.StatusBadRequest
+	case params.ErrForbidden:
+		status = http.StatusForbidden
 	}
 	// TODO log writeJSON error if it happens?
 	WriteJSON(w, status, errResp)
@@ -77,4 +81,35 @@ func WriteJSON(w http.ResponseWriter, code int, val interface{}) error {
 	w.WriteHeader(code)
 	w.Write(data)
 	return nil
+}
+
+// NotFoundHandler is like http.NotFoundHandler except it
+// returns a JSON error response.
+func NotFoundHandler() http.Handler {
+	return HandleErrors(func(w http.ResponseWriter, req *http.Request) error {
+		return params.ErrNotFound
+	})
+}
+
+func NewServeMux() *ServeMux {
+	return &ServeMux{http.NewServeMux()}
+}
+
+// ServeMux is like http.ServeMux but returns
+// JSON errors when pages are not found.
+type ServeMux struct {
+	*http.ServeMux
+}
+
+func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if req.RequestURI == "*" {
+		mux.ServeMux.ServeHTTP(w, req)
+		return
+	}
+	h, pattern := mux.Handler(req)
+	if pattern == "" {
+		WriteError(w, params.ErrNotFound)
+		return
+	}
+	h.ServeHTTP(w, req)
 }

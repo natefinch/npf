@@ -39,7 +39,10 @@ var knownSeries = map[string]bool{
 // handle multiple metadata "include" requests in a single batch.
 //
 // For simple metadata handlers that cannot be
-// efficiently combined, see SingleIncludeHandler,
+// efficiently combined, see SingleIncludeHandler.
+//
+// All handlers may assume that http.Request.ParseForm
+// has been called to parse the URL form values.
 type BulkIncludeHandler interface {
 	// Key returns a value that will be used to group handlers
 	// together in preparation for a call to Handle.
@@ -82,6 +85,10 @@ type Handlers struct {
 	//
 	// Path matching is by matched by longest-prefix - the same as
 	// http.ServeMux.
+	//
+	// Note that, unlike http.ServeMux, the prefix is stripped
+	// from the URL path before the hander is invoked,
+	// matching the behaviour of the other handlers.
 	Global map[string]http.Handler
 
 	// Id holds handlers for paths which correspond to a single
@@ -118,10 +125,15 @@ func New(handlers *Handlers, resolveURL func(url *charm.Reference) error) *Route
 		handlers:   handlers,
 		resolveURL: resolveURL,
 	}
-	mux := http.NewServeMux()
+	mux := NewServeMux()
 	mux.Handle("/meta/", http.StripPrefix("/meta", HandleJSON(r.serveBulkMeta)))
 	for path, handler := range r.handlers.Global {
-		mux.Handle("/"+path, handler)
+		path = "/" + path
+		prefix := path
+		if strings.HasSuffix(prefix, "/") {
+			prefix = prefix[0 : len(prefix)-1]
+		}
+		mux.Handle(path, http.StripPrefix(prefix, handler))
 	}
 	mux.Handle("/", HandleErrors(r.serveIds))
 	r.handler = mux
@@ -130,6 +142,10 @@ func New(handlers *Handlers, resolveURL func(url *charm.Reference) error) *Route
 
 // ServeHTTP implements http.Handler.ServeHTTP.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if err := req.ParseForm(); err != nil {
+		WriteError(w, errgo.Notef(err, "cannot parse form"))
+		return
+	}
 	r.handler.ServeHTTP(w, req)
 }
 
@@ -141,10 +157,6 @@ func (r *Router) Handlers() *Handlers {
 
 // serveIds serves requests that may be rooted at a charm or bundle id.
 func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
-	if err := req.ParseForm(); err != nil {
-		return errgo.Mask(err)
-	}
-
 	// We can ignore a trailing / because we do not return any
 	// relative URLs. If we start to return relative URL redirects,
 	// we will need to redirect non-slash-terminated URLs
@@ -264,7 +276,6 @@ func (r *Router) metaNames() []string {
 // http://tinyurl.com/kdrly9f
 func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interface{}, error) {
 	// TODO get the metadata concurrently for each id.
-	req.ParseForm()
 	ids := req.Form["id"]
 	if len(ids) == 0 {
 		return nil, errgo.Newf("no ids specified in meta request")

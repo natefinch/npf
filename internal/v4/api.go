@@ -30,7 +30,8 @@ func New(store *charmstore.Store) http.Handler {
 	}
 	h.Router = router.New(&router.Handlers{
 		Global: map[string]http.Handler{
-			"stats/counter":      http.HandlerFunc(h.serveStatsCounter),
+			"stats/counter/":     router.HandleJSON(h.serveStatsCounter),
+			"stats/":             router.NotFoundHandler(),
 			"search":             http.HandlerFunc(h.serveSearch),
 			"search/interesting": http.HandlerFunc(h.serveSearchInteresting),
 			"debug":              http.HandlerFunc(h.serveDebug),
@@ -59,6 +60,10 @@ func New(store *charmstore.Store) http.Handler {
 		},
 	}, h.resolveURL)
 	return h
+}
+
+func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	h.Router.ServeHTTP(w, req)
 }
 
 // ResolveURL resolves the series and revision of the given URL
@@ -150,12 +155,6 @@ func preferredURL(url0, url1 *charm.Reference) bool {
 }
 
 var errNotImplemented = errgo.Newf("method not implemented")
-
-// GET stats/counter/key[:key]...?[by=unit]&start=date][&stop=date][&list=1]
-// http://tinyurl.com/nkdovcf
-func (h *handler) serveStatsCounter(w http.ResponseWriter, req *http.Request) {
-	router.WriteError(w, errNotImplemented)
-}
 
 // GET search[?text=text][&autocomplete=1][&filter=value…][&limit=limit][&include=meta]
 // http://tinyurl.com/qzobc69

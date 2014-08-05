@@ -14,6 +14,8 @@ func (code ErrorCode) Error() string {
 const (
 	ErrNotFound         ErrorCode = "not found"
 	ErrMetadataNotFound ErrorCode = "metadata not found"
+	ErrForbidden        ErrorCode = "forbidden"
+	ErrBadRequest       ErrorCode = "bad request"
 )
 
 // Error represents an error - it is returned for any response

@@ -11,6 +11,8 @@ import (
 
 	"github.com/juju/errgo"
 	"gopkg.in/mgo.v2"
+
+	"github.com/juju/charmstore/internal/router"
 )
 
 // NewAPIHandler returns a new API handler that
@@ -28,13 +30,13 @@ func NewServer(db *mgo.Database, versions map[string]NewAPIHandler) (http.Handle
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot make store")
 	}
-	mux := http.NewServeMux()
+	mux := router.NewServeMux()
 	for vers, newAPI := range versions {
 		handle(mux, "/"+vers, newAPI(store))
 	}
 	return mux, nil
 }
 
-func handle(mux *http.ServeMux, path string, handler http.Handler) {
+func handle(mux *router.ServeMux, path string, handler http.Handler) {
 	mux.Handle(path+"/", http.StripPrefix(path, handler))
 }

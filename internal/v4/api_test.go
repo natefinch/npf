@@ -14,6 +14,7 @@ import (
 	jujutesting "github.com/juju/testing"
 	"gopkg.in/juju/charm.v3"
 	charmtesting "gopkg.in/juju/charm.v3/testing"
+	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 	gc "launchpad.net/gocheck"
 
@@ -38,13 +39,20 @@ var _ = gc.Suite(&APISuite{})
 
 func (s *APISuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
-	db := s.Session.DB("charmstore")
+	s.srv, s.store = newServer(c, s.Session)
+}
+
+func newServer(c *gc.C, session *mgo.Session) (http.Handler, *charmstore.Store) {
+	db := session.DB("charmstore")
 	store, err := charmstore.NewStore(db)
 	c.Assert(err, gc.IsNil)
-	s.store = store
 	srv, err := charmstore.NewServer(db, map[string]charmstore.NewAPIHandler{"v4": v4.New})
 	c.Assert(err, gc.IsNil)
-	s.srv = srv
+	return srv, store
+}
+
+func storeURL(path string) string {
+	return "http://0.1.2.3/v4/" + path
 }
 
 type metaEndpoint struct {
@@ -145,7 +153,7 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 		tested := false
 		for _, url := range urls {
 			charmId := strings.TrimPrefix(url.String(), "cs:")
-			storeURL := "http://0.1.2.3/v4/" + charmId + "/meta/" + ep.name
+			storeURL := storeURL(charmId + "/meta/" + ep.name)
 			expectData, err := ep.get(s.store, url)
 			c.Assert(err, gc.IsNil)
 			c.Logf("	expected data for %q: %#v", url, expectData)
@@ -195,7 +203,7 @@ func (s *APISuite) TestMetaEndpointsAny(c *gc.C) {
 				expectData.Meta[ep.name] = val
 			}
 		}
-		storeURL := "http://0.1.2.3/v4/" + charmId + "/meta/any?" + strings.Join(flags, "&")
+		storeURL := storeURL(charmId + "/meta/any?" + strings.Join(flags, "&"))
 		storetesting.AssertJSONCall(c, s.srv, "GET", storeURL, "",
 			http.StatusOK, expectData)
 	}
@@ -206,11 +214,11 @@ func (s *APISuite) TestMetaEndpointsAny(c *gc.C) {
 func (s *APISuite) TestMetaCharmActions(c *gc.C) {
 	url, dummy := s.addCharm(c, "dummy", "cs:precise/dummy-10")
 	storetesting.AssertJSONCall(c, s.srv,
-		"GET", "http://0.1.2.3/v4/precise/dummy-10/meta/charm-actions", "",
+		"GET", storeURL("precise/dummy-10/meta/charm-actions"), "",
 		http.StatusOK, dummy.Actions())
 
 	storetesting.AssertJSONCall(c, s.srv,
-		"GET", "http://0.1.2.3/v4/precise/dummy-10/meta/any?include=charm-actions", "",
+		"GET", storeURL("precise/dummy-10/meta/any?include=charm-actions"), "",
 		http.StatusOK, params.MetaAnyResponse{
 			Id: url,
 			Meta: map[string]interface{}{
@@ -226,7 +234,7 @@ func (s *APISuite) TestBulkMeta(c *gc.C) {
 
 	_, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	_, mysql := s.addCharm(c, "mysql", "cs:precise/mysql-10")
-	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/meta/charm-metadata?id=precise/wordpress-23&id=precise/mysql-10", "", http.StatusOK, map[string]*charm.Meta{
+	storetesting.AssertJSONCall(c, s.srv, "GET", storeURL("meta/charm-metadata?id=precise/wordpress-23&id=precise/mysql-10"), "", http.StatusOK, map[string]*charm.Meta{
 		"precise/wordpress-23": wordpress.Meta(),
 		"precise/mysql-10":     mysql.Meta(),
 	})
@@ -239,7 +247,7 @@ func (s *APISuite) TestBulkMetaAny(c *gc.C) {
 
 	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	mysqlURL, mysql := s.addCharm(c, "mysql", "cs:precise/mysql-10")
-	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/meta/any?include=charm-metadata&include=charm-config&id=precise/wordpress-23&id=precise/mysql-10", "", http.StatusOK, map[string]params.MetaAnyResponse{
+	storetesting.AssertJSONCall(c, s.srv, "GET", storeURL("meta/any?include=charm-metadata&include=charm-config&id=precise/wordpress-23&id=precise/mysql-10"), "", http.StatusOK, map[string]params.MetaAnyResponse{
 		"precise/wordpress-23": {
 			Id: wordpressURL,
 			Meta: map[string]interface{}{
@@ -263,7 +271,7 @@ func (s *APISuite) TestIdsAreResolved(c *gc.C) {
 	// defined, and the ResolveURL tests, this should
 	// be sufficient to "join the dots".
 	_, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
-	storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/wordpress/meta/charm-metadata", "", http.StatusOK, wordpress.Meta())
+	storetesting.AssertJSONCall(c, s.srv, "GET", storeURL("wordpress/meta/charm-metadata"), "", http.StatusOK, wordpress.Meta())
 }
 
 func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
@@ -273,9 +281,9 @@ func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
 			Message: params.ErrNotFound.Error(),
 			Code:    params.ErrNotFound,
 		}
-		storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/precise/wordpress-23/meta/"+ep.name, "", http.StatusNotFound, expected)
+		storetesting.AssertJSONCall(c, s.srv, "GET", storeURL("precise/wordpress-23/meta/"+ep.name), "", http.StatusNotFound, expected)
 		expected.Message = `no matching charm or bundle for "cs:wordpress"`
-		storetesting.AssertJSONCall(c, s.srv, "GET", "http://0.1.2.3/v4/wordpress/meta/"+ep.name, "", http.StatusNotFound, expected)
+		storetesting.AssertJSONCall(c, s.srv, "GET", storeURL("wordpress/meta/"+ep.name), "", http.StatusNotFound, expected)
 	}
 }
 
@@ -338,7 +346,7 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 }
 
 func assertNotImplemented(c *gc.C, h http.Handler, path string) {
-	storetesting.AssertJSONCall(c, h, "GET", "http://0.1.2.3/v4/"+path, "", http.StatusInternalServerError, params.Error{
+	storetesting.AssertJSONCall(c, h, "GET", storeURL(path), "", http.StatusInternalServerError, params.Error{
 		Message: "method not implemented",
 	})
 }
