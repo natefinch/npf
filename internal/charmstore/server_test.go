@@ -78,13 +78,17 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 }
 
 func assertServesVersion(c *gc.C, h http.Handler, vers string) {
-	storetesting.AssertJSONCall(c, h, "GET", "http://0.1.2.3/"+vers+"/some/path", "", http.StatusOK, versionResponse{
-		Version: vers,
-		Path:    "/some/path",
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler: h,
+		URL:     "http://0.1.2.3/" + vers + "/some/path",
+		ExpectBody: versionResponse{
+			Version: vers,
+			Path:    "/some/path",
+		},
 	})
 }
 
 func assertDoesNotServeVersion(c *gc.C, h http.Handler, vers string) {
-	rec := storetesting.DoRequest(c, h, "GET", "http://0.1.2.3/"+vers+"/some/path", "", nil)
+	rec := storetesting.DoRequest(c, h, "GET", "http://0.1.2.3/"+vers+"/some/path", "", "", nil)
 	c.Assert(rec.Code, gc.Equals, http.StatusNotFound)
 }

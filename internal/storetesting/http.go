@@ -14,21 +14,47 @@ import (
 	gc "launchpad.net/gocheck"
 )
 
+// JSONCallParams holds parameters for AssertJSONCall.
+// If left empty, some fields will automatically be filled
+// with defaults.
+type JSONCallParams struct {
+	// Handler holds the handler to use to make the request.
+	Handler http.Handler
+
+	// Method holds the HTTP method to use for the call.
+	// GET is assumed if this is empty.
+	Method string
+
+	// URL holds the URL to pass when making the request.
+	URL string
+
+	// Body holds the body to send in the request.
+	Body string
+
+	// BodyContentType holds the content type of the
+	// body. If this is empty, the default content type is assumed.
+	BodyContentType string
+
+	// ExpectCode holds the expected HTTP status code.
+	// http.StatusOK is assumed if this is zero.
+	ExpectCode int
+
+	// ExpectBody holds the expected JSON body.
+	ExpectBody interface{}
+}
+
 // AssertJSONCall asserts that when the given handler is called with
-// the given method, URL, and body, the result has the expected
-// status code and body.
-func AssertJSONCall(
-	c *gc.C,
-	handler http.Handler,
-	method string,
-	urlStr string,
-	body string,
-	expectCode int,
-	expectBody interface{},
-) {
-	rec := DoRequest(c, handler, method, urlStr, body, nil)
-	c.Assert(rec.Code, gc.Equals, expectCode, gc.Commentf("body: %s", rec.Body.Bytes()))
-	if expectBody == nil {
+// the given parameters, the result is as specified.
+func AssertJSONCall(c *gc.C, p JSONCallParams) {
+	if p.Method == "" {
+		p.Method = "GET"
+	}
+	if p.ExpectCode == 0 {
+		p.ExpectCode = http.StatusOK
+	}
+	rec := DoRequest(c, p.Handler, p.Method, p.URL, p.Body, p.BodyContentType, nil)
+	c.Assert(rec.Code, gc.Equals, p.ExpectCode, gc.Commentf("body: %s", rec.Body.Bytes()))
+	if p.ExpectBody == nil {
 		c.Assert(rec.Body.Bytes(), gc.HasLen, 0)
 		return
 	}
@@ -36,7 +62,7 @@ func AssertJSONCall(
 	// body type, we reform the expected body in JSON and
 	// back to interface{}, so we can check the whole content.
 	// Otherwise we lose information when unmarshaling.
-	expectBodyBytes, err := json.Marshal(expectBody)
+	expectBodyBytes, err := json.Marshal(p.ExpectBody)
 	c.Assert(err, gc.IsNil)
 	var expectBodyVal interface{}
 	err = json.Unmarshal(expectBodyBytes, &expectBodyVal)
@@ -45,13 +71,13 @@ func AssertJSONCall(
 	var gotBodyVal interface{}
 	err = json.Unmarshal(rec.Body.Bytes(), &gotBodyVal)
 	c.Assert(err, gc.IsNil, gc.Commentf("json body: %q", rec.Body.Bytes()))
-
+	// TODO(rog) check that content type is application/json
 	c.Assert(gotBodyVal, jc.DeepEquals, expectBodyVal)
 }
 
 // DoRequest invokes a request on the given handler with the given
-// method, URL, body and headers.
-func DoRequest(c *gc.C, handler http.Handler, method string, urlStr string, body string, header map[string][]string) *httptest.ResponseRecorder {
+// method, URL, body, body content type and headers.
+func DoRequest(c *gc.C, handler http.Handler, method string, urlStr string, body, bodyContentType string, header map[string][]string) *httptest.ResponseRecorder {
 	var r io.Reader
 	if body != "" {
 		r = strings.NewReader(body)
@@ -60,6 +86,9 @@ func DoRequest(c *gc.C, handler http.Handler, method string, urlStr string, body
 	c.Assert(err, gc.IsNil)
 	if header != nil {
 		req.Header = header
+	}
+	if bodyContentType != "" {
+		req.Header.Set("Content-Type", bodyContentType)
 	}
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

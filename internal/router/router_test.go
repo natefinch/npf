@@ -687,7 +687,12 @@ func (s *RouterSuite) TestRouter(c *gc.C) {
 		// Note that fieldSelectHandler increments this each time
 		// a query is made.
 		queryCount = 0
-		storetesting.AssertJSONCall(c, router, "GET", test.urlStr, "", test.expectCode, test.expectBody)
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:    router,
+			URL:        test.urlStr,
+			ExpectCode: test.expectCode,
+			ExpectBody: test.expectBody,
+		})
 		c.Assert(queryCount, gc.Equals, test.expectQueryCount)
 	}
 }
@@ -913,10 +918,20 @@ func (s *RouterSuite) TestServeMux(c *gc.C) {
 	mux.Handle("/data", HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
 		return Foo{"hello"}, nil
 	}))
-	storetesting.AssertJSONCall(c, mux, "GET", "http://0.1.2.3/data", "", http.StatusOK, Foo{"hello"})
-	storetesting.AssertJSONCall(c, mux, "GET", "http://0.1.2.3/foo", "", http.StatusNotFound, params.Error{
-		Message: "not found",
-		Code:    params.ErrNotFound,
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:    mux,
+		URL:        "http://0.1.2.3/data",
+		ExpectCode: http.StatusOK,
+		ExpectBody: Foo{"hello"},
+	})
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:    mux,
+		URL:        "http://0.1.2.3/foo",
+		ExpectCode: http.StatusNotFound,
+		ExpectBody: params.Error{
+			Message: "not found",
+			Code:    params.ErrNotFound,
+		},
 	})
 }
 
@@ -1036,7 +1051,12 @@ type ReqInfo struct {
 func (s *RouterSuite) TestHandlers(c *gc.C) {
 	for i, test := range handlerTests {
 		c.Logf("test %d: %s", i, test.about)
-		storetesting.AssertJSONCall(c, test.handler, "GET", "http://0.1.2.3", "", test.expectCode, test.expectBody)
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:    test.handler,
+			URL:        "http://0.1.2.3",
+			ExpectCode: test.expectCode,
+			ExpectBody: test.expectBody,
+		})
 	}
 }
 
