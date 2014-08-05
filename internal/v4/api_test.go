@@ -115,6 +115,7 @@ func sizeChecker(id string) func(c *gc.C, store *charmstore.Store, data interfac
 		err := store.DB.Entities().FindId(id).One(&doc)
 		c.Assert(err, gc.IsNil)
 		c.Assert(data, gc.Equals, doc.Size)
+		c.Assert(doc.Size, gc.Not(gc.Equals), int64(0))
 	}
 }
 
