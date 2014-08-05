@@ -167,15 +167,22 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	if err := r.resolveURL(url); err != nil {
-		// Note: preserve error cause from resolveURL.
-		return errgo.Mask(err, errgo.Any)
-	}
 	key, path := handlerKey(path)
 	if key == "" {
 		return params.ErrNotFound
 	}
-	if handler, ok := r.handlers.Id[key]; ok {
+	handler := r.handlers.Id[key]
+	if handler == nil || idHandlerNeedsResolveURL(req) {
+		// If it's not an id handler, it's a meta endpoint, so
+		// we always want a resolved URL. Otherwise we leave the
+		// URL unresolved for cases where the id may validly not
+		// exist (for example when uploading a new charm).
+		if err := r.resolveURL(url); err != nil {
+			// Note: preserve error cause from resolveURL.
+			return errgo.Mask(err, errgo.Any)
+		}
+	}
+	if handler != nil {
 		req.URL.Path = path
 		err := handler(url, w, req)
 		// Note: preserve error cause from handlers.
@@ -192,6 +199,10 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	}
 	WriteJSON(w, http.StatusOK, resp)
 	return nil
+}
+
+func idHandlerNeedsResolveURL(req *http.Request) bool {
+	return req.Method != "POST" && req.Method != "PUT"
 }
 
 // handlerKey returns a key that can be used to look up a handler at the
