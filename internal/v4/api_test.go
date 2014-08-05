@@ -281,15 +281,14 @@ func (s *APISuite) TestBulkMeta(c *gc.C) {
 
 	_, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	_, mysql := s.addCharm(c, "mysql", "cs:precise/mysql-10")
-	storetesting.AssertJSONCall(
-		c, storetesting.JSONCallParams{
-			Handler: s.srv,
-			URL:     storeURL("meta/charm-metadata?id=precise/wordpress-23&id=precise/mysql-10"),
-			ExpectBody: map[string]*charm.Meta{
-				"precise/wordpress-23": wordpress.Meta(),
-				"precise/mysql-10":     mysql.Meta(),
-			},
-		})
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL("meta/charm-metadata?id=precise/wordpress-23&id=precise/mysql-10"),
+		ExpectBody: map[string]*charm.Meta{
+			"precise/wordpress-23": wordpress.Meta(),
+			"precise/mysql-10":     mysql.Meta(),
+		},
+	})
 }
 
 func (s *APISuite) TestBulkMetaAny(c *gc.C) {
@@ -299,27 +298,26 @@ func (s *APISuite) TestBulkMetaAny(c *gc.C) {
 
 	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	mysqlURL, mysql := s.addCharm(c, "mysql", "cs:precise/mysql-10")
-	storetesting.AssertJSONCall(
-		c, storetesting.JSONCallParams{
-			Handler: s.srv,
-			URL:     storeURL("meta/any?include=charm-metadata&include=charm-config&id=precise/wordpress-23&id=precise/mysql-10"),
-			ExpectBody: map[string]params.MetaAnyResponse{
-				"precise/wordpress-23": {
-					Id: wordpressURL,
-					Meta: map[string]interface{}{
-						"charm-config":   wordpress.Config(),
-						"charm-metadata": wordpress.Meta(),
-					},
-				},
-				"precise/mysql-10": {
-					Id: mysqlURL,
-					Meta: map[string]interface{}{
-						"charm-config":   mysql.Config(),
-						"charm-metadata": mysql.Meta(),
-					},
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL("meta/any?include=charm-metadata&include=charm-config&id=precise/wordpress-23&id=precise/mysql-10"),
+		ExpectBody: map[string]params.MetaAnyResponse{
+			"precise/wordpress-23": {
+				Id: wordpressURL,
+				Meta: map[string]interface{}{
+					"charm-config":   wordpress.Config(),
+					"charm-metadata": wordpress.Meta(),
 				},
 			},
-		})
+			"precise/mysql-10": {
+				Id: mysqlURL,
+				Meta: map[string]interface{}{
+					"charm-config":   mysql.Config(),
+					"charm-metadata": mysql.Meta(),
+				},
+			},
+		},
+	})
 }
 
 func (s *APISuite) TestIdsAreResolved(c *gc.C) {

@@ -921,7 +921,6 @@ func (s *RouterSuite) TestServeMux(c *gc.C) {
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:    mux,
 		URL:        "http://0.1.2.3/data",
-		ExpectCode: http.StatusOK,
 		ExpectBody: Foo{"hello"},
 	})
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
