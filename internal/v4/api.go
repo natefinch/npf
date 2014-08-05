@@ -198,7 +198,23 @@ func (h *handler) serveExpandId(charmId *charm.Reference, w http.ResponseWriter,
 // POST id/archive?sha256=hash
 // http://tinyurl.com/lzrzrgb
 func (h *handler) serveArchive(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
-	return errNotImplemented
+	var entity mongodoc.Entity
+	if err := h.store.DB.Entities().
+		FindId(charmId).
+		Select(bson.D{{"blobhash", 1}}).
+		One(&entity); err != nil {
+		if err == mgo.ErrNotFound {
+			return params.ErrNotFound
+		}
+		return errgo.Notef(err, "cannot get %s", charmId)
+	}
+	r, size, err := h.store.BlobStore.Open(entity.BlobHash)
+	if err != nil {
+		return errgo.Notef(err, "cannot open archive data for %s", charmId)
+	}
+	defer r.Close()
+	serveContent(w, req, size, r)
+	return nil
 }
 
 // GET id/archive/…

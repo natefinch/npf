@@ -26,7 +26,7 @@ func AssertJSONCall(
 	expectCode int,
 	expectBody interface{},
 ) {
-	rec := DoRequest(c, handler, method, urlStr, body)
+	rec := DoRequest(c, handler, method, urlStr, body, nil)
 	c.Assert(rec.Code, gc.Equals, expectCode, gc.Commentf("body: %s", rec.Body.Bytes()))
 	if expectBody == nil {
 		c.Assert(rec.Body.Bytes(), gc.HasLen, 0)
@@ -50,14 +50,17 @@ func AssertJSONCall(
 }
 
 // DoRequest invokes a request on the given handler with the given
-// method, URL and body.
-func DoRequest(c *gc.C, handler http.Handler, method string, urlStr string, body string) *httptest.ResponseRecorder {
+// method, URL, body and headers.
+func DoRequest(c *gc.C, handler http.Handler, method string, urlStr string, body string, header map[string][]string) *httptest.ResponseRecorder {
 	var r io.Reader
 	if body != "" {
 		r = strings.NewReader(body)
 	}
 	req, err := http.NewRequest(method, urlStr, r)
 	c.Assert(err, gc.IsNil)
+	if header != nil {
+		req.Header = header
+	}
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	return rec
