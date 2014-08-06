@@ -5,7 +5,6 @@ package storetesting
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -32,7 +31,8 @@ type JSONCallParams struct {
 	Body string
 
 	// BodyContentType holds the content type of the
-	// body. If this is empty, the default content type is assumed.
+	// body. If this is empty, the a content type of
+	// "text/plain; charset=utf-8"  is assumed.
 	BodyContentType string
 
 	// ExpectCode holds the expected HTTP status code.
@@ -78,18 +78,15 @@ func AssertJSONCall(c *gc.C, p JSONCallParams) {
 // DoRequest invokes a request on the given handler with the given
 // method, URL, body, body content type and headers.
 func DoRequest(c *gc.C, handler http.Handler, method string, urlStr string, body, bodyContentType string, header map[string][]string) *httptest.ResponseRecorder {
-	var r io.Reader
-	if body != "" {
-		r = strings.NewReader(body)
-	}
-	req, err := http.NewRequest(method, urlStr, r)
+	req, err := http.NewRequest(method, urlStr, strings.NewReader(body))
 	c.Assert(err, gc.IsNil)
 	if header != nil {
 		req.Header = header
 	}
-	if bodyContentType != "" {
-		req.Header.Set("Content-Type", bodyContentType)
+	if bodyContentType == "" {
+		bodyContentType = "text/plain; charset=utf-8"
 	}
+	req.Header.Set("Content-Type", bodyContentType)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	return rec

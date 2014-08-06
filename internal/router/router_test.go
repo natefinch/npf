@@ -31,7 +31,7 @@ type RouterSuite struct {
 
 var _ = gc.Suite(&RouterSuite{})
 
-var routerTests = []struct {
+var routerGetTests = []struct {
 	about            string
 	handlers         Handlers
 	urlStr           string
@@ -676,15 +676,15 @@ func noResolveURL(*charm.Reference) error {
 	return nil
 }
 
-func (s *RouterSuite) TestRouter(c *gc.C) {
-	for i, test := range routerTests {
+func (s *RouterSuite) TestRouterGet(c *gc.C) {
+	for i, test := range routerGetTests {
 		c.Logf("test %d: %s", i, test.about)
 		resolve := noResolveURL
 		if test.resolveURL != nil {
 			resolve = test.resolveURL
 		}
 		router := New(&test.handlers, resolve)
-		// Note that fieldSelectHandler increments this each time
+		// Note that fieldSelectHandler increments queryCount each time
 		// a query is made.
 		queryCount = 0
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
@@ -694,6 +694,53 @@ func (s *RouterSuite) TestRouter(c *gc.C) {
 			ExpectBody: test.expectBody,
 		})
 		c.Assert(queryCount, gc.Equals, test.expectQueryCount)
+	}
+}
+
+func (s *RouterSuite) TestRouterMethodsThatPassThroughUnresolvedId(c *gc.C) {
+	alwaysResolves := map[string]bool{
+		"POST":   false,
+		"PUT":    false,
+		"GET":    true,
+		"HEAD":   true,
+		"DELETE": true,
+	}
+	for method, resolves := range alwaysResolves {
+		c.Logf("test %s", method)
+		// First try with a metadata handler. This should always resolve,
+		// regardless of the method.
+		handlers := Handlers{
+			Id: map[string]IdHandler{
+				"idhandler": testIdHandler,
+			},
+			Meta: map[string]BulkIncludeHandler{
+				"metahandler": testMetaHandler,
+			},
+		}
+		router := New(&handlers, newResolveURL("series", 1234))
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler: router,
+			Method:  method,
+			URL:     "http://0.1.2.3/wordpress/meta/metahandler",
+			ExpectBody: &metaHandlerTestResp{
+				CharmURL: "cs:series/wordpress-1234",
+			},
+		})
+
+		// Then try with an id handler. This should only resolve
+		// for some methods.
+		var resp idHandlerTestResp
+		if resolves {
+			resp.CharmURL = "cs:series/wordpress-1234"
+		} else {
+			resp.CharmURL = "cs:wordpress"
+		}
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:    router,
+			Method:     method,
+			URL:        "http://0.1.2.3/wordpress/idhandler",
+			ExpectBody: resp,
+		})
 	}
 }
 
