@@ -98,14 +98,15 @@ func (s *StatsSuite) TestServerStatsStatus(c *gc.C) {
 	}}
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.path)
-		url := storeURL(test.path)
-		storetesting.AssertJSONCall(c, s.srv, "GET", url, "",
-			test.status,
-			params.Error{
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:    s.srv,
+			URL:        storeURL(test.path),
+			ExpectCode: test.status,
+			ExpectBody: params.Error{
 				Message: test.message,
 				Code:    test.code,
 			},
-		)
+		})
 	}
 }
 
@@ -137,9 +138,13 @@ func (s *StatsSuite) TestStatsCounter(c *gc.C) {
 	for counter, n := range expected {
 		c.Logf("test %q", counter)
 		url := storeURL("stats/counter/" + counter)
-		storetesting.AssertJSONCall(c, s.srv, "GET", url, "", http.StatusOK, []params.Statistic{{
-			Count: n,
-		}})
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler: s.srv,
+			URL:     url,
+			ExpectBody: []params.Statistic{{
+				Count: n,
+			}},
+		})
 	}
 }
 
@@ -221,7 +226,11 @@ func (s *StatsSuite) TestStatsCounterList(c *gc.C) {
 	for i, test := range tests {
 		c.Logf("test %d: %s", i, test.key)
 		url := storeURL("stats/counter/" + test.key + "?list=1")
-		storetesting.AssertJSONCall(c, s.srv, "GET", url, "", http.StatusOK, test.result)
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:    s.srv,
+			URL:        url,
+			ExpectBody: test.result,
+		})
 	}
 }
 
@@ -424,6 +433,10 @@ func (s *StatsSuite) TestStatsCounterBy(c *gc.C) {
 			url += "?" + flags.Encode()
 		}
 		c.Logf("test %d: %s", i, url)
-		storetesting.AssertJSONCall(c, s.srv, "GET", url, "", http.StatusOK, test.result)
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:    s.srv,
+			URL:        url,
+			ExpectBody: test.result,
+		})
 	}
 }

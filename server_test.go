@@ -54,20 +54,36 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	h, err := charmstore.NewServer(db, charmstore.V4)
 	c.Assert(err, gc.IsNil)
 
-	storetesting.AssertJSONCall(c, h, "GET", "http://0.1.2.3/v4/debug", "", http.StatusInternalServerError, params.Error{
-		Message: "method not implemented",
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:    h,
+		URL:        "http://0.1.2.3/v4/debug",
+		ExpectCode: http.StatusInternalServerError,
+		ExpectBody: params.Error{
+			Message: "method not implemented",
+		},
 	})
 	assertDoesNotServeVersion(c, h, "v3")
 }
 
 func assertServesVersion(c *gc.C, h http.Handler, vers string) {
-	storetesting.AssertJSONCall(c, h, "GET", "http://0.1.2.3/"+vers+"/some/path", "", http.StatusOK, versionResponse{
-		Version: vers,
-		Path:    "/some/path",
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler: h,
+		URL:     "http://0.1.2.3/" + vers + "/some/path",
+		ExpectBody: versionResponse{
+			Version: vers,
+			Path:    "/some/path",
+		},
 	})
 }
 
 func assertDoesNotServeVersion(c *gc.C, h http.Handler, vers string) {
-	rec := storetesting.DoRequest(c, h, "GET", "http://0.1.2.3/"+vers+"/debug", "", nil)
-	c.Assert(rec.Code, gc.Equals, http.StatusNotFound)
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:    h,
+		URL:        "http://0.1.2.3/" + vers + "/debug",
+		ExpectCode: http.StatusNotFound,
+		ExpectBody: params.Error{
+			Message: "not found",
+			Code:    params.ErrNotFound,
+		},
+	})
 }
