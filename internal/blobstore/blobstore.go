@@ -153,6 +153,13 @@ func (s *Store) Open(hashSum string) (ReadSeekCloser, int64, error) {
 	return r.(ReadSeekCloser), length, nil
 }
 
+// Remove removes a reference to the given hash.
+// If there are other references, the content will not
+// actually be removed.
+func (s *Store) Remove(hashSum string) error {
+	return s.mstore.RemoveForEnvironment("", hashSum)
+}
+
 // newResourceHash returns a ResourceHash equivalent to the
 // given hashSum. It does not complain if hashSum is invalid - the
 // lower levels will fail appropriately.
