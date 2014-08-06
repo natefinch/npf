@@ -107,7 +107,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 	c.Assert(obtainedSize, gc.Equals, size)
 	data, err := ioutil.ReadAll(r)
 	c.Assert(err, gc.IsNil)
-	bundleArchive, err := charm.ReadBundleArchiveBytes(data, verifyConstraints)
+	bundleArchive, err := charm.ReadBundleArchiveBytes(data)
 	c.Assert(err, gc.IsNil)
 	c.Assert(bundleArchive.Data(), jc.DeepEquals, bundle.Data())
 	c.Assert(bundleArchive.ReadMe(), jc.DeepEquals, bundle.ReadMe())
@@ -230,7 +230,7 @@ func (s *StoreSuite) TestAddBundleDir(c *gc.C) {
 func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
 	bundleArchive, err := charm.ReadBundleArchive(
 		testing.Charms.BundleArchivePath(c.MkDir(), "wordpress"),
-		verifyConstraints)
+	)
 	c.Assert(err, gc.IsNil)
 	s.checkAddBundle(c, bundleArchive)
 }
@@ -259,8 +259,6 @@ func mustGetSizeAndHash(c interface{}) (int64, string) {
 	}
 	return size, fmt.Sprintf("%x", hash.Sum(nil))
 }
-
-func verifyConstraints(c string) error { return nil }
 
 func mustParseReference(url string) *charm.Reference {
 	ref, err := charm.ParseReference(url)
