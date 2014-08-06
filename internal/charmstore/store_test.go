@@ -260,8 +260,6 @@ func mustGetSizeAndHash(c interface{}) (int64, string) {
 	return size, fmt.Sprintf("%x", hash.Sum(nil))
 }
 
-func verifyConstraints(c string) error { return nil }
-
 func mustParseReference(url string) *charm.Reference {
 	ref, err := charm.ParseReference(url)
 	if err != nil {
