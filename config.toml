@@ -1,11 +1,24 @@
 baseurl = "http://npf.io"
 languageCode = "en-us"
 title = "npf.io"
+theme = "hyde"
+copyright = "Nate Finch"
+
+[Author]
+	name = "Nate Finch"
+
 [permalinks]
-  post = "/:year/:month/:filename/"
+	blog = "/:year/:month/:filename"
+	code = "/:filename"
+
+[taxonomies]
+	tag = "tags"
+	series = "series"
+
 [params]
 	description = "code by Nate Finch"
 	twitter = "https://twitter.com/natethefinch"
 	github = "https://github.com/natefinch"
 	gplus = "https://plus.google.com/+NateFinch"
 	disqus = "npfio"
+

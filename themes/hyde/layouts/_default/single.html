@@ -5,23 +5,11 @@
 
     <div class="content container">
 <div class="post">
-  <h1 class="title">{{ .Title }}
-  {{if .Params.badges}}
-  <span class="badges">
-  {{range .Params.badges}}
-  	<a href="{{.url}}"><img class="badge" title="{{.alt}}" alt="{{.alt}}" src="{{.img}}"></a>
-  {{end}}
-  </span>
-  {{end}}
-  </h1>
-  {{if ne .Type "page"}}
+  <h1 class="title">{{ .Title }}</h1>
   <span class="post-date">{{ .Date.Format "Mon, Jan 2, 2006" }}</span>
-  {{end}}
       {{ .Content }}
 
-  {{if ne .Type "page"}}
       {{ template "partials/comments.html" . }}
-  {{end}}
 </div>
 </div>
 
