@@ -1,0 +1,14 @@
+{{ template "theme/chrome/head.html" . }}
+<body>
+
+{{ template "theme/chrome/sidebar.html" . }}
+
+  <div class="content container">
+  <div class="post">
+    <h1 class="title">{{ .Title }}</h1>
+    {{ .Content }}
+  </div>
+  </div>
+
+  </body>
+</html>
