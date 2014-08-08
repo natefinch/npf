@@ -30,3 +30,9 @@ type Statistic struct {
 type ArchivePostResponse struct {
 	Id *charm.Reference
 }
+
+// ArchiveSizeResponse holds the result of an
+// id/meta/archive-size GET request. See http://tinyurl.com/m8b9geq
+type ArchiveSizeResponse struct {
+	Size int64
+}

@@ -237,7 +237,9 @@ func (h *handler) metaColor(id *charm.Reference, path string, flags url.Values) 
 // GET id/meta/archive-size
 // http://tinyurl.com/m8b9geq
 func (h *handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
-	return entity.Size, nil
+	return &params.ArchiveSizeResponse{
+		Size: entity.Size,
+	}, nil
 }
 
 // GET id/meta/stats/
