@@ -106,14 +106,13 @@ var metaEndpoints = []metaEndpoint{{
 		c.Assert(data.(*charm.Actions).ActionSpecs["snapshot"].Description, gc.Equals, "Take a snapshot of the database.")
 	},
 }, {
-	name:            "archive-size", // Charm size.
-	get:             entityGetter(entitySizeGetter),
+	name: "archive-size",
+	get: entityGetter(func(entity *mongodoc.Entity) interface{} {
+		return &params.ArchiveSizeResponse{
+			Size: entity.Size,
+		}
+	}),
 	checkURL:        "cs:precise/wordpress-23",
-	assertCheckData: entitySizeChecker,
-}, {
-	name:            "archive-size", // Bundle size.
-	get:             entityGetter(entitySizeGetter),
-	checkURL:        "cs:bundle/wordpress-42",
 	assertCheckData: entitySizeChecker,
 }}
 
@@ -418,12 +417,6 @@ func entityGetter(get func(*mongodoc.Entity) interface{}) func(*charmstore.Store
 			return nil, errgo.Mask(err)
 		}
 		return get(&doc), nil
-	}
-}
-
-func entitySizeGetter(entity *mongodoc.Entity) interface{} {
-	return &params.ArchiveSizeResponse{
-		Size: entity.Size,
 	}
 }
 
