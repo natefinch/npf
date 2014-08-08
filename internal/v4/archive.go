@@ -56,6 +56,7 @@ func (h *handler) serveArchive(charmId *charm.Reference, w http.ResponseWriter, 
 
 func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (resp *params.ArchivePostResponse, err error) {
 	// Validate the request parameters.
+
 	if id.Series == "" {
 		return nil, badRequestf(nil, "series not specified")
 	}
@@ -72,6 +73,7 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 
 	// Upload the actual blob, and make sure that it is removed
 	// if we fail later.
+
 	err = h.store.BlobStore.PutUnchallenged(req.Body, req.ContentLength, hash)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot put archive blob")
@@ -89,6 +91,7 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 	}()
 
 	// Create the entry for the entity in charm store.
+
 	rev, err := h.nextRevisionForId(id)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot get next revision for id")

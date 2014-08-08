@@ -428,7 +428,7 @@ func sizeChecker(c *gc.C, data interface{}) {
 func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, charm.Charm) {
 	url := mustParseReference(curl)
 	wordpress := charmtesting.Charms.CharmDir(charmName)
-	err := s.store.UploadCharm(url, wordpress)
+	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 	return url, wordpress
 }
@@ -436,7 +436,7 @@ func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, 
 func (s *APISuite) addBundle(c *gc.C, bundleName string, curl string) (*charm.Reference, charm.Bundle) {
 	url := mustParseReference(curl)
 	bundle := charmtesting.Charms.BundleDir(bundleName)
-	err := s.store.UploadBundle(url, bundle)
+	err := s.store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
 	return url, bundle
 }

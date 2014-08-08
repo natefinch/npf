@@ -82,10 +82,11 @@ func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (string, int64, err
 	return blobHash, size, nil
 }
 
-// UploadCharm uploads the given charm to the blob store.
-// This method is provided for tests only. Normal clients
-// should upload charms through the API.
-func (s *Store) UploadCharm(url *charm.Reference, ch charm.Charm) error {
+// AddCharmWithArchive is like AddCharm but
+// also adds the charm archive to the blob store.
+// This method is provided principally so that
+// tests can easily create content in the store.
+func (s *Store) AddCharmWithArchive(url *charm.Reference, ch charm.Charm) error {
 	blobHash, size, err := s.uploadCharmOrBundle(ch)
 	if err != nil {
 		return errgo.Mask(err)
@@ -93,10 +94,11 @@ func (s *Store) UploadCharm(url *charm.Reference, ch charm.Charm) error {
 	return s.AddCharm(url, ch, blobHash, size)
 }
 
-// UploadBundle uploads the given bundle to the blob store.
-// This method is provided for tests only. Normal clients
-// should upload bundles through the API.
-func (s *Store) UploadBundle(url *charm.Reference, b charm.Bundle) error {
+// AddBundleWithArchive is like AddBundle but
+// also adds the charm archive to the blob store.
+// This method is provided principally so that
+// tests can easily create content in the store.
+func (s *Store) AddBundleWithArchive(url *charm.Reference, b charm.Bundle) error {
 	blobHash, size, err := s.uploadCharmOrBundle(b)
 	if err != nil {
 		return errgo.Mask(err)

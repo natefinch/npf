@@ -41,15 +41,12 @@ func (s *ArchiveSuite) SetUpTest(c *gc.C) {
 }
 
 func (s *ArchiveSuite) TestArchiveGet(c *gc.C) {
-	wordpress := charmtesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	url := mustParseReference("cs:precise/wordpress-23")
-	err := s.store.UploadCharm(url, wordpress)
-	c.Assert(err, gc.IsNil)
+	wordpress := s.assertUploadCharm(c, mustParseReference("cs:precise/wordpress-0"), "wordpress")
 
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
 	c.Assert(err, gc.IsNil)
 
-	rec := storetesting.DoRequest(c, s.srv, "GET", storeURL("precise/wordpress-23/archive"), nil, 0, nil)
+	rec := storetesting.DoRequest(c, s.srv, "GET", storeURL("precise/wordpress-0/archive"), nil, 0, nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
@@ -57,7 +54,7 @@ func (s *ArchiveSuite) TestArchiveGet(c *gc.C) {
 	// Check that the HTTP range logic is plugged in OK. If this
 	// is working, we assume that the whole thing is working OK,
 	// as net/http is well-tested.
-	rec = storetesting.DoRequest(c, s.srv, "GET", storeURL("precise/wordpress-23/archive"), nil, 0, http.Header{"Range": {"bytes=10-100"}})
+	rec = storetesting.DoRequest(c, s.srv, "GET", storeURL("precise/wordpress-0/archive"), nil, 0, http.Header{"Range": {"bytes=10-100"}})
 	c.Assert(err, gc.IsNil)
 	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
 	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
@@ -304,7 +301,7 @@ func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSee
 // assertUploadCharm uploads the testing charm with the given name
 // through the API. The URL must hold the expected revision
 // that the charm will be given when uploaded.
-func (s *ArchiveSuite) assertUploadCharm(c *gc.C, url *charm.Reference, charmName string) {
+func (s *ArchiveSuite) assertUploadCharm(c *gc.C, url *charm.Reference, charmName string) *charm.CharmArchive {
 	ch := testing.Charms.CharmArchive(c.MkDir(), charmName)
 	size := s.assertUpload(c, url, ch.Path)
 	s.assertEntityInfo(c, url, entityInfo{
@@ -315,8 +312,8 @@ func (s *ArchiveSuite) assertUploadCharm(c *gc.C, url *charm.Reference, charmNam
 			CharmConfig:  ch.Config(),
 			CharmActions: ch.Actions(),
 		},
-	},
-	)
+	})
+	return ch
 }
 
 // assertUploadBundle uploads the testing bundle with the given name

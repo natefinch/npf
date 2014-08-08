@@ -33,7 +33,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 	store, err := NewStore(s.Session.DB("foo"))
 	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:precise/wordpress-23")
-	err = store.UploadCharm(url, ch)
+	err = store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
 
 	var doc mongodoc.Entity
@@ -71,7 +71,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 
 	// Try inserting the charm again - it should fail because the charm is
 	// already there.
-	err = store.UploadCharm(url, ch)
+	err = store.AddCharmWithArchive(url, ch)
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrDuplicateUpload)
 }
 
@@ -79,7 +79,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 	store, err := NewStore(s.Session.DB("foo"))
 	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:bundle/wordpress-simple-42")
-	err = store.UploadBundle(url, bundle)
+	err = store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
 
 	var doc mongodoc.Entity
@@ -115,7 +115,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 
 	// Try inserting the bundle again - it should fail because the bundle is
 	// already there.
-	err = store.UploadBundle(url, bundle)
+	err = store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.Equals, params.ErrDuplicateUpload)
 }
 
@@ -185,7 +185,7 @@ func (s *StoreSuite) TestExpandURL(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		urls := mustParseReferences(test.inStore)
 		for _, url := range urls {
-			err := store.UploadCharm(url, wordpress)
+			err := store.AddCharmWithArchive(url, wordpress)
 			c.Assert(err, gc.IsNil)
 		}
 		gotURLs, err := store.ExpandURL((*charm.Reference)(mustParseReference(test.expand)))
