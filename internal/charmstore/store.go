@@ -15,6 +15,7 @@ import (
 
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/mongodoc"
+	"github.com/juju/charmstore/params"
 )
 
 // Store represents the underlying charm and blob data stores.
@@ -81,32 +82,58 @@ func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (string, int64, err
 	return blobHash, size, nil
 }
 
-// AddCharm adds a charm to the blob store and to the entities collection
-// associated with the given URL.
-func (s *Store) AddCharm(url *charm.Reference, c charm.Charm) error {
-	// Insert the charm archive into the blob store.
+// AddCharmWithArchive is like AddCharm but
+// also adds the charm archive to the blob store.
+// This method is provided principally so that
+// tests can easily create content in the store.
+func (s *Store) AddCharmWithArchive(url *charm.Reference, ch charm.Charm) error {
+	blobHash, size, err := s.uploadCharmOrBundle(ch)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	return s.AddCharm(url, ch, blobHash, size)
+}
+
+// AddBundleWithArchive is like AddBundle but
+// also adds the charm archive to the blob store.
+// This method is provided principally so that
+// tests can easily create content in the store.
+func (s *Store) AddBundleWithArchive(url *charm.Reference, b charm.Bundle) error {
+	blobHash, size, err := s.uploadCharmOrBundle(b)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	return s.AddBundle(url, b, blobHash, size)
+}
+
+func (s *Store) uploadCharmOrBundle(c interface{}) (blobHash string, size int64, err error) {
 	archive, err := getArchive(c)
 	if err != nil {
-		return errgo.Mask(err)
+		return "", 0, errgo.Mask(err)
 	}
 	defer archive.Close()
-	blobHash, size, err := s.putArchive(archive)
-	if err != nil {
-		return errgo.Mask(err)
-	}
+	return s.putArchive(archive)
+}
 
+// AddCharm adds a charm to the blob store and to the entities collection
+// associated with the given URL.
+func (s *Store) AddCharm(url *charm.Reference, c charm.Charm, blobHash string, blobSize int64) error {
 	// Add charm metadata to the entities collection.
-	return s.DB.Entities().Insert(&mongodoc.Entity{
+	err := s.DB.Entities().Insert(&mongodoc.Entity{
 		URL:                     url,
 		BaseURL:                 baseURL(url),
 		BlobHash:                blobHash,
-		Size:                    size,
+		Size:                    blobSize,
 		CharmMeta:               c.Meta(),
 		CharmConfig:             c.Config(),
 		CharmActions:            c.Actions(),
 		CharmProvidedInterfaces: interfacesForRelations(c.Meta().Provides),
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
 	})
+	if mgo.IsDup(err) {
+		return params.ErrDuplicateUpload
+	}
+	return errgo.Mask(err)
 }
 
 // ExpandURL returns all the URLs that the given URL may refer to.
@@ -164,33 +191,25 @@ var errNotImplemented = errgo.Newf("not implemented")
 
 // AddBundle adds a bundle to the blob store and to the entities collection
 // associated with the given URL.
-func (s *Store) AddBundle(url *charm.Reference, b charm.Bundle) error {
-	// Insert the bundle archive into the blob store.
-	archive, err := getArchive(b)
-	if err != nil {
-		return errgo.Mask(err)
-	}
-	defer archive.Close()
-	blobHash, size, err := s.putArchive(archive)
-	if err != nil {
-		return errgo.Mask(err)
-	}
-
-	// Add bundle metadata to the entities collection.
+func (s *Store) AddBundle(url *charm.Reference, b charm.Bundle, blobHash string, blobSize int64) error {
 	bundleData := b.Data()
 	urls, err := bundleCharms(bundleData)
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	return s.DB.Entities().Insert(&mongodoc.Entity{
+	err = s.DB.Entities().Insert(&mongodoc.Entity{
 		URL:          url,
 		BaseURL:      baseURL(url),
 		BlobHash:     blobHash,
-		Size:         size,
+		Size:         blobSize,
 		BundleData:   bundleData,
 		BundleReadMe: b.ReadMe(),
 		BundleCharms: urls,
 	})
+	if mgo.IsDup(err) {
+		return params.ErrDuplicateUpload
+	}
+	return errgo.Mask(err)
 }
 
 func bundleCharms(data *charm.BundleData) ([]*charm.Reference, error) {

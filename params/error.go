@@ -16,6 +16,7 @@ const (
 	ErrMetadataNotFound ErrorCode = "metadata not found"
 	ErrForbidden        ErrorCode = "forbidden"
 	ErrBadRequest       ErrorCode = "bad request"
+	ErrDuplicateUpload  ErrorCode = "duplicate upload"
 )
 
 // Error represents an error - it is returned for any response

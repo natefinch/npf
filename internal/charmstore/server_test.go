@@ -5,18 +5,12 @@ package charmstore
 
 import (
 	"net/http"
-	"testing"
 
-	jujutesting "github.com/juju/testing"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/internal/storetesting"
 )
-
-func TestPackage(t *testing.T) {
-	jujutesting.MgoTestPackage(t, nil)
-}
 
 type ServerSuite struct {
 	storetesting.IsolatedMgoSuite
@@ -80,7 +74,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 func assertServesVersion(c *gc.C, h http.Handler, vers string) {
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler: h,
-		URL:     "http://0.1.2.3/" + vers + "/some/path",
+		URL:     "/" + vers + "/some/path",
 		ExpectBody: versionResponse{
 			Version: vers,
 			Path:    "/some/path",
@@ -89,6 +83,6 @@ func assertServesVersion(c *gc.C, h http.Handler, vers string) {
 }
 
 func assertDoesNotServeVersion(c *gc.C, h http.Handler, vers string) {
-	rec := storetesting.DoRequest(c, h, "GET", "http://0.1.2.3/"+vers+"/some/path", "", "", nil)
+	rec := storetesting.DoRequest(c, h, "GET", "/"+vers+"/some/path", nil, 0, nil)
 	c.Assert(rec.Code, gc.Equals, http.StatusNotFound)
 }
