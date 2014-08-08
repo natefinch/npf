@@ -120,10 +120,11 @@ func (s *Store) Put(r io.Reader, size int64, hash string, proof *ContentChalleng
 		// was created, so continue on with uploading
 		// the content as if there was no previous challenge.
 	}
-	resp, err := s.mstore.PutForEnvironmentRequest("", hash, *newResourceHash(hash))
+	rh := newResourceHash(hash)
+	resp, err := s.mstore.PutForEnvironmentRequest("", hash, rh)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			if err := s.mstore.PutForEnvironment("", hash, r, size); err != nil {
+			if err := s.mstore.PutForEnvironmentAndCheckHash("", hash, r, size, rh); err != nil {
 				return nil, errgo.Mask(err)
 			}
 			return nil, nil
@@ -141,7 +142,8 @@ func (s *Store) Put(r io.Reader, size int64, hash string, proof *ContentChalleng
 // storage. The content should have the given size and hash. In this case
 // a challenge is never returned and a proof is not required.
 func (s *Store) PutUnchallenged(r io.Reader, size int64, hash string) error {
-	return s.mstore.PutForEnvironment("", hash, r, size)
+	rh := newResourceHash(hash)
+	return s.mstore.PutForEnvironmentAndCheckHash("", hash, r, size, rh)
 }
 
 // Open opens the blob with the given hash.
@@ -163,14 +165,14 @@ func (s *Store) Remove(hashSum string) error {
 // newResourceHash returns a ResourceHash equivalent to the
 // given hashSum. It does not complain if hashSum is invalid - the
 // lower levels will fail appropriately.
-func newResourceHash(hashSum string) *blobstore.ResourceHash {
+func newResourceHash(hashSum string) blobstore.ResourceHash {
 	p := hex.EncodedLen(md5.Size)
 	if len(hashSum) < p {
-		return &blobstore.ResourceHash{
+		return blobstore.ResourceHash{
 			MD5Hash: hashSum,
 		}
 	}
-	return &blobstore.ResourceHash{
+	return blobstore.ResourceHash{
 		MD5Hash:    hashSum[0:p],
 		SHA256Hash: hashSum[p:],
 	}
