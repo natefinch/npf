@@ -699,6 +699,12 @@ func (s *RouterSuite) TestRouterGet(c *gc.C) {
 }
 
 func (s *RouterSuite) TestRouterMethodsThatPassThroughUnresolvedId(c *gc.C) {
+	// We omit HEAD because net/http does not send back the body
+	// when doing a HEAD request. Given that there's no actual logic
+	// in the code that is HEAD specific, it seems reasonable to drop the this case.
+	// TODO(rog) Refactor the test to make the handler store the id in a local variable
+	// rather than relying on the returned body.
+
 	alwaysResolves := map[string]bool{
 		"POST":   false,
 		"PUT":    false,
