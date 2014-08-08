@@ -6,7 +6,7 @@ series = ["Hugo 101"]
 +++
 
 In my last post, I had deployed what is almost the most basic Hugo site
-possible.  The only reason it took more then 10 minutes is because I wanted to
+possible.  The only reason it took more than 10 minutes is because I wanted to
 tweak the theme.  However, there were a few things that immediately annoyed me.  
 
 I didn't like having to type `hugo -t hyde` all the time.  Well, turns out
