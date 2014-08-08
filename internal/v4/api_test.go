@@ -106,15 +106,14 @@ var metaEndpoints = []metaEndpoint{{
 		c.Assert(data.(*charm.Actions).ActionSpecs["snapshot"].Description, gc.Equals, "Take a snapshot of the database.")
 	},
 }, {
-	name:            "archive-size", // Charm size.
-	get:             entityFieldGetter("Size"),
+	name: "archive-size",
+	get: entityGetter(func(entity *mongodoc.Entity) interface{} {
+		return &params.ArchiveSizeResponse{
+			Size: entity.Size,
+		}
+	}),
 	checkURL:        "cs:precise/wordpress-23",
-	assertCheckData: sizeChecker,
-}, {
-	name:            "archive-size", // Bundle size.
-	get:             entityFieldGetter("Size"),
-	checkURL:        "cs:bundle/wordpress-42",
-	assertCheckData: sizeChecker,
+	assertCheckData: entitySizeChecker,
 }}
 
 // TestEndpointGet tries to ensure that the endpoint
@@ -421,8 +420,9 @@ func entityGetter(get func(*mongodoc.Entity) interface{}) func(*charmstore.Store
 	}
 }
 
-func sizeChecker(c *gc.C, data interface{}) {
-	c.Assert(data.(int64), gc.Not(gc.Equals), int64(0))
+func entitySizeChecker(c *gc.C, data interface{}) {
+	response := data.(*params.ArchiveSizeResponse)
+	c.Assert(response.Size, gc.Not(gc.Equals), int64(0))
 }
 
 func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, charm.Charm) {

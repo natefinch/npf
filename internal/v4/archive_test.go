@@ -307,7 +307,7 @@ func (s *ArchiveSuite) assertUploadCharm(c *gc.C, url *charm.Reference, charmNam
 	s.assertEntityInfo(c, url, entityInfo{
 		Id: url,
 		Meta: entityMetaInfo{
-			ArchiveSize:  size,
+			ArchiveSize:  &params.ArchiveSizeResponse{Size: size},
 			CharmMeta:    ch.Meta(),
 			CharmConfig:  ch.Config(),
 			CharmActions: ch.Actions(),
@@ -327,7 +327,7 @@ func (s *ArchiveSuite) assertUploadBundle(c *gc.C, url *charm.Reference, bundleN
 	s.assertEntityInfo(c, url, entityInfo{
 		Id: url,
 		Meta: entityMetaInfo{
-			ArchiveSize: size,
+			ArchiveSize: &params.ArchiveSizeResponse{Size: size},
 			BundleMeta:  b.Data(),
 		},
 	},
@@ -376,13 +376,11 @@ type entityInfo struct {
 }
 
 type entityMetaInfo struct {
-	// TODO(rog) change to params.ArchiveSizeResponse when archive-size endpoint
-	// is fixed.
-	ArchiveSize  int64             `json:"archive-size"`
-	CharmMeta    *charm.Meta       `json:"charm-metadata,omitempty"`
-	CharmConfig  *charm.Config     `json:"charm-config,omitempty"`
-	CharmActions *charm.Actions    `json:"charm-actions,omitempty"`
-	BundleMeta   *charm.BundleData `json:"bundle-metadata,omitempty"`
+	ArchiveSize  *params.ArchiveSizeResponse `json:"archive-size,omitempty"`
+	CharmMeta    *charm.Meta                 `json:"charm-metadata,omitempty"`
+	CharmConfig  *charm.Config               `json:"charm-config,omitempty"`
+	CharmActions *charm.Actions              `json:"charm-actions,omitempty"`
+	BundleMeta   *charm.BundleData           `json:"bundle-metadata,omitempty"`
 }
 
 func (s *ArchiveSuite) assertEntityInfo(c *gc.C, url *charm.Reference, expect entityInfo) {
