@@ -8,8 +8,8 @@ copyright = "Nate Finch"
 	name = "Nate Finch"
 
 [permalinks]
-	blog = "/:year/:month/:filename"
-	code = "/:filename"
+	blog = "/:year/:month/:filename/"
+	code = "/:filename/"
 
 [taxonomies]
 	tag = "tags"

@@ -5,16 +5,22 @@
 
   <div class="content container">
     <div class="post">
-    <h1 class="title">{{ .Title }}</h1>
+    <h1 class="post-title">{{ .Title }}</h1>
     <span class="post-date">{{ .Date.Format "Jan 2, 2006" }}</span>
+    {{if .Params.series}}
+	    {{ $name := index .Params.series 0 }}
+    	<p class="seriesname">Series: <a href="{{.Site.BaseUrl}}/series/{{$name | urlize}}">{{$name}}</a></p>
+    {{end}}
     {{ .Content }}
     
     {{ if .Params.series }}
 	    {{ $name := index .Params.series 0 }}
-    	<p>This post is one of a series entitled {{$name}}.<br/>
-    	Posts in this series:</p>
+	    <hr/>
+    	<p><a href="" id="series"></a>This is a post in the <b>{{$name}}</b> series.<br/>
+    	Other posts in this series:</p>
 
-	    {{ $name := $name | lower | urlize }}
+
+	    {{ $name := $name | urlize }}
 	    {{ $series := index .Site.Taxonomies.series $name }}
 	    <ul class="series">
 	    {{ range $series.Pages }}
@@ -27,5 +33,5 @@
 </div>
 </div> 
 
-</body>
+</body>w
 </html>
