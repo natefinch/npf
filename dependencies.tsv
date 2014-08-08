@@ -1,5 +1,5 @@
 code.google.com/p/go.crypto	hg	aa2644fe4aa50e3b38d75187b4799b1f0c9ddcef	212
-github.com/juju/blobstore	git	cb12cc93f02a9b83d4f8cc635b505d8423be4181	
+github.com/juju/blobstore	git	cd6cafb4214d1d23a7e3efbe3f20738fb912ee4f	
 github.com/juju/errgo	git	2cf7b553faddc588f903020c33e71c527d5e0838	
 github.com/juju/errors	git	11f260fcce20d158a2c68d6d2a7fb6b98e83b658	
 github.com/juju/gojsonpointer	git	0154bf5a168b672d8c97d8dd83a54cb60cd088e8	
