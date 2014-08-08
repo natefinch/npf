@@ -103,7 +103,7 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 		if err != nil {
 			return nil, errgo.Notef(err, "cannot read bundle archive")
 		}
-		if err := b.Data().Verify(func(string) error { return nil }); err != nil {
+		if err := b.Data().Verify(verifyConstraints); err != nil {
 			return nil, errgo.Notef(err, "bundle verification failed")
 		}
 		if err := h.store.AddBundle(id, b, hash, req.ContentLength); err != nil {
@@ -121,6 +121,11 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 	return &params.ArchivePostResponse{
 		Id: id,
 	}, nil
+}
+
+func verifyConstraints(s string) error {
+	// TODO(rog) provide some actual constraints checking here.
+	return nil
 }
 
 type readerAtSeeker struct {
