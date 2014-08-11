@@ -4,6 +4,7 @@
 package v4
 
 import (
+	"archive/zip"
 	"net/http"
 	"net/url"
 
@@ -48,9 +49,9 @@ func New(store *charmstore.Store) http.Handler {
 			"charm-config":    h.entityHandler(h.metaCharmConfig, "charmconfig"),
 			"charm-actions":   h.entityHandler(h.metaCharmActions, "charmactions"),
 			"archive-size":    h.entityHandler(h.metaArchiveSize, "size"),
+			"manifest":        h.entityHandler(h.metaManifest, "blobhash"),
 
 			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
-			"manifest":            router.SingleIncludeHandler(h.metaManifest),
 			"color":               router.SingleIncludeHandler(h.metaColor),
 			"bundles-containing":  router.SingleIncludeHandler(h.metaBundlesContaining),
 			"extra-info":          router.SingleIncludeHandler(h.metaExtraInfo),
@@ -212,8 +213,29 @@ func (h *handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.Referenc
 
 // GET id/meta/manifest
 // http://tinyurl.com/p3xdcto
-func (h *handler) metaManifest(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
+func (h *handler) metaManifest(entity *mongodoc.Entity, id *charm.Reference, path, method string, flags url.Values) (interface{}, error) {
+	r, size, err := h.store.BlobStore.Open(entity.BlobHash)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot open archive data for %s", id)
+	}
+	defer r.Close()
+	zipReader, err := zip.NewReader(&readerAtSeeker{r}, size)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot read archive data for %s", id)
+	}
+	// Collect the files.
+	var manifest []params.ManifestFile
+	for _, file := range zipReader.File {
+		fileInfo := file.FileInfo()
+		if fileInfo.IsDir() {
+			continue
+		}
+		manifest = append(manifest, params.ManifestFile{
+			Name: file.Name,
+			Size: fileInfo.Size(),
+		})
+	}
+	return &manifest, nil
 }
 
 // GET id/meta/charm-actions

@@ -4,7 +4,10 @@
 package v4_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"reflect"
 	"strings"
@@ -55,11 +58,13 @@ func storeURL(path string) string {
 	return "/v4/" + path
 }
 
+type metaEndpointExpectedValueGetter func(*charmstore.Store, *charm.Reference) (interface{}, error)
+
 type metaEndpoint struct {
 	name       string
 	exclusive  int
 	bundleOnly bool
-	get        func(*charmstore.Store, *charm.Reference) (interface{}, error)
+	get        metaEndpointExpectedValueGetter
 
 	// checkURL holds one URL to sanity check data against.
 	checkURL string
@@ -114,6 +119,25 @@ var metaEndpoints = []metaEndpoint{{
 	}),
 	checkURL:        "cs:precise/wordpress-23",
 	assertCheckData: entitySizeChecker,
+}, {
+	name: "manifest",
+	get: zipGetter(func(r *zip.Reader) interface{} {
+		var manifest []params.ManifestFile
+		for _, file := range r.File {
+			if strings.HasSuffix(file.Name, "/") {
+				continue
+			}
+			manifest = append(manifest, params.ManifestFile{
+				Name: file.Name,
+				Size: int64(file.UncompressedSize64),
+			})
+		}
+		return manifest
+	}),
+	checkURL: "cs:bundle/wordpress-42",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data.([]params.ManifestFile), gc.Not(gc.HasLen), 0)
+	},
 }}
 
 // TestEndpointGet tries to ensure that the endpoint
@@ -399,7 +423,7 @@ func assertNotImplemented(c *gc.C, h http.Handler, path string) {
 	})
 }
 
-func entityFieldGetter(fieldName string) func(*charmstore.Store, *charm.Reference) (interface{}, error) {
+func entityFieldGetter(fieldName string) metaEndpointExpectedValueGetter {
 	return entityGetter(func(entity *mongodoc.Entity) interface{} {
 		field := reflect.ValueOf(entity).Elem().FieldByName(fieldName)
 		if !field.IsValid() {
@@ -409,14 +433,40 @@ func entityFieldGetter(fieldName string) func(*charmstore.Store, *charm.Referenc
 	})
 }
 
-func entityGetter(get func(*mongodoc.Entity) interface{}) func(*charmstore.Store, *charm.Reference) (interface{}, error) {
+func entityGetter(get func(*mongodoc.Entity) interface{}) metaEndpointExpectedValueGetter {
 	return func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
 		var doc mongodoc.Entity
-		err := store.DB.Entities().Find(bson.D{{"_id", url}}).One(&doc)
+		err := store.DB.Entities().FindId(url).One(&doc)
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}
 		return get(&doc), nil
+	}
+}
+
+func zipGetter(get func(*zip.Reader) interface{}) metaEndpointExpectedValueGetter {
+	return func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		var doc mongodoc.Entity
+		if err := store.DB.Entities().
+			FindId(url).
+			Select(bson.D{{"blobhash", 1}}).
+			One(&doc); err != nil {
+			return nil, errgo.Mask(err)
+		}
+		blob, size, err := store.BlobStore.Open(doc.BlobHash)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+		defer blob.Close()
+		content, err := ioutil.ReadAll(blob)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+		r, err := zip.NewReader(bytes.NewReader(content), size)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+		return get(r), nil
 	}
 }
 

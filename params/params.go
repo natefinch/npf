@@ -36,3 +36,11 @@ type ArchivePostResponse struct {
 type ArchiveSizeResponse struct {
 	Size int64
 }
+
+// ManifestFile holds information about a charm or bundle file.
+// A slice of ManifestFile is used as response for
+// id/meta/manifest GET requests. See http://tinyurl.com/p3xdcto
+type ManifestFile struct {
+	Name string
+	Size int64
+}
