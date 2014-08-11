@@ -88,14 +88,14 @@ func (h *handler) resolveURL(url *charm.Reference) error {
 	return ResolveURL(h.store, url)
 }
 
-type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error)
+type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.Reference, path string, method string, flags url.Values) (interface{}, error)
 
 // entityHandler returns a handler that calls f with a *mongodoc.Entity that
 // contains at least the given fields.
 func (h *handler) entityHandler(f entityHandlerFunc, fields ...string) router.BulkIncludeHandler {
-	handle := func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	handle := func(doc interface{}, id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 		edoc := doc.(*mongodoc.Entity)
-		val, err := f(edoc, id, path, flags)
+		val, err := f(edoc, id, path, method, flags)
 		return val, errgo.Mask(err, errgo.Any)
 	}
 	type entityHandlerKey struct{}
@@ -200,43 +200,43 @@ func badRequestf(underlying error, f string, a ...interface{}) error {
 
 // GET id/meta/charm-metadata
 // http://tinyurl.com/poeoulw
-func (h *handler) metaCharmMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaCharmMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return entity.CharmMeta, nil
 }
 
 // GET id/meta/bundle-metadata
 // http://tinyurl.com/ozshbtb
-func (h *handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return entity.BundleData, nil
 }
 
 // GET id/meta/manifest
 // http://tinyurl.com/p3xdcto
-func (h *handler) metaManifest(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaManifest(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/charm-actions
 // http://tinyurl.com/kfd2h34
-func (h *handler) metaCharmActions(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaCharmActions(entity *mongodoc.Entity, id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return entity.CharmActions, nil
 }
 
 // GET id/meta/charm-config
 // http://tinyurl.com/oxxyujx
-func (h *handler) metaCharmConfig(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaCharmConfig(entity *mongodoc.Entity, id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return entity.CharmConfig, nil
 }
 
 // GET id/meta/color
 // http://tinyurl.com/o2t3j4p
-func (h *handler) metaColor(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaColor(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/archive-size
 // http://tinyurl.com/m8b9geq
-func (h *handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return &params.ArchiveSizeResponse{
 		Size: entity.Size,
 	}, nil
@@ -244,36 +244,36 @@ func (h *handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, 
 
 // GET id/meta/stats/
 // http://tinyurl.com/lvyp2l5
-func (h *handler) metaStats(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaStats(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/bundles-containing[?include=meta[&include=meta…]]
 // http://tinyurl.com/oqc386r
-func (h *handler) metaBundlesContaining(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaBundlesContaining(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/extra-info
 // http://tinyurl.com/keos7wd
-func (h *handler) metaExtraInfo(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaExtraInfo(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/extra-info/key
 // http://tinyurl.com/polrbn7
-func (h *handler) metaExtraInfoWithKey(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaExtraInfoWithKey(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/charm-related[?include=meta[&include=meta…]]
 // http://tinyurl.com/q7vdmzl
-func (h *handler) metaCharmRelated(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaCharmRelated(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/archive-upload-time
 // http://tinyurl.com/nmujuqk
-func (h *handler) metaArchiveUploadTime(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *handler) metaArchiveUploadTime(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
