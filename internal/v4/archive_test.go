@@ -42,7 +42,7 @@ func (s *ArchiveSuite) SetUpTest(c *gc.C) {
 	s.srv, s.store = newServer(c, s.Session)
 }
 
-func (s *ArchiveSuite) TestArchiveGet(c *gc.C) {
+func (s *ArchiveSuite) TestGet(c *gc.C) {
 	wordpress := s.assertUploadCharm(c, mustParseReference("cs:precise/wordpress-0"), "wordpress")
 
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
@@ -95,7 +95,7 @@ var archivePostErrorsTests = []struct {
 	expectCode:      params.ErrBadRequest,
 }}
 
-func (s *ArchiveSuite) TestArchivePostErrors(c *gc.C) {
+func (s *ArchiveSuite) TestPostErrors(c *gc.C) {
 	type exoticReader struct {
 		io.Reader
 	}
@@ -234,7 +234,7 @@ loop:
 	}
 }
 
-func (s *ArchiveSuite) TestArchivePostCharm(c *gc.C) {
+func (s *ArchiveSuite) TestPostCharm(c *gc.C) {
 	// A charm that did not exist before should get revision 0.
 	s.assertUploadCharm(c, mustParseReference("precise/wordpress-0"), "wordpress")
 
@@ -243,13 +243,35 @@ func (s *ArchiveSuite) TestArchivePostCharm(c *gc.C) {
 	s.assertUploadCharm(c, mustParseReference("precise/wordpress-1"), "wordpress")
 }
 
-func (s *ArchiveSuite) TestArchivePostBundle(c *gc.C) {
+func (s *ArchiveSuite) TestPostBundle(c *gc.C) {
 	// A bundle that did not exist before should get revision 0.
 	s.assertUploadBundle(c, mustParseReference("bundle/wordpress-0"), "wordpress")
 
 	// Subsequent bundle uploads should increment the
 	// revision by 1.
 	s.assertUploadBundle(c, mustParseReference("bundle/wordpress-1"), "wordpress")
+}
+
+func (s *ArchiveSuite) TestPostHashMismatch(c *gc.C) {
+	content := []byte("some content")
+	hash, _ := hashOf(bytes.NewReader(content))
+
+	// Corrupt the content.
+	copy(content, "bogus")
+	path := fmt.Sprintf("precise/wordpress/archive?hash=%s", hash)
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL(path),
+		Method:  "POST",
+		Header: http.Header{
+			"Content-Type": {"application/zip"},
+		},
+		Body:       bytes.NewReader(content),
+		ExpectCode: http.StatusInternalServerError,
+		ExpectBody: params.Error{
+			Message: "cannot put archive blob: hash mismatch",
+		},
+	})
 }
 
 func invalidZip() io.ReadSeeker {
