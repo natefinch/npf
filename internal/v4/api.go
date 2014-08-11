@@ -224,7 +224,7 @@ func (h *handler) metaManifest(entity *mongodoc.Entity, id *charm.Reference, pat
 		return nil, errgo.Notef(err, "cannot read archive data for %s", id)
 	}
 	// Collect the files.
-	var manifest []params.ManifestFile
+	manifest := make([]params.ManifestFile, 0, len(zipReader.File))
 	for _, file := range zipReader.File {
 		fileInfo := file.FileInfo()
 		if fileInfo.IsDir() {
@@ -235,7 +235,7 @@ func (h *handler) metaManifest(entity *mongodoc.Entity, id *charm.Reference, pat
 			Size: fileInfo.Size(),
 		})
 	}
-	return &manifest, nil
+	return manifest, nil
 }
 
 // GET id/meta/charm-actions
