@@ -1,0 +1,13 @@
++++
+title = "Autogenerate docs with this one dumb trick"
+date = 2014-06-17T05:59:00Z
+updated = 2014-07-22T07:12:05Z
+tags = ["Go", "testing", "programming", "golang"]
+blogimport = true 
+type = "post"
+[author]
+	name = "Nate Finch"
+	uri = "https://plus.google.com/115818189328363361527"
++++
+
+Yesterday, I was trying to think of a way of automating some doc generation for my go packages.  The specific task I wanted to automate was updating a badge in my package's README to show the test coverage.  What I wanted was a way to run go test -cover, parse the results, and put the result in the correct spot of my README.  My first thought was to write an application that would do that for me ... but then I'd have to run that <i>instead</i> of go test.  What I realized I wanted was something that was "compatible with go test" - i.e. I want to run go test and not have to remember to run some special other command.<br /><br />And that's when it hit me:  What is a test in Go?  A test is a Go function that gets run when you run "go test". &nbsp;Nothing says your test has to actually test anything. &nbsp;And nothing prevents your test from doing something permanent on your machine (in fact we usually have to bend over backwards to make sure our tests <i>don't</i>&nbsp;do anything permanent. &nbsp;You can just write a test function that updates the docs for you.<br /><br />I actually quite like this technique. &nbsp;I often have some manual tasks after updating my code - usually updating the docs in the README with changes to the API, or changing the docs to show new CLI flags, etc. &nbsp;And there's one thing I always do after I update my code - and that's run "go test". &nbsp;If that also updates my docs, all the better.<br /><br />This is how covergen was born. &nbsp;<a href="https://github.com/natefinch/covergen">https://github.com/natefinch/covergen</a><br /><br />Covergen is a particularly heinous example of a test that updates your docs. &nbsp;The heinous part is that it actually doubles the time it takes to run your tests... this is because that one test re-runs all the tests with -cover to get the coverage percent. &nbsp;I'm not sure I'd actually release real code that used such a thing - doubling the time it takes to run your tests just to save a few seconds of copy and paste is pretty terrible.<br /><br />However, it's a valid example of what you can do when you throw away testing convention and decide you want to write some code in a test that doesn't actually test anything, and instead just runs some automated tasks that you want run whenever anyone runs go test. &nbsp;Just make sure the result is idempotent so you're not continually causing things to look modified to version control.
