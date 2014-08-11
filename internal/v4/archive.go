@@ -4,14 +4,21 @@
 package v4
 
 import (
+	"archive/zip"
 	"io"
+	"mime"
 	"net/http"
+	"path"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v3"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
+	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/params"
@@ -22,32 +29,22 @@ import (
 //
 // POST id/archive?sha256=hash
 // http://tinyurl.com/lzrzrgb
-func (h *handler) serveArchive(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
 	default:
 		// TODO(rog) params.ErrMethodNotAllowed
 		return errgo.Newf("method not allowed")
 	case "POST":
-		resp, err := h.servePostArchive(charmId, w, req)
+		resp, err := h.servePostArchive(id, w, req)
 		if err != nil {
 			return err
 		}
 		return router.WriteJSON(w, http.StatusOK, resp)
 	case "GET":
 	}
-	var entity mongodoc.Entity
-	if err := h.store.DB.Entities().
-		FindId(charmId).
-		Select(bson.D{{"blobhash", 1}}).
-		One(&entity); err != nil {
-		if err == mgo.ErrNotFound {
-			return params.ErrNotFound
-		}
-		return errgo.Notef(err, "cannot get %s", charmId)
-	}
-	r, size, err := h.store.BlobStore.Open(entity.BlobHash)
+	r, size, err := h.openBlobById(id)
 	if err != nil {
-		return errgo.Notef(err, "cannot open archive data for %s", charmId)
+		return err
 	}
 	defer r.Close()
 	serveContent(w, req, size, r)
@@ -128,6 +125,48 @@ func verifyConstraints(s string) error {
 	return nil
 }
 
+// GET id/archive/…
+// http://tinyurl.com/lampm24
+func (h *handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+	r, size, err := h.openBlobById(id)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	zipReader, err := zip.NewReader(&readerAtSeeker{r}, size)
+	if err != nil {
+		return errgo.Notef(err, "cannot read archive data for %s", id)
+	}
+
+	// Retrieve the requested file from the zip archive.
+	filePath := strings.TrimPrefix(req.URL.String(), "/")
+	for _, file := range zipReader.File {
+		if path.Clean(file.Name) != filePath {
+			continue
+		}
+		// The file is found.
+		fileInfo := file.FileInfo()
+		if fileInfo.IsDir() {
+			return errgo.WithCausef(nil, params.ErrForbidden, "directory listing not allowed")
+		}
+		content, err := file.Open()
+		if err != nil {
+			return errgo.Notef(err, "unable to read file %q", filePath)
+		}
+		defer content.Close()
+		// Send the response to the client.
+		ctype := mime.TypeByExtension(filepath.Ext(filePath))
+		if ctype != "" {
+			w.Header().Set("Content-Type", ctype)
+		}
+		w.Header().Set("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
+		w.WriteHeader(http.StatusOK)
+		io.Copy(w, content)
+		return nil
+	}
+	return errgo.WithCausef(nil, params.ErrNotFound, "file %q not found in the archive", filePath)
+}
+
 type readerAtSeeker struct {
 	r io.ReadSeeker
 }
@@ -152,8 +191,20 @@ func (h *handler) nextRevisionForId(id *charm.Reference) (int, error) {
 	return 0, nil
 }
 
-// GET id/archive/…
-// http://tinyurl.com/lampm24
-func (h *handler) serveArchiveFile(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
-	return errNotImplemented
+func (h *handler) openBlobById(id *charm.Reference) (blobstore.ReadSeekCloser, int64, error) {
+	var entity mongodoc.Entity
+	if err := h.store.DB.Entities().
+		FindId(id).
+		Select(bson.D{{"blobhash", 1}}).
+		One(&entity); err != nil {
+		if err == mgo.ErrNotFound {
+			return nil, 0, params.ErrNotFound
+		}
+		return nil, 0, errgo.Notef(err, "cannot get %s", id)
+	}
+	r, size, err := h.store.BlobStore.Open(entity.BlobHash)
+	if err != nil {
+		return nil, 0, errgo.Notef(err, "cannot open archive data for %s", id)
+	}
+	return r, size, nil
 }
