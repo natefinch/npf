@@ -14,7 +14,7 @@ type FieldQueryFunc func(id *charm.Reference, selector map[string]int) (interfac
 // A FieldHandlerFunc returns some data from the given document. The
 // document will have been returned from an earlier call to the
 // associated QueryFunc.
-type FieldHandlerFunc func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error)
+type FieldHandlerFunc func(doc interface{}, id *charm.Reference, path string, method string, flags url.Values) (interface{}, error)
 
 // FieldIncludeHandler returns a BulkIncludeHandler that will perform
 // only a single database query for several requests. The given key is
@@ -48,7 +48,7 @@ func (h *fieldIncludeHandler) Key() interface{} {
 	return h.key
 }
 
-func (h *fieldIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error) {
+func (h *fieldIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.Reference, paths []string, method string, flags url.Values) ([]interface{}, error) {
 	funcs := make([]FieldHandlerFunc, len(hs))
 	selector := make(map[string]int)
 	// Extract the handler functions and union all the fields.
@@ -70,7 +70,7 @@ func (h *fieldIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.Referenc
 	results := make([]interface{}, len(hs))
 	for i, f := range funcs {
 		var err error
-		results[i], err = f(doc, id, paths[i], flags)
+		results[i], err = f(doc, id, paths[i], method, flags)
 		if err != nil {
 			// TODO correlate error with handler (perhaps return
 			// an error that identifies the slice position of the handler that

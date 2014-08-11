@@ -63,7 +63,7 @@ type BulkIncludeHandler interface {
 	// and flags holds all the url query values.
 	//
 	// TODO(rog) document indexed errors.
-	Handle(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error)
+	Handle(hs []BulkIncludeHandler, id *charm.Reference, paths []string, method string, flags url.Values) ([]interface{}, error)
 }
 
 // IdHandler handles a charm store request rooted at the given id.
@@ -244,7 +244,7 @@ func (r *Router) serveMeta(id *charm.Reference, req *http.Request) (interface{},
 		}, nil
 	}
 	if handler := r.handlers.Meta[key]; handler != nil {
-		results, err := handler.Handle([]BulkIncludeHandler{handler}, id, []string{path}, req.Form)
+		results, err := handler.Handle([]BulkIncludeHandler{handler}, id, []string{path}, req.Method, req.Form)
 		if err != nil {
 			// Note: preserve error cause from handlers.
 			return nil, errgo.Mask(err, errgo.Any)
@@ -355,7 +355,7 @@ func (r *Router) GetMetadata(id *charm.Reference, includes []string) (map[string
 		for i, include := range groupIncludes {
 			_, paths[i] = handlerKey(include)
 		}
-		groupResults, err := g[0].Handle(g, id, paths, nil)
+		groupResults, err := g[0].Handle(g, id, paths, "GET", nil)
 		if err != nil {
 			// TODO(rog) if it's a BulkError, attach
 			// the original include path to error (the BulkError

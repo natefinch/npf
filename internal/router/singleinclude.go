@@ -11,7 +11,7 @@ var _ BulkIncludeHandler = SingleIncludeHandler(nil)
 
 // SingleIncludeHandler implements BulkMetaHander for a non-batching
 // metadata retrieval function.
-type SingleIncludeHandler func(id *charm.Reference, path string, flags url.Values) (interface{}, error)
+type SingleIncludeHandler func(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error)
 
 // Key implements BulkMetadataHander.Key.
 func (h SingleIncludeHandler) Key() interface{} {
@@ -22,11 +22,11 @@ func (h SingleIncludeHandler) Key() interface{} {
 }
 
 // Handle implements BulkMetadataHander.Handle.
-func (h SingleIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error) {
+func (h SingleIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.Reference, paths []string, method string, flags url.Values) ([]interface{}, error) {
 	results := make([]interface{}, len(hs))
 	for i, h := range hs {
 		h := h.(SingleIncludeHandler)
-		result, err := h(id, paths[i], flags)
+		result, err := h(id, paths[i], method, flags)
 		if err != nil {
 			// TODO(rog) include index of failed handler.
 			return nil, errgo.Mask(err, errgo.Any)
