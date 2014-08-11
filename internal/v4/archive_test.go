@@ -445,6 +445,7 @@ func (s *ArchiveSuite) assertArchiveFileContents(c *gc.C, zipFile *zip.ReadClose
 			defer r.Close()
 			expectBytes, err = ioutil.ReadAll(r)
 			c.Assert(err, gc.IsNil)
+			break
 		}
 	}
 	c.Assert(expectBytes, gc.Not(gc.HasLen), 0)

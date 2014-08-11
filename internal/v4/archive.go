@@ -42,7 +42,7 @@ func (h *handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 		return router.WriteJSON(w, http.StatusOK, resp)
 	case "GET":
 	}
-	r, size, err := h.openBlobById(id)
+	r, size, err := h.openBlob(id)
 	if err != nil {
 		return err
 	}
@@ -128,7 +128,7 @@ func verifyConstraints(s string) error {
 // GET id/archive/…
 // http://tinyurl.com/lampm24
 func (h *handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
-	r, size, err := h.openBlobById(id)
+	r, size, err := h.openBlob(id)
 	if err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func (h *handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, r
 	}
 
 	// Retrieve the requested file from the zip archive.
-	filePath := strings.TrimPrefix(req.URL.String(), "/")
+	filePath := strings.TrimPrefix(path.Clean(req.URL.Path), "/")
 	for _, file := range zipReader.File {
 		if path.Clean(file.Name) != filePath {
 			continue
@@ -191,7 +191,7 @@ func (h *handler) nextRevisionForId(id *charm.Reference) (int, error) {
 	return 0, nil
 }
 
-func (h *handler) openBlobById(id *charm.Reference) (blobstore.ReadSeekCloser, int64, error) {
+func (h *handler) openBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64, error) {
 	var entity mongodoc.Entity
 	if err := h.store.DB.Entities().
 		FindId(id).
