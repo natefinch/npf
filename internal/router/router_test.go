@@ -265,7 +265,7 @@ var routerGetTests = []struct {
 	expectCode: http.StatusOK,
 	expectBody: &metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
-		Method: "GET",
+		Method:   "GET",
 	},
 }, {
 	about: "meta handler with additional elements",
@@ -278,7 +278,7 @@ var routerGetTests = []struct {
 	expectCode: http.StatusOK,
 	expectBody: metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
-		Method: "GET",
+		Method:   "GET",
 		Path:     "/bar/baz",
 	},
 }, {
@@ -292,7 +292,7 @@ var routerGetTests = []struct {
 	expectCode: http.StatusOK,
 	expectBody: metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
-		Method: "GET",
+		Method:   "GET",
 		Flags: url.Values{
 			"one": {"a", "c"},
 			"two": {"b"},
@@ -348,7 +348,7 @@ var routerGetTests = []struct {
 			Id:       mustParseReference("cs:precise/wordpress-42"),
 			Selector: map[string]int{"field1": 1, "field2": 1},
 		},
-		Id: mustParseReference("cs:precise/wordpress-42"),
+		Id:     mustParseReference("cs:precise/wordpress-42"),
 		Method: "GET",
 	},
 }, {
@@ -388,7 +388,7 @@ var routerGetTests = []struct {
 		Meta: map[string]interface{}{
 			"field1-1": fieldSelectHandleInfo{
 				HandlerId: "handler1",
-				Method: "GET",
+				Method:    "GET",
 				Doc: fieldSelectQueryInfo{
 					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1},
@@ -397,7 +397,7 @@ var routerGetTests = []struct {
 			},
 			"field2": fieldSelectHandleInfo{
 				HandlerId: "handler2",
-				Method: "GET",
+				Method:    "GET",
 				Doc: fieldSelectQueryInfo{
 					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1},
@@ -406,7 +406,7 @@ var routerGetTests = []struct {
 			},
 			"field1-2": fieldSelectHandleInfo{
 				HandlerId: "handler3",
-				Method: "GET",
+				Method:    "GET",
 				Doc: fieldSelectQueryInfo{
 					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1},
@@ -432,7 +432,7 @@ var routerGetTests = []struct {
 		Meta: map[string]interface{}{
 			"item1/foo": fieldSelectHandleInfo{
 				HandlerId: "handler1",
-				Method: "GET",
+				Method:    "GET",
 				Doc: fieldSelectQueryInfo{
 					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
@@ -442,7 +442,7 @@ var routerGetTests = []struct {
 			},
 			"item2/bar": fieldSelectHandleInfo{
 				HandlerId: "handler2",
-				Method: "GET",
+				Method:    "GET",
 				Doc: fieldSelectQueryInfo{
 					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
@@ -452,7 +452,7 @@ var routerGetTests = []struct {
 			},
 			"item1": fieldSelectHandleInfo{
 				HandlerId: "handler3",
-				Method: "GET",
+				Method:    "GET",
 				Doc: fieldSelectQueryInfo{
 					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
@@ -476,7 +476,7 @@ var routerGetTests = []struct {
 		Id: mustParseReference("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
 			"ok": metaHandlerTestResp{
-				Method: "GET",
+				Method:   "GET",
 				CharmURL: "cs:precise/wordpress-42",
 			},
 		},
@@ -506,7 +506,7 @@ var routerGetTests = []struct {
 	expectBody: map[string]metaHandlerTestResp{
 		"precise/wordpress-42": {
 			CharmURL: "cs:precise/wordpress-42",
-			Method: "GET",
+			Method:   "GET",
 		},
 	},
 }, {
@@ -521,11 +521,11 @@ var routerGetTests = []struct {
 	expectBody: map[string]metaHandlerTestResp{
 		"precise/wordpress-42": {
 			CharmURL: "cs:precise/wordpress-42",
-			Method: "GET",
+			Method:   "GET",
 		},
 		"quantal/foo-32": {
 			CharmURL: "cs:quantal/foo-32",
-			Method: "GET",
+			Method:   "GET",
 		},
 	},
 }, {
@@ -544,11 +544,11 @@ var routerGetTests = []struct {
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
 					CharmURL: "cs:precise/wordpress-42",
-					Method: "GET",
+					Method:   "GET",
 				},
 				"bar/something": metaHandlerTestResp{
 					CharmURL: "cs:precise/wordpress-42",
-					Method: "GET",
+					Method:   "GET",
 					Path:     "/something",
 				},
 			},
@@ -557,12 +557,12 @@ var routerGetTests = []struct {
 			Id: mustParseReference("cs:quantal/foo-32"),
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
-					Method: "GET",
+					Method:   "GET",
 					CharmURL: "cs:quantal/foo-32",
 				},
 				"bar/something": metaHandlerTestResp{
 					CharmURL: "cs:quantal/foo-32",
-					Method: "GET",
+					Method:   "GET",
 					Path:     "/something",
 				},
 			},
@@ -581,7 +581,7 @@ var routerGetTests = []struct {
 	expectBody: map[string]metaHandlerTestResp{
 		"wordpress": {
 			CharmURL: "cs:precise/wordpress-100",
-			Method: "GET",
+			Method:   "GET",
 			Path:     "/bar",
 		},
 	},
@@ -599,7 +599,7 @@ var routerGetTests = []struct {
 		"wordpress": {
 			CharmURL: "cs:precise/wordpress-100",
 			Path:     "/bar",
-			Method: "GET",
+			Method:   "GET",
 			Flags: url.Values{
 				"arble": {"bletch"},
 				"z":     {"w", "p"},
@@ -636,7 +636,7 @@ var routerGetTests = []struct {
 	expectBody: map[string]metaHandlerTestResp{
 		"precise/wordpress-23": {
 			CharmURL: "cs:precise/wordpress-23",
-			Method: "GET",
+			Method:   "GET",
 		},
 	},
 }, {
@@ -760,7 +760,7 @@ func (s *RouterSuite) TestRouterMethodsThatPassThroughUnresolvedId(c *gc.C) {
 			Header:  header,
 			ExpectBody: &metaHandlerTestResp{
 				CharmURL: "cs:series/wordpress-1234",
-				Method: method,
+				Method:   method,
 			},
 		})
 
@@ -802,7 +802,7 @@ var getMetadataTests = []struct {
 				Id:       mustParseReference("cs:~rog/precise/wordpress-2"),
 				Selector: map[string]int{"item1": 1, "item2": 1},
 			},
-			Id: mustParseReference("cs:~rog/precise/wordpress-2"),
+			Id:     mustParseReference("cs:~rog/precise/wordpress-2"),
 			Method: "GET",
 		},
 		"item2": fieldSelectHandleInfo{
@@ -811,12 +811,12 @@ var getMetadataTests = []struct {
 				Id:       mustParseReference("cs:~rog/precise/wordpress-2"),
 				Selector: map[string]int{"item1": 1, "item2": 1},
 			},
-			Id: mustParseReference("cs:~rog/precise/wordpress-2"),
+			Id:     mustParseReference("cs:~rog/precise/wordpress-2"),
 			Method: "GET",
 		},
 		"test": &metaHandlerTestResp{
 			CharmURL: "cs:~rog/precise/wordpress-2",
-			Method: "GET",
+			Method:   "GET",
 		},
 	},
 }, {
@@ -1168,7 +1168,7 @@ func testIdHandler(charmId *charm.Reference, w http.ResponseWriter, req *http.Re
 type metaHandlerTestResp struct {
 	CharmURL string
 	Path     string
-	Method string
+	Method   string
 	Flags    url.Values
 }
 
@@ -1180,7 +1180,7 @@ var testMetaHandler = SingleIncludeHandler(
 		return &metaHandlerTestResp{
 			CharmURL: id.String(),
 			Path:     path,
-			Method: method,
+			Method:   method,
 			Flags:    flags,
 		}, nil
 	},
@@ -1214,7 +1214,7 @@ type fieldSelectHandleInfo struct {
 	Doc       fieldSelectQueryInfo
 	Id        *charm.Reference
 	Path      string
-	Method string
+	Method    string
 	Flags     url.Values
 }
 
@@ -1242,7 +1242,7 @@ func fieldSelectHandler(handlerId string, key interface{}, fields ...string) Bul
 			Doc:       doc.(fieldSelectQueryInfo),
 			Id:        id,
 			Path:      path,
-			Method: method,
+			Method:    method,
 			Flags:     flags,
 		}, nil
 	}
