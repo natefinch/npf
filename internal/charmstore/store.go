@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"time"
 
 	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v3"
@@ -125,7 +124,6 @@ func (s *Store) AddCharm(url *charm.Reference, c charm.Charm, blobHash string, b
 		BaseURL:                 baseURL(url),
 		BlobHash:                blobHash,
 		Size:                    blobSize,
-		UploadTime:              time.Now().UTC(),
 		CharmMeta:               c.Meta(),
 		CharmConfig:             c.Config(),
 		CharmActions:            c.Actions(),
@@ -204,7 +202,6 @@ func (s *Store) AddBundle(url *charm.Reference, b charm.Bundle, blobHash string,
 		BaseURL:      baseURL(url),
 		BlobHash:     blobHash,
 		Size:         blobSize,
-		UploadTime:   time.Now().UTC(),
 		BundleData:   bundleData,
 		BundleReadMe: b.ReadMe(),
 		BundleCharms: urls,

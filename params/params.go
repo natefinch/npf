@@ -7,8 +7,6 @@
 package params
 
 import (
-	"time"
-
 	"gopkg.in/juju/charm.v3"
 )
 
@@ -45,10 +43,4 @@ type ArchiveSizeResponse struct {
 type ManifestFile struct {
 	Name string
 	Size int64
-}
-
-// ArchiveUploadTimeResponse holds the result of an
-// id/meta/archive-upload-time GET request. See http://tinyurl.com/nmujuqk
-type ArchiveUploadTimeResponse struct {
-	UploadTime time.Time
 }

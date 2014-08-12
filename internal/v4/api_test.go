@@ -12,7 +12,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/juju/errgo"
 	jujutesting "github.com/juju/testing"
@@ -138,18 +137,6 @@ var metaEndpoints = []metaEndpoint{{
 	checkURL: "cs:bundle/wordpress-42",
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data.([]params.ManifestFile), gc.Not(gc.HasLen), 0)
-	},
-}, {
-	name: "archive-upload-time",
-	get: entityGetter(func(entity *mongodoc.Entity) interface{} {
-		return &params.ArchiveUploadTimeResponse{
-			UploadTime: entity.UploadTime,
-		}
-	}),
-	checkURL: "cs:precise/wordpress-23",
-	assertCheckData: func(c *gc.C, data interface{}) {
-		response := data.(*params.ArchiveUploadTimeResponse)
-		c.Assert(response.UploadTime, gc.Not(gc.Equals), time.Time{})
 	},
 }}
 

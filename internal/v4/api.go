@@ -44,20 +44,20 @@ func New(store *charmstore.Store) http.Handler {
 			"expand-id": h.serveExpandId,
 		},
 		Meta: map[string]router.BulkIncludeHandler{
-			"charm-metadata":      h.entityHandler(h.metaCharmMetadata, "charmmeta"),
-			"bundle-metadata":     h.entityHandler(h.metaBundleMetadata, "bundledata"),
-			"charm-config":        h.entityHandler(h.metaCharmConfig, "charmconfig"),
-			"charm-actions":       h.entityHandler(h.metaCharmActions, "charmactions"),
-			"archive-size":        h.entityHandler(h.metaArchiveSize, "size"),
-			"manifest":            h.entityHandler(h.metaManifest, "blobhash"),
-			"archive-upload-time": h.entityHandler(h.metaArchiveUploadTime, "uploadtime"),
+			"charm-metadata":  h.entityHandler(h.metaCharmMetadata, "charmmeta"),
+			"bundle-metadata": h.entityHandler(h.metaBundleMetadata, "bundledata"),
+			"charm-config":    h.entityHandler(h.metaCharmConfig, "charmconfig"),
+			"charm-actions":   h.entityHandler(h.metaCharmActions, "charmactions"),
+			"archive-size":    h.entityHandler(h.metaArchiveSize, "size"),
+			"manifest":        h.entityHandler(h.metaManifest, "blobhash"),
 
 			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
-			"color":              router.SingleIncludeHandler(h.metaColor),
-			"bundles-containing": router.SingleIncludeHandler(h.metaBundlesContaining),
-			"extra-info":         router.SingleIncludeHandler(h.metaExtraInfo),
-			"extra-info/":        router.SingleIncludeHandler(h.metaExtraInfoWithKey),
-			"charm-related":      router.SingleIncludeHandler(h.metaCharmRelated),
+			"color":               router.SingleIncludeHandler(h.metaColor),
+			"bundles-containing":  router.SingleIncludeHandler(h.metaBundlesContaining),
+			"extra-info":          router.SingleIncludeHandler(h.metaExtraInfo),
+			"extra-info/":         router.SingleIncludeHandler(h.metaExtraInfoWithKey),
+			"charm-related":       router.SingleIncludeHandler(h.metaCharmRelated),
+			"archive-upload-time": router.SingleIncludeHandler(h.metaArchiveUploadTime),
 		},
 	}, h.resolveURL)
 	return h
@@ -296,8 +296,6 @@ func (h *handler) metaCharmRelated(id *charm.Reference, path string, method stri
 
 // GET id/meta/archive-upload-time
 // http://tinyurl.com/nmujuqk
-func (h *handler) metaArchiveUploadTime(entity *mongodoc.Entity, id *charm.Reference, path, method string, flags url.Values) (interface{}, error) {
-	return &params.ArchiveUploadTimeResponse{
-		UploadTime: entity.UploadTime,
-	}, nil
+func (h *handler) metaArchiveUploadTime(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
+	return nil, errNotImplemented
 }
