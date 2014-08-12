@@ -37,7 +37,7 @@ func LongWalk(w Walker) {
 
 func main() {
     c := Camel{“Bill”}
-    LongWalk©
+    LongWalk\(c)
 }
 
 // prints
@@ -258,7 +258,7 @@ func MakeWalker(c *Camel) Walker {
 }
 
 var c *Camel
-w := MakeWalker©
+w := MakeWalker\(c)
 if w != nil {
     // we’ll get in here, but why?
     w.Walk(500)
@@ -310,7 +310,7 @@ func MakeWalker(c *Camel) Walker {
 }
 
 var c *Camel
-w := MakeWalker©
+w := MakeWalker\(c)
 if w != nil {
     // Yay, we don’t get here!
     w.Walk(500)
