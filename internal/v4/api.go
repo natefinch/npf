@@ -298,6 +298,6 @@ func (h *handler) metaCharmRelated(id *charm.Reference, path string, method stri
 // http://tinyurl.com/nmujuqk
 func (h *handler) metaArchiveUploadTime(entity *mongodoc.Entity, id *charm.Reference, path, method string, flags url.Values) (interface{}, error) {
 	return &params.ArchiveUploadTimeResponse{
-		UploadTime: entity.UploadTime,
+		UploadTime: entity.UploadTime.UTC(),
 	}, nil
 }

@@ -34,8 +34,12 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 	store, err := NewStore(s.Session.DB("foo"))
 	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:precise/wordpress-23")
+
+	// Add the charm to the store.
+	beforeAdding := time.Now()
 	err = store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
+	afterAdding := time.Now()
 
 	var doc mongodoc.Entity
 	err = store.DB.Entities().FindId("cs:precise/wordpress-23").One(&doc)
@@ -48,7 +52,8 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 
 	// Check the upload time and then reset it to its zero value
 	// so that we can test the deterministic parts later.
-	c.Assert(doc.UploadTime, isRecent())
+	c.Assert(doc.UploadTime, jc.TimeBetween(beforeAdding, afterAdding))
+
 	doc.UploadTime = time.Time{}
 
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
@@ -86,8 +91,12 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 	store, err := NewStore(s.Session.DB("foo"))
 	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:bundle/wordpress-simple-42")
+
+	// Add the bundle to the store.
+	beforeAdding := time.Now()
 	err = store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
+	afterAdding := time.Now()
 
 	var doc mongodoc.Entity
 	err = store.DB.Entities().FindId("cs:bundle/wordpress-simple-42").One(&doc)
@@ -96,7 +105,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 
 	// Check the upload time and then reset it to its zero value
 	// so that we can test the deterministic parts later.
-	c.Assert(doc.UploadTime, isRecent())
+	c.Assert(doc.UploadTime, jc.TimeBetween(beforeAdding, afterAdding))
 	doc.UploadTime = time.Time{}
 
 	// The entity doc has been correctly added to the mongo collection.
@@ -279,9 +288,4 @@ func mustParseReference(url string) *charm.Reference {
 		panic(err)
 	}
 	return ref
-}
-
-func isRecent() gc.Checker {
-	now := time.Now()
-	return jc.TimeBetween(now.Add(-time.Second), now)
 }

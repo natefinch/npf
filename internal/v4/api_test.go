@@ -16,6 +16,7 @@ import (
 
 	"github.com/juju/errgo"
 	jujutesting "github.com/juju/testing"
+	jc "github.com/juju/testing/checkers"
 	"gopkg.in/juju/charm.v3"
 	charmtesting "gopkg.in/juju/charm.v3/testing"
 	"gopkg.in/mgo.v2"
@@ -143,13 +144,14 @@ var metaEndpoints = []metaEndpoint{{
 	name: "archive-upload-time",
 	get: entityGetter(func(entity *mongodoc.Entity) interface{} {
 		return &params.ArchiveUploadTimeResponse{
-			UploadTime: entity.UploadTime,
+			UploadTime: entity.UploadTime.UTC(),
 		}
 	}),
 	checkURL: "cs:precise/wordpress-23",
 	assertCheckData: func(c *gc.C, data interface{}) {
 		response := data.(*params.ArchiveUploadTimeResponse)
-		c.Assert(response.UploadTime, gc.Not(gc.Equals), time.Time{})
+		c.Assert(response.UploadTime, gc.Not(jc.Satisfies), time.Time.IsZero)
+		c.Assert(response.UploadTime.Location(), gc.Equals, time.UTC)
 	},
 }}
 
