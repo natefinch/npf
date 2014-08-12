@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/juju/errgo"
 	jc "github.com/juju/testing/checkers"
@@ -44,6 +45,12 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 	size, hash := mustGetSizeAndHash(ch)
 	sort.Strings(doc.CharmProvidedInterfaces)
 	sort.Strings(doc.CharmRequiredInterfaces)
+
+	// Check the upload time and then reset it to its zero value
+	// so that we can test the deterministic parts later.
+	c.Assert(doc.UploadTime, isRecent())
+	doc.UploadTime = time.Time{}
+
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
 		URL:                     url,
 		BaseURL:                 mustParseReference("cs:wordpress"),
@@ -86,6 +93,11 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 	err = store.DB.Entities().FindId("cs:bundle/wordpress-simple-42").One(&doc)
 	c.Assert(err, gc.IsNil)
 	sort.Sort(orderedURLs(doc.BundleCharms))
+
+	// Check the upload time and then reset it to its zero value
+	// so that we can test the deterministic parts later.
+	c.Assert(doc.UploadTime, isRecent())
+	doc.UploadTime = time.Time{}
 
 	// The entity doc has been correctly added to the mongo collection.
 	size, hash := mustGetSizeAndHash(bundle)
@@ -267,4 +279,9 @@ func mustParseReference(url string) *charm.Reference {
 		panic(err)
 	}
 	return ref
+}
+
+func isRecent() gc.Checker {
+	now := time.Now()
+	return jc.TimeBetween(now.Add(-time.Second), now)
 }
