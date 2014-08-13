@@ -26,6 +26,7 @@ import (
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/storetesting"
+	"github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
 )
 
@@ -498,6 +499,98 @@ func (s *ArchiveSuite) assertArchiveFileContents(c *gc.C, zipFile *zip.ReadClose
 	c.Assert(headers.Get("Content-Length"), gc.Equals, strconv.Itoa(len(expectBytes)))
 	// We only have text files in the charm repository used for tests.
 	c.Assert(headers.Get("Content-Type"), gc.Equals, "text/plain; charset=utf-8")
+}
+
+func (s *ArchiveSuite) TestBundleCharms(c *gc.C) {
+	// Populate the store with some testing charms.
+	mysql := charmtesting.Charms.CharmArchive(c.MkDir(), "mysql")
+	err := s.store.AddCharmWithArchive(
+		mustParseReference("cs:saucy/mysql-0"), mysql)
+	c.Assert(err, gc.IsNil)
+	riak := charmtesting.Charms.CharmArchive(c.MkDir(), "riak")
+	err = s.store.AddCharmWithArchive(
+		mustParseReference("cs:trusty/riak-42"), riak)
+	c.Assert(err, gc.IsNil)
+	wordpress := charmtesting.Charms.CharmArchive(c.MkDir(), "wordpress")
+	err = s.store.AddCharmWithArchive(
+		mustParseReference("cs:utopic/wordpress-47"), wordpress)
+	c.Assert(err, gc.IsNil)
+
+	// Retrieve the bundleCharms method.
+	handler := v4.New(s.store)
+	bundleCharms := v4.BundleCharms(handler)
+
+	tests := []struct {
+		about  string
+		ids    []string
+		charms map[string]charm.Charm
+	}{{
+		about: "no ids",
+	}, {
+		about: "fully qualified ids",
+		ids: []string{
+			"cs:saucy/mysql-0",
+			"cs:trusty/riak-42",
+			"cs:utopic/wordpress-47",
+		},
+		charms: map[string]charm.Charm{
+			"cs:saucy/mysql-0":       mysql,
+			"cs:trusty/riak-42":      riak,
+			"cs:utopic/wordpress-47": wordpress,
+		},
+	}, {
+		about: "partial ids",
+		ids:   []string{"utopic/wordpress", "mysql-0", "riak"},
+		charms: map[string]charm.Charm{
+			"mysql-0":          mysql,
+			"riak":             riak,
+			"utopic/wordpress": wordpress,
+		},
+	}, {
+		about: "charm not found",
+		ids:   []string{"utopic/no-such", "mysql"},
+		charms: map[string]charm.Charm{
+			"mysql": mysql,
+		},
+	}, {
+		about: "no charms found",
+		ids: []string{
+			"cs:saucy/mysql-99",   // Revision not present.
+			"cs:precise/riak-42",  // Series not present.
+			"cs:utopic/django-47", // Name not present.
+		},
+	}, {
+		about: "repeated charms",
+		ids: []string{
+			"cs:saucy/mysql",
+			"cs:trusty/riak-42",
+			"mysql",
+		},
+		charms: map[string]charm.Charm{
+			"cs:saucy/mysql":    mysql,
+			"cs:trusty/riak-42": riak,
+			"mysql":             mysql,
+		},
+	}}
+
+	// Run the tests.
+	for i, test := range tests {
+		c.Logf("test %d: %s", i, test.about)
+		charms, err := bundleCharms(test.ids)
+		c.Assert(err, gc.IsNil)
+		// Ensure the charms returned are what we expect.
+		c.Assert(charms, gc.HasLen, len(test.charms))
+		for i, ch := range charms {
+			expectCharm := test.charms[i]
+			c.Assert(ch.Meta(), jc.DeepEquals, expectCharm.Meta())
+			c.Assert(ch.Config(), jc.DeepEquals, expectCharm.Config())
+			c.Assert(ch.Actions(), jc.DeepEquals, expectCharm.Actions())
+			// Since the charm archive and the charm entity have a slightly
+			// different concept of what a revision is, and since the revision
+			// is not used for bundle validation, we can safely avoid checking
+			// the charm revision.
+		}
+	}
 }
 
 // entityInfo holds all the information we want to find

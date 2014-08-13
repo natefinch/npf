@@ -236,9 +236,10 @@ func (e *entityCharm) Revision() int {
 
 func (h *handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 	numIds := len(ids)
-	urls := make([]*charm.Reference, numIds)
-	urlIdmap := make(map[charm.Reference]string, numIds)
-	for i, id := range ids {
+	urls := make([]*charm.Reference, 0, numIds)
+	idKeys := make([]string, 0, numIds)
+	// TODO resolve ids concurrently.
+	for _, id := range ids {
 		url, err := charm.ParseReference(id)
 		if err != nil {
 			// Ignore this error. This will be caught in the bundle
@@ -254,8 +255,8 @@ func (h *handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 			}
 			return nil, err
 		}
-		urls[i] = url
-		urlIdmap[*url] = id
+		urls = append(urls, url)
+		idKeys = append(idKeys, id)
 	}
 	var entities []mongodoc.Entity
 	if err := h.store.DB.Entities().
@@ -263,11 +264,15 @@ func (h *handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 		All(&entities); err != nil {
 		return nil, err
 	}
-	charms := make(map[string]charm.Charm, len(entities))
+	entityCharms := make(map[charm.Reference]entityCharm, len(entities))
 	for _, entity := range entities {
-		id := urlIdmap[*entity.URL]
-		ch := entityCharm(entity)
-		charms[id] = &ch
+		entityCharms[*entity.URL] = entityCharm(entity)
+	}
+	charms := make(map[string]charm.Charm, len(urls))
+	for i, url := range urls {
+		if ch, ok := entityCharms[*url]; ok {
+			charms[idKeys[i]] = &ch
+		}
 	}
 	return charms, nil
 }
