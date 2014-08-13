@@ -214,9 +214,29 @@ func (h *handler) openBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64
 	return r, size, nil
 }
 
+// entityCharm implements charm.Charm.
+type entityCharm mongodoc.Entity
+
+func (e *entityCharm) Meta() *charm.Meta {
+	return e.CharmMeta
+}
+
+func (e *entityCharm) Config() *charm.Config {
+	return e.CharmConfig
+}
+
+func (e *entityCharm) Actions() *charm.Actions {
+	return e.CharmActions
+}
+
+func (e *entityCharm) Revision() int {
+	return e.URL.Revision
+}
+
 func (h *handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
-	charms := make(map[string]charm.Charm, len(ids))
-	for _, id := range ids {
+	urls := make([]*charm.Reference, len(ids))
+	urlIdmap := make(map[charm.Reference]string, len(ids))
+	for i, id := range ids {
 		url, err := charm.ParseReference(id)
 		if err != nil {
 			// Ignore this error. This will be caught in the bundle
@@ -232,21 +252,20 @@ func (h *handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 			}
 			return nil, err
 		}
-		r, size, err := h.openBlob(url)
-		if err != nil {
-			if err == params.ErrNotFound {
-				// Same as above: do not include this charm in charms.
-				// The bundle verification process will complain later.
-				continue
-			}
-			return nil, err
-		}
-		defer r.Close()
-		ch, err := charm.ReadCharmArchiveFromReader(&readerAtSeeker{r}, size)
-		if err != nil {
-			return nil, err
-		}
-		charms[id] = ch
+		urls[i] = url
+		urlIdmap[*url] = id
+	}
+	var entities []mongodoc.Entity
+	if err := h.store.DB.Entities().
+		Find(bson.D{{"_id", bson.D{{"$in", urls}}}}).
+		All(&entities); err != nil {
+		return nil, err
+	}
+	charms := make(map[string]charm.Charm, len(entities))
+	for _, entity := range entities {
+		id := urlIdmap[*entity.URL]
+		ch := entityCharm(entity)
+		charms[id] = &ch
 	}
 	return charms, nil
 }
