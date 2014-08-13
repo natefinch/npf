@@ -235,8 +235,9 @@ func (e *entityCharm) Revision() int {
 }
 
 func (h *handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
-	urls := make([]*charm.Reference, len(ids))
-	urlIdmap := make(map[charm.Reference]string, len(ids))
+	numIds := len(ids)
+	urls := make([]*charm.Reference, numIds)
+	urlIdmap := make(map[charm.Reference]string, numIds)
 	for i, id := range ids {
 		url, err := charm.ParseReference(id)
 		if err != nil {
@@ -271,8 +272,8 @@ func (h *handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 	return charms, nil
 }
 
-// verificationError returns an error whose string representation includes all
-// the verification error messages stored in err.
+// verificationError returns an error whose string representation is a list of
+// all the verification error messages stored in err, in JSON format.
 // Note that err must be a *charm.VerificationError.
 func verificationError(err error) error {
 	verr := err.(*charm.VerificationError)
