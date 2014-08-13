@@ -5,6 +5,7 @@ package v4
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"io"
 	"mime"
 	"net/http"
@@ -279,5 +280,10 @@ func verificationError(err error) error {
 	for i, err := range verr.Errors {
 		messages[i] = err.Error()
 	}
-	return errgo.New(strings.Join(messages, "; "))
+	encodedMessages, err := json.Marshal(messages)
+	if err != nil {
+		// This should never happen.
+		return err
+	}
+	return errgo.New(string(encodedMessages))
 }
