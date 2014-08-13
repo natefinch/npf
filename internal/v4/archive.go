@@ -215,25 +215,6 @@ func (h *handler) openBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64
 	return r, size, nil
 }
 
-// entityCharm implements charm.Charm.
-type entityCharm mongodoc.Entity
-
-func (e *entityCharm) Meta() *charm.Meta {
-	return e.CharmMeta
-}
-
-func (e *entityCharm) Config() *charm.Config {
-	return e.CharmConfig
-}
-
-func (e *entityCharm) Actions() *charm.Actions {
-	return e.CharmActions
-}
-
-func (e *entityCharm) Revision() int {
-	return e.URL.Revision
-}
-
 func (h *handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 	numIds := len(ids)
 	urls := make([]*charm.Reference, 0, numIds)
@@ -264,24 +245,47 @@ func (h *handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 		All(&entities); err != nil {
 		return nil, err
 	}
-	entityCharms := make(map[charm.Reference]entityCharm, len(entities))
-	for _, entity := range entities {
-		entityCharms[*entity.URL] = entityCharm(entity)
+
+	entityCharms := make(map[charm.Reference]charm.Charm, len(entities))
+	for i, entity := range entities {
+		entityCharms[*entity.URL] = (*entityCharm)(&entities[i])
 	}
 	charms := make(map[string]charm.Charm, len(urls))
 	for i, url := range urls {
 		if ch, ok := entityCharms[*url]; ok {
-			charms[idKeys[i]] = &ch
+			charms[idKeys[i]] = ch
 		}
 	}
 	return charms, nil
+}
+
+// entityCharm implements charm.Charm.
+type entityCharm mongodoc.Entity
+
+func (e *entityCharm) Meta() *charm.Meta {
+	return e.CharmMeta
+}
+
+func (e *entityCharm) Config() *charm.Config {
+	return e.CharmConfig
+}
+
+func (e *entityCharm) Actions() *charm.Actions {
+	return e.CharmActions
+}
+
+func (e *entityCharm) Revision() int {
+	return e.URL.Revision
 }
 
 // verificationError returns an error whose string representation is a list of
 // all the verification error messages stored in err, in JSON format.
 // Note that err must be a *charm.VerificationError.
 func verificationError(err error) error {
-	verr := err.(*charm.VerificationError)
+	verr, ok := err.(*charm.VerificationError)
+	if !ok {
+		return err
+	}
 	messages := make([]string, len(verr.Errors))
 	for i, err := range verr.Errors {
 		messages[i] = err.Error()
