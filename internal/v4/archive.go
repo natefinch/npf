@@ -241,8 +241,8 @@ func (h *handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 		url, err := charm.ParseReference(id)
 		if err != nil {
 			// Ignore this error. This will be caught in the bundle
-			// verification process and will be returned to the user
-			// along with other bundle errors.
+			// verification process (see bundleData.VerifyWithCharms) and will
+			// be returned to the user along with other bundle errors.
 			continue
 		}
 		if err = h.resolveURL(url); err != nil {
