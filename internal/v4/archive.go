@@ -100,8 +100,13 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 		if err != nil {
 			return nil, errgo.Notef(err, "cannot read bundle archive")
 		}
-		if err := b.Data().Verify(verifyConstraints); err != nil {
-			return nil, errgo.Notef(err, "bundle verification failed")
+		bundleData := b.Data()
+		charms, err := h.bundleCharms(bundleData.RequiredCharms())
+		if err != nil {
+			return nil, errgo.Notef(err, "cannot retrieve bundle charms")
+		}
+		if err := bundleData.VerifyWithCharms(verifyConstraints, charms); err != nil {
+			return nil, errgo.Notef(verificationError(err), "bundle verification failed")
 		}
 		if err := h.store.AddBundle(id, b, hash, req.ContentLength); err != nil {
 			return nil, errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
@@ -207,4 +212,53 @@ func (h *handler) openBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64
 		return nil, 0, errgo.Notef(err, "cannot open archive data for %s", id)
 	}
 	return r, size, nil
+}
+
+func (h *handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
+	charms := make(map[string]charm.Charm, len(ids))
+	for _, id := range ids {
+		url, err := charm.ParseReference(id)
+		if err != nil {
+			// Ignore this error. This will be caught in the bundle
+			// verification process and will be returned to the user
+			// along with other bundle errors.
+			continue
+		}
+		if err = h.resolveURL(url); err != nil {
+			if errgo.Cause(err) == params.ErrNotFound {
+				// Ignore this error too, for the same reasons
+				// described above.
+				continue
+			}
+			return nil, err
+		}
+		r, size, err := h.openBlob(url)
+		if err != nil {
+			if err == params.ErrNotFound {
+				// Same as above: do not include this charm in charms.
+				// The bundle verification process will complain later.
+				continue
+			}
+			return nil, err
+		}
+		defer r.Close()
+		ch, err := charm.ReadCharmArchiveFromReader(&readerAtSeeker{r}, size)
+		if err != nil {
+			return nil, err
+		}
+		charms[id] = ch
+	}
+	return charms, nil
+}
+
+// verificationError returns an error whose string representation includes all
+// the verification error messages stored in err.
+// Note that err must be a *charm.VerificationError.
+func verificationError(err error) error {
+	verr := err.(*charm.VerificationError)
+	messages := make([]string, len(verr.Errors))
+	for i, err := range verr.Errors {
+		messages[i] = err.Error()
+	}
+	return errgo.New(strings.Join(messages, "; "))
 }

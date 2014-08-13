@@ -244,6 +244,16 @@ func (s *ArchiveSuite) TestPostCharm(c *gc.C) {
 }
 
 func (s *ArchiveSuite) TestPostBundle(c *gc.C) {
+	// Upload the required charms.
+	err := s.store.AddCharmWithArchive(
+		mustParseReference("cs:utopic/mysql-42"),
+		charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"))
+	c.Assert(err, gc.IsNil)
+	err = s.store.AddCharmWithArchive(
+		mustParseReference("cs:utopic/wordpress-47"),
+		charmtesting.Charms.CharmArchive(c.MkDir(), "wordpress"))
+	c.Assert(err, gc.IsNil)
+
 	// A bundle that did not exist before should get revision 0.
 	s.assertUploadBundle(c, mustParseReference("bundle/wordpress-0"), "wordpress")
 
@@ -291,7 +301,12 @@ func (s *ArchiveSuite) TestPostInvalidBundleData(c *gc.C) {
 	f, err := os.Open(path)
 	c.Assert(err, gc.IsNil)
 	defer f.Close()
-	expectErr := `bundle verification failed: relation ["foo:db" "mysql:server"] refers to service "foo" not defined in this bundle`
+	// Here we exercise both bundle internal verification (bad relation) and
+	// validation with respect to charms (wordpress and mysql are missing).
+	expectErr := `bundle verification failed: ` +
+		`service "wordpress" refers to non-existent charm "wordpress"; ` +
+		`service "mysql" refers to non-existent charm "mysql"; ` +
+		`relation ["foo:db" "mysql:server"] refers to service "foo" not defined in this bundle`
 	s.assertCannotUpload(c, "bundle/wordpress", f, expectErr)
 }
 
