@@ -5,6 +5,7 @@ package v4
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"io"
 	"mime"
 	"net/http"
@@ -100,8 +101,13 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 		if err != nil {
 			return nil, errgo.Notef(err, "cannot read bundle archive")
 		}
-		if err := b.Data().Verify(verifyConstraints); err != nil {
-			return nil, errgo.Notef(err, "bundle verification failed")
+		bundleData := b.Data()
+		charms, err := h.bundleCharms(bundleData.RequiredCharms())
+		if err != nil {
+			return nil, errgo.Notef(err, "cannot retrieve bundle charms")
+		}
+		if err := bundleData.VerifyWithCharms(verifyConstraints, charms); err != nil {
+			return nil, errgo.Notef(verificationError(err), "bundle verification failed")
 		}
 		if err := h.store.AddBundle(id, b, hash, req.ContentLength); err != nil {
 			return nil, errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
@@ -207,4 +213,87 @@ func (h *handler) openBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64
 		return nil, 0, errgo.Notef(err, "cannot open archive data for %s", id)
 	}
 	return r, size, nil
+}
+
+func (h *handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
+	numIds := len(ids)
+	urls := make([]*charm.Reference, 0, numIds)
+	idKeys := make([]string, 0, numIds)
+	// TODO resolve ids concurrently.
+	for _, id := range ids {
+		url, err := charm.ParseReference(id)
+		if err != nil {
+			// Ignore this error. This will be caught in the bundle
+			// verification process (see bundleData.VerifyWithCharms) and will
+			// be returned to the user along with other bundle errors.
+			continue
+		}
+		if err = h.resolveURL(url); err != nil {
+			if errgo.Cause(err) == params.ErrNotFound {
+				// Ignore this error too, for the same reasons
+				// described above.
+				continue
+			}
+			return nil, err
+		}
+		urls = append(urls, url)
+		idKeys = append(idKeys, id)
+	}
+	var entities []mongodoc.Entity
+	if err := h.store.DB.Entities().
+		Find(bson.D{{"_id", bson.D{{"$in", urls}}}}).
+		All(&entities); err != nil {
+		return nil, err
+	}
+
+	entityCharms := make(map[charm.Reference]charm.Charm, len(entities))
+	for i, entity := range entities {
+		entityCharms[*entity.URL] = (*entityCharm)(&entities[i])
+	}
+	charms := make(map[string]charm.Charm, len(urls))
+	for i, url := range urls {
+		if ch, ok := entityCharms[*url]; ok {
+			charms[idKeys[i]] = ch
+		}
+	}
+	return charms, nil
+}
+
+// entityCharm implements charm.Charm.
+type entityCharm mongodoc.Entity
+
+func (e *entityCharm) Meta() *charm.Meta {
+	return e.CharmMeta
+}
+
+func (e *entityCharm) Config() *charm.Config {
+	return e.CharmConfig
+}
+
+func (e *entityCharm) Actions() *charm.Actions {
+	return e.CharmActions
+}
+
+func (e *entityCharm) Revision() int {
+	return e.URL.Revision
+}
+
+// verificationError returns an error whose string representation is a list of
+// all the verification error messages stored in err, in JSON format.
+// Note that err must be a *charm.VerificationError.
+func verificationError(err error) error {
+	verr, ok := err.(*charm.VerificationError)
+	if !ok {
+		return err
+	}
+	messages := make([]string, len(verr.Errors))
+	for i, err := range verr.Errors {
+		messages[i] = err.Error()
+	}
+	encodedMessages, err := json.Marshal(messages)
+	if err != nil {
+		// This should never happen.
+		return err
+	}
+	return errgo.New(string(encodedMessages))
 }
