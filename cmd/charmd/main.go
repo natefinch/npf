@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 
 	"gopkg.in/mgo.v2"
-	"launchpad.net/goyaml"
+	"gopkg.in/yaml.v1"
 
 	"github.com/juju/charmstore"
 )
@@ -70,7 +70,7 @@ func readConfig(path string) (*config, error) {
 		return nil, fmt.Errorf("reading config file: %v", err)
 	}
 	var conf config
-	err = goyaml.Unmarshal(data, &conf)
+	err = yaml.Unmarshal(data, &conf)
 	if err != nil {
 		return nil, fmt.Errorf("processing config file: %v", err)
 	}
