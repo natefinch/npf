@@ -28,11 +28,11 @@ var _ = gc.Suite(&BlobStoreSuite{})
 func (s *BlobStoreSuite) TestPutOpen(c *gc.C) {
 	store := blobstore.New(s.Session.DB("db"), "blobstore")
 	content := "some data"
-	chal, err := store.Put(strings.NewReader(content), int64(len(content)), hashOf(content), nil)
+	chal, err := store.Put(strings.NewReader(content), "x", int64(len(content)), hashOf(content), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(chal, gc.IsNil)
 
-	rc, length, err := store.Open(hashOf(content))
+	rc, length, err := store.Open("x")
 	c.Assert(err, gc.IsNil)
 	defer rc.Close()
 	c.Assert(length, gc.Equals, int64(len(content)))
@@ -42,14 +42,14 @@ func (s *BlobStoreSuite) TestPutOpen(c *gc.C) {
 	c.Assert(string(data), gc.Equals, content)
 
 	// Putting the resource again should generate a challenge.
-	chal, err = store.Put(strings.NewReader(content), int64(len(content)), hashOf(content), nil)
+	chal, err = store.Put(strings.NewReader(content), "y", int64(len(content)), hashOf(content), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(chal, gc.NotNil)
 
 	resp, err := blobstore.NewContentChallengeResponse(chal, strings.NewReader(content))
 	c.Assert(err, gc.IsNil)
 
-	chal, err = store.Put(strings.NewReader(content), int64(len(content)), hashOf(content), resp)
+	chal, err = store.Put(strings.NewReader(content), "y", int64(len(content)), hashOf(content), resp)
 	c.Assert(err, gc.IsNil)
 	c.Assert(chal, gc.IsNil)
 }
@@ -57,11 +57,11 @@ func (s *BlobStoreSuite) TestPutOpen(c *gc.C) {
 func (s *BlobStoreSuite) TestPutInvalidHash(c *gc.C) {
 	store := blobstore.New(s.Session.DB("db"), "blobstore")
 	content := "some data"
-	chal, err := store.Put(strings.NewReader(content), int64(len(content)), hashOf("wrong"), nil)
+	chal, err := store.Put(strings.NewReader(content), "x", int64(len(content)), hashOf("wrong"), nil)
 	c.Assert(err, gc.ErrorMatches, "hash mismatch")
 	c.Assert(chal, gc.IsNil)
 
-	rc, length, err := store.Open(hashOf(content))
+	rc, length, err := store.Open("x")
 	c.Assert(err, gc.ErrorMatches, "resource.*not found")
 	c.Assert(rc, gc.Equals, nil)
 	c.Assert(length, gc.Equals, int64(0))
@@ -71,10 +71,10 @@ func (s *BlobStoreSuite) TestPutUnchallenged(c *gc.C) {
 	store := blobstore.New(s.Session.DB("db"), "blobstore")
 
 	content := "some data"
-	err := store.PutUnchallenged(strings.NewReader(content), int64(len(content)), hashOf(content))
+	err := store.PutUnchallenged(strings.NewReader(content), "x", int64(len(content)), hashOf(content))
 	c.Assert(err, gc.IsNil)
 
-	rc, length, err := store.Open(hashOf(content))
+	rc, length, err := store.Open("x")
 	c.Assert(err, gc.IsNil)
 	defer rc.Close()
 	c.Assert(length, gc.Equals, int64(len(content)))
@@ -83,24 +83,24 @@ func (s *BlobStoreSuite) TestPutUnchallenged(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(string(data), gc.Equals, content)
 
-	err = store.PutUnchallenged(strings.NewReader(content), int64(len(content)), hashOf(content))
+	err = store.PutUnchallenged(strings.NewReader(content), "x", int64(len(content)), hashOf(content))
 	c.Assert(err, gc.IsNil)
 }
 
 func (s *BlobStoreSuite) TestPutUnchallengedInvalidHash(c *gc.C) {
 	store := blobstore.New(s.Session.DB("db"), "blobstore")
 	content := "some data"
-	err := store.PutUnchallenged(strings.NewReader(content), int64(len(content)), hashOf("wrong"))
+	err := store.PutUnchallenged(strings.NewReader(content), "x", int64(len(content)), hashOf("wrong"))
 	c.Assert(err, gc.ErrorMatches, "hash mismatch")
 }
 
 func (s *BlobStoreSuite) TestRemove(c *gc.C) {
 	store := blobstore.New(s.Session.DB("db"), "blobstore")
 	content := "some data"
-	err := store.PutUnchallenged(strings.NewReader(content), int64(len(content)), hashOf(content))
+	err := store.PutUnchallenged(strings.NewReader(content), "x", int64(len(content)), hashOf(content))
 	c.Assert(err, gc.IsNil)
 
-	rc, length, err := store.Open(hashOf(content))
+	rc, length, err := store.Open("x")
 	c.Assert(err, gc.IsNil)
 	defer rc.Close()
 	c.Assert(length, gc.Equals, int64(len(content)))
@@ -108,10 +108,10 @@ func (s *BlobStoreSuite) TestRemove(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(string(data), gc.Equals, content)
 
-	err = store.Remove(hashOf(content))
+	err = store.Remove("x")
 	c.Assert(err, gc.IsNil)
 
-	rc, length, err = store.Open(hashOf(content))
+	rc, length, err = store.Open("x")
 	c.Assert(err, gc.ErrorMatches, `resource at path "[^"]+" not found`)
 }
 
@@ -123,11 +123,11 @@ func (s *BlobStoreSuite) TestLarge(c *gc.C) {
 	}
 	hash := hashOfReader(c, newContent())
 
-	chal, err := store.Put(newContent(), size, hash, nil)
+	chal, err := store.Put(newContent(), "x", size, hash, nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(chal, gc.IsNil)
 
-	rc, length, err := store.Open(hash)
+	rc, length, err := store.Open("x")
 	c.Assert(err, gc.IsNil)
 	defer rc.Close()
 	c.Assert(length, gc.Equals, size)

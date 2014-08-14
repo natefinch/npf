@@ -25,6 +25,7 @@ import (
 
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/charmstore"
+	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
 	"github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
@@ -333,9 +334,8 @@ func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSee
 		},
 	})
 
-	// Check that the uploaded blob has been deleted.
-	_, _, err = s.store.BlobStore.Open(hash)
-	c.Assert(err, gc.ErrorMatches, "resource.*not found")
+	// TODO(rog) check that the uploaded blob has been deleted,
+	// by checking that no new blobs have been added to the blob store.
 }
 
 // assertUploadCharm uploads the testing charm with the given name
@@ -400,9 +400,12 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, url *charm.Reference, fileName stri
 		},
 	})
 
+	var entity mongodoc.Entity
+	err = s.store.DB.Entities().FindId(url).One(&entity)
+	c.Assert(err, gc.IsNil)
 	// Test that the expected entry has been created
 	// in the blob store.
-	r, _, err := s.store.BlobStore.Open(hash)
+	r, _, err := s.store.BlobStore.Open(entity.BlobName)
 	c.Assert(err, gc.IsNil)
 	r.Close()
 	return size

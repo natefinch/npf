@@ -72,29 +72,33 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 	// Upload the actual blob, and make sure that it is removed
 	// if we fail later.
 
-	err = h.store.BlobStore.PutUnchallenged(req.Body, req.ContentLength, hash)
+	name := bson.NewObjectId().Hex()
+	err = h.store.BlobStore.PutUnchallenged(req.Body, name, req.ContentLength, hash)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot put archive blob")
 	}
-	r, _, err := h.store.BlobStore.Open(hash)
+	r, _, err := h.store.BlobStore.Open(name)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot open newly created blob")
 	}
 	defer r.Close()
 	defer func() {
 		if err != nil {
-			h.store.BlobStore.Remove(hash)
+			h.store.BlobStore.Remove(name)
 			// TODO(rog) log if remove fails.
 		}
 	}()
 
-	// Create the entry for the entity in charm store.
-
+	// Assign a new revision to the id, so that we know what name
+	// give the archive in the store.
 	rev, err := h.nextRevisionForId(id)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot get next revision for id")
 	}
 	id.Revision = rev
+
+	// Create the entry for the entity in charm store.
+
 	readerAt := &readerAtSeeker{r}
 	if id.Series == "bundle" {
 		b, err := charm.ReadBundleArchiveFromReader(readerAt, req.ContentLength)
@@ -109,7 +113,7 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 		if err := bundleData.VerifyWithCharms(verifyConstraints, charms); err != nil {
 			return nil, errgo.Notef(verificationError(err), "bundle verification failed")
 		}
-		if err := h.store.AddBundle(id, b, hash, req.ContentLength); err != nil {
+		if err := h.store.AddBundle(id, b, name, hash, req.ContentLength); err != nil {
 			return nil, errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 		}
 	} else {
@@ -117,7 +121,7 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 		if err != nil {
 			return nil, errgo.Notef(err, "cannot read charm archive")
 		}
-		if err := h.store.AddCharm(id, ch, hash, req.ContentLength); err != nil {
+		if err := h.store.AddCharm(id, ch, name, hash, req.ContentLength); err != nil {
 			return nil, errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 		}
 	}
@@ -201,14 +205,14 @@ func (h *handler) openBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64
 	var entity mongodoc.Entity
 	if err := h.store.DB.Entities().
 		FindId(id).
-		Select(bson.D{{"blobhash", 1}}).
+		Select(bson.D{{"blobname", 1}}).
 		One(&entity); err != nil {
 		if err == mgo.ErrNotFound {
 			return nil, 0, params.ErrNotFound
 		}
 		return nil, 0, errgo.Notef(err, "cannot get %s", id)
 	}
-	r, size, err := h.store.BlobStore.Open(entity.BlobHash)
+	r, size, err := h.store.BlobStore.Open(entity.BlobName)
 	if err != nil {
 		return nil, 0, errgo.Notef(err, "cannot open archive data for %s", id)
 	}
