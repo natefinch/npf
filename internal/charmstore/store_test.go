@@ -60,8 +60,8 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 	c.Assert(blobName, gc.Matches, "[0-9a-z]+")
 	doc.BlobName = ""
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
-		URL:     url,
-		BaseURL: mustParseReference("cs:wordpress"),
+		URL:                     url,
+		BaseURL:                 mustParseReference("cs:wordpress"),
 		BlobHash:                hash,
 		Size:                    size,
 		CharmMeta:               ch.Meta(),
