@@ -26,7 +26,7 @@ type Entity struct {
 	// TODO(rog) rename this to BlobSize.
 	Size int64
 
-	// BlobName holds the  name that the archive blob is given in the blob store.
+	// BlobName holds the name that the archive blob is given in the blob store.
 	BlobName string
 
 	UploadTime time.Time

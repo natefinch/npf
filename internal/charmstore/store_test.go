@@ -62,7 +62,6 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
 		URL:     url,
 		BaseURL: mustParseReference("cs:wordpress"),
-
 		BlobHash:                hash,
 		Size:                    size,
 		CharmMeta:               ch.Meta(),
@@ -112,6 +111,8 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 	c.Assert(doc.UploadTime, jc.TimeBetween(beforeAdding, afterAdding))
 	doc.UploadTime = time.Time{}
 
+	// The blob name is random, but we check that it's
+	// in the correct format, and non-empty.
 	blobName := doc.BlobName
 	c.Assert(blobName, gc.Matches, "[0-9a-z]+")
 	doc.BlobName = ""

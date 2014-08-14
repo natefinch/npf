@@ -89,16 +89,13 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 		}
 	}()
 
-	// Assign a new revision to the id, so that we know what name
-	// give the archive in the store.
+	// Create the entry for the entity in charm store.
+
 	rev, err := h.nextRevisionForId(id)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot get next revision for id")
 	}
 	id.Revision = rev
-
-	// Create the entry for the entity in charm store.
-
 	readerAt := &readerAtSeeker{r}
 	if id.Series == "bundle" {
 		b, err := charm.ReadBundleArchiveFromReader(readerAt, req.ContentLength)
