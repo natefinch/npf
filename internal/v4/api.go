@@ -55,6 +55,7 @@ func New(store *charmstore.Store) http.Handler {
 			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
 			"color":              router.SingleIncludeHandler(h.metaColor),
 			"bundles-containing": router.SingleIncludeHandler(h.metaBundlesContaining),
+			"revision-info":      router.SingleIncludeHandler(h.metaRevisionInfo),
 			"extra-info":         router.SingleIncludeHandler(h.metaExtraInfo),
 			"extra-info/":        router.SingleIncludeHandler(h.metaExtraInfoWithKey),
 			"charm-related":      router.SingleIncludeHandler(h.metaCharmRelated),
@@ -273,6 +274,12 @@ func (h *handler) metaStats(id *charm.Reference, path string, method string, fla
 // GET id/meta/bundles-containing[?include=meta[&include=meta…]]
 // http://tinyurl.com/oqc386r
 func (h *handler) metaBundlesContaining(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
+	return nil, errNotImplemented
+}
+
+// GET id/meta/revision-info
+// http://tinyurl.com/q6xos7f
+func (h *handler) metaRevisionInfo(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
