@@ -18,8 +18,16 @@ type Entity struct {
 	// e.g. cs:wordpress, cs:~user/foo
 	BaseURL *charm.Reference
 
-	BlobHash string // This is also used as a blob reference.
-	Size     int64
+	// BlobHash holds the hash checksum of the blob, in hexadecimal format,
+	// as created by blobstore.NewHash.
+	BlobHash string
+
+	// Size holds the size of the archive blob.
+	// TODO(rog) rename this to BlobSize.
+	Size int64
+
+	// BlobName holds the name that the archive blob is given in the blob store.
+	BlobName string
 
 	UploadTime time.Time
 

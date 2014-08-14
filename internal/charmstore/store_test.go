@@ -56,6 +56,9 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 
 	doc.UploadTime = time.Time{}
 
+	blobName := doc.BlobName
+	c.Assert(blobName, gc.Matches, "[0-9a-z]+")
+	doc.BlobName = ""
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
 		URL:                     url,
 		BaseURL:                 mustParseReference("cs:wordpress"),
@@ -69,7 +72,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 	})
 
 	// The charm archive has been properly added to the blob store.
-	r, obtainedSize, err := store.BlobStore.Open(hash)
+	r, obtainedSize, err := store.BlobStore.Open(blobName)
 	c.Assert(err, gc.IsNil)
 	c.Assert(obtainedSize, gc.Equals, size)
 	data, err := ioutil.ReadAll(r)
@@ -108,6 +111,12 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 	c.Assert(doc.UploadTime, jc.TimeBetween(beforeAdding, afterAdding))
 	doc.UploadTime = time.Time{}
 
+	// The blob name is random, but we check that it's
+	// in the correct format, and non-empty.
+	blobName := doc.BlobName
+	c.Assert(blobName, gc.Matches, "[0-9a-z]+")
+	doc.BlobName = ""
+
 	// The entity doc has been correctly added to the mongo collection.
 	size, hash := mustGetSizeAndHash(bundle)
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
@@ -124,7 +133,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 	})
 
 	// The bundle archive has been properly added to the blob store.
-	r, obtainedSize, err := store.BlobStore.Open(hash)
+	r, obtainedSize, err := store.BlobStore.Open(blobName)
 	c.Assert(err, gc.IsNil)
 	c.Assert(obtainedSize, gc.Equals, size)
 	data, err := ioutil.ReadAll(r)

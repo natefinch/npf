@@ -49,7 +49,7 @@ func New(store *charmstore.Store) http.Handler {
 			"charm-config":        h.entityHandler(h.metaCharmConfig, "charmconfig"),
 			"charm-actions":       h.entityHandler(h.metaCharmActions, "charmactions"),
 			"archive-size":        h.entityHandler(h.metaArchiveSize, "size"),
-			"manifest":            h.entityHandler(h.metaManifest, "blobhash"),
+			"manifest":            h.entityHandler(h.metaManifest, "blobname"),
 			"archive-upload-time": h.entityHandler(h.metaArchiveUploadTime, "uploadtime"),
 
 			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
@@ -214,7 +214,7 @@ func (h *handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.Referenc
 // GET id/meta/manifest
 // http://tinyurl.com/p3xdcto
 func (h *handler) metaManifest(entity *mongodoc.Entity, id *charm.Reference, path, method string, flags url.Values) (interface{}, error) {
-	r, size, err := h.store.BlobStore.Open(entity.BlobHash)
+	r, size, err := h.store.BlobStore.Open(entity.BlobName)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot open archive data for %s", id)
 	}

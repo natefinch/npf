@@ -464,11 +464,11 @@ func zipGetter(get func(*zip.Reader) interface{}) metaEndpointExpectedValueGette
 		var doc mongodoc.Entity
 		if err := store.DB.Entities().
 			FindId(url).
-			Select(bson.D{{"blobhash", 1}}).
+			Select(bson.D{{"blobname", 1}}).
 			One(&doc); err != nil {
 			return nil, errgo.Mask(err)
 		}
-		blob, size, err := store.BlobStore.Open(doc.BlobHash)
+		blob, size, err := store.BlobStore.Open(doc.BlobName)
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}

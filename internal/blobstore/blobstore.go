@@ -102,12 +102,13 @@ func (s *Store) challengeResponse(resp *ContentChallengeResponse) error {
 }
 
 // Put tries to stream the content from the given reader into blob
-// storage. The content should have the given size and hash. If the
-// content is already in the store, a ContentChallengeError is returned
-// containing a challenge that must be satisfied by a client to prove
-// that they have access to the content. If the proof has already been
-// acquired, it should be passed in as the proof argument.
-func (s *Store) Put(r io.Reader, size int64, hash string, proof *ContentChallengeResponse) (*ContentChallenge, error) {
+// storage, with the provided name. The content should have the given
+// size and hash. If the content is already in the store, a
+// ContentChallengeError is returned containing a challenge that must be
+// satisfied by a client to prove that they have access to the content.
+// If the proof has already been acquired, it should be passed in as the
+// proof argument.
+func (s *Store) Put(r io.Reader, name string, size int64, hash string, proof *ContentChallengeResponse) (*ContentChallenge, error) {
 	if proof != nil {
 		err := s.challengeResponse(proof)
 		if err == nil {
@@ -121,10 +122,10 @@ func (s *Store) Put(r io.Reader, size int64, hash string, proof *ContentChalleng
 		// the content as if there was no previous challenge.
 	}
 	rh := newResourceHash(hash)
-	resp, err := s.mstore.PutForEnvironmentRequest("", hash, rh)
+	resp, err := s.mstore.PutForEnvironmentRequest("", name, rh)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			if err := s.mstore.PutForEnvironmentAndCheckHash("", hash, r, size, rh); err != nil {
+			if err := s.mstore.PutForEnvironmentAndCheckHash("", name, r, size, rh); err != nil {
 				return nil, errgo.Mask(err)
 			}
 			return nil, nil
@@ -139,27 +140,26 @@ func (s *Store) Put(r io.Reader, size int64, hash string, proof *ContentChalleng
 }
 
 // PutUnchallenged stream the content from the given reader into blob
-// storage. The content should have the given size and hash. In this case
-// a challenge is never returned and a proof is not required.
-func (s *Store) PutUnchallenged(r io.Reader, size int64, hash string) error {
+// storage, with the provided name. The content should have the given
+// size and hash. In this case a challenge is never returned and a proof
+// is not required.
+func (s *Store) PutUnchallenged(r io.Reader, name string, size int64, hash string) error {
 	rh := newResourceHash(hash)
-	return s.mstore.PutForEnvironmentAndCheckHash("", hash, r, size, rh)
+	return s.mstore.PutForEnvironmentAndCheckHash("", name, r, size, rh)
 }
 
-// Open opens the blob with the given hash.
-func (s *Store) Open(hashSum string) (ReadSeekCloser, int64, error) {
-	r, length, err := s.mstore.GetForEnvironment("", hashSum)
+// Open opens the entry with the given name.
+func (s *Store) Open(name string) (ReadSeekCloser, int64, error) {
+	r, length, err := s.mstore.GetForEnvironment("", name)
 	if err != nil {
 		return nil, 0, errgo.Mask(err)
 	}
 	return r.(ReadSeekCloser), length, nil
 }
 
-// Remove removes a reference to the given hash.
-// If there are other references, the content will not
-// actually be removed.
-func (s *Store) Remove(hashSum string) error {
-	return s.mstore.RemoveForEnvironment("", hashSum)
+// Remove the given name from the Store.
+func (s *Store) Remove(name string) error {
+	return s.mstore.RemoveForEnvironment("", name)
 }
 
 // newResourceHash returns a ResourceHash equivalent to the
