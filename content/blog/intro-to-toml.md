@@ -91,7 +91,7 @@ float = 5.0 # floats have a decimal point with numbers on both sides
 
 date = 2006-05-27T07:32:00Z # dates are ISO 8601 full zulu form
 
-bool = true # good old true and falss
+bool = true # good old true and false
 ```
 
 One cool point:  If the first line of a multiline string (either literal or not)
