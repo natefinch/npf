@@ -1,9 +1,8 @@
 +++
 date = 2014-08-13T14:09:51Z
-draft = true
 title = "Intro to TOML"
 type = "post"
-
+tags = ["programming"]
 +++
 
 TOML stands for Tom's Own Minimal Language.  It is a configuration language
