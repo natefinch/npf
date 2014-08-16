@@ -12,19 +12,19 @@
     {{ $taxname := .Data.Plural }}
 
     {{ $desc := printf "%s-desc" .Data.Singular}}
-    {{ $tax := index .Site.Taxonomies $desc }}
+    {{ $desctax := index .Site.Taxonomies $desc }}
 
 
-    {{ range $key, $value := .Data.Terms }}
-      {{ $page := index $value 0 }}
+    {{ range $name, $pages := .Data.Terms }}
+      {{ $page := index $pages 0 }}
       {{ $friendly := index $page.Page.Params $taxname 0 }}
-      <a href="{{$base}}/{{$data.Plural}}/{{$key}}"> {{ $friendly }} </a>
+      <a href="{{$base}}/{{$data.Plural}}/{{$name}}"> {{ $friendly }} </a> &nbsp;({{len $pages}} entries)
 
 
-      {{ $pages := index $tax $key }}
-      {{ if len $pages }}
-        {{ $page := index $pages 0 }}
-        <span class="term-desc">{{ $page.Page.Content }}</span>
+      {{ $descpages := index $desctax $name }}
+      {{ if len $descpages }}
+        {{ $descpage := index $descpages 0 }}
+        <span class="term-desc">{{ $descpage.Page.Content }}</span>
       {{end}}
     {{ end }}
    </ul>
