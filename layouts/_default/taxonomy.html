@@ -1,0 +1,27 @@
+{{ template "theme/chrome/head.html" . }}
+<body>
+
+{{ template "theme/chrome/sidebar.html" . }}
+   <div class="content container">
+    {{ $title := .Title }}
+    {{ $page := (index .Data.Pages 0) }}
+    {{ range $key, $value := .Data }}
+      {{if ne $key "Pages"}}
+        {{ $taxonomy := $key }}
+         {{ range (index $page.Params $taxonomy) }}
+          {{ if eq $title (. | urlize | title) }}
+            <h1 class="title">{{ . }}</h1>
+          {{end}}
+        {{end}}
+      {{end}}
+    {{end}}
+
+    <ul>
+    {{ range .Data.Pages }}
+      <li><a href="{{.Permalink}}">{{ .LinkTitle }}</a></li>
+    {{end}}
+    </ul>
+
+  </div>
+  </body>
+</html>

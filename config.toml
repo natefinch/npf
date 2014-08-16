@@ -14,6 +14,7 @@ copyright = "Nate Finch"
 [taxonomies]
 	tag = "tags"
 	series = "series"
+	series-desc = "series-desc"
 
 [params]
 	description = "code by Nate Finch"

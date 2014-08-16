@@ -1,0 +1,33 @@
+{{ template "theme/chrome/head.html" . }}
+<body>
+
+{{ template "theme/chrome/sidebar.html" . }}
+   <div class="content container">
+   <h1 class="title">{{ .Title }}</h1>
+
+    <ul>
+    {{ $base := .Site.BaseUrl }}
+    {{ $data := .Data}}
+
+    {{ $taxname := .Data.Plural }}
+
+    {{ $desc := printf "%s-desc" .Data.Singular}}
+    {{ $tax := index .Site.Taxonomies $desc }}
+
+
+    {{ range $key, $value := .Data.Terms }}
+      {{ $page := index $value 0 }}
+      {{ $friendly := index $page.Page.Params $taxname 0 }}
+      <a href="{{$base}}/{{$data.Plural}}/{{$key}}"> {{ $friendly }} </a>
+
+
+      {{ $pages := index $tax $key }}
+      {{ if len $pages }}
+        {{ $page := index $pages 0 }}
+        <span class="term-desc">{{ $page.Page.Content }}</span>
+      {{end}}
+    {{ end }}
+   </ul>
+  </div>
+  </body>
+</html>
