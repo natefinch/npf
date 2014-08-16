@@ -45,6 +45,9 @@ html {
   }
 }
 
+pre {
+  tab-size:4;
+}
 
 /*
  * Sidebar
