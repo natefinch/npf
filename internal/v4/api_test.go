@@ -11,11 +11,9 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/juju/errgo"
-	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	"gopkg.in/juju/charm.v3"
 	charmtesting "gopkg.in/juju/charm.v3/testing"
@@ -29,10 +27,6 @@ import (
 	"github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
 )
-
-func TestPackage(t *testing.T) {
-	jujutesting.MgoTestPackage(t, nil)
-}
 
 type APISuite struct {
 	storetesting.IsolatedMgoSuite
