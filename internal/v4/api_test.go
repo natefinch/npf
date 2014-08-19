@@ -435,6 +435,14 @@ var serveExpandIdTests = []struct {
 		{Id: "cs:bundle/wordpress-0"},
 	},
 }, {
+	about: "fully qualified URL that does not exist",
+	url:   "trusty/wordpress-99",
+	expect: []params.ExpandedId{
+		{Id: "cs:utopic/wordpress-42"},
+		{Id: "cs:trusty/wordpress-47"},
+		{Id: "cs:bundle/wordpress-0"},
+	},
+}, {
 	about: "partial URL",
 	url:   "haproxy",
 	expect: []params.ExpandedId{
@@ -448,8 +456,12 @@ var serveExpandIdTests = []struct {
 		{Id: "cs:bundle/mongo-0"},
 	},
 }, {
-	about: "no entities found",
+	about: "fully qualified URL with no entities found",
 	url:   "precise/no-such-42",
+	err:   `no matching charm or bundle for "cs:no-such"`,
+}, {
+	about: "partial URL with no entities found",
+	url:   "no-such",
 	err:   `no matching charm or bundle for "cs:no-such"`,
 }}
 
