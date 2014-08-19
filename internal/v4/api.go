@@ -80,13 +80,13 @@ func ResolveURL(store *charmstore.Store, url *charm.Reference) error {
 		return errgo.Notef(err, "cannot expand URL")
 	}
 	if len(urls) == 0 {
-		return resolveURLError(url)
+		return noMatchingURLError(url)
 	}
 	*url = *selectPreferredURL(urls)
 	return nil
 }
 
-func resolveURLError(url *charm.Reference) error {
+func noMatchingURLError(url *charm.Reference) error {
 	return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
 }
 
@@ -209,7 +209,7 @@ func (h *handler) serveExpandId(id *charm.Reference, w http.ResponseWriter, req 
 	// case a partial id is provided. Here we do the same for the case when
 	// a fully qualified URL is provided, but no matching entities are found.
 	if len(docs) == 0 {
-		return resolveURLError(id)
+		return noMatchingURLError(id)
 	}
 
 	// Collect all the expanded identifiers for each entity.
