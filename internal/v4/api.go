@@ -5,7 +5,6 @@ package v4
 
 import (
 	"archive/zip"
-	"encoding/json"
 	"net/http"
 	"net/url"
 
@@ -203,7 +202,7 @@ func (h *handler) serveExpandId(id *charm.Reference, w http.ResponseWriter, req 
 	// Retrieve all the entities with the same base URL.
 	var docs []mongodoc.Entity
 	if err := h.store.DB.Entities().Find(bson.D{{"baseurl", id}}).Select(bson.D{{"_id", 1}}).All(&docs); err != nil {
-		return errgo.Notef(err, "cannot retrieve the entities")
+		return errgo.Notef(err, "cannot get ids")
 	}
 
 	// A not found error should have been already returned by the router in the
@@ -220,11 +219,7 @@ func (h *handler) serveExpandId(id *charm.Reference, w http.ResponseWriter, req 
 	}
 
 	// Write the response in JSON format.
-	encoder := json.NewEncoder(w)
-	if err := encoder.Encode(response); err != nil {
-		return errgo.Notef(err, "cannot serialize the response")
-	}
-	return nil
+	return router.WriteJSON(w, http.StatusOK, response)
 }
 
 func badRequestf(underlying error, f string, a ...interface{}) error {
