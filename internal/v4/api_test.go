@@ -501,6 +501,64 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 	}
 }
 
+func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
+	s.addCharm(c, "wordpress", "cs:trusty/wordpress-43")
+	s.addCharm(c, "wordpress", "cs:trusty/wordpress-42")
+	s.addCharm(c, "wordpress", "cs:trusty/wordpress-41")
+	s.addCharm(c, "wordpress", "cs:trusty/wordpress-39")
+	var serveMetaRevisionInfoTests = []struct {
+		about  string
+		url    string
+		expect []params.ExpandedId
+		err    string
+	}{{
+		about: "fully qualified url",
+		url:   "trusty/wordpress-42",
+		expect: []params.ExpandedId{
+			{Id: "cs:trusty/wordpress-43"},
+			{Id: "cs:trusty/wordpress-42"},
+			{Id: "cs:trusty/wordpress-41"},
+			{Id: "cs:trusty/wordpress-39"},
+		},
+	}, {
+		about: "partial url uses a default series",
+		url:   "wordpress",
+		expect: []params.ExpandedId{
+			{Id: "cs:trusty/wordpress-43"},
+			{Id: "cs:trusty/wordpress-42"},
+			{Id: "cs:trusty/wordpress-41"},
+			{Id: "cs:trusty/wordpress-39"},
+		},
+	}, {
+		about: "no entities found",
+		url:   "precise/no-such-33",
+		err:   `no matching charm or bundle for "cs:precise/no-such"`,
+	}}
+
+	for i, test := range serveMetaRevisionInfoTests {
+		c.Logf("test %d: %s", i, test.about)
+		storeURL := storeURL(test.url + "/meta/revision-info")
+		var expectCode int
+		var expectBody interface{}
+		if test.err == "" {
+			expectCode = http.StatusOK
+			expectBody = test.expect
+		} else {
+			expectCode = http.StatusNotFound
+			expectBody = params.Error{
+				Code:    params.ErrNotFound,
+				Message: test.err,
+			}
+		}
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:    s.srv,
+			URL:        storeURL,
+			ExpectCode: expectCode,
+			ExpectBody: expectBody,
+		})
+	}
+}
+
 func assertNotImplemented(c *gc.C, h http.Handler, path string) {
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:    h,
