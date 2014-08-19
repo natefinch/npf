@@ -90,7 +90,7 @@ var metaCharmRelatedCharms = map[string]charm.Charm{
 }
 
 var metaCharmRelatedTests = []struct {
-	// About the test.
+	// Description of the test.
 	about string
 	// Charms to be stored in the store before the test is run.
 	charms map[string]charm.Charm
