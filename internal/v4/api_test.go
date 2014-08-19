@@ -421,6 +421,74 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 	}
 }
 
+var serveExpandIdTests = []struct {
+	about  string
+	url    string
+	expect []params.ExpandedId
+	err    string
+}{{
+	about: "fully qualified URL",
+	url:   "trusty/wordpress-42",
+	expect: []params.ExpandedId{
+		{Id: "cs:utopic/wordpress-42"},
+		{Id: "cs:trusty/wordpress-47"},
+		{Id: "cs:bundle/wordpress-0"},
+	},
+}, {
+	about: "partial URL",
+	url:   "haproxy",
+	expect: []params.ExpandedId{
+		{Id: "cs:precise/haproxy-1"},
+		{Id: "cs:trusty/haproxy-1"},
+	},
+}, {
+	about: "single result",
+	url:   "mongo-0",
+	expect: []params.ExpandedId{
+		{Id: "cs:bundle/mongo-0"},
+	},
+}, {
+	about: "no entities found",
+	url:   "precise/no-such-42",
+	err:   `no matching charm or bundle for "cs:no-such"`,
+}}
+
+func (s *APISuite) TestServeExpandId(c *gc.C) {
+	// Add a bunch of entities in the database.
+	// Note that expand-id only cares about entity identifiers,
+	// so it is ok to reuse the same charm for all the entities.
+	// Also here we assume Mongo returns the entities in natural order.
+	s.addCharm(c, "wordpress", "cs:utopic/wordpress-42")
+	s.addCharm(c, "wordpress", "cs:trusty/wordpress-47")
+	s.addCharm(c, "wordpress", "cs:precise/haproxy-1")
+	s.addCharm(c, "wordpress", "cs:trusty/haproxy-1")
+	s.addCharm(c, "wordpress", "cs:bundle/mongo-0")
+	s.addCharm(c, "wordpress", "cs:bundle/wordpress-0")
+
+	for i, test := range serveExpandIdTests {
+		c.Logf("test %d: %s", i, test.about)
+		storeURL := storeURL(test.url + "/expand-id")
+		var expectCode int
+		var expectBody interface{}
+		if test.err == "" {
+			expectCode = http.StatusOK
+			expectBody = test.expect
+		} else {
+			expectCode = http.StatusNotFound
+			expectBody = params.Error{
+				Code:    params.ErrNotFound,
+				Message: test.err,
+			}
+		}
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:    s.srv,
+			URL:        storeURL,
+			ExpectCode: expectCode,
+			ExpectBody: expectBody,
+		})
+	}
+}
+
 func assertNotImplemented(c *gc.C, h http.Handler, path string) {
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:    h,
