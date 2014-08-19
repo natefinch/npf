@@ -33,6 +33,13 @@ type ArchivePostResponse struct {
 	Id *charm.Reference
 }
 
+// ExpandedId holds a charm or bundle fully qualified id.
+// A slice of ExpandedId is used as response for
+// id/expand-id GET requests.
+type ExpandedId struct {
+	Id string
+}
+
 // ArchiveSizeResponse holds the result of an
 // id/meta/archive-size GET request. See http://tinyurl.com/m8b9geq
 type ArchiveSizeResponse struct {

@@ -80,10 +80,14 @@ func ResolveURL(store *charmstore.Store, url *charm.Reference) error {
 		return errgo.Notef(err, "cannot expand URL")
 	}
 	if len(urls) == 0 {
-		return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
+		return noMatchingURLError(url)
 	}
 	*url = *selectPreferredURL(urls)
 	return nil
+}
+
+func noMatchingURLError(url *charm.Reference) error {
+	return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
 }
 
 func (h *handler) resolveURL(url *charm.Reference) error {
@@ -190,8 +194,32 @@ func (h *handler) serveResources(charmId *charm.Reference, w http.ResponseWriter
 
 // GET id/expand-id
 // https://docs.google.com/a/canonical.com/document/d/1TgRA7jW_mmXoKH3JiwBbtPvQu7WiM6XMrz1wSrhTMXw/edit#bookmark=id.4xdnvxphb2si
-func (h *handler) serveExpandId(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
-	return errNotImplemented
+func (h *handler) serveExpandId(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+	// Mutate the given id so that it represents a base URL.
+	id.Revision = -1
+	id.Series = ""
+
+	// Retrieve all the entities with the same base URL.
+	var docs []mongodoc.Entity
+	if err := h.store.DB.Entities().Find(bson.D{{"baseurl", id}}).Select(bson.D{{"_id", 1}}).All(&docs); err != nil {
+		return errgo.Notef(err, "cannot get ids")
+	}
+
+	// A not found error should have been already returned by the router in the
+	// case a partial id is provided. Here we do the same for the case when
+	// a fully qualified URL is provided, but no matching entities are found.
+	if len(docs) == 0 {
+		return noMatchingURLError(id)
+	}
+
+	// Collect all the expanded identifiers for each entity.
+	response := make([]params.ExpandedId, 0, len(docs))
+	for _, doc := range docs {
+		response = append(response, params.ExpandedId{Id: doc.URL.String()})
+	}
+
+	// Write the response in JSON format.
+	return router.WriteJSON(w, http.StatusOK, response)
 }
 
 func badRequestf(underlying error, f string, a ...interface{}) error {
