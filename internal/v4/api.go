@@ -202,7 +202,7 @@ func (h *handler) serveExpandId(id *charm.Reference, w http.ResponseWriter, req 
 
 	// Retrieve all the entities with the same base URL.
 	var docs []mongodoc.Entity
-	if err := h.store.DB.Entities().Find(bson.M{"baseurl": id}).Select(bson.M{"_id": 1}).All(&docs); err != nil {
+	if err := h.store.DB.Entities().Find(bson.D{{"baseurl", id}}).Select(bson.D{{"_id", 1}}).All(&docs); err != nil {
 		return errgo.Notef(err, "cannot retrieve the entities")
 	}
 
