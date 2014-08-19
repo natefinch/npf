@@ -52,3 +52,15 @@ type ManifestFile struct {
 type ArchiveUploadTimeResponse struct {
 	UploadTime time.Time
 }
+
+// RelatedResponse holds the result of an
+// id/meta/charm-related GET request. See http://tinyurl.com/q7vdmzl
+type RelatedResponse struct {
+	// Requires holds an entry for each interface provided by
+	// the charm, containing all charms that require that interface.
+	Requires map[string][]MetaAnyResponse `json:",omitempty"`
+
+	// Provides holds an entry for each interface required by the
+	// the charm, containing all charms that provide that interface.
+	Provides map[string][]MetaAnyResponse `json:",omitempty"`
+}
