@@ -398,11 +398,14 @@ var metaBundlesContainingTests = []struct {
 	id string
 	// The querystring to append to the resulting charmstore URL.
 	querystring string
+	// The expected status code of the response.
+	expectCode int
 	// The expected response body.
-	expectBody []*params.MetaAnyResponse
+	expectBody interface{}
 }{{
-	about: "specific charm present in several bundles",
-	id:    "utopic/wordpress-42",
+	about:      "specific charm present in several bundles",
+	id:         "utopic/wordpress-42",
+	expectCode: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-simple-0"),
 	}, {
@@ -411,19 +414,22 @@ var metaBundlesContainingTests = []struct {
 		Id: mustParseReference("bundle/useless-0"),
 	}},
 }, {
-	about: "specific charm present in one bundle",
-	id:    "trusty/memcached-2",
+	about:      "specific charm present in one bundle",
+	id:         "trusty/memcached-2",
+	expectCode: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-complex-1"),
 	}},
 }, {
 	about:      "specific charm not present in any bundle",
 	id:         "trusty/django-42",
+	expectCode: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{},
 }, {
 	about:       "specific charm with includes",
 	id:          "trusty/mysql-1",
 	querystring: "?include=archive-size&include=bundle-metadata",
+	expectCode:  http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-complex-1"),
 		Meta: map[string]interface{}{
@@ -435,6 +441,7 @@ var metaBundlesContainingTests = []struct {
 	about:       "any series set to true",
 	id:          "trusty/mysql-0",
 	querystring: "?any-series=1",
+	expectCode:  http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-simple-0"),
 	}, {
@@ -444,13 +451,16 @@ var metaBundlesContainingTests = []struct {
 	about:       "invalid any series",
 	id:          "utopic/mysql-0",
 	querystring: "?any-series=true",
-	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/wordpress-simple-0"),
-	}},
+	expectCode:  http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: `invalid value for any-series: value must be either "0", "1" or empty, but "true" passed`,
+	},
 }, {
 	about:       "any revision set to true",
 	id:          "trusty/memcached-99",
 	querystring: "?any-revision=1",
+	expectCode:  http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-complex-1"),
 	}, {
@@ -460,11 +470,16 @@ var metaBundlesContainingTests = []struct {
 	about:       "invalid any revision",
 	id:          "trusty/memcached-99",
 	querystring: "?any-revision=why-not",
-	expectBody:  []*params.MetaAnyResponse{},
+	expectCode:  http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: `invalid value for any-revision: value must be either "0", "1" or empty, but "why-not" passed`,
+	},
 }, {
 	about:       "any series and revision",
 	id:          "saucy/mysql-99",
 	querystring: "?any-series=1&any-revision=1",
+	expectCode:  http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-simple-0"),
 	}, {
@@ -478,6 +493,7 @@ var metaBundlesContainingTests = []struct {
 	about:       "any series and revision with includes",
 	id:          "saucy/wordpress-99",
 	querystring: "?any-series=1&any-revision=1&include=archive-size&include=bundle-metadata",
+	expectCode:  http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-simple-0"),
 		Meta: map[string]interface{}{
@@ -516,7 +532,7 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 			Handler:    s.srv,
 			URL:        storeURL,
-			ExpectCode: http.StatusOK,
+			ExpectCode: test.expectCode,
 			ExpectBody: test.expectBody,
 		})
 

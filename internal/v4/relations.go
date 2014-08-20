@@ -136,8 +136,14 @@ func (h *handler) getRelatedIfaceResponses(
 // GET id/meta/bundles-containing[?include=meta[&include=meta…]][&any-series=1][&any-revision=1]
 // http://tinyurl.com/oqc386r
 func (h *handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Reference, path, method string, flags url.Values) (interface{}, error) {
-	anySeries := flags.Get("any-series") == "1"
-	anyRevision := flags.Get("any-revision") == "1"
+	anySeries, err := stringToBool(flags.Get("any-series"))
+	if err != nil {
+		return nil, badRequestf(err, "invalid value for any-series")
+	}
+	anyRevision, err := stringToBool(flags.Get("any-revision"))
+	if err != nil {
+		return nil, badRequestf(err, "invalid value for any-revision")
+	}
 
 	// Mutate the reference so that it represents a base URL if required.
 	searchId := *id
@@ -148,11 +154,10 @@ func (h *handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 
 	// Retrieve the bundles containing the resulting charm id.
 	var entities []mongodoc.Entity
-	if err := h.store.DB.Entities().Find(bson.D{{
-		"bundlecharms", bson.D{{
-			"$in", []*charm.Reference{&searchId},
-		}},
-	}}).Select(bson.D{{"_id", 1}, {"bundlecharms", 1}}).All(&entities); err != nil {
+	if err := h.store.DB.Entities().
+		Find(bson.D{{"bundlecharms", &searchId}}).
+		Select(bson.D{{"_id", 1}, {"bundlecharms", 1}}).
+		All(&entities); err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related bundles")
 	}
 

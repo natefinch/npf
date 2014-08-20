@@ -160,6 +160,18 @@ func preferredURL(url0, url1 *charm.Reference) bool {
 	return ltsReleases[url0.Series]
 }
 
+// stringToBool returns false if value is "0" or empty, true if value is "1",
+// an error otherwise. This can be useful to convert url.Values data.
+func stringToBool(value string) (bool, error) {
+	switch value {
+	case "0", "":
+		return false, nil
+	case "1":
+		return true, nil
+	}
+	return false, errgo.Newf(`value must be either "0", "1" or empty, but %q passed`, value)
+}
+
 var errNotImplemented = errgo.Newf("method not implemented")
 
 // GET search[?text=text][&autocomplete=1][&filter=value…][&limit=limit][&include=meta]
