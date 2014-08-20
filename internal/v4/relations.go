@@ -163,50 +163,38 @@ func (h *handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 
 	// Further filter the entities if required.
 	if anySeries != anyRevision {
-		filterId := *id
-		var transform func(*charm.Reference) *charm.Reference
-		if anySeries {
-			// Bundle can contain charms of any series but the requested
-			// revision must be preserved.
-			filterId.Series = ""
-			transform = func(url *charm.Reference) *charm.Reference {
-				url.Series = ""
-				return url
+		predicate := func(e *mongodoc.Entity) bool {
+			for _, charmId := range e.BundleCharms {
+				if charmId.Name == id.Name &&
+					charmId.User == id.User &&
+					(anySeries || charmId.Series == id.Series) &&
+					(anyRevision || charmId.Revision == id.Revision) {
+					return true
+				}
 			}
-		} else {
-			// Bundle can contain charms with any revision but the requested
-			// series must be preserved.
-			filterId.Revision = -1
-			transform = func(url *charm.Reference) *charm.Reference {
-				url.Revision = -1
-				return url
-			}
+			return false
 		}
-		entities = filterEntities(entities, byIncludedCharms(&filterId, transform))
+		entities = filterEntities(entities, predicate)
 	}
 
 	// Prepare and return the response.
 	response := make([]*params.MetaAnyResponse, 0, len(entities))
 	includes := flags["include"]
-	for _, entity := range entities {
-		meta, err := h.GetMetadata(entity.URL, includes)
+	for _, e := range entities {
+		meta, err := h.GetMetadata(e.URL, includes)
 		if err != nil {
 			return nil, errgo.Notef(err, "cannot retrieve bundle metadata")
 		}
 		response = append(response, &params.MetaAnyResponse{
-			Id:   entity.URL,
+			Id:   e.URL,
 			Meta: meta,
 		})
 	}
 	return response, nil
 }
 
-// entitiesFilterer functions can be passed as predicate to filterEntities in
-// order to filter entities.
-type entitiesFilterer func(*mongodoc.Entity) bool
-
 // filterEntities filters the given entities based on the given predicate.
-func filterEntities(entities []mongodoc.Entity, predicate entitiesFilterer) []mongodoc.Entity {
+func filterEntities(entities []mongodoc.Entity, predicate func(*mongodoc.Entity) bool) []mongodoc.Entity {
 	results := make([]mongodoc.Entity, 0, len(entities))
 	for _, entity := range entities {
 		if predicate(&entity) {
@@ -214,17 +202,4 @@ func filterEntities(entities []mongodoc.Entity, predicate entitiesFilterer) []mo
 		}
 	}
 	return results
-}
-
-// byIncludedCharms returns an entitiesFilterer which succeeds if the given id
-// matches any of the transformed charm ids in the entity.
-func byIncludedCharms(id *charm.Reference, transform func(*charm.Reference) *charm.Reference) entitiesFilterer {
-	return func(entity *mongodoc.Entity) bool {
-		for _, charmUrl := range entity.BundleCharms {
-			if *transform(charmUrl) == *id {
-				return true
-			}
-		}
-		return false
-	}
 }
