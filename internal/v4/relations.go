@@ -17,6 +17,10 @@ import (
 // GET id/meta/charm-related[?include=meta[&include=meta…]]
 // http://tinyurl.com/q7vdmzl
 func (h *handler) metaCharmRelated(entity *mongodoc.Entity, id *charm.Reference, path, method string, flags url.Values) (interface{}, error) {
+	if id.Series == "bundle" {
+		return nil, nil
+	}
+
 	// If the charm does not define any relation we can just return without
 	// hitting the db.
 	if len(entity.CharmProvidedInterfaces)+len(entity.CharmRequiredInterfaces) == 0 {
@@ -136,6 +140,11 @@ func (h *handler) getRelatedIfaceResponses(
 // GET id/meta/bundles-containing[?include=meta[&include=meta…]][&any-series=1][&any-revision=1]
 // http://tinyurl.com/oqc386r
 func (h *handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Reference, path, method string, flags url.Values) (interface{}, error) {
+	if id.Series == "bundle" {
+		return nil, nil
+	}
+
+	// Validate the URL query values.
 	anySeries, err := stringToBool(flags.Get("any-series"))
 	if err != nil {
 		return nil, badRequestf(err, "invalid value for any-series")

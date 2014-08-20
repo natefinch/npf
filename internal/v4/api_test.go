@@ -57,11 +57,13 @@ func storeURL(path string) string {
 type metaEndpointExpectedValueGetter func(*charmstore.Store, *charm.Reference) (interface{}, error)
 
 type metaEndpoint struct {
-	name       string
-	exclusive  int
-	bundleOnly bool
-	get        metaEndpointExpectedValueGetter
-
+	// The name of the meta endpoint.
+	name string
+	// Whether the endpoint applies only to charms (charmOnly),
+	// to bundles (bundleOnly) or to both (empty field).
+	exclusive int
+	// A function returning the expected data for the endpoint.
+	get metaEndpointExpectedValueGetter
 	// checkURL holds one URL to sanity check data against.
 	checkURL string
 	// assertCheckData holds a function that will be used to check that
@@ -146,6 +148,36 @@ var metaEndpoints = []metaEndpoint{{
 		response := data.(*params.ArchiveUploadTimeResponse)
 		c.Assert(response.UploadTime, gc.Not(jc.Satisfies), time.Time.IsZero)
 		c.Assert(response.UploadTime.Location(), gc.Equals, time.UTC)
+	},
+}, {
+	name:      "charm-related",
+	exclusive: charmOnly,
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		// The charms we use for those tests are not related each other.
+		// Charm relations are independently tested in relations_test.go.
+		if url.Series == "bundle" {
+			return nil, nil
+		}
+		return &params.RelatedResponse{}, nil
+	},
+	checkURL: "cs:precise/wordpress-23",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		_ = data.(*params.RelatedResponse)
+	},
+}, {
+	name:      "bundles-containing",
+	exclusive: charmOnly,
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		// The charms we use for those tests are not included in any bundle.
+		// Charm/bundle relations are tested in relations_test.go.
+		if url.Series == "bundle" {
+			return nil, nil
+		}
+		return []*params.MetaAnyResponse{}, nil
+	},
+	checkURL: "cs:precise/wordpress-23",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		_ = data.([]*params.MetaAnyResponse)
 	},
 }}
 
