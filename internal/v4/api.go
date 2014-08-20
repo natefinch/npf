@@ -5,9 +5,9 @@ package v4
 
 import (
 	"archive/zip"
-	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 
 	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v3"
@@ -309,25 +309,29 @@ func (h *handler) metaBundlesContaining(id *charm.Reference, path string, method
 // GET id/meta/revision-info
 // http://tinyurl.com/q6xos7f
 func (h *handler) metaRevisionInfo(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
-	// Mutate the given id so that it represents a base URL.
-	id.Revision = -1
+	baseURL := *id
+	baseURL.Revision = -1
+	baseURL.Series = ""
 
 	var docs []mongodoc.Entity
-	if err := h.store.DB.Entities().Find(bson.D{{"_id", bson.RegEx{fmt.Sprintf(`%s-\d+`, id), ""}}}).Select(bson.D{{"_id", 1}}).Sort("-_id").All(&docs); err != nil {
+	if err := h.store.DB.Entities().Find(
+		bson.D{{"baseurl", baseURL.String()}}).Select(
+		bson.D{{"_id", 1}}).All(&docs); err != nil {
 		return "", errgo.Notef(err, "cannot get ids")
 	}
 
-	// A not found error should have been already returned by the router in the
-	// case a partial id is provided. Here we do the same for the case when
-	// a fully qualified URL is provided, but no matching entities are found.
-	if len(docs) == 0 {
-		return "", noMatchingURLError(id)
-	}
-
-	// Collect all the expanded identifiers for each entity.
+	sort.Sort(mongodoc.EntitiesByURLDesc(docs))
 	response := make([]params.ExpandedId, 0, len(docs))
 	for _, doc := range docs {
-		response = append(response, params.ExpandedId{Id: doc.URL.String()})
+		if doc.URL.Series == id.Series {
+			response = append(response, params.ExpandedId{Id: doc.URL.String()})
+		}
+	}
+
+	if len(response) == 0 {
+		errorURL := *id
+		errorURL.Revision = -1
+		return "", noMatchingURLError(&errorURL)
 	}
 
 	// Write the response in JSON format.

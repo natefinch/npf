@@ -503,9 +503,9 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 
 func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 	s.addCharm(c, "wordpress", "cs:trusty/wordpress-43")
-	s.addCharm(c, "wordpress", "cs:trusty/wordpress-42")
 	s.addCharm(c, "wordpress", "cs:trusty/wordpress-41")
-	s.addCharm(c, "wordpress", "cs:trusty/wordpress-39")
+	s.addCharm(c, "wordpress", "cs:trusty/wordpress-9")
+	s.addCharm(c, "wordpress", "cs:trusty/wordpress-42")
 	var serveMetaRevisionInfoTests = []struct {
 		about  string
 		url    string
@@ -518,7 +518,7 @@ func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 			{Id: "cs:trusty/wordpress-43"},
 			{Id: "cs:trusty/wordpress-42"},
 			{Id: "cs:trusty/wordpress-41"},
-			{Id: "cs:trusty/wordpress-39"},
+			{Id: "cs:trusty/wordpress-9"},
 		},
 	}, {
 		about: "partial url uses a default series",
@@ -527,7 +527,7 @@ func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 			{Id: "cs:trusty/wordpress-43"},
 			{Id: "cs:trusty/wordpress-42"},
 			{Id: "cs:trusty/wordpress-41"},
-			{Id: "cs:trusty/wordpress-39"},
+			{Id: "cs:trusty/wordpress-9"},
 		},
 	}, {
 		about: "no entities found",

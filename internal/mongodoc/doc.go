@@ -56,3 +56,9 @@ type Entity struct {
 	// TODO Add fields denormalized for search purposes
 	// and search ranking field(s).
 }
+
+type EntitiesByURLDesc []Entity
+
+func (s EntitiesByURLDesc) Len() int           { return len(s) }
+func (s EntitiesByURLDesc) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s EntitiesByURLDesc) Less(i, j int) bool { return s[i].URL.Revision > s[j].URL.Revision }
