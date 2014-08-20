@@ -520,6 +520,14 @@ var metaBundlesContainingTests = []struct {
 			"bundle-metadata": metaBundlesContainingBundles["bundle/useless-0"].Data(),
 		},
 	}},
+}, {
+	about:       "include-error",
+	id:          "utopic/wordpress-42",
+	querystring: "?include=no-such",
+	expectCode:  http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: `cannot retrieve bundle metadata: unrecognized metadata name "no-such"`,
+	},
 }}
 
 func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
@@ -556,30 +564,6 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 		err = s.store.DB.Entities().Remove(bson.D{{"_id", url}})
 		c.Assert(err, gc.IsNil)
 	}
-}
-
-func (s *RelationsSuite) TestMetaBundlesContainingIncludeError(c *gc.C) {
-	// Add a charm.
-	charmUrl := mustParseReference("cs:utopic/django-0")
-	err := s.store.AddCharm(charmUrl, &relationTestingCharm{}, "blobName", "blobHash", int64(47))
-	c.Assert(err, gc.IsNil)
-
-	// Add a bundle including the charm.
-	bundle := &relationTestingBundle{
-		urls: []string{"cs:utopic/django-0"},
-	}
-	s.addBundles(c, map[string]charm.Bundle{"cs:bundle/django-simple-0": bundle})
-
-	// Check the error response.
-	storeURL := storeURL("utopic/django-0/meta/bundles-containing?include=no-such")
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    s.srv,
-		URL:        storeURL,
-		ExpectCode: http.StatusInternalServerError,
-		ExpectBody: params.Error{
-			Message: `cannot retrieve bundle metadata: unrecognized metadata name "no-such"`,
-		},
-	})
 }
 
 // relationTestingBundle implements charm.Bundle, and it is used for testing
