@@ -52,13 +52,13 @@ func New(store *charmstore.Store) http.Handler {
 			"manifest":            h.entityHandler(h.metaManifest, "blobname"),
 			"archive-upload-time": h.entityHandler(h.metaArchiveUploadTime, "uploadtime"),
 			"charm-related":       h.entityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces"),
+			"bundles-containing":  h.entityHandler(h.metaBundlesContaining),
 
 			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
-			"color":              router.SingleIncludeHandler(h.metaColor),
-			"bundles-containing": router.SingleIncludeHandler(h.metaBundlesContaining),
-			"revision-info":      router.SingleIncludeHandler(h.metaRevisionInfo),
-			"extra-info":         router.SingleIncludeHandler(h.metaExtraInfo),
-			"extra-info/":        router.SingleIncludeHandler(h.metaExtraInfoWithKey),
+			"color":         router.SingleIncludeHandler(h.metaColor),
+			"revision-info": router.SingleIncludeHandler(h.metaRevisionInfo),
+			"extra-info":    router.SingleIncludeHandler(h.metaExtraInfo),
+			"extra-info/":   router.SingleIncludeHandler(h.metaExtraInfoWithKey),
 		},
 	}, h.resolveURL)
 	return h
@@ -296,12 +296,6 @@ func (h *handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, 
 // GET id/meta/stats/
 // http://tinyurl.com/lvyp2l5
 func (h *handler) metaStats(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
-}
-
-// GET id/meta/bundles-containing[?include=meta[&include=meta…]]
-// http://tinyurl.com/oqc386r
-func (h *handler) metaBundlesContaining(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 

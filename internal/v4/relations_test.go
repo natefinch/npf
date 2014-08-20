@@ -4,9 +4,11 @@
 package v4_test
 
 import (
+	"fmt"
 	"net/http"
 
 	"gopkg.in/juju/charm.v3"
+	"gopkg.in/mgo.v2/bson"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/charmstore"
@@ -338,4 +340,240 @@ func (ch *relationTestingCharm) Revision() int {
 	// For the purposes of this implementation, the charm revision is not
 	// relevant.
 	return 0
+}
+
+func (s *RelationsSuite) addBundles(c *gc.C, bundles map[string]charm.Bundle) {
+	blobSize := int64(42)
+	for id, b := range bundles {
+		url := mustParseReference(id)
+		// The blob related info are not used in these tests.
+		// The charm-bundle relations are retrieved from the entities
+		// collection, without accessing the blob store.
+		err := s.store.AddBundle(url, b, "blobName", "blobHash", blobSize)
+		c.Assert(err, gc.IsNil)
+	}
+}
+
+// metaBundlesContainingBundles defines a bunch of bundles to be used in
+// the bundles-containing tests.
+var metaBundlesContainingBundles = map[string]charm.Bundle{
+	"bundle/wordpress-simple-0": &relationTestingBundle{
+		urls: []string{
+			"cs:utopic/wordpress-42",
+			"cs:utopic/mysql-0",
+		},
+	},
+	"bundle/wordpress-complex-1": &relationTestingBundle{
+		urls: []string{
+			"cs:utopic/wordpress-42",
+			"cs:utopic/wordpress-47",
+			"cs:trusty/mysql-0",
+			"cs:trusty/mysql-1",
+			"cs:trusty/memcached-2",
+		},
+	},
+	"bundle/django-generic-42": &relationTestingBundle{
+		urls: []string{
+			"django",
+			"django",
+			"mysql-1",
+			"trusty/memcached",
+		},
+	},
+	"bundle/useless-0": &relationTestingBundle{
+		urls: []string{"cs:utopic/wordpress-42"},
+	},
+	"bundle/mediawiki-47": &relationTestingBundle{
+		urls: []string{
+			"precise/mediawiki-0",
+			"mysql",
+		},
+	},
+}
+
+var metaBundlesContainingTests = []struct {
+	// Description of the test.
+	about string
+	// The id of the charm for which related bundles are returned.
+	id string
+	// The querystring to append to the resulting charmstore URL.
+	querystring string
+	// The expected response body.
+	expectBody []*params.MetaAnyResponse
+}{{
+	about: "specific charm present in several bundles",
+	id:    "utopic/wordpress-42",
+	expectBody: []*params.MetaAnyResponse{{
+		Id: mustParseReference("bundle/wordpress-simple-0"),
+	}, {
+		Id: mustParseReference("bundle/wordpress-complex-1"),
+	}, {
+		Id: mustParseReference("bundle/useless-0"),
+	}},
+}, {
+	about: "specific charm present in one bundle",
+	id:    "trusty/memcached-2",
+	expectBody: []*params.MetaAnyResponse{{
+		Id: mustParseReference("bundle/wordpress-complex-1"),
+	}},
+}, {
+	about:      "specific charm not present in any bundle",
+	id:         "trusty/django-42",
+	expectBody: []*params.MetaAnyResponse{},
+}, {
+	about:       "specific charm with includes",
+	id:          "trusty/mysql-1",
+	querystring: "?include=archive-size&include=bundle-metadata",
+	expectBody: []*params.MetaAnyResponse{{
+		Id: mustParseReference("bundle/wordpress-complex-1"),
+		Meta: map[string]interface{}{
+			"archive-size":    params.ArchiveSizeResponse{Size: 42},
+			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-complex-1"].Data(),
+		},
+	}},
+}, {
+	about:       "any series set to true",
+	id:          "trusty/mysql-0",
+	querystring: "?any-series=1",
+	expectBody: []*params.MetaAnyResponse{{
+		Id: mustParseReference("bundle/wordpress-simple-0"),
+	}, {
+		Id: mustParseReference("bundle/wordpress-complex-1"),
+	}},
+}, {
+	about:       "invalid any series",
+	id:          "utopic/mysql-0",
+	querystring: "?any-series=true",
+	expectBody: []*params.MetaAnyResponse{{
+		Id: mustParseReference("bundle/wordpress-simple-0"),
+	}},
+}, {
+	about:       "any revision set to true",
+	id:          "trusty/memcached-99",
+	querystring: "?any-revision=1",
+	expectBody: []*params.MetaAnyResponse{{
+		Id: mustParseReference("bundle/wordpress-complex-1"),
+	}, {
+		Id: mustParseReference("bundle/django-generic-42"),
+	}},
+}, {
+	about:       "invalid any revision",
+	id:          "trusty/memcached-99",
+	querystring: "?any-revision=why-not",
+	expectBody:  []*params.MetaAnyResponse{},
+}, {
+	about:       "any series and revision",
+	id:          "saucy/mysql-99",
+	querystring: "?any-series=1&any-revision=1",
+	expectBody: []*params.MetaAnyResponse{{
+		Id: mustParseReference("bundle/wordpress-simple-0"),
+	}, {
+		Id: mustParseReference("bundle/wordpress-complex-1"),
+	}, {
+		Id: mustParseReference("bundle/django-generic-42"),
+	}, {
+		Id: mustParseReference("bundle/mediawiki-47"),
+	}},
+}, {
+	about:       "any series and revision with includes",
+	id:          "saucy/wordpress-99",
+	querystring: "?any-series=1&any-revision=1&include=archive-size&include=bundle-metadata",
+	expectBody: []*params.MetaAnyResponse{{
+		Id: mustParseReference("bundle/wordpress-simple-0"),
+		Meta: map[string]interface{}{
+			"archive-size":    params.ArchiveSizeResponse{Size: 42},
+			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-simple-0"].Data(),
+		},
+	}, {
+		Id: mustParseReference("bundle/wordpress-complex-1"),
+		Meta: map[string]interface{}{
+			"archive-size":    params.ArchiveSizeResponse{Size: 42},
+			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-complex-1"].Data(),
+		},
+	}, {
+		Id: mustParseReference("bundle/useless-0"),
+		Meta: map[string]interface{}{
+			"archive-size":    params.ArchiveSizeResponse{Size: 42},
+			"bundle-metadata": metaBundlesContainingBundles["bundle/useless-0"].Data(),
+		},
+	}},
+}}
+
+func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
+	// Add the bundles used for testing to the database.
+	s.addBundles(c, metaBundlesContainingBundles)
+
+	for i, test := range metaBundlesContainingTests {
+		c.Logf("test %d: %s", i, test.about)
+
+		// Add the charm we need bundle info on to the database.
+		url := mustParseReference(test.id)
+		err := s.store.AddCharm(url, &relationTestingCharm{}, "blobName", "blobHash", int64(47))
+		c.Assert(err, gc.IsNil)
+
+		// Perform the request and ensure the response is what we expect.
+		storeURL := storeURL(test.id + "/meta/bundles-containing" + test.querystring)
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:    s.srv,
+			URL:        storeURL,
+			ExpectCode: http.StatusOK,
+			ExpectBody: test.expectBody,
+		})
+
+		// Clean up the charm entity in the store.
+		err = s.store.DB.Entities().Remove(bson.D{{"_id", url}})
+		c.Assert(err, gc.IsNil)
+	}
+}
+
+func (s *RelationsSuite) TestMetaBundlesContainingIncludeError(c *gc.C) {
+	// Add a charm.
+	charmUrl := mustParseReference("cs:utopic/django-0")
+	err := s.store.AddCharm(charmUrl, &relationTestingCharm{}, "blobName", "blobHash", int64(47))
+	c.Assert(err, gc.IsNil)
+
+	// Add a bundle including the charm.
+	bundle := &relationTestingBundle{
+		urls: []string{"cs:utopic/django-0"},
+	}
+	s.addBundles(c, map[string]charm.Bundle{"cs:bundle/django-simple-0": bundle})
+
+	// Check the error response.
+	storeURL := storeURL("utopic/django-0/meta/bundles-containing?include=no-such")
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:    s.srv,
+		URL:        storeURL,
+		ExpectCode: http.StatusInternalServerError,
+		ExpectBody: params.Error{
+			Message: `cannot retrieve bundle metadata: unrecognized metadata name "no-such"`,
+		},
+	})
+}
+
+// relationTestingBundle implements charm.Bundle, and it is used for testing
+// charm to bundle relations (for instance for the bundles-containing call).
+type relationTestingBundle struct {
+	// urls is a list of charm references to be included in the bundle.
+	// For each URL, a corresponding service is automatically created.
+	urls []string
+}
+
+func (b *relationTestingBundle) Data() *charm.BundleData {
+	services := make(map[string]*charm.ServiceSpec, len(b.urls))
+	for i, url := range b.urls {
+		service := &charm.ServiceSpec{
+			Charm:    url,
+			NumUnits: 1,
+		}
+		services[fmt.Sprintf("service-%d", i)] = service
+	}
+	return &charm.BundleData{
+		Services: services,
+	}
+}
+
+func (b *relationTestingBundle) ReadMe() string {
+	// For the purposes of this implementation, the charm readme is not
+	// relevant.
+	return ""
 }

@@ -132,3 +132,94 @@ func (h *handler) getRelatedIfaceResponses(
 	}
 	return responses, nil
 }
+
+// GET id/meta/bundles-containing[?include=meta[&include=meta…]][&any-series=1][&any-revision=1]
+// http://tinyurl.com/oqc386r
+func (h *handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Reference, path, method string, flags url.Values) (interface{}, error) {
+	anySeries := flags.Get("any-series") == "1"
+	anyRevision := flags.Get("any-revision") == "1"
+
+	// Mutate the reference so that it represents a base URL if required.
+	searchId := *id
+	if anySeries || anyRevision {
+		searchId.Revision = -1
+		searchId.Series = ""
+	}
+
+	// Retrieve the bundles containing the resulting charm id.
+	var entities []mongodoc.Entity
+	if err := h.store.DB.Entities().Find(bson.D{{
+		"bundlecharms", bson.D{{
+			"$in", []*charm.Reference{&searchId},
+		}},
+	}}).Select(bson.D{{"_id", 1}, {"bundlecharms", 1}}).All(&entities); err != nil {
+		return nil, errgo.Notef(err, "cannot retrieve the related bundles")
+	}
+
+	// Further filter the entities if required.
+	if anySeries != anyRevision {
+		filterId := *id
+		var transform func(*charm.Reference) *charm.Reference
+		if anySeries {
+			// Bundle can contain charms of any series but the requested
+			// revision must be preserved.
+			filterId.Series = ""
+			transform = func(url *charm.Reference) *charm.Reference {
+				url.Series = ""
+				return url
+			}
+		} else {
+			// Bundle can contain charms with any revision but the requested
+			// series must be preserved.
+			filterId.Revision = -1
+			transform = func(url *charm.Reference) *charm.Reference {
+				url.Revision = -1
+				return url
+			}
+		}
+		entities = filterEntities(entities, byIncludedCharms(&filterId, transform))
+	}
+
+	// Prepare and return the response.
+	response := make([]*params.MetaAnyResponse, 0, len(entities))
+	includes := flags["include"]
+	for _, entity := range entities {
+		meta, err := h.GetMetadata(entity.URL, includes)
+		if err != nil {
+			return nil, errgo.Notef(err, "cannot retrieve bundle metadata")
+		}
+		response = append(response, &params.MetaAnyResponse{
+			Id:   entity.URL,
+			Meta: meta,
+		})
+	}
+	return response, nil
+}
+
+// entitiesFilterer functions can be passed as predicate to filterEntities in
+// order to filter entities.
+type entitiesFilterer func(*mongodoc.Entity) bool
+
+// filterEntities filters the given entities based on the given predicate.
+func filterEntities(entities []mongodoc.Entity, predicate entitiesFilterer) []mongodoc.Entity {
+	results := make([]mongodoc.Entity, 0, len(entities))
+	for _, entity := range entities {
+		if predicate(&entity) {
+			results = append(results, entity)
+		}
+	}
+	return results
+}
+
+// byIncludedCharms returns an entitiesFilterer which succeeds if the given id
+// matches any of the transformed charm ids in the entity.
+func byIncludedCharms(id *charm.Reference, transform func(*charm.Reference) *charm.Reference) entitiesFilterer {
+	return func(entity *mongodoc.Entity) bool {
+		for _, charmUrl := range entity.BundleCharms {
+			if *transform(charmUrl) == *id {
+				return true
+			}
+		}
+		return false
+	}
+}
