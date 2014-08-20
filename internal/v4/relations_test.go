@@ -438,6 +438,13 @@ var metaBundlesContainingTests = []struct {
 		},
 	}},
 }, {
+	about:      "partial charm id",
+	id:         "mysql", // The test will add cs:utopic/mysql-0.
+	expectCode: http.StatusOK,
+	expectBody: []*params.MetaAnyResponse{{
+		Id: mustParseReference("bundle/wordpress-simple-0"),
+	}},
+}, {
 	about:       "any series set to true",
 	id:          "trusty/mysql-0",
 	querystring: "?any-series=1",
@@ -522,8 +529,17 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 	for i, test := range metaBundlesContainingTests {
 		c.Logf("test %d: %s", i, test.about)
 
-		// Add the charm we need bundle info on to the database.
+		// Expand the URL if required before adding the charm to the database,
+		// so that at least one matching charm can be resolved.
 		url := mustParseReference(test.id)
+		if url.Series == "" {
+			url.Series = "utopic"
+		}
+		if url.Revision == -1 {
+			url.Revision = 0
+		}
+
+		// Add the charm we need bundle info on to the database.
 		err := s.store.AddCharm(url, &relationTestingCharm{}, "blobName", "blobHash", int64(47))
 		c.Assert(err, gc.IsNil)
 
