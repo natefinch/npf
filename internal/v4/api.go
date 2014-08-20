@@ -320,6 +320,10 @@ func (h *handler) metaRevisionInfo(id *charm.Reference, path string, method stri
 		return "", errgo.Notef(err, "cannot get ids")
 	}
 
+	if len(docs) == 0 {
+		return "", params.ErrNotFound
+	}
+
 	sort.Sort(mongodoc.EntitiesByURLDesc(docs))
 	response := make([]params.ExpandedId, 0, len(docs))
 	for _, doc := range docs {
@@ -329,9 +333,7 @@ func (h *handler) metaRevisionInfo(id *charm.Reference, path string, method stri
 	}
 
 	if len(response) == 0 {
-		errorURL := *id
-		errorURL.Revision = -1
-		return "", noMatchingURLError(&errorURL)
+		return "", noMatchingURLError(&baseURL)
 	}
 
 	// Write the response in JSON format.

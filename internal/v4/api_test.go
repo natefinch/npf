@@ -147,6 +147,19 @@ var metaEndpoints = []metaEndpoint{{
 		c.Assert(response.UploadTime, gc.Not(jc.Satisfies), time.Time.IsZero)
 		c.Assert(response.UploadTime.Location(), gc.Equals, time.UTC)
 	},
+}, {
+	name: "revision-info",
+	get: func(store *charmstore.Store, id *charm.Reference) (interface{}, error) {
+		return []params.ExpandedId{
+			params.ExpandedId{Id: id.String()},
+		}, nil
+	},
+	checkURL: "cs:precise/wordpress-99",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		ids := data.([]params.ExpandedId)
+		c.Assert(ids[0].Id, gc.Equals, "cs:precise/wordpress-99")
+		c.Assert(len(ids), gc.Equals, 1)
+	},
 }}
 
 // TestEndpointGet tries to ensure that the endpoint
@@ -532,7 +545,7 @@ func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 	}, {
 		about: "no entities found",
 		url:   "precise/no-such-33",
-		err:   `no matching charm or bundle for "cs:precise/no-such"`,
+		err:   "not found",
 	}}
 
 	for i, test := range serveMetaRevisionInfoTests {
