@@ -515,6 +515,9 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 }
 
 func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
+	s.addCharm(c, "wordpress", "cs:trusty/mysql-42")
+	s.addCharm(c, "wordpress", "cs:trusty/mysql-41")
+	s.addCharm(c, "wordpress", "cs:precise/wordpress-42")
 	s.addCharm(c, "wordpress", "cs:trusty/wordpress-43")
 	s.addCharm(c, "wordpress", "cs:trusty/wordpress-41")
 	s.addCharm(c, "wordpress", "cs:trusty/wordpress-9")

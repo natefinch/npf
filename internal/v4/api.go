@@ -324,6 +324,7 @@ func (h *handler) metaRevisionInfo(id *charm.Reference, path string, method stri
 		return "", params.ErrNotFound
 	}
 
+	// Sort in descending order by revision.
 	sort.Sort(mongodoc.EntitiesByURLDesc(docs))
 	response := make([]params.ExpandedId, 0, len(docs))
 	for _, doc := range docs {
