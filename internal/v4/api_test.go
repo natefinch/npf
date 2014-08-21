@@ -57,15 +57,20 @@ func storeURL(path string) string {
 type metaEndpointExpectedValueGetter func(*charmstore.Store, *charm.Reference) (interface{}, error)
 
 type metaEndpoint struct {
-	// The name of the meta endpoint.
+	// name names the meta endpoint.
 	name string
-	// Whether the endpoint applies only to charms (charmOnly),
-	// to bundles (bundleOnly) or to both (empty field).
+
+	// exclusive specifies whether the endpoint is
+	// valid for charms only (charmOnly), bundles only (bundleOnly)
+	// or to both (zero).
 	exclusive int
-	// A function returning the expected data for the endpoint.
+
+	// get returns the expected data for the endpoint.
 	get metaEndpointExpectedValueGetter
+
 	// checkURL holds one URL to sanity check data against.
 	checkURL string
+
 	// assertCheckData holds a function that will be used to check that
 	// the get function returns sane data for checkURL.
 	assertCheckData func(c *gc.C, data interface{})

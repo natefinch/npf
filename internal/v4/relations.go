@@ -145,11 +145,11 @@ func (h *handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 	}
 
 	// Validate the URL query values.
-	anySeries, err := stringToBool(flags.Get("any-series"))
+	anySeries, err := parseBool(flags.Get("any-series"))
 	if err != nil {
 		return nil, badRequestf(err, "invalid value for any-series")
 	}
-	anyRevision, err := stringToBool(flags.Get("any-revision"))
+	anyRevision, err := parseBool(flags.Get("any-revision"))
 	if err != nil {
 		return nil, badRequestf(err, "invalid value for any-revision")
 	}

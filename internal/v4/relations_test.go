@@ -457,7 +457,7 @@ var metaBundlesContainingTests = []struct {
 	expectCode:  http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
-		Message: `invalid value for any-series: value must be either "0", "1" or empty, but "true" passed`,
+		Message: `invalid value for any-series: unexpected bool value "true" (must be "0" or "1")`,
 	},
 }, {
 	about:       "any revision set to true",
@@ -476,7 +476,7 @@ var metaBundlesContainingTests = []struct {
 	expectCode:  http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
-		Message: `invalid value for any-revision: value must be either "0", "1" or empty, but "why-not" passed`,
+		Message: `invalid value for any-revision: unexpected bool value "why-not" (must be "0" or "1")`,
 	},
 }, {
 	about:       "any series and revision",
