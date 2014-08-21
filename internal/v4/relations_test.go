@@ -11,10 +11,19 @@ import (
 	"gopkg.in/mgo.v2/bson"
 	gc "launchpad.net/gocheck"
 
+	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/storetesting"
 	"github.com/juju/charmstore/params"
 )
+
+// Define fake blob attributes to be used in tests.
+var fakeBlobSize, fakeBlobHash = func() (int64, string) {
+	b := []byte("fake content")
+	h := blobstore.NewHash()
+	h.Write(b)
+	return int64(len(b)), fmt.Sprintf("%x", h.Sum(nil))
+}()
 
 type RelationsSuite struct {
 	storetesting.IsolatedMgoSuite
@@ -239,7 +248,7 @@ var metaCharmRelatedTests = []struct {
 			"mount": []params.MetaAnyResponse{{
 				Id: mustParseReference("utopic/wordpress-0"),
 				Meta: map[string]interface{}{
-					"archive-size": params.ArchiveSizeResponse{Size: 42},
+					"archive-size": params.ArchiveSizeResponse{Size: fakeBlobSize},
 					"charm-metadata": &charm.Meta{
 						Provides: map[string]charm.Relation{
 							"website": {
@@ -268,13 +277,12 @@ var metaCharmRelatedTests = []struct {
 }}
 
 func (s *RelationsSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
-	blobSize := int64(42)
 	for id, ch := range charms {
 		url := mustParseReference(id)
 		// The blob related info are not used in these tests.
 		// The related charms are retrieved from the entities collection,
 		// without accessing the blob store.
-		err := s.store.AddCharm(url, ch, "blobName", "blobHash", blobSize)
+		err := s.store.AddCharm(url, ch, "blobName", fakeBlobHash, fakeBlobSize)
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -421,7 +429,7 @@ var metaBundlesContainingTests = []struct {
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-complex-1"),
 		Meta: map[string]interface{}{
-			"archive-size":    params.ArchiveSizeResponse{Size: 42},
+			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
 			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-complex-1"].Data(),
 		},
 	}},
@@ -492,19 +500,19 @@ var metaBundlesContainingTests = []struct {
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-simple-0"),
 		Meta: map[string]interface{}{
-			"archive-size":    params.ArchiveSizeResponse{Size: 42},
+			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
 			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-simple-0"].Data(),
 		},
 	}, {
 		Id: mustParseReference("bundle/wordpress-complex-1"),
 		Meta: map[string]interface{}{
-			"archive-size":    params.ArchiveSizeResponse{Size: 42},
+			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
 			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-complex-1"].Data(),
 		},
 	}, {
 		Id: mustParseReference("bundle/useless-0"),
 		Meta: map[string]interface{}{
-			"archive-size":    params.ArchiveSizeResponse{Size: 42},
+			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
 			"bundle-metadata": metaBundlesContainingBundles["bundle/useless-0"].Data(),
 		},
 	}},
@@ -520,13 +528,12 @@ var metaBundlesContainingTests = []struct {
 
 func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 	// Add the bundles used for testing to the database.
-	blobSize := int64(42)
 	for id, b := range metaBundlesContainingBundles {
 		url := mustParseReference(id)
 		// The blob related info are not used in these tests.
 		// The charm-bundle relations are retrieved from the entities
 		// collection, without accessing the blob store.
-		err := s.store.AddBundle(url, b, "blobName", "blobHash", blobSize)
+		err := s.store.AddBundle(url, b, "blobName", fakeBlobHash, fakeBlobSize)
 		c.Assert(err, gc.IsNil)
 	}
 
@@ -544,7 +551,7 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 		}
 
 		// Add the charm we need bundle info on to the database.
-		err := s.store.AddCharm(url, &relationTestingCharm{}, "blobName", "blobHash", int64(47))
+		err := s.store.AddCharm(url, &relationTestingCharm{}, "blobName", fakeBlobHash, fakeBlobSize)
 		c.Assert(err, gc.IsNil)
 
 		// Perform the request and ensure the response is what we expect.
