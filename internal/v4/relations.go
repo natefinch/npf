@@ -202,7 +202,8 @@ func (h *handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 	return response, nil
 }
 
-// filterEntities filters the given entities based on the given predicate.
+// filterEntities returns a slice containing all the entities for which the
+// given predicate returns true.
 func filterEntities(entities []mongodoc.Entity, predicate func(*mongodoc.Entity) bool) []mongodoc.Entity {
 	results := make([]mongodoc.Entity, 0, len(entities))
 	for _, entity := range entities {

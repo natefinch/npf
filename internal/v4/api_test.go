@@ -167,7 +167,7 @@ var metaEndpoints = []metaEndpoint{{
 	},
 	checkURL: "cs:precise/wordpress-23",
 	assertCheckData: func(c *gc.C, data interface{}) {
-		_ = data.(*params.RelatedResponse)
+		c.Assert(data, gc.FitsTypeOf, (*params.RelatedResponse)(nil))
 	},
 }, {
 	name:      "bundles-containing",
@@ -182,7 +182,7 @@ var metaEndpoints = []metaEndpoint{{
 	},
 	checkURL: "cs:precise/wordpress-23",
 	assertCheckData: func(c *gc.C, data interface{}) {
-		_ = data.([]*params.MetaAnyResponse)
+		c.Assert(data, gc.FitsTypeOf, []*params.MetaAnyResponse(nil))
 	},
 }}
 
