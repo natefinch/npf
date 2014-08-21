@@ -315,7 +315,7 @@ func (h *handler) metaRevisionInfo(id *charm.Reference, path string, method stri
 
 	var docs []mongodoc.Entity
 	if err := h.store.DB.Entities().Find(
-		bson.D{{"baseurl", baseURL.String()}}).Select(
+		bson.D{{"baseurl", &baseURL}}).Select(
 		bson.D{{"_id", 1}}).All(&docs); err != nil {
 		return "", errgo.Notef(err, "cannot get ids")
 	}
