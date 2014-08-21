@@ -342,18 +342,6 @@ func (ch *relationTestingCharm) Revision() int {
 	return 0
 }
 
-func (s *RelationsSuite) addBundles(c *gc.C, bundles map[string]charm.Bundle) {
-	blobSize := int64(42)
-	for id, b := range bundles {
-		url := mustParseReference(id)
-		// The blob related info are not used in these tests.
-		// The charm-bundle relations are retrieved from the entities
-		// collection, without accessing the blob store.
-		err := s.store.AddBundle(url, b, "blobName", "blobHash", blobSize)
-		c.Assert(err, gc.IsNil)
-	}
-}
-
 // metaBundlesContainingBundles defines a bunch of bundles to be used in
 // the bundles-containing tests.
 var metaBundlesContainingBundles = map[string]charm.Bundle{
@@ -532,7 +520,15 @@ var metaBundlesContainingTests = []struct {
 
 func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 	// Add the bundles used for testing to the database.
-	s.addBundles(c, metaBundlesContainingBundles)
+	blobSize := int64(42)
+	for id, b := range metaBundlesContainingBundles {
+		url := mustParseReference(id)
+		// The blob related info are not used in these tests.
+		// The charm-bundle relations are retrieved from the entities
+		// collection, without accessing the blob store.
+		err := s.store.AddBundle(url, b, "blobName", "blobHash", blobSize)
+		c.Assert(err, gc.IsNil)
+	}
 
 	for i, test := range metaBundlesContainingTests {
 		c.Logf("test %d: %s", i, test.about)
