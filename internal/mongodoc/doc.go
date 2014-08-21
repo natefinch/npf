@@ -56,12 +56,3 @@ type Entity struct {
 	// TODO Add fields denormalized for search purposes
 	// and search ranking field(s).
 }
-
-type EntitiesByURLDesc []Entity
-
-func (s EntitiesByURLDesc) Len() int      { return len(s) }
-func (s EntitiesByURLDesc) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
-// Implement the Less method of the sort interface backward, with > so that
-// the sort order is descending.
-func (s EntitiesByURLDesc) Less(i, j int) bool { return s[i].URL.Revision > s[j].URL.Revision }

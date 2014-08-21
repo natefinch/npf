@@ -325,7 +325,7 @@ func (h *handler) metaRevisionInfo(id *charm.Reference, path string, method stri
 	}
 
 	// Sort in descending order by revision.
-	sort.Sort(mongodoc.EntitiesByURLDesc(docs))
+	sort.Sort(entitiesByRevision(docs))
 	response := make([]params.ExpandedId, 0, len(docs))
 	for _, doc := range docs {
 		if doc.URL.Series == id.Series {
@@ -340,6 +340,15 @@ func (h *handler) metaRevisionInfo(id *charm.Reference, path string, method stri
 	// Write the response in JSON format.
 	return response, nil
 }
+
+type entitiesByRevision []mongodoc.Entity
+
+func (s entitiesByRevision) Len() int      { return len(s) }
+func (s entitiesByRevision) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+// Implement the Less method of the sort interface backward, with > so that
+// the sort order is descending.
+func (s entitiesByRevision) Less(i, j int) bool { return s[i].URL.Revision > s[j].URL.Revision }
 
 // GET id/meta/extra-info
 // http://tinyurl.com/keos7wd
