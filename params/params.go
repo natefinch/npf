@@ -19,14 +19,6 @@ type MetaAnyResponse struct {
 	Meta map[string]interface{} `json:",omitempty"`
 }
 
-// Statistic holds one element of a stats/counter
-// response. See http://tinyurl.com/nkdovcf
-type Statistic struct {
-	Key   string `json:",omitempty"`
-	Date  string `json:",omitempty"`
-	Count int64
-}
-
 // ArchivePostResponse holds the result of
 // a post to /$id/archive. See http://tinyurl.com/lzrzrgb
 type ArchivePostResponse struct {

@@ -61,6 +61,11 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
 	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
+
+	// Check that the downloads count for the entity has been updated.
+	key := []string{params.StatsArchiveDownload, "precise", "wordpress", "0"}
+	checkCounterSum(c, s.store, key, false, 2)
+
 }
 
 var archivePostErrorsTests = []struct {

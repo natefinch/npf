@@ -48,6 +48,8 @@ func (h *handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 		return err
 	}
 	defer r.Close()
+	// TODO frankban 2014-08-22: log possible IncCounter errors.
+	go h.store.IncCounter(entityStatsKey(id, params.StatsArchiveDownload))
 	serveContent(w, req, size, r)
 	return nil
 }

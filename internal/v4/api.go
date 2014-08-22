@@ -53,6 +53,7 @@ func New(store *charmstore.Store) http.Handler {
 			"archive-upload-time": h.entityHandler(h.metaArchiveUploadTime, "uploadtime"),
 			"charm-related":       h.entityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces"),
 			"bundles-containing":  h.entityHandler(h.metaBundlesContaining),
+			"stats":               h.entityHandler(h.metaStats),
 
 			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
 			"color":         router.SingleIncludeHandler(h.metaColor),
@@ -307,8 +308,20 @@ func (h *handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, 
 
 // GET id/meta/stats/
 // http://tinyurl.com/lvyp2l5
-func (h *handler) metaStats(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
+func (h *handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path, method string, flags url.Values) (interface{}, error) {
+	req := charmstore.CounterRequest{
+		Key: entityStatsKey(id, params.StatsArchiveDownload),
+	}
+	results, err := h.store.Counters(&req)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot retrieve stats")
+	}
+	return &params.StatsResponse{
+		// If a list is not requested as part of the charmstore.CounterRequest,
+		// one result is always returned: if the key is not found the count is
+		// set to 0.
+		ArchiveDownloadCount: results[0].Count,
+	}, nil
 }
 
 // GET id/meta/revision-info
