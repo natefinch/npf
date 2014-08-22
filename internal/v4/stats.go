@@ -19,7 +19,7 @@ import (
 // entityStatsKey returns a stats key for the given charm or bundle
 // reference and the given kind.
 // Entities' stats can then be retrieved like the following:
-//   - kind:utopic:* -> all charm of a specific series;
+//   - kind:utopic:* -> all charms of a specific series;
 //   - kind:trusty:django:* -> all revisions of a specific charm;
 //   - kind:trusty:django:42 -> a specific promulgated charm;
 //   - kind:trusty:django:42:* -> all user owned variations of a charm;
