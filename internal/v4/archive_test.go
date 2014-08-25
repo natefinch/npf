@@ -662,6 +662,25 @@ func (s *ArchiveSuite) TestDeleteNotFound(c *gc.C) {
 	})
 }
 
+func (s *ArchiveSuite) TestDeleteError(c *gc.C) {
+	// Add a charm to the database (not including the archive).
+	id := "utopic/mysql-42"
+	url := mustParseReference(id)
+	err := s.store.AddCharm(url, charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"), "no-such-name", fakeBlobHash, fakeBlobSize)
+	c.Assert(err, gc.IsNil)
+
+	// Try to delete the charm using the API.
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:    s.srv,
+		URL:        storeURL(id + "/archive"),
+		Method:     "DELETE",
+		ExpectCode: http.StatusInternalServerError,
+		ExpectBody: params.Error{
+			Message: `cannot remove blob no-such-name: resource at path "global/no-such-name" not found`,
+		},
+	})
+}
+
 func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 	if !storetesting.MongoJSEnabled() {
 		c.Skip("MongoDB JavaScript not available")
