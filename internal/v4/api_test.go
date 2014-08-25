@@ -164,9 +164,10 @@ var metaEndpoints = []metaEndpoint{{
 	},
 	checkURL: "cs:precise/wordpress-99",
 	assertCheckData: func(c *gc.C, data interface{}) {
-		ids := data.(params.RevisionInfoResponse)
-		c.Assert(ids.Revisions[0].String(), gc.Equals, "cs:precise/wordpress-99")
-		c.Assert(len(ids.Revisions), gc.Equals, 1)
+		c.Assert(data, gc.DeepEquals, params.RevisionInfoResponse{
+			[]*charm.Reference{
+				mustParseReference("cs:precise/wordpress-99"),
+			}})
 	},
 }, {
 	name:      "charm-related",
