@@ -6,7 +6,7 @@ package params
 // Define the kinds to be included in stats keys.
 // TODO frankban 2014-08-22:
 //  increase the counters for the kinds below:
-//  the only hooked kind is archive-download for now.
+//  the only hooked kinds are archive-download and archive-delete for now.
 const (
 	StatsArchiveDownload     = "archive-download"
 	StatsArchiveDelete       = "archive-delete"
