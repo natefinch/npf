@@ -326,14 +326,14 @@ func (h *handler) metaRevisionInfo(id *charm.Reference, path string, method stri
 
 	// Sort in descending order by revision.
 	sort.Sort(entitiesByRevision(docs))
-	response := make([]params.ExpandedId, 0, len(docs))
+	response := &params.RevisionInfoResponse{}
 	for _, doc := range docs {
 		if doc.URL.Series == id.Series {
-			response = append(response, params.ExpandedId{Id: doc.URL.String()})
+			response.Revisions = append(response.Revisions, doc.URL)
 		}
 	}
 
-	if len(response) == 0 {
+	if len(response.Revisions) == 0 {
 		return "", noMatchingURLError(&baseURL)
 	}
 

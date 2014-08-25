@@ -150,15 +150,15 @@ var metaEndpoints = []metaEndpoint{{
 }, {
 	name: "revision-info",
 	get: func(store *charmstore.Store, id *charm.Reference) (interface{}, error) {
-		return []params.ExpandedId{
-			params.ExpandedId{Id: id.String()},
+		return params.RevisionInfoResponse{
+			[]*charm.Reference{id},
 		}, nil
 	},
 	checkURL: "cs:precise/wordpress-99",
 	assertCheckData: func(c *gc.C, data interface{}) {
-		ids := data.([]params.ExpandedId)
-		c.Assert(ids[0].Id, gc.Equals, "cs:precise/wordpress-99")
-		c.Assert(len(ids), gc.Equals, 1)
+		ids := data.(params.RevisionInfoResponse)
+		c.Assert(ids.Revisions[0].String(), gc.Equals, "cs:precise/wordpress-99")
+		c.Assert(len(ids.Revisions), gc.Equals, 1)
 	},
 }}
 
@@ -514,6 +514,37 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 	}
 }
 
+var serveMetaRevisionInfoTests = []struct {
+	about  string
+	url    string
+	expect params.RevisionInfoResponse
+	err    string
+}{{
+	about: "fully qualified url",
+	url:   "trusty/wordpress-42",
+	expect: params.RevisionInfoResponse{
+		[]*charm.Reference{
+			mustParseReference("cs:trusty/wordpress-43"),
+			mustParseReference("cs:trusty/wordpress-42"),
+			mustParseReference("cs:trusty/wordpress-41"),
+			mustParseReference("cs:trusty/wordpress-9"),
+		}},
+}, {
+	about: "partial url uses a default series",
+	url:   "wordpress",
+	expect: params.RevisionInfoResponse{
+		[]*charm.Reference{
+			mustParseReference("cs:trusty/wordpress-43"),
+			mustParseReference("cs:trusty/wordpress-42"),
+			mustParseReference("cs:trusty/wordpress-41"),
+			mustParseReference("cs:trusty/wordpress-9"),
+		}},
+}, {
+	about: "no entities found",
+	url:   "precise/no-such-33",
+	err:   "not found",
+}}
+
 func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 	s.addCharm(c, "wordpress", "cs:trusty/mysql-42")
 	s.addCharm(c, "wordpress", "cs:trusty/mysql-41")
@@ -522,34 +553,6 @@ func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 	s.addCharm(c, "wordpress", "cs:trusty/wordpress-41")
 	s.addCharm(c, "wordpress", "cs:trusty/wordpress-9")
 	s.addCharm(c, "wordpress", "cs:trusty/wordpress-42")
-	var serveMetaRevisionInfoTests = []struct {
-		about  string
-		url    string
-		expect []params.ExpandedId
-		err    string
-	}{{
-		about: "fully qualified url",
-		url:   "trusty/wordpress-42",
-		expect: []params.ExpandedId{
-			{Id: "cs:trusty/wordpress-43"},
-			{Id: "cs:trusty/wordpress-42"},
-			{Id: "cs:trusty/wordpress-41"},
-			{Id: "cs:trusty/wordpress-9"},
-		},
-	}, {
-		about: "partial url uses a default series",
-		url:   "wordpress",
-		expect: []params.ExpandedId{
-			{Id: "cs:trusty/wordpress-43"},
-			{Id: "cs:trusty/wordpress-42"},
-			{Id: "cs:trusty/wordpress-41"},
-			{Id: "cs:trusty/wordpress-9"},
-		},
-	}, {
-		about: "no entities found",
-		url:   "precise/no-such-33",
-		err:   "not found",
-	}}
 
 	for i, test := range serveMetaRevisionInfoTests {
 		c.Logf("test %d: %s", i, test.about)
