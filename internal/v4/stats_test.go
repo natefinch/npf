@@ -32,12 +32,15 @@ func (s *StatsSuite) SetUpTest(c *gc.C) {
 
 // checkCounterSum checks that statistics are properly collected.
 // It retries a few times as they are generally collected in background.
-func (s *StatsSuite) checkCounterSum(c *gc.C, key []string, prefix bool, expected int64) {
+func checkCounterSum(c *gc.C, store *charmstore.Store, key []string, prefix bool, expected int64) {
 	var sum int64
 	for retry := 0; retry < 10; retry++ {
 		time.Sleep(100 * time.Millisecond)
-		req := charmstore.CounterRequest{Key: key, Prefix: prefix}
-		cs, err := s.store.Counters(&req)
+		req := charmstore.CounterRequest{
+			Key:    key,
+			Prefix: prefix,
+		}
+		cs, err := store.Counters(&req)
 		c.Assert(err, gc.IsNil)
 		if sum = cs[0].Count; sum == expected {
 			if expected == 0 && retry < 2 {
@@ -112,7 +115,7 @@ func (s *StatsSuite) TestServerStatsStatus(c *gc.C) {
 
 func (s *StatsSuite) TestStatsCounter(c *gc.C) {
 	if !storetesting.MongoJSEnabled() {
-		c.Skip("MongoDB javascript not available")
+		c.Skip("MongoDB JavaScript not available")
 	}
 
 	for _, key := range [][]string{{"a", "b"}, {"a", "b"}, {"a", "c"}, {"a"}} {
@@ -150,7 +153,7 @@ func (s *StatsSuite) TestStatsCounter(c *gc.C) {
 
 func (s *StatsSuite) TestStatsCounterList(c *gc.C) {
 	if !storetesting.MongoJSEnabled() {
-		c.Skip("MongoDB javascript not available")
+		c.Skip("MongoDB JavaScript not available")
 	}
 
 	incs := [][]string{
@@ -236,7 +239,7 @@ func (s *StatsSuite) TestStatsCounterList(c *gc.C) {
 
 func (s *StatsSuite) TestStatsCounterBy(c *gc.C) {
 	if !storetesting.MongoJSEnabled() {
-		c.Skip("MongoDB javascript not available")
+		c.Skip("MongoDB JavaScript not available")
 	}
 
 	incs := []struct {

@@ -5,14 +5,33 @@ package v4
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/juju/errgo"
+	"gopkg.in/juju/charm.v3"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/params"
 )
+
+// entityStatsKey returns a stats key for the given charm or bundle
+// reference and the given kind.
+// Entities' stats can then be retrieved like the following:
+//   - kind:utopic:* -> all charms of a specific series;
+//   - kind:trusty:django:* -> all revisions of a specific charm;
+//   - kind:trusty:django:42 -> a specific promulgated charm;
+//   - kind:trusty:django:42:* -> all user owned variations of a charm;
+//   - kind:trusty:django:42:who -> a specific user charm.
+// The above also applies to bundles (where the series is "bundle").
+func entityStatsKey(url *charm.Reference, kind string) []string {
+	key := []string{kind, url.Series, url.Name, strconv.Itoa(url.Revision)}
+	if url.User != "" {
+		key = append(key, url.User)
+	}
+	return key
+}
 
 // GET stats/counter/key[:key]...?[by=unit]&start=date][&stop=date][&list=1]
 // http://tinyurl.com/nkdovcf

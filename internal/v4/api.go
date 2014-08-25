@@ -53,13 +53,14 @@ func New(store *charmstore.Store) http.Handler {
 			"manifest":            h.entityHandler(h.metaManifest, "blobname"),
 			"archive-upload-time": h.entityHandler(h.metaArchiveUploadTime, "uploadtime"),
 			"charm-related":       h.entityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces"),
+			"bundles-containing":  h.entityHandler(h.metaBundlesContaining),
+			"stats":               h.entityHandler(h.metaStats),
 
 			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
-			"color":              router.SingleIncludeHandler(h.metaColor),
-			"bundles-containing": router.SingleIncludeHandler(h.metaBundlesContaining),
-			"revision-info":      router.SingleIncludeHandler(h.metaRevisionInfo),
-			"extra-info":         router.SingleIncludeHandler(h.metaExtraInfo),
-			"extra-info/":        router.SingleIncludeHandler(h.metaExtraInfoWithKey),
+			"color":         router.SingleIncludeHandler(h.metaColor),
+			"revision-info": router.SingleIncludeHandler(h.metaRevisionInfo),
+			"extra-info":    router.SingleIncludeHandler(h.metaExtraInfo),
+			"extra-info/":   router.SingleIncludeHandler(h.metaExtraInfoWithKey),
 		},
 	}, h.resolveURL)
 	return h
@@ -159,6 +160,18 @@ func preferredURL(url0, url1 *charm.Reference) bool {
 		return url0.Series > url1.Series
 	}
 	return ltsReleases[url0.Series]
+}
+
+// parseBool returns the boolean value represented by the string.
+// It accepts "1" or "0". Any other value returns an error.
+func parseBool(value string) (bool, error) {
+	switch value {
+	case "0", "":
+		return false, nil
+	case "1":
+		return true, nil
+	}
+	return false, errgo.Newf(`unexpected bool value %q (must be "0" or "1")`, value)
 }
 
 var errNotImplemented = errgo.Newf("method not implemented")
@@ -296,14 +309,20 @@ func (h *handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, 
 
 // GET id/meta/stats/
 // http://tinyurl.com/lvyp2l5
-func (h *handler) metaStats(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
-}
-
-// GET id/meta/bundles-containing[?include=meta[&include=meta…]]
-// http://tinyurl.com/oqc386r
-func (h *handler) metaBundlesContaining(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
+func (h *handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path, method string, flags url.Values) (interface{}, error) {
+	req := charmstore.CounterRequest{
+		Key: entityStatsKey(id, params.StatsArchiveDownload),
+	}
+	results, err := h.store.Counters(&req)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot retrieve stats")
+	}
+	return &params.StatsResponse{
+		// If a list is not requested as part of the charmstore.CounterRequest,
+		// one result is always returned: if the key is not found the count is
+		// set to 0.
+		ArchiveDownloadCount: results[0].Count,
+	}, nil
 }
 
 // GET id/meta/revision-info

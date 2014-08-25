@@ -21,6 +21,7 @@ import (
 	"gopkg.in/juju/charm.v3"
 	"gopkg.in/juju/charm.v3/testing"
 	charmtesting "gopkg.in/juju/charm.v3/testing"
+	"gopkg.in/mgo.v2/bson"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/blobstore"
@@ -61,6 +62,27 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
 	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
+}
+
+func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
+	if !storetesting.MongoJSEnabled() {
+		c.Skip("MongoDB JavaScript not available")
+	}
+
+	// Add a charm to the database (including the archive).
+	id := "utopic/mysql-42"
+	err := s.store.AddCharmWithArchive(
+		mustParseReference(id),
+		charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"))
+	c.Assert(err, gc.IsNil)
+
+	// Download the charm archive using the API.
+	rec := storetesting.DoRequest(c, s.srv, "GET", storeURL(id+"/archive"), nil, 0, nil)
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+
+	// Check that the downloads count for the entity has been updated.
+	key := []string{params.StatsArchiveDownload, "utopic", "mysql", "42"}
+	checkCounterSum(c, s.store, key, false, 1)
 }
 
 var archivePostErrorsTests = []struct {
@@ -594,6 +616,119 @@ func (s *ArchiveSuite) TestBundleCharms(c *gc.C) {
 			// the charm revision.
 		}
 	}
+}
+
+func (s *ArchiveSuite) TestDelete(c *gc.C) {
+	// Add a charm to the database (including the archive).
+	id := "utopic/mysql-42"
+	url := mustParseReference(id)
+	err := s.store.AddCharmWithArchive(url, charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"))
+	c.Assert(err, gc.IsNil)
+
+	// Retrieve the corresponding entity.
+	var entity mongodoc.Entity
+	err = s.store.DB.Entities().FindId(url).Select(bson.D{{"blobname", 1}}).One(&entity)
+	c.Assert(err, gc.IsNil)
+
+	// Delete the charm using the API.
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:    s.srv,
+		URL:        storeURL(id + "/archive"),
+		Method:     "DELETE",
+		ExpectCode: http.StatusOK,
+	})
+
+	// The entity has been deleted.
+	count, err := s.store.DB.Entities().FindId(url).Count()
+	c.Assert(err, gc.IsNil)
+	c.Assert(count, gc.Equals, 0)
+
+	// The blob has been deleted.
+	_, _, err = s.store.BlobStore.Open(entity.BlobName)
+	c.Assert(err, gc.ErrorMatches, "resource.*not found")
+}
+
+func (s *ArchiveSuite) TestDeleteSpecificCharm(c *gc.C) {
+	// Add a couple of charms to the database.
+	for _, id := range []string{"trusty/mysql-42", "utopic/mysql-42", "utopic/mysql-47"} {
+		err := s.store.AddCharmWithArchive(
+			mustParseReference(id),
+			charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"))
+		c.Assert(err, gc.IsNil)
+	}
+
+	// Delete the second charm using the API.
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:    s.srv,
+		URL:        storeURL("utopic/mysql-42/archive"),
+		Method:     "DELETE",
+		ExpectCode: http.StatusOK,
+	})
+
+	// The other two charms are still present in the database.
+	urls := []*charm.Reference{
+		mustParseReference("trusty/mysql-42"),
+		mustParseReference("utopic/mysql-47"),
+	}
+	count, err := s.store.DB.Entities().Find(bson.D{{
+		"_id", bson.D{{"$in", urls}},
+	}}).Count()
+	c.Assert(err, gc.IsNil)
+	c.Assert(count, gc.Equals, 2)
+}
+
+func (s *ArchiveSuite) TestDeleteNotFound(c *gc.C) {
+	// Try to delete a non existing charm using the API.
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:    s.srv,
+		URL:        storeURL("utopic/no-such-0/archive"),
+		Method:     "DELETE",
+		ExpectCode: http.StatusNotFound,
+		ExpectBody: params.Error{
+			Message: params.ErrNotFound.Error(),
+			Code:    params.ErrNotFound,
+		},
+	})
+}
+
+func (s *ArchiveSuite) TestDeleteError(c *gc.C) {
+	// Add a charm to the database (not including the archive).
+	id := "utopic/mysql-42"
+	url := mustParseReference(id)
+	err := s.store.AddCharm(url, charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"), "no-such-name", fakeBlobHash, fakeBlobSize)
+	c.Assert(err, gc.IsNil)
+
+	// Try to delete the charm using the API.
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:    s.srv,
+		URL:        storeURL(id + "/archive"),
+		Method:     "DELETE",
+		ExpectCode: http.StatusInternalServerError,
+		ExpectBody: params.Error{
+			Message: `cannot remove blob no-such-name: resource at path "global/no-such-name" not found`,
+		},
+	})
+}
+
+func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
+	if !storetesting.MongoJSEnabled() {
+		c.Skip("MongoDB JavaScript not available")
+	}
+
+	// Add a charm to the database (including the archive).
+	id := "utopic/mysql-42"
+	err := s.store.AddCharmWithArchive(
+		mustParseReference(id),
+		charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"))
+	c.Assert(err, gc.IsNil)
+
+	// Delete the charm using the API.
+	rec := storetesting.DoRequest(c, s.srv, "DELETE", storeURL(id+"/archive"), nil, 0, nil)
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+
+	// Check that the delete count for the entity has been updated.
+	key := []string{params.StatsArchiveDelete, "utopic", "mysql", "42"}
+	checkCounterSum(c, s.store, key, false, 1)
 }
 
 // entityInfo holds all the information we want to find

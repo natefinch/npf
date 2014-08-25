@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,13 +58,20 @@ func storeURL(path string) string {
 type metaEndpointExpectedValueGetter func(*charmstore.Store, *charm.Reference) (interface{}, error)
 
 type metaEndpoint struct {
-	name       string
-	exclusive  int
-	bundleOnly bool
-	get        metaEndpointExpectedValueGetter
+	// name names the meta endpoint.
+	name string
+
+	// exclusive specifies whether the endpoint is
+	// valid for charms only (charmOnly), bundles only (bundleOnly)
+	// or to both (zero).
+	exclusive int
+
+	// get returns the expected data for the endpoint.
+	get metaEndpointExpectedValueGetter
 
 	// checkURL holds one URL to sanity check data against.
 	checkURL string
+
 	// assertCheckData holds a function that will be used to check that
 	// the get function returns sane data for checkURL.
 	assertCheckData func(c *gc.C, data interface{})
@@ -159,6 +167,48 @@ var metaEndpoints = []metaEndpoint{{
 		ids := data.(params.RevisionInfoResponse)
 		c.Assert(ids.Revisions[0].String(), gc.Equals, "cs:precise/wordpress-99")
 		c.Assert(len(ids.Revisions), gc.Equals, 1)
+	},
+}, {
+	name:      "charm-related",
+	exclusive: charmOnly,
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		// The charms we use for those tests are not related each other.
+		// Charm relations are independently tested in relations_test.go.
+		if url.Series == "bundle" {
+			return nil, nil
+		}
+		return &params.RelatedResponse{}, nil
+	},
+	checkURL: "cs:precise/wordpress-23",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.FitsTypeOf, (*params.RelatedResponse)(nil))
+	},
+}, {
+	name:      "bundles-containing",
+	exclusive: charmOnly,
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		// The charms we use for those tests are not included in any bundle.
+		// Charm/bundle relations are tested in relations_test.go.
+		if url.Series == "bundle" {
+			return nil, nil
+		}
+		return []*params.MetaAnyResponse{}, nil
+	},
+	checkURL: "cs:precise/wordpress-23",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.FitsTypeOf, []*params.MetaAnyResponse(nil))
+	},
+}, {
+	name: "stats",
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		// The entities used for those tests were never downloaded.
+		return &params.StatsResponse{
+			ArchiveDownloadCount: 0,
+		}, nil
+	},
+	checkURL: "cs:precise/wordpress-23",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.FitsTypeOf, (*params.StatsResponse)(nil))
 	},
 }}
 
@@ -574,6 +624,74 @@ func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 			URL:        storeURL,
 			ExpectCode: expectCode,
 			ExpectBody: expectBody,
+		})
+	}
+}
+
+var metaStatsTests = []struct {
+	about     string
+	url       string
+	downloads int64
+}{{
+	about: "no downloads",
+	url:   "trusty/mysql-0",
+}, {
+	about:     "single download",
+	url:       "utopic/django-42",
+	downloads: 1,
+}, {
+	about:     "multiple downloads",
+	url:       "utopic/django-47",
+	downloads: 5,
+}, {
+	about:     "bundle downloads",
+	url:       "bundle/wordpress-simple-42",
+	downloads: 2,
+}, {
+	about:     "single user download",
+	url:       "~who/utopic/django-42",
+	downloads: 1,
+}}
+
+func (s *APISuite) TestMetaStats(c *gc.C) {
+	if !storetesting.MongoJSEnabled() {
+		c.Skip("MongoDB JavaScript not available")
+	}
+
+	// Add a bunch of entities in the database.
+	s.addCharm(c, "wordpress", "cs:trusty/mysql-0")
+	s.addCharm(c, "wordpress", "cs:utopic/django-42")
+	s.addCharm(c, "wordpress", "cs:utopic/django-47")
+	s.addCharm(c, "wordpress", "cs:~who/utopic/django-42")
+	s.addBundle(c, "wordpress", "cs:bundle/wordpress-simple-42")
+
+	for i, test := range metaStatsTests {
+		c.Logf("test %d: %s", i, test.about)
+
+		// Download the entity archive for the requested number of times.
+		archiveUrl := storeURL(test.url + "/archive")
+		for i := 0; i < int(test.downloads); i++ {
+			rec := storetesting.DoRequest(c, s.srv, "GET", archiveUrl, nil, 0, nil)
+			c.Assert(rec.Code, gc.Equals, http.StatusOK)
+		}
+
+		// Wait until the counters are updated.
+		url := mustParseReference(test.url)
+		key := []string{params.StatsArchiveDownload, url.Series, url.Name, strconv.Itoa(url.Revision)}
+		if url.User != "" {
+			key = append(key, url.User)
+		}
+		checkCounterSum(c, s.store, key, false, test.downloads)
+
+		// Ensure the meta/stats response reports the correct downloads count.
+		statsURL := storeURL(test.url + "/meta/stats")
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:    s.srv,
+			URL:        statsURL,
+			ExpectCode: http.StatusOK,
+			ExpectBody: params.StatsResponse{
+				ArchiveDownloadCount: test.downloads,
+			},
 		})
 	}
 }

@@ -228,6 +228,9 @@ func bundleCharms(data *charm.BundleData) ([]*charm.Reference, error) {
 			return nil, errgo.Mask(err)
 		}
 		urlMap[url.String()] = url
+		// Also add the corresponding base URL.
+		base := baseURL(url)
+		urlMap[base.String()] = base
 	}
 	urls := make([]*charm.Reference, 0, len(urlMap))
 	for _, url := range urlMap {
