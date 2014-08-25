@@ -115,7 +115,7 @@ func (s *StatsSuite) TestServerStatsStatus(c *gc.C) {
 
 func (s *StatsSuite) TestStatsCounter(c *gc.C) {
 	if !storetesting.MongoJSEnabled() {
-		c.Skip("MongoDB javascript not available")
+		c.Skip("MongoDB JavaScript not available")
 	}
 
 	for _, key := range [][]string{{"a", "b"}, {"a", "b"}, {"a", "c"}, {"a"}} {
@@ -153,7 +153,7 @@ func (s *StatsSuite) TestStatsCounter(c *gc.C) {
 
 func (s *StatsSuite) TestStatsCounterList(c *gc.C) {
 	if !storetesting.MongoJSEnabled() {
-		c.Skip("MongoDB javascript not available")
+		c.Skip("MongoDB JavaScript not available")
 	}
 
 	incs := [][]string{
@@ -239,7 +239,7 @@ func (s *StatsSuite) TestStatsCounterList(c *gc.C) {
 
 func (s *StatsSuite) TestStatsCounterBy(c *gc.C) {
 	if !storetesting.MongoJSEnabled() {
-		c.Skip("MongoDB javascript not available")
+		c.Skip("MongoDB JavaScript not available")
 	}
 
 	incs := []struct {

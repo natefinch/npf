@@ -577,6 +577,10 @@ var metaStatsTests = []struct {
 }}
 
 func (s *APISuite) TestMetaStats(c *gc.C) {
+	if !storetesting.MongoJSEnabled() {
+		c.Skip("MongoDB JavaScript not available")
+	}
+
 	// Add a bunch of entities in the database.
 	s.addCharm(c, "wordpress", "cs:trusty/mysql-0")
 	s.addCharm(c, "wordpress", "cs:utopic/django-42")
