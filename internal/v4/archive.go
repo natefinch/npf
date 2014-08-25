@@ -30,6 +30,9 @@ import (
 //
 // POST id/archive?sha256=hash
 // http://tinyurl.com/lzrzrgb
+
+// DELETE id/archive
+// http://tinyurl.com/ojmlwos
 func (h *handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
 	default:

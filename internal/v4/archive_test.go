@@ -648,6 +648,35 @@ func (s *ArchiveSuite) TestDelete(c *gc.C) {
 	c.Assert(err, gc.ErrorMatches, "resource.*not found")
 }
 
+func (s *ArchiveSuite) TestDeleteSpecificCharm(c *gc.C) {
+	// Add a couple of charms to the database.
+	for _, id := range []string{"trusty/mysql-42", "utopic/mysql-42", "utopic/mysql-47"} {
+		err := s.store.AddCharmWithArchive(
+			mustParseReference(id),
+			charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"))
+		c.Assert(err, gc.IsNil)
+	}
+
+	// Delete the second charm using the API.
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:    s.srv,
+		URL:        storeURL("utopic/mysql-42/archive"),
+		Method:     "DELETE",
+		ExpectCode: http.StatusOK,
+	})
+
+	// The other two charms are still present in the database.
+	urls := []*charm.Reference{
+		mustParseReference("trusty/mysql-42"),
+		mustParseReference("utopic/mysql-47"),
+	}
+	count, err := s.store.DB.Entities().Find(bson.D{{
+		"_id", bson.D{{"$in", urls}},
+	}}).Count()
+	c.Assert(err, gc.IsNil)
+	c.Assert(count, gc.Equals, 2)
+}
+
 func (s *ArchiveSuite) TestDeleteNotFound(c *gc.C) {
 	// Try to delete a non existing charm using the API.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
