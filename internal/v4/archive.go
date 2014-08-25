@@ -30,11 +30,16 @@ import (
 //
 // POST id/archive?sha256=hash
 // http://tinyurl.com/lzrzrgb
+
+// DELETE id/archive
+// http://tinyurl.com/ojmlwos
 func (h *handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
 	default:
 		// TODO(rog) params.ErrMethodNotAllowed
 		return errgo.Newf("method not allowed")
+	case "DELETE":
+		return h.serveDeleteArchive(id, w, req)
 	case "POST":
 		resp, err := h.servePostArchive(id, w, req)
 		if err != nil {
@@ -54,9 +59,27 @@ func (h *handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 	return nil
 }
 
+func (h *handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+	// Retrieve the entity blob name from the database.
+	blobName, err := h.findBlobName(id)
+	if err != nil {
+		return err
+	}
+	// Remove the entity.
+	if err := h.store.DB.Entities().RemoveId(id); err != nil {
+		return errgo.Notef(err, "cannot remove %s", id)
+	}
+	// Remove the reference to the archive from the blob store.
+	if err := h.store.BlobStore.Remove(blobName); err != nil {
+		return errgo.Notef(err, "cannot remove blob %s", blobName)
+	}
+	// TODO frankban 2014-08-25: log possible IncCounter errors.
+	go h.store.IncCounter(entityStatsKey(id, params.StatsArchiveDelete))
+	return nil
+}
+
 func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (resp *params.ArchivePostResponse, err error) {
 	// Validate the request parameters.
-
 	if id.Series == "" {
 		return nil, badRequestf(nil, "series not specified")
 	}
@@ -200,18 +223,26 @@ func (h *handler) nextRevisionForId(id *charm.Reference) (int, error) {
 	return 0, nil
 }
 
-func (h *handler) openBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64, error) {
+func (h *handler) findBlobName(id *charm.Reference) (string, error) {
 	var entity mongodoc.Entity
 	if err := h.store.DB.Entities().
 		FindId(id).
 		Select(bson.D{{"blobname", 1}}).
 		One(&entity); err != nil {
 		if err == mgo.ErrNotFound {
-			return nil, 0, params.ErrNotFound
+			return "", params.ErrNotFound
 		}
-		return nil, 0, errgo.Notef(err, "cannot get %s", id)
+		return "", errgo.Notef(err, "cannot get %s", id)
 	}
-	r, size, err := h.store.BlobStore.Open(entity.BlobName)
+	return entity.BlobName, nil
+}
+
+func (h *handler) openBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64, error) {
+	blobName, err := h.findBlobName(id)
+	if err != nil {
+		return nil, 0, err
+	}
+	r, size, err := h.store.BlobStore.Open(blobName)
 	if err != nil {
 		return nil, 0, errgo.Notef(err, "cannot open archive data for %s", id)
 	}
