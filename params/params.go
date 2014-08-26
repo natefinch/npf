@@ -63,3 +63,9 @@ type RelatedResponse struct {
 	// the charm, containing all charms that provide that interface.
 	Provides map[string][]MetaAnyResponse `json:",omitempty"`
 }
+
+// RevisionInfoResponse holds the result of an
+// id/meta/revision-info GET request. See http://tinyurl.com/q6xos7f
+type RevisionInfoResponse struct {
+	Revisions []*charm.Reference
+}

@@ -156,6 +156,20 @@ var metaEndpoints = []metaEndpoint{{
 		c.Assert(response.UploadTime.Location(), gc.Equals, time.UTC)
 	},
 }, {
+	name: "revision-info",
+	get: func(store *charmstore.Store, id *charm.Reference) (interface{}, error) {
+		return params.RevisionInfoResponse{
+			[]*charm.Reference{id},
+		}, nil
+	},
+	checkURL: "cs:precise/wordpress-99",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.DeepEquals, params.RevisionInfoResponse{
+			[]*charm.Reference{
+				mustParseReference("cs:precise/wordpress-99"),
+			}})
+	},
+}, {
 	name:      "charm-related",
 	exclusive: charmOnly,
 	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
@@ -530,6 +544,70 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 	for i, test := range serveExpandIdTests {
 		c.Logf("test %d: %s", i, test.about)
 		storeURL := storeURL(test.url + "/expand-id")
+		var expectCode int
+		var expectBody interface{}
+		if test.err == "" {
+			expectCode = http.StatusOK
+			expectBody = test.expect
+		} else {
+			expectCode = http.StatusNotFound
+			expectBody = params.Error{
+				Code:    params.ErrNotFound,
+				Message: test.err,
+			}
+		}
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:    s.srv,
+			URL:        storeURL,
+			ExpectCode: expectCode,
+			ExpectBody: expectBody,
+		})
+	}
+}
+
+var serveMetaRevisionInfoTests = []struct {
+	about  string
+	url    string
+	expect params.RevisionInfoResponse
+	err    string
+}{{
+	about: "fully qualified url",
+	url:   "trusty/wordpress-42",
+	expect: params.RevisionInfoResponse{
+		[]*charm.Reference{
+			mustParseReference("cs:trusty/wordpress-43"),
+			mustParseReference("cs:trusty/wordpress-42"),
+			mustParseReference("cs:trusty/wordpress-41"),
+			mustParseReference("cs:trusty/wordpress-9"),
+		}},
+}, {
+	about: "partial url uses a default series",
+	url:   "wordpress",
+	expect: params.RevisionInfoResponse{
+		[]*charm.Reference{
+			mustParseReference("cs:trusty/wordpress-43"),
+			mustParseReference("cs:trusty/wordpress-42"),
+			mustParseReference("cs:trusty/wordpress-41"),
+			mustParseReference("cs:trusty/wordpress-9"),
+		}},
+}, {
+	about: "no entities found",
+	url:   "precise/no-such-33",
+	err:   "not found",
+}}
+
+func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
+	s.addCharm(c, "wordpress", "cs:trusty/mysql-42")
+	s.addCharm(c, "wordpress", "cs:trusty/mysql-41")
+	s.addCharm(c, "wordpress", "cs:precise/wordpress-42")
+	s.addCharm(c, "wordpress", "cs:trusty/wordpress-43")
+	s.addCharm(c, "wordpress", "cs:trusty/wordpress-41")
+	s.addCharm(c, "wordpress", "cs:trusty/wordpress-9")
+	s.addCharm(c, "wordpress", "cs:trusty/wordpress-42")
+
+	for i, test := range serveMetaRevisionInfoTests {
+		c.Logf("test %d: %s", i, test.about)
+		storeURL := storeURL(test.url + "/meta/revision-info")
 		var expectCode int
 		var expectBody interface{}
 		if test.err == "" {
