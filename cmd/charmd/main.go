@@ -68,7 +68,7 @@ type config struct {
 }
 
 func (c *config) validate() error {
-	missing := make([]string, 0)
+	var missing []string
 	if c.MongoURL == "" {
 		missing = append(missing, "mongo-url")
 	}
@@ -82,7 +82,7 @@ func (c *config) validate() error {
 		missing = append(missing, "auth-password")
 	}
 	if len(missing) != 0 {
-		return fmt.Errorf("missing %s in config file", strings.Join(missing, ", "))
+		return fmt.Errorf("missing fields %s in config file", strings.Join(missing, ", "))
 	}
 	return nil
 }

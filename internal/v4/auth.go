@@ -15,7 +15,7 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
-const basicRealm = "CharmStore v4"
+const basicRealm = "CharmStore4"
 
 // authRequired decorates the given function so that an "unathorized"
 // response is returned if the HTTP basic auth in the request fails.

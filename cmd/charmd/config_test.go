@@ -68,5 +68,5 @@ func (s *ConfigSuite) TestValidateConfig(c *gc.C) {
 func (s *ConfigSuite) TestValidateConfigError(c *gc.C) {
 	conf := s.makeConfig(c, "")
 	err := conf.validate()
-	c.Assert(err, gc.ErrorMatches, "missing mongo-url, api-addr, auth-username, auth-password in config file")
+	c.Assert(err, gc.ErrorMatches, "missing fields mongo-url, api-addr, auth-username, auth-password in config file")
 }
