@@ -53,6 +53,8 @@ func parseCredentials(req *http.Request) (username, password string, err error) 
 	if len(parts) != 2 || parts[0] != "Basic" {
 		return "", "", errgo.New("invalid or missing HTTP auth header")
 	}
+	// Challenge is a base64-encoded "tag:pass" string.
+	// See RFC 2617, Section 2.
 	challenge, err := base64.StdEncoding.DecodeString(parts[1])
 	if err != nil {
 		return "", "", errgo.New("invalid HTTP auth encoding")

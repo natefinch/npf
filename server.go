@@ -35,8 +35,8 @@ func Versions() []string {
 }
 
 // NewServer returns a new handler that handles charm store requests and stores
-// its data in the given database. Each version handler is created providing
-// the given handler configuration.
+// its data in the given database. The handler will serve the specified
+// versions of the API using the given configuration.
 func NewServer(db *mgo.Database, config *params.HandlerConfig, serveVersions ...string) (http.Handler, error) {
 	newAPIs := make(map[string]charmstore.NewAPIHandler)
 	for _, vers := range serveVersions {
