@@ -32,35 +32,35 @@ func New(store *charmstore.Store) http.Handler {
 	}
 	h.Router = router.New(&router.Handlers{
 		Global: map[string]http.Handler{
-			"stats/counter/":     router.HandleJSON(h.serveStatsCounter),
-			"stats/":             router.NotFoundHandler(),
+			"debug":              http.HandlerFunc(h.serveDebug),
 			"search":             http.HandlerFunc(h.serveSearch),
 			"search/interesting": http.HandlerFunc(h.serveSearchInteresting),
-			"debug":              http.HandlerFunc(h.serveDebug),
+			"stats/":             router.NotFoundHandler(),
+			"stats/counter/":     router.HandleJSON(h.serveStatsCounter),
 		},
 		Id: map[string]router.IdHandler{
-			"resources": h.serveResources,
 			"archive":   h.serveArchive,
 			"archive/":  h.serveArchiveFile,
 			"expand-id": h.serveExpandId,
+			"resources": h.serveResources,
 		},
 		Meta: map[string]router.BulkIncludeHandler{
-			"charm-metadata":      h.entityHandler(h.metaCharmMetadata, "charmmeta"),
-			"bundle-metadata":     h.entityHandler(h.metaBundleMetadata, "bundledata"),
-			"charm-config":        h.entityHandler(h.metaCharmConfig, "charmconfig"),
-			"charm-actions":       h.entityHandler(h.metaCharmActions, "charmactions"),
 			"archive-size":        h.entityHandler(h.metaArchiveSize, "size"),
-			"manifest":            h.entityHandler(h.metaManifest, "blobname"),
 			"archive-upload-time": h.entityHandler(h.metaArchiveUploadTime, "uploadtime"),
-			"charm-related":       h.entityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces"),
+			"bundle-metadata":     h.entityHandler(h.metaBundleMetadata, "bundledata"),
 			"bundles-containing":  h.entityHandler(h.metaBundlesContaining),
+			"charm-actions":       h.entityHandler(h.metaCharmActions, "charmactions"),
+			"charm-config":        h.entityHandler(h.metaCharmConfig, "charmconfig"),
+			"charm-metadata":      h.entityHandler(h.metaCharmMetadata, "charmmeta"),
+			"charm-related":       h.entityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces"),
+			"manifest":            h.entityHandler(h.metaManifest, "blobname"),
+			"revision-info":       router.SingleIncludeHandler(h.metaRevisionInfo),
 			"stats":               h.entityHandler(h.metaStats),
 
 			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
-			"color":         router.SingleIncludeHandler(h.metaColor),
-			"revision-info": router.SingleIncludeHandler(h.metaRevisionInfo),
-			"extra-info":    router.SingleIncludeHandler(h.metaExtraInfo),
-			"extra-info/":   router.SingleIncludeHandler(h.metaExtraInfoWithKey),
+			"color":       router.SingleIncludeHandler(h.metaColor),
+			"extra-info":  router.SingleIncludeHandler(h.metaExtraInfo),
+			"extra-info/": router.SingleIncludeHandler(h.metaExtraInfoWithKey),
 		},
 	}, h.resolveURL)
 	return h
