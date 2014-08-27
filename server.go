@@ -12,7 +12,6 @@ import (
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/v4"
-	"github.com/juju/charmstore/params"
 )
 
 // Versions of the API that can be served.
@@ -34,10 +33,16 @@ func Versions() []string {
 	return vs
 }
 
+// ServerParams holds configuration for a new API server.
+type ServerParams struct {
+	AuthUsername string
+	AuthPassword string
+}
+
 // NewServer returns a new handler that handles charm store requests and stores
 // its data in the given database. The handler will serve the specified
 // versions of the API using the given configuration.
-func NewServer(db *mgo.Database, config *params.HandlerConfig, serveVersions ...string) (http.Handler, error) {
+func NewServer(db *mgo.Database, config ServerParams, serveVersions ...string) (http.Handler, error) {
 	newAPIs := make(map[string]charmstore.NewAPIHandler)
 	for _, vers := range serveVersions {
 		newAPI := versions[vers]
@@ -46,6 +51,5 @@ func NewServer(db *mgo.Database, config *params.HandlerConfig, serveVersions ...
 		}
 		newAPIs[vers] = newAPI
 	}
-
-	return charmstore.NewServer(db, config, newAPIs)
+	return charmstore.NewServer(db, charmstore.ServerParams(config), newAPIs)
 }

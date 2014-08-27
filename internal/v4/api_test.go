@@ -29,7 +29,7 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
-var handlerConfig = &params.HandlerConfig{
+var serverParams = charmstore.ServerParams{
 	AuthUsername: "test-user",
 	AuthPassword: "test-password",
 }
@@ -44,10 +44,10 @@ var _ = gc.Suite(&APISuite{})
 
 func (s *APISuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
-	s.srv, s.store = newServer(c, s.Session, handlerConfig)
+	s.srv, s.store = newServer(c, s.Session, serverParams)
 }
 
-func newServer(c *gc.C, session *mgo.Session, config *params.HandlerConfig) (http.Handler, *charmstore.Store) {
+func newServer(c *gc.C, session *mgo.Session, config charmstore.ServerParams) (http.Handler, *charmstore.Store) {
 	db := session.DB("charmstore")
 	store, err := charmstore.NewStore(db)
 	c.Assert(err, gc.IsNil)

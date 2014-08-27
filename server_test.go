@@ -23,14 +23,14 @@ func TestPackage(t *testing.T) {
 
 type ServerSuite struct {
 	storetesting.IsolatedMgoSuite
-	config *params.HandlerConfig
+	config charmstore.ServerParams
 }
 
 var _ = gc.Suite(&ServerSuite{})
 
 func (s *ServerSuite) SetUpSuite(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpSuite(c)
-	s.config = &params.HandlerConfig{
+	s.config = charmstore.ServerParams{
 		AuthUsername: "test-user",
 		AuthPassword: "test-password",
 	}

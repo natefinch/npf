@@ -23,11 +23,11 @@ import (
 type handler struct {
 	*router.Router
 	store  *charmstore.Store
-	config *params.HandlerConfig
+	config charmstore.ServerParams
 }
 
 // New returns a new instance of the v4 API handler.
-func New(store *charmstore.Store, config *params.HandlerConfig) http.Handler {
+func New(store *charmstore.Store, config charmstore.ServerParams) http.Handler {
 	h := &handler{
 		store:  store,
 		config: config,

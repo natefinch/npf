@@ -27,7 +27,7 @@ var _ = gc.Suite(&StatsSuite{})
 
 func (s *StatsSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
-	s.srv, s.store = newServer(c, s.Session, handlerConfig)
+	s.srv, s.store = newServer(c, s.Session, serverParams)
 }
 
 // checkCounterSum checks that statistics are properly collected.

@@ -43,7 +43,7 @@ var _ = gc.Suite(&ArchiveSuite{})
 
 func (s *ArchiveSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
-	s.srv, s.store = newServer(c, s.Session, handlerConfig)
+	s.srv, s.store = newServer(c, s.Session, serverParams)
 }
 
 func (s *ArchiveSuite) TestGet(c *gc.C) {
@@ -141,8 +141,8 @@ func (s *ArchiveSuite) TestPostErrors(c *gc.C) {
 				"Content-Type": {"application/zip"},
 			},
 			Body:       body,
-			Username:   handlerConfig.AuthUsername,
-			Password:   handlerConfig.AuthPassword,
+			Username:   serverParams.AuthUsername,
+			Password:   serverParams.AuthPassword,
 			ExpectCode: test.expectStatus,
 			ExpectBody: params.Error{
 				Message: test.expectMessage,
@@ -185,7 +185,7 @@ func (s *ArchiveSuite) TestConcurrentUploads(c *gc.C) {
 		req, err := http.NewRequest("POST", url, body)
 		c.Assert(err, gc.IsNil)
 		req.Header.Set("Content-Type", "application/zip")
-		req.SetBasicAuth(handlerConfig.AuthUsername, handlerConfig.AuthPassword)
+		req.SetBasicAuth(serverParams.AuthUsername, serverParams.AuthPassword)
 		resp, err := http.DefaultClient.Do(req)
 		if !c.Check(err, gc.IsNil) {
 			return
@@ -308,8 +308,8 @@ func (s *ArchiveSuite) TestPostHashMismatch(c *gc.C) {
 			"Content-Type": {"application/zip"},
 		},
 		Body:       bytes.NewReader(content),
-		Username:   handlerConfig.AuthUsername,
-		Password:   handlerConfig.AuthPassword,
+		Username:   serverParams.AuthUsername,
+		Password:   serverParams.AuthPassword,
 		ExpectCode: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: "cannot put archive blob: hash mismatch",
@@ -358,8 +358,8 @@ func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSee
 			"Content-Type": {"application/zip"},
 		},
 		Body:       content,
-		Username:   handlerConfig.AuthUsername,
-		Password:   handlerConfig.AuthPassword,
+		Username:   serverParams.AuthUsername,
+		Password:   serverParams.AuthPassword,
 		ExpectCode: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: errorMessage,
@@ -427,8 +427,8 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, url *charm.Reference, fileName stri
 			"Content-Type": {"application/zip"},
 		},
 		Body:     f,
-		Username: handlerConfig.AuthUsername,
-		Password: handlerConfig.AuthPassword,
+		Username: serverParams.AuthUsername,
+		Password: serverParams.AuthPassword,
 		ExpectBody: params.ArchivePostResponse{
 			Id: url,
 		},
@@ -554,7 +554,7 @@ func (s *ArchiveSuite) TestBundleCharms(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Retrieve the bundleCharms method.
-	handler := v4.New(s.store, handlerConfig)
+	handler := v4.New(s.store, serverParams)
 	bundleCharms := v4.BundleCharms(handler)
 
 	tests := []struct {
@@ -647,8 +647,8 @@ func (s *ArchiveSuite) TestDelete(c *gc.C) {
 		Handler:    s.srv,
 		URL:        storeURL(id + "/archive"),
 		Method:     "DELETE",
-		Username:   handlerConfig.AuthUsername,
-		Password:   handlerConfig.AuthPassword,
+		Username:   serverParams.AuthUsername,
+		Password:   serverParams.AuthPassword,
 		ExpectCode: http.StatusOK,
 	})
 
@@ -676,8 +676,8 @@ func (s *ArchiveSuite) TestDeleteSpecificCharm(c *gc.C) {
 		Handler:    s.srv,
 		URL:        storeURL("utopic/mysql-42/archive"),
 		Method:     "DELETE",
-		Username:   handlerConfig.AuthUsername,
-		Password:   handlerConfig.AuthPassword,
+		Username:   serverParams.AuthUsername,
+		Password:   serverParams.AuthPassword,
 		ExpectCode: http.StatusOK,
 	})
 
@@ -699,8 +699,8 @@ func (s *ArchiveSuite) TestDeleteNotFound(c *gc.C) {
 		Handler:    s.srv,
 		URL:        storeURL("utopic/no-such-0/archive"),
 		Method:     "DELETE",
-		Username:   handlerConfig.AuthUsername,
-		Password:   handlerConfig.AuthPassword,
+		Username:   serverParams.AuthUsername,
+		Password:   serverParams.AuthPassword,
 		ExpectCode: http.StatusNotFound,
 		ExpectBody: params.Error{
 			Message: params.ErrNotFound.Error(),
@@ -721,8 +721,8 @@ func (s *ArchiveSuite) TestDeleteError(c *gc.C) {
 		Handler:    s.srv,
 		URL:        storeURL(id + "/archive"),
 		Method:     "DELETE",
-		Username:   handlerConfig.AuthUsername,
-		Password:   handlerConfig.AuthPassword,
+		Username:   serverParams.AuthUsername,
+		Password:   serverParams.AuthPassword,
 		ExpectCode: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: `cannot remove blob no-such-name: resource at path "global/no-such-name" not found`,
@@ -743,7 +743,7 @@ func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Delete the charm using the API.
-	rec := storetesting.DoRequest(c, s.srv, "DELETE", storeURL(id+"/archive"), nil, 0, nil, handlerConfig.AuthUsername, handlerConfig.AuthPassword)
+	rec := storetesting.DoRequest(c, s.srv, "DELETE", storeURL(id+"/archive"), nil, 0, nil, serverParams.AuthUsername, serverParams.AuthPassword)
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 
 	// Check that the delete count for the entity has been updated.

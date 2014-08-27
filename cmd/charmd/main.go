@@ -15,7 +15,6 @@ import (
 	"gopkg.in/yaml.v1"
 
 	"github.com/juju/charmstore"
-	"github.com/juju/charmstore/params"
 )
 
 func main() {
@@ -49,7 +48,7 @@ func serve() error {
 	}
 	defer session.Close()
 	db := session.DB("juju")
-	cfg := &params.HandlerConfig{
+	cfg := charmstore.ServerParams{
 		AuthUsername: conf.AuthUsername,
 		AuthPassword: conf.AuthPassword,
 	}

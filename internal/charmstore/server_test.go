@@ -10,10 +10,9 @@ import (
 
 	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/internal/storetesting"
-	"github.com/juju/charmstore/params"
 )
 
-var handlerConfig = &params.HandlerConfig{
+var serverParams = ServerParams{
 	AuthUsername: "test-user",
 	AuthPassword: "test-password",
 }
@@ -25,7 +24,7 @@ type ServerSuite struct {
 var _ = gc.Suite(&ServerSuite{})
 
 func (s *ServerSuite) TestNewServerWithNoVersions(c *gc.C) {
-	h, err := NewServer(s.Session.DB("foo"), handlerConfig, nil)
+	h, err := NewServer(s.Session.DB("foo"), serverParams, nil)
 	c.Assert(err, gc.ErrorMatches, `charm store server must serve at least one version of the API`)
 	c.Assert(h, gc.IsNil)
 }
@@ -38,7 +37,7 @@ type versionResponse struct {
 func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	db := s.Session.DB("foo")
 	serveVersion := func(vers string) NewAPIHandler {
-		return func(store *Store, config *params.HandlerConfig) http.Handler {
+		return func(store *Store, config ServerParams) http.Handler {
 			c.Assert(store.DB.Database, gc.Equals, db)
 			return router.HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
 				return versionResponse{
@@ -49,7 +48,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 		}
 	}
 
-	h, err := NewServer(db, handlerConfig, map[string]NewAPIHandler{
+	h, err := NewServer(db, serverParams, map[string]NewAPIHandler{
 		"version1": serveVersion("version1"),
 	})
 	c.Assert(err, gc.IsNil)
@@ -57,7 +56,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	assertDoesNotServeVersion(c, h, "version2")
 	assertDoesNotServeVersion(c, h, "version3")
 
-	h, err = NewServer(db, handlerConfig, map[string]NewAPIHandler{
+	h, err = NewServer(db, serverParams, map[string]NewAPIHandler{
 		"version1": serveVersion("version1"),
 		"version2": serveVersion("version2"),
 	})
@@ -66,7 +65,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	assertServesVersion(c, h, "version2")
 	assertDoesNotServeVersion(c, h, "version3")
 
-	h, err = NewServer(db, handlerConfig, map[string]NewAPIHandler{
+	h, err = NewServer(db, serverParams, map[string]NewAPIHandler{
 		"version1": serveVersion("version1"),
 		"version2": serveVersion("version2"),
 		"version3": serveVersion("version3"),
@@ -78,19 +77,19 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 }
 
 func (s *ServerSuite) TestNewServerWithConfig(c *gc.C) {
-	serveConfig := func(store *Store, config *params.HandlerConfig) http.Handler {
+	serveConfig := func(store *Store, config ServerParams) http.Handler {
 		return router.HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
 			return config, nil
 		})
 	}
-	h, err := NewServer(s.Session.DB("foo"), handlerConfig, map[string]NewAPIHandler{
+	h, err := NewServer(s.Session.DB("foo"), serverParams, map[string]NewAPIHandler{
 		"version1": serveConfig,
 	})
 	c.Assert(err, gc.IsNil)
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:    h,
 		URL:        "/version1/some/path",
-		ExpectBody: handlerConfig,
+		ExpectBody: serverParams,
 	})
 }
 
