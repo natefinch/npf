@@ -9,39 +9,22 @@ import (
 	"strings"
 
 	"github.com/juju/errgo"
-	"gopkg.in/juju/charm.v3"
 
-	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/params"
 )
 
 const basicRealm = "CharmStore4"
 
-// authRequired decorates the given function so that an "unathorized"
-// response is returned if the HTTP basic auth in the request fails.
-// For the time being, authentication is done by simply checking that the
-// provided user/password match the superuser credentials stored in the
-// API handler.
-func (h *handler) authRequired(f router.IdHandler) router.IdHandler {
-	return func(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
-		if err := authenticate(req, h.config.AuthUsername, h.config.AuthPassword); err != nil {
-			w.Header().Set("WWW-Authenticate", `Basic realm="`+basicRealm+`"`)
-			return err
-		}
-		return f(charmId, w, req)
-	}
-}
-
 // authenticate checks that the request's headers HTTP basic auth credentials
-// match the given username and password.
+// match the superuser credentials stored in the API handler.
 // A params.ErrUnauthorized is returned if the authentication fails.
-func authenticate(req *http.Request, username, password string) error {
+func (h *handler) authenticate(w http.ResponseWriter, req *http.Request) error {
 	user, passwd, err := parseCredentials(req)
 	if err != nil {
-		return errgo.WithCausef(err, params.ErrUnauthorized, "authentication failed")
+		return unauthorized(w, "authentication failed", err)
 	}
-	if (user != username) || (passwd != password) {
-		return errgo.WithCausef(nil, params.ErrUnauthorized, "invalid user name or password")
+	if (user != h.config.AuthUsername) || (passwd != h.config.AuthPassword) {
+		return unauthorized(w, "invalid user name or password", nil)
 	}
 	return nil
 }
@@ -64,4 +47,9 @@ func parseCredentials(req *http.Request) (username, password string, err error) 
 		return "", "", errgo.New("invalid HTTP auth contents")
 	}
 	return tokens[0], tokens[1], nil
+}
+
+func unauthorized(w http.ResponseWriter, message string, underlying error) error {
+	w.Header().Set("WWW-Authenticate", `Basic realm="`+basicRealm+`"`)
+	return errgo.WithCausef(underlying, params.ErrUnauthorized, message)
 }
