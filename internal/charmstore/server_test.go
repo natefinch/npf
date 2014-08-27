@@ -13,23 +13,19 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
+var handlerConfig = &params.HandlerConfig{
+	AuthUsername: "test-user",
+	AuthPassword: "test-password",
+}
+
 type ServerSuite struct {
 	storetesting.IsolatedMgoSuite
-	config *params.HandlerConfig
 }
 
 var _ = gc.Suite(&ServerSuite{})
 
-func (s *ServerSuite) SetUpSuite(c *gc.C) {
-	s.IsolatedMgoSuite.SetUpSuite(c)
-	s.config = &params.HandlerConfig{
-		AuthUsername: "test-user",
-		AuthPassword: "test-password",
-	}
-}
-
 func (s *ServerSuite) TestNewServerWithNoVersions(c *gc.C) {
-	h, err := NewServer(s.Session.DB("foo"), s.config, nil)
+	h, err := NewServer(s.Session.DB("foo"), handlerConfig, nil)
 	c.Assert(err, gc.ErrorMatches, `charm store server must serve at least one version of the API`)
 	c.Assert(h, gc.IsNil)
 }
@@ -53,7 +49,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 		}
 	}
 
-	h, err := NewServer(db, s.config, map[string]NewAPIHandler{
+	h, err := NewServer(db, handlerConfig, map[string]NewAPIHandler{
 		"version1": serveVersion("version1"),
 	})
 	c.Assert(err, gc.IsNil)
@@ -61,7 +57,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	assertDoesNotServeVersion(c, h, "version2")
 	assertDoesNotServeVersion(c, h, "version3")
 
-	h, err = NewServer(db, s.config, map[string]NewAPIHandler{
+	h, err = NewServer(db, handlerConfig, map[string]NewAPIHandler{
 		"version1": serveVersion("version1"),
 		"version2": serveVersion("version2"),
 	})
@@ -70,7 +66,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	assertServesVersion(c, h, "version2")
 	assertDoesNotServeVersion(c, h, "version3")
 
-	h, err = NewServer(db, s.config, map[string]NewAPIHandler{
+	h, err = NewServer(db, handlerConfig, map[string]NewAPIHandler{
 		"version1": serveVersion("version1"),
 		"version2": serveVersion("version2"),
 		"version3": serveVersion("version3"),
@@ -87,14 +83,14 @@ func (s *ServerSuite) TestNewServerWithConfig(c *gc.C) {
 			return config, nil
 		})
 	}
-	h, err := NewServer(s.Session.DB("foo"), s.config, map[string]NewAPIHandler{
+	h, err := NewServer(s.Session.DB("foo"), handlerConfig, map[string]NewAPIHandler{
 		"version1": serveConfig,
 	})
 	c.Assert(err, gc.IsNil)
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:    h,
 		URL:        "/version1/some/path",
-		ExpectBody: s.config,
+		ExpectBody: handlerConfig,
 	})
 }
 

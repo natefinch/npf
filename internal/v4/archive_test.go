@@ -343,10 +343,6 @@ func (s *ArchiveSuite) TestPostInvalidBundleData(c *gc.C) {
 	s.assertCannotUpload(c, "bundle/wordpress", f, expectErr)
 }
 
-func (s *ArchiveSuite) TestPostAuthErrors(c *gc.C) {
-	checkAuthErrors(c, s.srv, "POST", "utopic/django/archive")
-}
-
 func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSeeker, errorMessage string) {
 	hash, size := hashOf(content)
 	_, err := content.Seek(0, 0)
@@ -753,6 +749,10 @@ func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 	// Check that the delete count for the entity has been updated.
 	key := []string{params.StatsArchiveDelete, "utopic", "mysql", "42"}
 	checkCounterSum(c, s.store, key, false, 1)
+}
+
+func (s *ArchiveSuite) TestPostAuthErrors(c *gc.C) {
+	checkAuthErrors(c, s.srv, "POST", "utopic/django/archive")
 }
 
 func (s *ArchiveSuite) TestDeleteAuthErrors(c *gc.C) {
