@@ -13,16 +13,18 @@ import (
 	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/internal/router"
+	"github.com/juju/charmstore/params"
 )
 
 // NewAPIHandler returns a new API handler that
 // uses the given Store.
-type NewAPIHandler func(*Store) http.Handler
+type NewAPIHandler func(*Store, *params.HandlerConfig) http.Handler
 
 // NewServer returns a handler that serves the given charm store API
 // versions using db to store that charm store data.
 // The key of the versions map is the version name.
-func NewServer(db *mgo.Database, versions map[string]NewAPIHandler) (http.Handler, error) {
+// The handler configuration is provided to all version handlers.
+func NewServer(db *mgo.Database, config *params.HandlerConfig, versions map[string]NewAPIHandler) (http.Handler, error) {
 	if len(versions) == 0 {
 		return nil, errgo.Newf("charm store server must serve at least one version of the API")
 	}
@@ -32,7 +34,7 @@ func NewServer(db *mgo.Database, versions map[string]NewAPIHandler) (http.Handle
 	}
 	mux := router.NewServeMux()
 	for vers, newAPI := range versions {
-		handle(mux, "/"+vers, newAPI(store))
+		handle(mux, "/"+vers, newAPI(store, config))
 	}
 	return mux, nil
 }

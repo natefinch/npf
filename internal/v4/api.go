@@ -22,13 +22,15 @@ import (
 
 type handler struct {
 	*router.Router
-	store *charmstore.Store
+	store  *charmstore.Store
+	config *params.HandlerConfig
 }
 
 // New returns a new instance of the v4 API handler.
-func New(store *charmstore.Store) http.Handler {
+func New(store *charmstore.Store, config *params.HandlerConfig) http.Handler {
 	h := &handler{
-		store: store,
+		store:  store,
+		config: config,
 	}
 	h.Router = router.New(&router.Handlers{
 		Global: map[string]http.Handler{

@@ -29,6 +29,11 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
+var handlerConfig = &params.HandlerConfig{
+	AuthUsername: "test-user",
+	AuthPassword: "test-password",
+}
+
 type APISuite struct {
 	storetesting.IsolatedMgoSuite
 	srv   http.Handler
@@ -39,14 +44,14 @@ var _ = gc.Suite(&APISuite{})
 
 func (s *APISuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
-	s.srv, s.store = newServer(c, s.Session)
+	s.srv, s.store = newServer(c, s.Session, handlerConfig)
 }
 
-func newServer(c *gc.C, session *mgo.Session) (http.Handler, *charmstore.Store) {
+func newServer(c *gc.C, session *mgo.Session, config *params.HandlerConfig) (http.Handler, *charmstore.Store) {
 	db := session.DB("charmstore")
 	store, err := charmstore.NewStore(db)
 	c.Assert(err, gc.IsNil)
-	srv, err := charmstore.NewServer(db, map[string]charmstore.NewAPIHandler{"v4": v4.New})
+	srv, err := charmstore.NewServer(db, config, map[string]charmstore.NewAPIHandler{"v4": v4.New})
 	c.Assert(err, gc.IsNil)
 	return srv, store
 }
@@ -672,7 +677,7 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 		// Download the entity archive for the requested number of times.
 		archiveUrl := storeURL(test.url + "/archive")
 		for i := 0; i < int(test.downloads); i++ {
-			rec := storetesting.DoRequest(c, s.srv, "GET", archiveUrl, nil, 0, nil)
+			rec := storetesting.DoRequest(c, s.srv, "GET", archiveUrl, nil, 0, nil, "", "")
 			c.Assert(rec.Code, gc.Equals, http.StatusOK)
 		}
 

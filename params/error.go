@@ -17,6 +17,7 @@ const (
 	ErrForbidden        ErrorCode = "forbidden"
 	ErrBadRequest       ErrorCode = "bad request"
 	ErrDuplicateUpload  ErrorCode = "duplicate upload"
+	ErrUnauthorized     ErrorCode = "unauthorized"
 )
 
 // Error represents an error - it is returned for any response

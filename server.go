@@ -12,6 +12,7 @@ import (
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/v4"
+	"github.com/juju/charmstore/params"
 )
 
 // Versions of the API that can be served.
@@ -19,7 +20,7 @@ const (
 	V4 = "v4"
 )
 
-var versions = map[string]func(*charmstore.Store) http.Handler{
+var versions = map[string]charmstore.NewAPIHandler{
 	V4: v4.New,
 }
 
@@ -33,9 +34,10 @@ func Versions() []string {
 	return vs
 }
 
-// NewServer returns a new handler that handles
-// charm store requests and stores its data in the given database.
-func NewServer(db *mgo.Database, serveVersions ...string) (http.Handler, error) {
+// NewServer returns a new handler that handles charm store requests and stores
+// its data in the given database. Each version handler is created providing
+// the given handler configuration.
+func NewServer(db *mgo.Database, config *params.HandlerConfig, serveVersions ...string) (http.Handler, error) {
 	newAPIs := make(map[string]charmstore.NewAPIHandler)
 	for _, vers := range serveVersions {
 		newAPI := versions[vers]
@@ -45,5 +47,5 @@ func NewServer(db *mgo.Database, serveVersions ...string) (http.Handler, error) 
 		newAPIs[vers] = newAPI
 	}
 
-	return charmstore.NewServer(db, newAPIs)
+	return charmstore.NewServer(db, config, newAPIs)
 }

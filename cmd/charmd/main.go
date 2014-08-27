@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/mgo.v2"
 	"gopkg.in/yaml.v1"
 
 	"github.com/juju/charmstore"
+	"github.com/juju/charmstore/params"
 )
 
 func main() {
@@ -38,8 +40,8 @@ func serve() error {
 	if err != nil {
 		return err
 	}
-	if conf.MongoURL == "" || conf.APIAddr == "" {
-		return fmt.Errorf("missing mongo-url or api-addr in config file")
+	if err := conf.validate(); err != nil {
+		return err
 	}
 	session, err := mgo.Dial(conf.MongoURL)
 	if err != nil {
@@ -47,7 +49,11 @@ func serve() error {
 	}
 	defer session.Close()
 	db := session.DB("juju")
-	server, err := charmstore.NewServer(db, charmstore.V4)
+	cfg := &params.HandlerConfig{
+		AuthUsername: conf.AuthUsername,
+		AuthPassword: conf.AuthPassword,
+	}
+	server, err := charmstore.NewServer(db, cfg, charmstore.V4)
 	if err != nil {
 		return err
 	}
@@ -55,8 +61,30 @@ func serve() error {
 }
 
 type config struct {
-	MongoURL string `yaml:"mongo-url"`
-	APIAddr  string `yaml:"api-addr"`
+	MongoURL     string `yaml:"mongo-url"`
+	APIAddr      string `yaml:"api-addr"`
+	AuthUsername string `yaml:"auth-username"`
+	AuthPassword string `yaml:"auth-password"`
+}
+
+func (c *config) validate() error {
+	missing := make([]string, 0)
+	if c.MongoURL == "" {
+		missing = append(missing, "mongo-url")
+	}
+	if c.APIAddr == "" {
+		missing = append(missing, "api-addr")
+	}
+	if c.AuthUsername == "" {
+		missing = append(missing, "auth-username")
+	}
+	if c.AuthPassword == "" {
+		missing = append(missing, "auth-password")
+	}
+	if len(missing) != 0 {
+		return fmt.Errorf("missing %s in config file", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 func readConfig(path string) (*config, error) {
