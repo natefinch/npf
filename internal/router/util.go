@@ -59,6 +59,8 @@ func WriteError(w http.ResponseWriter, err error) {
 		status = http.StatusBadRequest
 	case params.ErrForbidden:
 		status = http.StatusForbidden
+	case params.ErrUnauthorized:
+		status = http.StatusUnauthorized
 	}
 	// TODO log writeJSON error if it happens?
 	WriteJSON(w, status, errResp)

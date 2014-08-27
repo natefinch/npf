@@ -19,7 +19,7 @@ const (
 	V4 = "v4"
 )
 
-var versions = map[string]func(*charmstore.Store) http.Handler{
+var versions = map[string]charmstore.NewAPIHandler{
 	V4: v4.New,
 }
 
@@ -33,9 +33,16 @@ func Versions() []string {
 	return vs
 }
 
-// NewServer returns a new handler that handles
-// charm store requests and stores its data in the given database.
-func NewServer(db *mgo.Database, serveVersions ...string) (http.Handler, error) {
+// ServerParams holds configuration for a new API server.
+type ServerParams struct {
+	AuthUsername string
+	AuthPassword string
+}
+
+// NewServer returns a new handler that handles charm store requests and stores
+// its data in the given database. The handler will serve the specified
+// versions of the API using the given configuration.
+func NewServer(db *mgo.Database, config ServerParams, serveVersions ...string) (http.Handler, error) {
 	newAPIs := make(map[string]charmstore.NewAPIHandler)
 	for _, vers := range serveVersions {
 		newAPI := versions[vers]
@@ -44,6 +51,5 @@ func NewServer(db *mgo.Database, serveVersions ...string) (http.Handler, error) 
 		}
 		newAPIs[vers] = newAPI
 	}
-
-	return charmstore.NewServer(db, newAPIs)
+	return charmstore.NewServer(db, charmstore.ServerParams(config), newAPIs)
 }

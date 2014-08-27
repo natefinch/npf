@@ -40,6 +40,12 @@ type JSONCallParams struct {
 	// content-length behaviour will be used.
 	ContentLength int64
 
+	// Username, if specified, is used for HTTP basic authentication.
+	Username string
+
+	// Password, if specified, is used for HTTP basic authentication.
+	Password string
+
 	// ExpectCode holds the expected HTTP status code.
 	// http.StatusOK is assumed if this is zero.
 	// TODO(rog) change this to ExpectStatus
@@ -59,7 +65,7 @@ func AssertJSONCall(c *gc.C, p JSONCallParams) {
 	if p.ExpectCode == 0 {
 		p.ExpectCode = http.StatusOK
 	}
-	rec := DoRequest(c, p.Handler, p.Method, p.URL, p.Body, p.ContentLength, p.Header)
+	rec := DoRequest(c, p.Handler, p.Method, p.URL, p.Body, p.ContentLength, p.Header, p.Username, p.Password)
 	c.Assert(rec.Code, gc.Equals, p.ExpectCode, gc.Commentf("body: %s", rec.Body.Bytes()))
 	if p.ExpectBody == nil {
 		c.Assert(rec.Body.Bytes(), gc.HasLen, 0)
@@ -84,7 +90,9 @@ func AssertJSONCall(c *gc.C, p JSONCallParams) {
 
 // DoRequest invokes a request on the given handler with the given
 // method, URL, body, content length and headers.
-func DoRequest(c *gc.C, handler http.Handler, method string, urlStr string, body io.Reader, contentLength int64, header map[string][]string) *httptest.ResponseRecorder {
+func DoRequest(c *gc.C, handler http.Handler, method string, urlStr string, body io.Reader, contentLength int64, header map[string][]string, username, password string) *httptest.ResponseRecorder {
+	// TODO frankban: this function has too many arguments.
+	//   Use something like RequestParams.
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
@@ -97,6 +105,9 @@ func DoRequest(c *gc.C, handler http.Handler, method string, urlStr string, body
 	}
 	if contentLength != 0 {
 		req.ContentLength = contentLength
+	}
+	if username != "" || password != "" {
+		req.SetBasicAuth(username, password)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	c.Assert(err, gc.IsNil)

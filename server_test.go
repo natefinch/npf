@@ -23,18 +23,27 @@ func TestPackage(t *testing.T) {
 
 type ServerSuite struct {
 	storetesting.IsolatedMgoSuite
+	config charmstore.ServerParams
 }
 
 var _ = gc.Suite(&ServerSuite{})
 
+func (s *ServerSuite) SetUpSuite(c *gc.C) {
+	s.IsolatedMgoSuite.SetUpSuite(c)
+	s.config = charmstore.ServerParams{
+		AuthUsername: "test-user",
+		AuthPassword: "test-password",
+	}
+}
+
 func (s *ServerSuite) TestNewServerWithNoVersions(c *gc.C) {
-	h, err := charmstore.NewServer(s.Session.DB("foo"))
+	h, err := charmstore.NewServer(s.Session.DB("foo"), s.config)
 	c.Assert(err, gc.ErrorMatches, `charm store server must serve at least one version of the API`)
 	c.Assert(h, gc.IsNil)
 }
 
 func (s *ServerSuite) TestNewServerWithUnregisteredVersion(c *gc.C) {
-	h, err := charmstore.NewServer(s.Session.DB("foo"), "wrong")
+	h, err := charmstore.NewServer(s.Session.DB("foo"), s.config, "wrong")
 	c.Assert(err, gc.ErrorMatches, `unknown version "wrong"`)
 	c.Assert(h, gc.IsNil)
 }
@@ -51,7 +60,7 @@ func (s *ServerSuite) TestVersions(c *gc.C) {
 func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	db := s.Session.DB("foo")
 
-	h, err := charmstore.NewServer(db, charmstore.V4)
+	h, err := charmstore.NewServer(db, s.config, charmstore.V4)
 	c.Assert(err, gc.IsNil)
 
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{

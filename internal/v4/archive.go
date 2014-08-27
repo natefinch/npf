@@ -39,13 +39,15 @@ func (h *handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 		// TODO(rog) params.ErrMethodNotAllowed
 		return errgo.Newf("method not allowed")
 	case "DELETE":
-		return h.serveDeleteArchive(id, w, req)
-	case "POST":
-		resp, err := h.servePostArchive(id, w, req)
-		if err != nil {
+		if err := h.authenticate(w, req); err != nil {
 			return err
 		}
-		return router.WriteJSON(w, http.StatusOK, resp)
+		return h.serveDeleteArchive(id, w, req)
+	case "POST":
+		if err := h.authenticate(w, req); err != nil {
+			return err
+		}
+		return h.servePostArchive(id, w, req)
 	case "GET":
 	}
 	r, size, err := h.openBlob(id)
@@ -78,33 +80,32 @@ func (h *handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter,
 	return nil
 }
 
-func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (resp *params.ArchivePostResponse, err error) {
+func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	// Validate the request parameters.
 	if id.Series == "" {
-		return nil, badRequestf(nil, "series not specified")
+		return badRequestf(nil, "series not specified")
 	}
 	if id.Revision != -1 {
-		return nil, badRequestf(nil, "revision specified, but should not be specified")
+		return badRequestf(nil, "revision specified, but should not be specified")
 	}
 	hash := req.Form.Get("hash")
 	if hash == "" {
-		return nil, badRequestf(nil, "hash parameter not specified")
+		return badRequestf(nil, "hash parameter not specified")
 	}
 	if req.ContentLength == -1 {
-		return nil, badRequestf(nil, "Content-Length not specified")
+		return badRequestf(nil, "Content-Length not specified")
 	}
 
 	// Upload the actual blob, and make sure that it is removed
 	// if we fail later.
-
 	name := bson.NewObjectId().Hex()
-	err = h.store.BlobStore.PutUnchallenged(req.Body, name, req.ContentLength, hash)
+	err := h.store.BlobStore.PutUnchallenged(req.Body, name, req.ContentLength, hash)
 	if err != nil {
-		return nil, errgo.Notef(err, "cannot put archive blob")
+		return errgo.Notef(err, "cannot put archive blob")
 	}
 	r, _, err := h.store.BlobStore.Open(name)
 	if err != nil {
-		return nil, errgo.Notef(err, "cannot open newly created blob")
+		return errgo.Notef(err, "cannot open newly created blob")
 	}
 	defer r.Close()
 	defer func() {
@@ -115,41 +116,40 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 	}()
 
 	// Create the entry for the entity in charm store.
-
 	rev, err := h.nextRevisionForId(id)
 	if err != nil {
-		return nil, errgo.Notef(err, "cannot get next revision for id")
+		return errgo.Notef(err, "cannot get next revision for id")
 	}
 	id.Revision = rev
 	readerAt := &readerAtSeeker{r}
 	if id.Series == "bundle" {
 		b, err := charm.ReadBundleArchiveFromReader(readerAt, req.ContentLength)
 		if err != nil {
-			return nil, errgo.Notef(err, "cannot read bundle archive")
+			return errgo.Notef(err, "cannot read bundle archive")
 		}
 		bundleData := b.Data()
 		charms, err := h.bundleCharms(bundleData.RequiredCharms())
 		if err != nil {
-			return nil, errgo.Notef(err, "cannot retrieve bundle charms")
+			return errgo.Notef(err, "cannot retrieve bundle charms")
 		}
 		if err := bundleData.VerifyWithCharms(verifyConstraints, charms); err != nil {
-			return nil, errgo.Notef(verificationError(err), "bundle verification failed")
+			return errgo.Notef(verificationError(err), "bundle verification failed")
 		}
 		if err := h.store.AddBundle(id, b, name, hash, req.ContentLength); err != nil {
-			return nil, errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
+			return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 		}
 	} else {
 		ch, err := charm.ReadCharmArchiveFromReader(readerAt, req.ContentLength)
 		if err != nil {
-			return nil, errgo.Notef(err, "cannot read charm archive")
+			return errgo.Notef(err, "cannot read charm archive")
 		}
 		if err := h.store.AddCharm(id, ch, name, hash, req.ContentLength); err != nil {
-			return nil, errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
+			return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 		}
 	}
-	return &params.ArchivePostResponse{
+	return router.WriteJSON(w, http.StatusOK, &params.ArchivePostResponse{
 		Id: id,
-	}, nil
+	})
 }
 
 func verifyConstraints(s string) error {

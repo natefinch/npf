@@ -1,2 +1,4 @@
 mongo-url: localhost:27017
 api-addr: localhost:8080
+auth-username: admin
+auth-password: example-passwd

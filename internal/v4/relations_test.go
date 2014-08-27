@@ -35,7 +35,7 @@ var _ = gc.Suite(&RelationsSuite{})
 
 func (s *RelationsSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
-	s.srv, s.store = newServer(c, s.Session)
+	s.srv, s.store = newServer(c, s.Session, serverParams)
 }
 
 // metaCharmRelatedCharms defines a bunch of charms to be used in
