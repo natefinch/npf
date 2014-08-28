@@ -102,9 +102,9 @@ func (s *StatsSuite) TestServerStatsStatus(c *gc.C) {
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.path)
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    s.srv,
-			URL:        storeURL(test.path),
-			ExpectCode: test.status,
+			Handler:      s.srv,
+			URL:          storeURL(test.path),
+			ExpectStatus: test.status,
 			ExpectBody: params.Error{
 				Message: test.message,
 				Code:    test.code,

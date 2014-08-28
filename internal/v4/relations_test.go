@@ -293,10 +293,10 @@ func (s *RelationsSuite) TestMetaCharmRelated(c *gc.C) {
 		s.addCharms(c, test.charms)
 		storeURL := storeURL(test.id + "/meta/charm-related" + test.querystring)
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    s.srv,
-			URL:        storeURL,
-			ExpectCode: http.StatusOK,
-			ExpectBody: test.expectBody,
+			Handler:      s.srv,
+			URL:          storeURL,
+			ExpectStatus: http.StatusOK,
+			ExpectBody:   test.expectBody,
 		})
 		// Clean up the entities in the store.
 		_, err := s.store.DB.Entities().RemoveAll(nil)
@@ -308,9 +308,9 @@ func (s *RelationsSuite) TestMetaCharmRelatedIncludeError(c *gc.C) {
 	s.addCharms(c, metaCharmRelatedCharms)
 	storeURL := storeURL("utopic/wordpress-0/meta/charm-related?include=no-such")
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    s.srv,
-		URL:        storeURL,
-		ExpectCode: http.StatusInternalServerError,
+		Handler:      s.srv,
+		URL:          storeURL,
+		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: `cannot retrieve the charm requires: unrecognized metadata name "no-such"`,
 		},
@@ -395,13 +395,13 @@ var metaBundlesContainingTests = []struct {
 	// The querystring to append to the resulting charmstore URL.
 	querystring string
 	// The expected status code of the response.
-	expectCode int
+	expectStatus int
 	// The expected response body.
 	expectBody interface{}
 }{{
-	about:      "specific charm present in several bundles",
-	id:         "utopic/wordpress-42",
-	expectCode: http.StatusOK,
+	about:        "specific charm present in several bundles",
+	id:           "utopic/wordpress-42",
+	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-simple-0"),
 	}, {
@@ -410,22 +410,22 @@ var metaBundlesContainingTests = []struct {
 		Id: mustParseReference("bundle/useless-0"),
 	}},
 }, {
-	about:      "specific charm present in one bundle",
-	id:         "trusty/memcached-2",
-	expectCode: http.StatusOK,
+	about:        "specific charm present in one bundle",
+	id:           "trusty/memcached-2",
+	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-complex-1"),
 	}},
 }, {
-	about:      "specific charm not present in any bundle",
-	id:         "trusty/django-42",
-	expectCode: http.StatusOK,
-	expectBody: []*params.MetaAnyResponse{},
+	about:        "specific charm not present in any bundle",
+	id:           "trusty/django-42",
+	expectStatus: http.StatusOK,
+	expectBody:   []*params.MetaAnyResponse{},
 }, {
-	about:       "specific charm with includes",
-	id:          "trusty/mysql-1",
-	querystring: "?include=archive-size&include=bundle-metadata",
-	expectCode:  http.StatusOK,
+	about:        "specific charm with includes",
+	id:           "trusty/mysql-1",
+	querystring:  "?include=archive-size&include=bundle-metadata",
+	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-complex-1"),
 		Meta: map[string]interface{}{
@@ -434,55 +434,55 @@ var metaBundlesContainingTests = []struct {
 		},
 	}},
 }, {
-	about:      "partial charm id",
-	id:         "mysql", // The test will add cs:utopic/mysql-0.
-	expectCode: http.StatusOK,
+	about:        "partial charm id",
+	id:           "mysql", // The test will add cs:utopic/mysql-0.
+	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-simple-0"),
 	}},
 }, {
-	about:       "any series set to true",
-	id:          "trusty/mysql-0",
-	querystring: "?any-series=1",
-	expectCode:  http.StatusOK,
+	about:        "any series set to true",
+	id:           "trusty/mysql-0",
+	querystring:  "?any-series=1",
+	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-simple-0"),
 	}, {
 		Id: mustParseReference("bundle/wordpress-complex-1"),
 	}},
 }, {
-	about:       "invalid any series",
-	id:          "utopic/mysql-0",
-	querystring: "?any-series=true",
-	expectCode:  http.StatusBadRequest,
+	about:        "invalid any series",
+	id:           "utopic/mysql-0",
+	querystring:  "?any-series=true",
+	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
 		Message: `invalid value for any-series: unexpected bool value "true" (must be "0" or "1")`,
 	},
 }, {
-	about:       "any revision set to true",
-	id:          "trusty/memcached-99",
-	querystring: "?any-revision=1",
-	expectCode:  http.StatusOK,
+	about:        "any revision set to true",
+	id:           "trusty/memcached-99",
+	querystring:  "?any-revision=1",
+	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-complex-1"),
 	}, {
 		Id: mustParseReference("bundle/django-generic-42"),
 	}},
 }, {
-	about:       "invalid any revision",
-	id:          "trusty/memcached-99",
-	querystring: "?any-revision=why-not",
-	expectCode:  http.StatusBadRequest,
+	about:        "invalid any revision",
+	id:           "trusty/memcached-99",
+	querystring:  "?any-revision=why-not",
+	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
 		Message: `invalid value for any-revision: unexpected bool value "why-not" (must be "0" or "1")`,
 	},
 }, {
-	about:       "any series and revision",
-	id:          "saucy/mysql-99",
-	querystring: "?any-series=1&any-revision=1",
-	expectCode:  http.StatusOK,
+	about:        "any series and revision",
+	id:           "saucy/mysql-99",
+	querystring:  "?any-series=1&any-revision=1",
+	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-simple-0"),
 	}, {
@@ -493,10 +493,10 @@ var metaBundlesContainingTests = []struct {
 		Id: mustParseReference("bundle/mediawiki-47"),
 	}},
 }, {
-	about:       "any series and revision with includes",
-	id:          "saucy/wordpress-99",
-	querystring: "?any-series=1&any-revision=1&include=archive-size&include=bundle-metadata",
-	expectCode:  http.StatusOK,
+	about:        "any series and revision with includes",
+	id:           "saucy/wordpress-99",
+	querystring:  "?any-series=1&any-revision=1&include=archive-size&include=bundle-metadata",
+	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: mustParseReference("bundle/wordpress-simple-0"),
 		Meta: map[string]interface{}{
@@ -517,10 +517,10 @@ var metaBundlesContainingTests = []struct {
 		},
 	}},
 }, {
-	about:       "include-error",
-	id:          "utopic/wordpress-42",
-	querystring: "?include=no-such",
-	expectCode:  http.StatusInternalServerError,
+	about:        "include-error",
+	id:           "utopic/wordpress-42",
+	querystring:  "?include=no-such",
+	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: `cannot retrieve bundle metadata: unrecognized metadata name "no-such"`,
 	},
@@ -557,10 +557,10 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 		// Perform the request and ensure the response is what we expect.
 		storeURL := storeURL(test.id + "/meta/bundles-containing" + test.querystring)
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    s.srv,
-			URL:        storeURL,
-			ExpectCode: test.expectCode,
-			ExpectBody: test.expectBody,
+			Handler:      s.srv,
+			URL:          storeURL,
+			ExpectStatus: test.expectStatus,
+			ExpectBody:   test.expectBody,
 		})
 
 		// Clean up the charm entity in the store.

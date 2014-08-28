@@ -105,6 +105,9 @@ func assertServesVersion(c *gc.C, h http.Handler, vers string) {
 }
 
 func assertDoesNotServeVersion(c *gc.C, h http.Handler, vers string) {
-	rec := storetesting.DoRequest(c, h, "GET", "/"+vers+"/some/path", nil, 0, nil, "", "")
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: h,
+		URL:     "/" + vers + "/some/path",
+	})
 	c.Assert(rec.Code, gc.Equals, http.StatusNotFound)
 }

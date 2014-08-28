@@ -52,14 +52,22 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
 	c.Assert(err, gc.IsNil)
 
-	rec := storetesting.DoRequest(c, s.srv, "GET", storeURL("precise/wordpress-0/archive"), nil, 0, nil, "", "")
+	archiveUrl := storeURL("precise/wordpress-0/archive")
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     archiveUrl,
+	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
 
 	// Check that the HTTP range logic is plugged in OK. If this
 	// is working, we assume that the whole thing is working OK,
 	// as net/http is well-tested.
-	rec = storetesting.DoRequest(c, s.srv, "GET", storeURL("precise/wordpress-0/archive"), nil, 0, http.Header{"Range": {"bytes=10-100"}}, "", "")
+	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     archiveUrl,
+		Header:  http.Header{"Range": {"bytes=10-100"}},
+	})
 	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
 	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
@@ -78,7 +86,10 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Download the charm archive using the API.
-	rec := storetesting.DoRequest(c, s.srv, "GET", storeURL(id+"/archive"), nil, 0, nil, "", "")
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL(id + "/archive"),
+	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 
 	// Check that the downloads count for the entity has been updated.
@@ -140,10 +151,10 @@ func (s *ArchiveSuite) TestPostErrors(c *gc.C) {
 			Header: http.Header{
 				"Content-Type": {"application/zip"},
 			},
-			Body:       body,
-			Username:   serverParams.AuthUsername,
-			Password:   serverParams.AuthPassword,
-			ExpectCode: test.expectStatus,
+			Body:         body,
+			Username:     serverParams.AuthUsername,
+			Password:     serverParams.AuthPassword,
+			ExpectStatus: test.expectStatus,
 			ExpectBody: params.Error{
 				Message: test.expectMessage,
 				Code:    test.expectCode,
@@ -307,10 +318,10 @@ func (s *ArchiveSuite) TestPostHashMismatch(c *gc.C) {
 		Header: http.Header{
 			"Content-Type": {"application/zip"},
 		},
-		Body:       bytes.NewReader(content),
-		Username:   serverParams.AuthUsername,
-		Password:   serverParams.AuthPassword,
-		ExpectCode: http.StatusInternalServerError,
+		Body:         bytes.NewReader(content),
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: "cannot put archive blob: hash mismatch",
 		},
@@ -357,10 +368,10 @@ func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSee
 		Header: http.Header{
 			"Content-Type": {"application/zip"},
 		},
-		Body:       content,
-		Username:   serverParams.AuthUsername,
-		Password:   serverParams.AuthPassword,
-		ExpectCode: http.StatusInternalServerError,
+		Body:         content,
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: errorMessage,
 		},
@@ -479,10 +490,10 @@ func (s *ArchiveSuite) TestArchiveFileErrors(c *gc.C) {
 	for i, test := range archiveFileErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    s.srv,
-			URL:        storeURL(test.path),
-			Method:     "GET",
-			ExpectCode: test.expectStatus,
+			Handler:      s.srv,
+			URL:          storeURL(test.path),
+			Method:       "GET",
+			ExpectStatus: test.expectStatus,
 			ExpectBody: params.Error{
 				Message: test.expectMessage,
 				Code:    test.expectCode,
@@ -527,7 +538,10 @@ func (s *ArchiveSuite) assertArchiveFileContents(c *gc.C, zipFile *zip.ReadClose
 
 	// Make the request.
 	url := storeURL(path)
-	rec := storetesting.DoRequest(c, s.srv, "GET", url, nil, 0, nil, "", "")
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     url,
+	})
 
 	// Ensure the response is what we expect.
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
@@ -644,12 +658,12 @@ func (s *ArchiveSuite) TestDelete(c *gc.C) {
 
 	// Delete the charm using the API.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    s.srv,
-		URL:        storeURL(id + "/archive"),
-		Method:     "DELETE",
-		Username:   serverParams.AuthUsername,
-		Password:   serverParams.AuthPassword,
-		ExpectCode: http.StatusOK,
+		Handler:      s.srv,
+		URL:          storeURL(id + "/archive"),
+		Method:       "DELETE",
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusOK,
 	})
 
 	// The entity has been deleted.
@@ -673,12 +687,12 @@ func (s *ArchiveSuite) TestDeleteSpecificCharm(c *gc.C) {
 
 	// Delete the second charm using the API.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    s.srv,
-		URL:        storeURL("utopic/mysql-42/archive"),
-		Method:     "DELETE",
-		Username:   serverParams.AuthUsername,
-		Password:   serverParams.AuthPassword,
-		ExpectCode: http.StatusOK,
+		Handler:      s.srv,
+		URL:          storeURL("utopic/mysql-42/archive"),
+		Method:       "DELETE",
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusOK,
 	})
 
 	// The other two charms are still present in the database.
@@ -696,12 +710,12 @@ func (s *ArchiveSuite) TestDeleteSpecificCharm(c *gc.C) {
 func (s *ArchiveSuite) TestDeleteNotFound(c *gc.C) {
 	// Try to delete a non existing charm using the API.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    s.srv,
-		URL:        storeURL("utopic/no-such-0/archive"),
-		Method:     "DELETE",
-		Username:   serverParams.AuthUsername,
-		Password:   serverParams.AuthPassword,
-		ExpectCode: http.StatusNotFound,
+		Handler:      s.srv,
+		URL:          storeURL("utopic/no-such-0/archive"),
+		Method:       "DELETE",
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
 			Message: params.ErrNotFound.Error(),
 			Code:    params.ErrNotFound,
@@ -718,12 +732,12 @@ func (s *ArchiveSuite) TestDeleteError(c *gc.C) {
 
 	// Try to delete the charm using the API.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    s.srv,
-		URL:        storeURL(id + "/archive"),
-		Method:     "DELETE",
-		Username:   serverParams.AuthUsername,
-		Password:   serverParams.AuthPassword,
-		ExpectCode: http.StatusInternalServerError,
+		Handler:      s.srv,
+		URL:          storeURL(id + "/archive"),
+		Method:       "DELETE",
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: `cannot remove blob no-such-name: resource at path "global/no-such-name" not found`,
 		},
@@ -743,7 +757,13 @@ func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Delete the charm using the API.
-	rec := storetesting.DoRequest(c, s.srv, "DELETE", storeURL(id+"/archive"), nil, 0, nil, serverParams.AuthUsername, serverParams.AuthPassword)
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler:  s.srv,
+		Method:   "DELETE",
+		URL:      storeURL(id + "/archive"),
+		Username: serverParams.AuthUsername,
+		Password: serverParams.AuthPassword,
+	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 
 	// Check that the delete count for the entity has been updated.
@@ -798,13 +818,13 @@ func checkAuthErrors(c *gc.C, handler http.Handler, method, url string) {
 			test.header.Add("Content-Type", "application/zip")
 		}
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    handler,
-			URL:        archiveURL,
-			Method:     method,
-			Header:     test.header,
-			Username:   test.username,
-			Password:   test.password,
-			ExpectCode: http.StatusUnauthorized,
+			Handler:      handler,
+			URL:          archiveURL,
+			Method:       method,
+			Header:       test.header,
+			Username:     test.username,
+			Password:     test.password,
+			ExpectStatus: http.StatusUnauthorized,
 			ExpectBody: params.Error{
 				Message: test.expectMessage,
 				Code:    params.ErrUnauthorized,

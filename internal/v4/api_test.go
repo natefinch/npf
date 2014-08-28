@@ -266,9 +266,9 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 			c.Logf("	expected data for %q: %#v", url, expectData)
 			if isNull(expectData) {
 				storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-					Handler:    s.srv,
-					URL:        storeURL,
-					ExpectCode: http.StatusNotFound,
+					Handler:      s.srv,
+					URL:          storeURL,
+					ExpectStatus: http.StatusNotFound,
 					ExpectBody: params.Error{
 						Message: params.ErrMetadataNotFound.Error(),
 						Code:    params.ErrMetadataNotFound,
@@ -417,17 +417,17 @@ func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
 			Code:    params.ErrNotFound,
 		}
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    s.srv,
-			URL:        storeURL("precise/wordpress-23/meta/" + ep.name),
-			ExpectCode: http.StatusNotFound,
-			ExpectBody: expected,
+			Handler:      s.srv,
+			URL:          storeURL("precise/wordpress-23/meta/" + ep.name),
+			ExpectStatus: http.StatusNotFound,
+			ExpectBody:   expected,
 		})
 		expected.Message = `no matching charm or bundle for "cs:wordpress"`
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    s.srv,
-			URL:        storeURL("wordpress/meta/" + ep.name),
-			ExpectCode: http.StatusNotFound,
-			ExpectBody: expected,
+			Handler:      s.srv,
+			URL:          storeURL("wordpress/meta/" + ep.name),
+			ExpectStatus: http.StatusNotFound,
+			ExpectBody:   expected,
 		})
 	}
 }
@@ -549,23 +549,23 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 	for i, test := range serveExpandIdTests {
 		c.Logf("test %d: %s", i, test.about)
 		storeURL := storeURL(test.url + "/expand-id")
-		var expectCode int
+		var expectStatus int
 		var expectBody interface{}
 		if test.err == "" {
-			expectCode = http.StatusOK
+			expectStatus = http.StatusOK
 			expectBody = test.expect
 		} else {
-			expectCode = http.StatusNotFound
+			expectStatus = http.StatusNotFound
 			expectBody = params.Error{
 				Code:    params.ErrNotFound,
 				Message: test.err,
 			}
 		}
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    s.srv,
-			URL:        storeURL,
-			ExpectCode: expectCode,
-			ExpectBody: expectBody,
+			Handler:      s.srv,
+			URL:          storeURL,
+			ExpectStatus: expectStatus,
+			ExpectBody:   expectBody,
 		})
 	}
 }
@@ -613,23 +613,23 @@ func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 	for i, test := range serveMetaRevisionInfoTests {
 		c.Logf("test %d: %s", i, test.about)
 		storeURL := storeURL(test.url + "/meta/revision-info")
-		var expectCode int
+		var expectStatus int
 		var expectBody interface{}
 		if test.err == "" {
-			expectCode = http.StatusOK
+			expectStatus = http.StatusOK
 			expectBody = test.expect
 		} else {
-			expectCode = http.StatusNotFound
+			expectStatus = http.StatusNotFound
 			expectBody = params.Error{
 				Code:    params.ErrNotFound,
 				Message: test.err,
 			}
 		}
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    s.srv,
-			URL:        storeURL,
-			ExpectCode: expectCode,
-			ExpectBody: expectBody,
+			Handler:      s.srv,
+			URL:          storeURL,
+			ExpectStatus: expectStatus,
+			ExpectBody:   expectBody,
 		})
 	}
 }
@@ -677,7 +677,10 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 		// Download the entity archive for the requested number of times.
 		archiveUrl := storeURL(test.url + "/archive")
 		for i := 0; i < int(test.downloads); i++ {
-			rec := storetesting.DoRequest(c, s.srv, "GET", archiveUrl, nil, 0, nil, "", "")
+			rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+				Handler: s.srv,
+				URL:     archiveUrl,
+			})
 			c.Assert(rec.Code, gc.Equals, http.StatusOK)
 		}
 
@@ -692,9 +695,9 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 		// Ensure the meta/stats response reports the correct downloads count.
 		statsURL := storeURL(test.url + "/meta/stats")
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    s.srv,
-			URL:        statsURL,
-			ExpectCode: http.StatusOK,
+			Handler:      s.srv,
+			URL:          statsURL,
+			ExpectStatus: http.StatusOK,
 			ExpectBody: params.StatsResponse{
 				ArchiveDownloadCount: test.downloads,
 			},
@@ -704,9 +707,9 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 
 func assertNotImplemented(c *gc.C, h http.Handler, path string) {
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    h,
-		URL:        storeURL(path),
-		ExpectCode: http.StatusInternalServerError,
+		Handler:      h,
+		URL:          storeURL(path),
+		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: "method not implemented",
 		},
