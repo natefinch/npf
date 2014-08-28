@@ -24,6 +24,7 @@ const (
 	ErrDuplicateUpload  ErrorCode = "duplicate upload"
 	ErrMultipleErrors   ErrorCode = "multiple errors"
 	ErrUnauthorized     ErrorCode = "unauthorized"
+	ErrMethodNotAllowed ErrorCode = "method not allowed"
 )
 
 // Error represents an error - it is returned for any response

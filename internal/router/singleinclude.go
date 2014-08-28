@@ -22,7 +22,7 @@ func (h SingleIncludeHandler) Key() interface{} {
 	return singleMetaHandlerKey(singleMetaHandlerKey{})
 }
 
-// Handle implements BulkMetadataHander.HandleGet.
+// HandleGet implements BulkMetadataHander.HandleGet.
 func (h SingleIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error) {
 	results := make([]interface{}, len(hs))
 	for i, h := range hs {
@@ -39,6 +39,7 @@ func (h SingleIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *charm.Refer
 
 var errPutNotImplemented = errgo.New("PUT not implemented")
 
+// HandlePut implements BulkMetadataHander.HandlePut.
 func (h SingleIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Reference, paths []string, values []*json.RawMessage) []error {
 	errs := make([]error, len(hs))
 	for i := range hs {

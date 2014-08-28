@@ -47,7 +47,7 @@ var knownSeries = map[string]bool{
 // has been called to parse the URL form values.
 type BulkIncludeHandler interface {
 	// Key returns a value that will be used to group handlers
-	// together in preparation for a call to Handle.
+	// together in preparation for a call to HandleGet or HandlePut.
 	// The key should be comparable for equality.
 	// Please do not return NaN. That would be silly, OK?
 	Key() interface{}
@@ -62,7 +62,7 @@ type BulkIncludeHandler interface {
 	// Each item in paths holds the remaining metadata path
 	// for the handler in the corresponding position
 	// in hs after the prefix in Handlers.Meta has been stripped,
-	// and flags holds all the url query values.
+	// and flags holds all the URL query values.
 	//
 	// TODO(rog) document indexed errors.
 	HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error)
@@ -71,6 +71,7 @@ type BulkIncludeHandler interface {
 	// the given charm or bundle id. If there is an error, the
 	// returned errors slice should contain one element for each element
 	// in paths. The error for handler hs[i] should be returned in errors[i].
+	// If there is no error, an empty slice should be returned.
 	//
 	// Each item in paths holds the remaining metadata path
 	// for the handler in the corresponding position
@@ -241,9 +242,11 @@ func (r *Router) serveMeta(id *charm.Reference, w http.ResponseWriter, req *http
 		WriteJSON(w, http.StatusOK, resp)
 		return nil
 	case "PUT":
+		// Put requests don't return any data unless there's
+		// an error.
 		return r.serveMetaPut(id, req)
 	}
-	return errgo.Newf("method %q not allowed", req.Method)
+	return params.ErrMethodNotAllowed
 }
 
 func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface{}, error) {
@@ -294,6 +297,9 @@ func unmarshalJSONBody(req *http.Request, val interface{}) error {
 	return nil
 }
 
+// serveMetaPut serves a PUT request to the metadata for the given id.
+// The metadata to be put is in the request body.
+// PUT /$id/meta/...
 func (r *Router) serveMetaPut(id *charm.Reference, req *http.Request) error {
 	var body json.RawMessage
 	if err := unmarshalJSONBody(req, &body); err != nil {
@@ -302,6 +308,10 @@ func (r *Router) serveMetaPut(id *charm.Reference, req *http.Request) error {
 	return r.serveMetaPutBody(id, req, &body)
 }
 
+// serveMetaPutBody serves a PUT request to the metadata for the given id.
+// The metadata to be put is in body.
+// This method is used both for individual metadata PUTs and
+// also bulk metadata PUTs.
 func (r *Router) serveMetaPutBody(id *charm.Reference, req *http.Request, body *json.RawMessage) error {
 	key, path := handlerKey(req.URL.Path)
 	if key == "" {
@@ -349,6 +359,7 @@ func isNull(val interface{}) bool {
 	return v.IsNil()
 }
 
+// metaNames returns a slice of all the metadata endpoint names.
 func (r *Router) metaNames() []string {
 	names := make([]string, 0, len(r.handlers.Meta))
 	for name := range r.handlers.Meta {
@@ -358,6 +369,7 @@ func (r *Router) metaNames() []string {
 	return names
 }
 
+// serveBulkMeta serves bulk metadata requests (requests to /meta/...).
 func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
 	case "GET", "HEAD":
@@ -370,7 +382,7 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) error {
 	case "PUT":
 		return r.serveBulkMetaPut(req)
 	default:
-		return fmt.Errorf("method not allowed")
+		return params.ErrMethodNotAllowed
 	}
 }
 
@@ -415,6 +427,9 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 	return result, nil
 }
 
+// serveBulkMetaPut serves a bulk PUT request to several ids.
+// PUT /meta/$endpoint
+// http://tinyurl.com/na83nta
 func (r *Router) serveBulkMetaPut(req *http.Request) error {
 	if len(req.Form["id"]) > 0 {
 		return fmt.Errorf("ids may not be specified in meta PUT request")
@@ -438,6 +453,8 @@ func (r *Router) serveBulkMetaPut(req *http.Request) error {
 	return nil
 }
 
+// serveBulkMetaPutOne serves a PUT to a single id as part of a bulk PUT
+// request. It's in a separate function to make the error handling easier.
 func (r *Router) serveBulkMetaPutOne(req *http.Request, id string, val *json.RawMessage) error {
 	url, err := charm.ParseReference(id)
 	if err != nil {
@@ -508,6 +525,9 @@ func (r *Router) GetMetadata(id *charm.Reference, includes []string) (map[string
 	return results, nil
 }
 
+// PutMetadata puts metadata for the given id. Each key in data holds
+// the name of a metadata endpoint; its associated value
+// holds the value to be written.
 func (r *Router) PutMetadata(id *charm.Reference, data map[string]*json.RawMessage) error {
 	groups := make(map[interface{}][]BulkIncludeHandler)
 	valuesByGroup := make(map[interface{}][]*json.RawMessage)
@@ -585,6 +605,8 @@ func splitPath(path string, i int) (elem string, nextIndex int) {
 	return path[i:j], j
 }
 
+// splitId splits the given URL path into a charm or bundle
+// URL and the rest of the path.
 func splitId(path string) (url *charm.Reference, rest string, err error) {
 	path = strings.TrimPrefix(path, "/")
 

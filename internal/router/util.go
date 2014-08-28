@@ -6,7 +6,6 @@ package router
 import (
 	"encoding/json"
 	"fmt"
-	//	"log"
 	"net/http"
 
 	"github.com/juju/errgo"
@@ -90,7 +89,6 @@ func (err multiError) ErrorInfo() map[string]*params.Error {
 // given ResponseWriter and sets an appropriate
 // HTTP status.
 func WriteError(w http.ResponseWriter, err error) {
-	//	log.Printf("error: %s", errgo.Details(err))
 	errResp := ErrorResponse(err)
 	status := http.StatusInternalServerError
 	switch errResp.Code {
@@ -102,6 +100,8 @@ func WriteError(w http.ResponseWriter, err error) {
 		status = http.StatusForbidden
 	case params.ErrUnauthorized:
 		status = http.StatusUnauthorized
+	case params.ErrMethodNotAllowed:
+		status = http.StatusMethodNotAllowed
 	}
 	// TODO log writeJSON error if it happens?
 	WriteJSON(w, status, errResp)

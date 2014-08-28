@@ -24,7 +24,7 @@ func (u *FieldUpdater) UpdateField(fieldName string, val interface{}) {
 }
 
 // A FieldUpdateFunc is used to update a metadata document for the
-// given URL. For each field in fields, it should set that field to
+// given id. For each field in fields, it should set that field to
 // its corresponding value in the metadata document.
 type FieldUpdateFunc func(id *charm.Reference, fields map[string]interface{}) error
 
@@ -33,8 +33,8 @@ type FieldUpdateFunc func(id *charm.Reference, fields map[string]interface{}) er
 // associated QueryFunc.
 type FieldGetFunc func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error)
 
-// FieldPutFunc sets values in updateOp corresponding to fields to be set
-// in the metadata document for the given URL. The path holds the metadata path
+// FieldPutFunc sets using the given FieldUpdater corresponding to fields to be set
+// in the metadata document for the given id. The path holds the metadata path
 // after the initial prefix has been removed.
 type FieldPutFunc func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error
 
@@ -44,22 +44,25 @@ type FieldIncludeHandlerParams struct {
 	// (the same query should be generated for any given key).
 	Key interface{}
 
-	// Query is used to retrieve the document from the database
-	// The fields passed to the query will be the union of all fields found
-	// in all the handlers in the bulk request.
+	// Query is used to retrieve the document from the database for
+	// GET requests. The fields passed to the query will be the
+	// union of all fields found in all the handlers in the bulk
+	// request.
 	Query FieldQueryFunc
 
 	// Fields specifies which fields are required by the given handler.
 	Fields []string
 
-	// Handle actually retrieves the data from the document.
+	// Handle actually returns the data from the document retrieved
+	// by Query, for GET requests.
 	HandleGet FieldGetFunc
 
 	// HandlePut generates update operations for a PUT
 	// operation.
 	HandlePut FieldPutFunc
 
-	// Update is used to update the document in the database.
+	// Update is used to update the document in the database for
+	// PUT requests.
 	Update FieldUpdateFunc
 }
 

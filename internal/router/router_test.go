@@ -1250,7 +1250,7 @@ func (s *RouterSuite) TestRouterPut(c *gc.C) {
 				"Content-Type": {"application/json"},
 			},
 			ExpectStatus: test.expectCode,
-			ExpectBody: test.expectBody,
+			ExpectBody:   test.expectBody,
 		})
 		c.Assert(RecordedCalls(), jc.DeepEquals, test.expectRecordedCalls)
 	}
@@ -1319,7 +1319,7 @@ func (s *RouterSuite) TestRouterPutWithInvalidContent(c *gc.C) {
 				"Content-Type": {test.contentType},
 			},
 			ExpectStatus: test.expectCode,
-			ExpectBody: test.expectBody,
+			ExpectBody:   test.expectBody,
 		})
 	}
 }
@@ -1914,6 +1914,9 @@ func RecordedCalls() []interface{} {
 	return callRecords
 }
 
+// byJSON implements sort.Interface, ordering its
+// elements lexicographically by marshaled JSON
+// representation.
 type byJSON []interface{}
 
 func (b byJSON) Less(i, j int) bool {
@@ -2037,6 +2040,9 @@ func (f swapFunc) Swap(i, j int) {
 	f(i, j)
 }
 
+// groupSort is an implementation of sort.Interface
+// that keeps a set of secondary values sorted according
+// to the same criteria as key.
 type groupSort struct {
 	key   sort.Interface
 	other []swapper

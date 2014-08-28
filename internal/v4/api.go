@@ -250,9 +250,6 @@ func (h *handler) metaCharmMetadata(entity *mongodoc.Entity, id *charm.Reference
 	return entity.CharmMeta, nil
 }
 
-//func (h *handler) putMetaExtraInfo(id *charm.Reference, path string, value *json.RawMessage, flags url.Values, fieldToSet map[string] interface{}) error {
-//}
-
 // GET id/meta/bundle-metadata
 // http://tinyurl.com/ozshbtb
 func (h *handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
