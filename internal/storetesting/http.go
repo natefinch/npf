@@ -71,10 +71,14 @@ func AssertJSONCall(c *gc.C, p JSONCallParams) {
 		Password:      p.Password,
 	})
 	c.Assert(rec.Code, gc.Equals, p.ExpectStatus, gc.Commentf("body: %s", rec.Body.Bytes()))
+
+	// Ensure the response includes the expected body.
 	if p.ExpectBody == nil {
 		c.Assert(rec.Body.Bytes(), gc.HasLen, 0)
 		return
 	}
+	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "application/json")
+
 	// Rather than unmarshaling into something of the expected
 	// body type, we reform the expected body in JSON and
 	// back to interface{}, so we can check the whole content.
@@ -88,7 +92,6 @@ func AssertJSONCall(c *gc.C, p JSONCallParams) {
 	var gotBodyVal interface{}
 	err = json.Unmarshal(rec.Body.Bytes(), &gotBodyVal)
 	c.Assert(err, gc.IsNil, gc.Commentf("json body: %q", rec.Body.Bytes()))
-	// TODO(rog) check that content type is application/json
 	c.Assert(gotBodyVal, jc.DeepEquals, expectBodyVal)
 }
 
