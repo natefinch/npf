@@ -5,6 +5,7 @@ package router
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/juju/errgo"
@@ -41,16 +42,54 @@ func HandleJSON(handle func(http.ResponseWriter, *http.Request) (interface{}, er
 	return HandleErrors(f)
 }
 
+type errorInfoer interface {
+	ErrorInfo() map[string]*params.Error
+}
+
+type errorCoder interface {
+	ErrorCode() params.ErrorCode
+}
+
+// ErrorResponse returns an appropriate error
+// response for the provided error.
+func ErrorResponse(err error) *params.Error {
+	errResp := &params.Error{
+		Message: err.Error(),
+	}
+	cause := errgo.Cause(err)
+	if coder, ok := cause.(errorCoder); ok {
+		errResp.Code = coder.ErrorCode()
+	}
+	if infoer, ok := cause.(errorInfoer); ok {
+		errResp.Info = infoer.ErrorInfo()
+	}
+	return errResp
+}
+
+// multiError holds multiple errors.
+type multiError map[string]error
+
+func (err multiError) Error() string {
+	return fmt.Sprintf("multiple (%d) errors", len(err))
+}
+
+func (err multiError) ErrorCode() params.ErrorCode {
+	return params.ErrMultipleErrors
+}
+
+func (err multiError) ErrorInfo() map[string]*params.Error {
+	m := make(map[string]*params.Error)
+	for key, err := range err {
+		m[key] = ErrorResponse(err)
+	}
+	return m
+}
+
 // WriteError writes an JSON error response to the
 // given ResponseWriter and sets an appropriate
 // HTTP status.
 func WriteError(w http.ResponseWriter, err error) {
-	errResp := &params.Error{
-		Message: err.Error(),
-	}
-	if err, ok := errgo.Cause(err).(params.ErrorCode); ok {
-		errResp.Code = err
-	}
+	errResp := ErrorResponse(err)
 	status := http.StatusInternalServerError
 	switch errResp.Code {
 	case params.ErrNotFound, params.ErrMetadataNotFound:
@@ -61,6 +100,8 @@ func WriteError(w http.ResponseWriter, err error) {
 		status = http.StatusForbidden
 	case params.ErrUnauthorized:
 		status = http.StatusUnauthorized
+	case params.ErrMethodNotAllowed:
+		status = http.StatusMethodNotAllowed
 	}
 	// TODO log writeJSON error if it happens?
 	WriteJSON(w, status, errResp)

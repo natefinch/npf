@@ -64,7 +64,7 @@ type Store struct {
 
 // Open creates a new session with the store. It connects to the MongoDB
 // server at the given address (as expected by the Mongo function in the
-// labix.org/v2/mgo package).
+// gopkg.in/mgo.v2 package).
 func Open(mongoAddr string) (store *Store, err error) {
 	logger.Infof("store opened, connecting to: %s", mongoAddr)
 	store = &Store{}

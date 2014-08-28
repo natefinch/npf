@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/json"
 	"net/url"
 
 	"github.com/juju/errgo"
@@ -10,8 +11,8 @@ import (
 var _ BulkIncludeHandler = SingleIncludeHandler(nil)
 
 // SingleIncludeHandler implements BulkMetaHander for a non-batching
-// metadata retrieval function.
-type SingleIncludeHandler func(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error)
+// metadata retrieval function that can perform a GET only.
+type SingleIncludeHandler func(id *charm.Reference, path string, flags url.Values) (interface{}, error)
 
 // Key implements BulkMetadataHander.Key.
 func (h SingleIncludeHandler) Key() interface{} {
@@ -21,12 +22,12 @@ func (h SingleIncludeHandler) Key() interface{} {
 	return singleMetaHandlerKey(singleMetaHandlerKey{})
 }
 
-// Handle implements BulkMetadataHander.Handle.
-func (h SingleIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.Reference, paths []string, method string, flags url.Values) ([]interface{}, error) {
+// HandleGet implements BulkMetadataHander.HandleGet.
+func (h SingleIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error) {
 	results := make([]interface{}, len(hs))
 	for i, h := range hs {
 		h := h.(SingleIncludeHandler)
-		result, err := h(id, paths[i], method, flags)
+		result, err := h(id, paths[i], flags)
 		if err != nil {
 			// TODO(rog) include index of failed handler.
 			return nil, errgo.Mask(err, errgo.Any)
@@ -34,4 +35,15 @@ func (h SingleIncludeHandler) Handle(hs []BulkIncludeHandler, id *charm.Referenc
 		results[i] = result
 	}
 	return results, nil
+}
+
+var errPutNotImplemented = errgo.New("PUT not implemented")
+
+// HandlePut implements BulkMetadataHander.HandlePut.
+func (h SingleIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Reference, paths []string, values []*json.RawMessage) []error {
+	errs := make([]error, len(hs))
+	for i := range hs {
+		errs[i] = errPutNotImplemented
+	}
+	return errs
 }
