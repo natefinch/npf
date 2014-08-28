@@ -5,10 +5,15 @@ import (
 )
 
 // ErrorCode holds the class of an error in machine-readable format.
+// It is also an error in its own right.
 type ErrorCode string
 
 func (code ErrorCode) Error() string {
 	return string(code)
+}
+
+func (code ErrorCode) ErrorCode() ErrorCode {
+	return code
 }
 
 const (
@@ -17,6 +22,7 @@ const (
 	ErrForbidden        ErrorCode = "forbidden"
 	ErrBadRequest       ErrorCode = "bad request"
 	ErrDuplicateUpload  ErrorCode = "duplicate upload"
+	ErrMultipleErrors   ErrorCode = "multiple errors"
 	ErrUnauthorized     ErrorCode = "unauthorized"
 )
 
@@ -26,6 +32,7 @@ const (
 type Error struct {
 	Message string
 	Code    ErrorCode
+	Info    map[string]*Error `json:",omitempty"`
 }
 
 // NewError returns a new *Error with the given error code
@@ -46,6 +53,10 @@ func (e *Error) Error() string {
 // machine readable format.
 func (e *Error) ErrorCode() string {
 	return e.Code.Error()
+}
+
+func (e *Error) ErrorInfo() map[string]*Error {
+	return e.Info
 }
 
 // Cause implements errgo.Causer.Cause.

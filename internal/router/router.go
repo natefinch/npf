@@ -6,6 +6,8 @@
 package router
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -50,7 +52,7 @@ type BulkIncludeHandler interface {
 	// Please do not return NaN. That would be silly, OK?
 	Key() interface{}
 
-	// Handle returns the results of invoking all the given handlers
+	// HandleGet returns the results of invoking all the given handlers
 	// on the given charm or bundle id. Each result is held in
 	// the respective element of the returned slice.
 	//
@@ -63,7 +65,18 @@ type BulkIncludeHandler interface {
 	// and flags holds all the url query values.
 	//
 	// TODO(rog) document indexed errors.
-	Handle(hs []BulkIncludeHandler, id *charm.Reference, paths []string, method string, flags url.Values) ([]interface{}, error)
+	HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error)
+
+	// HandlePut invokes a PUT request on all the given handlers on
+	// the given charm or bundle id. If there is an error, the
+	// returned errors slice should contain one element for each element
+	// in paths. The error for handler hs[i] should be returned in errors[i].
+	//
+	// Each item in paths holds the remaining metadata path
+	// for the handler in the corresponding position
+	// in hs after the prefix in Handlers.Meta has been stripped,
+	// and flags holds all the url query values.
+	HandlePut(hs []BulkIncludeHandler, id *charm.Reference, paths []string, values []*json.RawMessage) []error
 }
 
 // IdHandler handles a charm store request rooted at the given id.
@@ -126,7 +139,7 @@ func New(handlers *Handlers, resolveURL func(url *charm.Reference) error) *Route
 		resolveURL: resolveURL,
 	}
 	mux := NewServeMux()
-	mux.Handle("/meta/", http.StripPrefix("/meta", HandleJSON(r.serveBulkMeta)))
+	mux.Handle("/meta/", http.StripPrefix("/meta", HandleErrors(r.serveBulkMeta)))
 	for path, handler := range r.handlers.Global {
 		path = "/" + path
 		prefix := path
@@ -192,13 +205,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 		return params.ErrNotFound
 	}
 	req.URL.Path = path
-	resp, err := r.serveMeta(url, req)
-	if err != nil {
-		// Note: preserve error cause from handlers.
-		return errgo.Mask(err, errgo.Any)
-	}
-	WriteJSON(w, http.StatusOK, resp)
-	return nil
+	return r.serveMeta(url, w, req)
 }
 
 func idHandlerNeedsResolveURL(req *http.Request) bool {
@@ -223,7 +230,23 @@ func handlerKey(path string) (key, rest string) {
 	return key, ""
 }
 
-func (r *Router) serveMeta(id *charm.Reference, req *http.Request) (interface{}, error) {
+func (r *Router) serveMeta(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+	switch req.Method {
+	case "GET", "HEAD":
+		resp, err := r.serveMetaGet(id, req)
+		if err != nil {
+			// Note: preserve error causes from meta handlers.
+			return errgo.Mask(err, errgo.Any)
+		}
+		WriteJSON(w, http.StatusOK, resp)
+		return nil
+	case "PUT":
+		return r.serveMetaPut(id, req)
+	}
+	return errgo.Newf("method %q not allowed", req.Method)
+}
+
+func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface{}, error) {
 	key, path := handlerKey(req.URL.Path)
 	if key == "" {
 		// GET id/meta
@@ -244,7 +267,7 @@ func (r *Router) serveMeta(id *charm.Reference, req *http.Request) (interface{},
 		}, nil
 	}
 	if handler := r.handlers.Meta[key]; handler != nil {
-		results, err := handler.Handle([]BulkIncludeHandler{handler}, id, []string{path}, req.Method, req.Form)
+		results, err := handler.HandleGet([]BulkIncludeHandler{handler}, id, []string{path}, req.Form)
 		if err != nil {
 			// Note: preserve error cause from handlers.
 			return nil, errgo.Mask(err, errgo.Any)
@@ -256,6 +279,61 @@ func (r *Router) serveMeta(id *charm.Reference, req *http.Request) (interface{},
 		return results[0], nil
 	}
 	return nil, params.ErrNotFound
+}
+
+const jsonContentType = "application/json"
+
+func unmarshalJSONBody(req *http.Request, val interface{}) error {
+	if ct := req.Header.Get("Content-Type"); ct != jsonContentType {
+		return errgo.WithCausef(nil, params.ErrBadRequest, "unexpected Content-Type %q; expected %q", ct, jsonContentType)
+	}
+	dec := json.NewDecoder(req.Body)
+	if err := dec.Decode(val); err != nil {
+		return errgo.Notef(err, "cannot unmarshal body")
+	}
+	return nil
+}
+
+func (r *Router) serveMetaPut(id *charm.Reference, req *http.Request) error {
+	var body json.RawMessage
+	if err := unmarshalJSONBody(req, &body); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrBadRequest))
+	}
+	return r.serveMetaPutBody(id, req, &body)
+}
+
+func (r *Router) serveMetaPutBody(id *charm.Reference, req *http.Request, body *json.RawMessage) error {
+	key, path := handlerKey(req.URL.Path)
+	if key == "" {
+		return params.ErrForbidden
+	}
+	if key == "any" {
+		// PUT id/meta/any
+		var bodyMeta struct {
+			Meta map[string]*json.RawMessage
+		}
+		if err := json.Unmarshal(*body, &bodyMeta); err != nil {
+			return errgo.Notef(err, "cannot unmarshal body")
+		}
+		if err := r.PutMetadata(id, bodyMeta.Meta); err != nil {
+			return errgo.Mask(err, errgo.Any)
+		}
+		return nil
+	}
+	if handler := r.handlers.Meta[key]; handler != nil {
+		errs := handler.HandlePut(
+			[]BulkIncludeHandler{handler},
+			id,
+			[]string{path},
+			[]*json.RawMessage{body},
+		)
+		if len(errs) > 0 && errs[0] != nil {
+			// Note: preserve error cause from handlers.
+			return errgo.Mask(errs[0], errgo.Any)
+		}
+		return nil
+	}
+	return params.ErrNotFound
 }
 
 // isNull reports whether the given value will encode to
@@ -280,12 +358,28 @@ func (r *Router) metaNames() []string {
 	return names
 }
 
-// serveBulkMeta serves the "bulk" metadata retrieval endpoint
+func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) error {
+	switch req.Method {
+	case "GET", "HEAD":
+		resp, err := r.serveBulkMetaGet(req)
+		if err != nil {
+			return errgo.Mask(err, errgo.Any)
+		}
+		WriteJSON(w, http.StatusOK, resp)
+		return nil
+	case "PUT":
+		return r.serveBulkMetaPut(req)
+	default:
+		return fmt.Errorf("method not allowed")
+	}
+}
+
+// serveBulkMetaGet serves the "bulk" metadata retrieval endpoint
 // that can return information on several ids at once.
 //
 // GET meta/$endpoint?id=$id0[&id=$id1...][$otherflags]
 // http://tinyurl.com/kdrly9f
-func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 	// TODO get the metadata concurrently for each id.
 	ids := req.Form["id"]
 	if len(ids) == 0 {
@@ -307,7 +401,7 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interf
 			// Note: preserve error cause from resolveURL.
 			return nil, errgo.Mask(err, errgo.Any)
 		}
-		meta, err := r.serveMeta(url, req)
+		meta, err := r.serveMetaGet(url, req)
 		if errgo.Cause(err) == params.ErrMetadataNotFound {
 			// The relevant data does not exist.
 			// http://tinyurl.com/o5ptfkk
@@ -319,6 +413,44 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) (interf
 		result[id] = meta
 	}
 	return result, nil
+}
+
+func (r *Router) serveBulkMetaPut(req *http.Request) error {
+	if len(req.Form["id"]) > 0 {
+		return fmt.Errorf("ids may not be specified in meta PUT request")
+	}
+	var ids map[string]*json.RawMessage
+	if err := unmarshalJSONBody(req, &ids); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrBadRequest))
+	}
+	var multiErr multiError
+	for id, val := range ids {
+		if err := r.serveBulkMetaPutOne(req, id, val); err != nil {
+			if multiErr == nil {
+				multiErr = make(multiError)
+			}
+			multiErr[id] = errgo.Mask(err, errgo.Any)
+		}
+	}
+	if len(multiErr) != 0 {
+		return multiErr
+	}
+	return nil
+}
+
+func (r *Router) serveBulkMetaPutOne(req *http.Request, id string, val *json.RawMessage) error {
+	url, err := charm.ParseReference(id)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	if err := r.resolveURL(url); err != nil {
+		// Note: preserve error cause from resolveURL.
+		return errgo.Mask(err, errgo.Any)
+	}
+	if err := r.serveMetaPutBody(url, req, val); err != nil {
+		return errgo.Mask(err, errgo.Any)
+	}
+	return nil
 }
 
 // GetMetadata retrieves metadata for the given charm or bundle id,
@@ -351,11 +483,12 @@ func (r *Router) GetMetadata(id *charm.Reference, includes []string) (map[string
 
 		// Paths contains all the path elements after
 		// the handler key has been stripped off.
+		// TODO(rog) BUG shouldn't this be len(groupIncludes) ?
 		paths := make([]string, len(g))
 		for i, include := range groupIncludes {
 			_, paths[i] = handlerKey(include)
 		}
-		groupResults, err := g[0].Handle(g, id, paths, "GET", nil)
+		groupResults, err := g[0].HandleGet(g, id, paths, nil)
 		if err != nil {
 			// TODO(rog) if it's a BulkError, attach
 			// the original include path to error (the BulkError
@@ -373,6 +506,66 @@ func (r *Router) GetMetadata(id *charm.Reference, includes []string) (map[string
 		}
 	}
 	return results, nil
+}
+
+func (r *Router) PutMetadata(id *charm.Reference, data map[string]*json.RawMessage) error {
+	groups := make(map[interface{}][]BulkIncludeHandler)
+	valuesByGroup := make(map[interface{}][]*json.RawMessage)
+	pathsByGroup := make(map[interface{}][]string)
+	for path, body := range data {
+		// Get the key that lets us choose the meta handler.
+		metaKey, _ := handlerKey(path)
+		handler := r.handlers.Meta[metaKey]
+		if handler == nil {
+			return errgo.Newf("unrecognized metadata name %q", path)
+		}
+
+		// Get the key that lets us group this handler into the
+		// correct bulk group.
+		key := handler.Key()
+		groups[key] = append(groups[key], handler)
+		valuesByGroup[key] = append(valuesByGroup[key], body)
+
+		// Paths contains all the path elements after
+		// the handler key has been stripped off.
+		pathsByGroup[key] = append(pathsByGroup[key], path)
+	}
+	var multiErr multiError
+	for _, g := range groups {
+		// We know that we must have at least one element in the
+		// slice here. We could use any member of the slice to
+		// actually handle the request, so arbitrarily choose
+		// g[0]. Note that g[0].Key() is equal to g[i].Key() for
+		// every i in the slice.
+		key := g[0].Key()
+
+		paths := pathsByGroup[key]
+		// The paths passed to the handler contain all the path elements
+		// after the handler key has been stripped off.
+		strippedPaths := make([]string, len(paths))
+		for i, path := range paths {
+			_, strippedPaths[i] = handlerKey(path)
+		}
+
+		errs := g[0].HandlePut(g, id, strippedPaths, valuesByGroup[key])
+		if len(errs) > 0 {
+			if multiErr == nil {
+				multiErr = make(multiError)
+			}
+			if len(errs) != len(paths) {
+				return fmt.Errorf("unexpected error count; expected %d, got %q", len(paths), errs)
+			}
+			for i, err := range errs {
+				if err != nil {
+					multiErr[paths[i]] = err
+				}
+			}
+		}
+	}
+	if len(multiErr) != 0 {
+		return multiErr
+	}
+	return nil
 }
 
 // splitPath returns the first path element

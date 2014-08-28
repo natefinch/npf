@@ -4,11 +4,15 @@
 package router
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -46,8 +50,9 @@ var routerGetTests = []struct {
 		Global: map[string]http.Handler{
 			"foo": HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
 				return ReqInfo{
-					Path: req.URL.Path,
-					Form: req.Form,
+					Method: req.Method,
+					Path:   req.URL.Path,
+					Form:   req.Form,
 				}, nil
 			}),
 		},
@@ -55,7 +60,8 @@ var routerGetTests = []struct {
 	urlStr:       "/foo",
 	expectStatus: http.StatusOK,
 	expectBody: ReqInfo{
-		Path: "",
+		Method: "GET",
+		Path:   "",
 	},
 }, {
 	about: "global handler with sub-path and flags",
@@ -63,8 +69,9 @@ var routerGetTests = []struct {
 		Global: map[string]http.Handler{
 			"foo/bar/": HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
 				return ReqInfo{
-					Path: req.URL.Path,
-					Form: req.Form,
+					Method: req.Method,
+					Path:   req.URL.Path,
+					Form:   req.Form,
 				}, nil
 			}),
 		},
@@ -72,7 +79,8 @@ var routerGetTests = []struct {
 	urlStr:       "/foo/bar/a/b?a=1&b=two",
 	expectStatus: http.StatusOK,
 	expectBody: ReqInfo{
-		Path: "/a/b",
+		Path:   "/a/b",
+		Method: "GET",
 		Form: url.Values{
 			"a": {"1"},
 			"b": {"two"},
@@ -95,6 +103,7 @@ var routerGetTests = []struct {
 	urlStr:       "/precise/wordpress-34/foo",
 	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
+		Method:   "GET",
 		CharmURL: "cs:precise/wordpress-34",
 	},
 }, {
@@ -107,6 +116,7 @@ var routerGetTests = []struct {
 	urlStr:       "/precise/wordpress-34/foo/blah/arble",
 	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
+		Method:   "GET",
 		CharmURL: "cs:precise/wordpress-34",
 		Path:     "/blah/arble",
 	},
@@ -146,6 +156,7 @@ var routerGetTests = []struct {
 	urlStr:       "/~joe/precise/wordpress-34/foo",
 	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
+		Method:   "GET",
 		CharmURL: "cs:~joe/precise/wordpress-34",
 	},
 }, {
@@ -158,6 +169,7 @@ var routerGetTests = []struct {
 	urlStr:       "/~joe/precise/wordpress-34/foo/blah/arble",
 	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
+		Method:   "GET",
 		CharmURL: "cs:~joe/precise/wordpress-34",
 		Path:     "/blah/arble",
 	},
@@ -214,6 +226,7 @@ var routerGetTests = []struct {
 	resolveURL:   newResolveURL("precise", 34),
 	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
+		Method:   "GET",
 		CharmURL: "cs:~joe/precise/wordpress-34",
 	},
 }, {
@@ -247,8 +260,8 @@ var routerGetTests = []struct {
 	about: "meta list",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": testMetaHandler,
-			"bar": testMetaHandler,
+			"foo": testMetaHandler(0),
+			"bar": testMetaHandler(1),
 		},
 	},
 	urlStr:       "/precise/wordpress-42/meta",
@@ -258,41 +271,38 @@ var routerGetTests = []struct {
 	about: "meta handler",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": testMetaHandler,
+			"foo": testMetaHandler(0),
 		},
 	},
 	urlStr:       "/precise/wordpress-42/meta/foo",
 	expectStatus: http.StatusOK,
 	expectBody: &metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
-		Method:   "GET",
 	},
 }, {
 	about: "meta handler with additional elements",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo/": testMetaHandler,
+			"foo/": testMetaHandler(0),
 		},
 	},
 	urlStr:       "/precise/wordpress-42/meta/foo/bar/baz",
 	expectStatus: http.StatusOK,
 	expectBody: metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
-		Method:   "GET",
 		Path:     "/bar/baz",
 	},
 }, {
 	about: "meta handler with params",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": testMetaHandler,
+			"foo": testMetaHandler(0),
 		},
 	},
 	urlStr:       "/precise/wordpress-42/meta/foo?one=a&two=b&one=c",
 	expectStatus: http.StatusOK,
 	expectBody: metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
-		Method:   "GET",
 		Flags: url.Values{
 			"one": {"a", "c"},
 			"two": {"b"},
@@ -342,14 +352,13 @@ var routerGetTests = []struct {
 	},
 	expectStatus:     http.StatusOK,
 	expectQueryCount: 1,
-	expectBody: fieldSelectHandleInfo{
+	expectBody: fieldSelectHandleGetInfo{
 		HandlerId: "handler1",
 		Doc: fieldSelectQueryInfo{
 			Id:       mustParseReference("cs:precise/wordpress-42"),
 			Selector: map[string]int{"field1": 1, "field2": 1},
 		},
-		Id:     mustParseReference("cs:precise/wordpress-42"),
-		Method: "GET",
+		Id: mustParseReference("cs:precise/wordpress-42"),
 	},
 }, {
 	about:  "meta handler returning error with code",
@@ -386,27 +395,24 @@ var routerGetTests = []struct {
 	expectBody: params.MetaAnyResponse{
 		Id: mustParseReference("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
-			"field1-1": fieldSelectHandleInfo{
+			"field1-1": fieldSelectHandleGetInfo{
 				HandlerId: "handler1",
-				Method:    "GET",
 				Doc: fieldSelectQueryInfo{
 					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1},
 				},
 				Id: mustParseReference("cs:precise/wordpress-42"),
 			},
-			"field2": fieldSelectHandleInfo{
+			"field2": fieldSelectHandleGetInfo{
 				HandlerId: "handler2",
-				Method:    "GET",
 				Doc: fieldSelectQueryInfo{
 					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1},
 				},
 				Id: mustParseReference("cs:precise/wordpress-42"),
 			},
-			"field1-2": fieldSelectHandleInfo{
+			"field1-2": fieldSelectHandleGetInfo{
 				HandlerId: "handler3",
-				Method:    "GET",
 				Doc: fieldSelectQueryInfo{
 					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1},
@@ -430,9 +436,8 @@ var routerGetTests = []struct {
 	expectBody: params.MetaAnyResponse{
 		Id: mustParseReference("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
-			"item1/foo": fieldSelectHandleInfo{
+			"item1/foo": fieldSelectHandleGetInfo{
 				HandlerId: "handler1",
-				Method:    "GET",
 				Doc: fieldSelectQueryInfo{
 					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
@@ -440,9 +445,8 @@ var routerGetTests = []struct {
 				Id:   mustParseReference("cs:precise/wordpress-42"),
 				Path: "/foo",
 			},
-			"item2/bar": fieldSelectHandleInfo{
+			"item2/bar": fieldSelectHandleGetInfo{
 				HandlerId: "handler2",
-				Method:    "GET",
 				Doc: fieldSelectQueryInfo{
 					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
@@ -450,9 +454,8 @@ var routerGetTests = []struct {
 				Id:   mustParseReference("cs:precise/wordpress-42"),
 				Path: "/bar",
 			},
-			"item1": fieldSelectHandleInfo{
+			"item1": fieldSelectHandleGetInfo{
 				HandlerId: "handler3",
-				Method:    "GET",
 				Doc: fieldSelectQueryInfo{
 					Id:       mustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
@@ -466,7 +469,7 @@ var routerGetTests = []struct {
 	urlStr: "/precise/wordpress-42/meta/any?include=ok&include=nil",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"ok":       testMetaHandler,
+			"ok":       testMetaHandler(0),
 			"nil":      constMetaHandler(nil),
 			"typednil": constMetaHandler((*struct{})(nil)),
 		},
@@ -476,7 +479,6 @@ var routerGetTests = []struct {
 		Id: mustParseReference("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
 			"ok": metaHandlerTestResp{
-				Method:   "GET",
 				CharmURL: "cs:precise/wordpress-42",
 			},
 		},
@@ -499,14 +501,13 @@ var routerGetTests = []struct {
 	urlStr: "/meta/foo?id=precise/wordpress-42",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": testMetaHandler,
+			"foo": testMetaHandler(0),
 		},
 	},
 	expectStatus: http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"precise/wordpress-42": {
 			CharmURL: "cs:precise/wordpress-42",
-			Method:   "GET",
 		},
 	},
 }, {
@@ -514,18 +515,16 @@ var routerGetTests = []struct {
 	urlStr: "/meta/foo?id=precise/wordpress-42&id=quantal/foo-32",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": testMetaHandler,
+			"foo": testMetaHandler(0),
 		},
 	},
 	expectStatus: http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"precise/wordpress-42": {
 			CharmURL: "cs:precise/wordpress-42",
-			Method:   "GET",
 		},
 		"quantal/foo-32": {
 			CharmURL: "cs:quantal/foo-32",
-			Method:   "GET",
 		},
 	},
 }, {
@@ -533,8 +532,8 @@ var routerGetTests = []struct {
 	urlStr: "/meta/any?id=precise/wordpress-42&id=quantal/foo-32&include=foo&include=bar/something",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo":  testMetaHandler,
-			"bar/": testMetaHandler,
+			"foo":  testMetaHandler(0),
+			"bar/": testMetaHandler(1),
 		},
 	},
 	expectStatus: http.StatusOK,
@@ -544,11 +543,9 @@ var routerGetTests = []struct {
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
 					CharmURL: "cs:precise/wordpress-42",
-					Method:   "GET",
 				},
 				"bar/something": metaHandlerTestResp{
 					CharmURL: "cs:precise/wordpress-42",
-					Method:   "GET",
 					Path:     "/something",
 				},
 			},
@@ -557,12 +554,10 @@ var routerGetTests = []struct {
 			Id: mustParseReference("cs:quantal/foo-32"),
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
-					Method:   "GET",
 					CharmURL: "cs:quantal/foo-32",
 				},
 				"bar/something": metaHandlerTestResp{
 					CharmURL: "cs:quantal/foo-32",
-					Method:   "GET",
 					Path:     "/something",
 				},
 			},
@@ -573,7 +568,7 @@ var routerGetTests = []struct {
 	urlStr: "/meta/foo/bar?id=wordpress",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo/": testMetaHandler,
+			"foo/": testMetaHandler(0),
 		},
 	},
 	resolveURL:   newResolveURL("precise", 100),
@@ -581,7 +576,6 @@ var routerGetTests = []struct {
 	expectBody: map[string]metaHandlerTestResp{
 		"wordpress": {
 			CharmURL: "cs:precise/wordpress-100",
-			Method:   "GET",
 			Path:     "/bar",
 		},
 	},
@@ -590,7 +584,7 @@ var routerGetTests = []struct {
 	urlStr: "/meta/foo/bar?id=wordpress&arble=bletch&z=w&z=p",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo/": testMetaHandler,
+			"foo/": testMetaHandler(0),
 		},
 	},
 	resolveURL:   newResolveURL("precise", 100),
@@ -599,7 +593,6 @@ var routerGetTests = []struct {
 		"wordpress": {
 			CharmURL: "cs:precise/wordpress-100",
 			Path:     "/bar",
-			Method:   "GET",
 			Flags: url.Values{
 				"arble": {"bletch"},
 				"z":     {"w", "p"},
@@ -611,7 +604,7 @@ var routerGetTests = []struct {
 	urlStr: "/meta/foo/bar",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo/": testMetaHandler,
+			"foo/": testMetaHandler(0),
 		},
 	},
 	expectStatus: http.StatusInternalServerError,
@@ -629,14 +622,13 @@ var routerGetTests = []struct {
 	},
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": testMetaHandler,
+			"foo": testMetaHandler(0),
 		},
 	},
 	expectStatus: http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"precise/wordpress-23": {
 			CharmURL: "cs:precise/wordpress-23",
-			Method:   "GET",
 		},
 	},
 }, {
@@ -650,7 +642,7 @@ var routerGetTests = []struct {
 	},
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": testMetaHandler,
+			"foo": testMetaHandler(0),
 		},
 	},
 	expectStatus: http.StatusInternalServerError,
@@ -719,7 +711,620 @@ func (s *RouterSuite) TestRouterGet(c *gc.C) {
 	}
 }
 
-func (s *RouterSuite) TestRouterMethodsThatPassThroughUnresolvedId(c *gc.C) {
+var routerPutTests = []struct {
+	about               string
+	handlers            Handlers
+	urlStr              string
+	body                interface{}
+	expectCode          int
+	expectBody          interface{}
+	expectRecordedCalls []interface{}
+	resolveURL          func(*charm.Reference) error
+}{{
+	about: "global handler",
+	handlers: Handlers{
+		Global: map[string]http.Handler{
+			"foo": HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+				return ReqInfo{
+					Method: req.Method,
+					Path:   req.URL.Path,
+					Form:   req.Form,
+				}, nil
+			}),
+		},
+	},
+	urlStr:     "/foo",
+	expectCode: http.StatusOK,
+	expectBody: ReqInfo{
+		Method: "PUT",
+		Path:   "",
+	},
+}, {
+	about: "id handler",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:     "/precise/wordpress-34/foo",
+	expectCode: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		Method:   "PUT",
+		CharmURL: "cs:precise/wordpress-34",
+	},
+}, {
+	about: "meta handler",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	urlStr:     "/precise/wordpress-42/meta/foo",
+	expectCode: http.StatusOK,
+	body:       "hello",
+	expectRecordedCalls: []interface{}{
+		metaHandlerTestPutParams{
+			NumHandlers: 1,
+			Id:          "cs:precise/wordpress-42",
+			Paths:       []string{""},
+			Values:      []interface{}{"hello"},
+		},
+	},
+}, {
+	about: "meta/any",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+			"bar": testMetaHandler(1),
+		},
+	},
+	urlStr: "/precise/wordpress-42/meta/any",
+	body: params.MetaAnyResponse{
+		Meta: map[string]interface{}{
+			"foo": "foo-value",
+			"bar": map[string]interface{}{
+				"bar-value1": 234.0,
+				"bar-value2": "whee",
+			},
+		},
+	},
+	expectRecordedCalls: []interface{}{
+		metaHandlerTestPutParams{
+			NumHandlers: 2,
+			Id:          "cs:precise/wordpress-42",
+			Paths:       []string{"", ""},
+			Values: []interface{}{
+				"foo-value",
+				map[string]interface{}{
+					"bar-value1": 234.0,
+					"bar-value2": "whee",
+				},
+			},
+		},
+	},
+}, {
+	about: "meta/any with extra paths",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo/": testMetaHandler(0),
+			"bar":  testMetaHandler(1),
+		},
+	},
+	urlStr: "/precise/wordpress-42/meta/any",
+	body: params.MetaAnyResponse{
+		Meta: map[string]interface{}{
+			"foo/one": "foo-value-one",
+			"foo/two": "foo-value-two",
+			"bar":     1234.0,
+		},
+	},
+	expectRecordedCalls: []interface{}{
+		metaHandlerTestPutParams{
+			NumHandlers: 3,
+			Id:          "cs:precise/wordpress-42",
+			Paths:       []string{"/one", "/two", ""},
+			Values: []interface{}{
+				"foo-value-one",
+				"foo-value-two",
+				1234.0,
+			},
+		},
+	},
+}, {
+	about: "bulk meta",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	urlStr: "/meta/foo",
+	body: map[string]string{
+		"precise/wordpress-42": "forty two",
+		"precise/foo-134":      "blah",
+	},
+	expectRecordedCalls: []interface{}{
+		metaHandlerTestPutParams{
+			NumHandlers: 1,
+			Id:          "cs:precise/foo-134",
+			Paths:       []string{""},
+			Values:      []interface{}{"blah"},
+		},
+		metaHandlerTestPutParams{
+			NumHandlers: 1,
+			Id:          "cs:precise/wordpress-42",
+			Paths:       []string{""},
+			Values:      []interface{}{"forty two"},
+		},
+	},
+}, {
+	about: "bulk meta any",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo":  testMetaHandler(0),
+			"bar":  testMetaHandler(1),
+			"baz/": testMetaHandler(2),
+		},
+	},
+	urlStr: "/meta/any",
+	body: map[string]params.MetaAnyResponse{
+		"precise/wordpress-42": {
+			Meta: map[string]interface{}{
+				"foo": "foo-wordpress-val",
+				"bar": "bar-wordpress-val",
+			},
+		},
+		"precise/mysql-134": {
+			Meta: map[string]interface{}{
+				"foo":      "foo-mysql-val",
+				"baz/blah": "baz/blah-mysql-val",
+				"baz/ppp":  "baz/ppp-mysql-val",
+			},
+		},
+	},
+	expectRecordedCalls: []interface{}{
+		metaHandlerTestPutParams{
+			NumHandlers: 3,
+			Id:          "cs:precise/mysql-134",
+			Paths:       []string{"", "/blah", "/ppp"},
+			Values:      []interface{}{"foo-mysql-val", "baz/blah-mysql-val", "baz/ppp-mysql-val"},
+		},
+		metaHandlerTestPutParams{
+			NumHandlers: 2,
+			Id:          "cs:precise/wordpress-42",
+			Paths:       []string{"", ""},
+			Values:      []interface{}{"foo-wordpress-val", "bar-wordpress-val"},
+		},
+	},
+}, {
+	about: "field include handler with bulk meta any",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo":  fieldSelectHandler("handler1", 0, "field1", "field2"),
+			"bar":  fieldSelectHandler("handler2", 0, "field3", "field4"),
+			"baz/": fieldSelectHandler("handler3", 1, "field5"),
+		},
+	},
+	urlStr: "/meta/any",
+	body: map[string]params.MetaAnyResponse{
+		"precise/mysql-123": {
+			Meta: map[string]interface{}{
+				"foo":      "foo-mysql-val",
+				"baz/blah": "baz/blah-mysql-val",
+				"baz/ppp":  "baz/ppp-mysql-val",
+			},
+		},
+		"precise/wordpress-42": {
+			Meta: map[string]interface{}{
+				"foo": "foo-wordpress-val",
+				"bar": "bar-wordpress-val",
+			},
+		},
+	},
+	expectRecordedCalls: []interface{}{
+		fieldSelectHandleUpdateInfo{
+			Id: "cs:precise/mysql-123",
+			Fields: map[string]fieldSelectHandlePutInfo{
+				"field1": {
+					Id:    "cs:precise/mysql-123",
+					Value: "foo-mysql-val",
+				},
+				"field2": {
+					Id:    "cs:precise/mysql-123",
+					Value: "foo-mysql-val",
+				},
+			},
+		},
+		fieldSelectHandleUpdateInfo{
+			Id: "cs:precise/mysql-123",
+			Fields: map[string]fieldSelectHandlePutInfo{
+				"field5/blah": {
+					Id:    "cs:precise/mysql-123",
+					Value: "baz/blah-mysql-val",
+				},
+				"field5/ppp": {
+					Id:    "cs:precise/mysql-123",
+					Value: "baz/ppp-mysql-val",
+				},
+			},
+		},
+		fieldSelectHandleUpdateInfo{
+			Id: "cs:precise/wordpress-42",
+			Fields: map[string]fieldSelectHandlePutInfo{
+				"field1": {
+					Id:    "cs:precise/wordpress-42",
+					Value: "foo-wordpress-val",
+				},
+				"field2": {
+					Id:    "cs:precise/wordpress-42",
+					Value: "foo-wordpress-val",
+				},
+				"field3": {
+					Id:    "cs:precise/wordpress-42",
+					Value: "bar-wordpress-val",
+				},
+				"field4": {
+					Id:    "cs:precise/wordpress-42",
+					Value: "bar-wordpress-val",
+				},
+			},
+		},
+	},
+}, {
+	about: "field include handler with no HandlePut",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": FieldIncludeHandler(FieldIncludeHandlerParams{
+				Key: 0,
+			}),
+		},
+	},
+	urlStr:     "/precise/wordpress-23/meta/foo",
+	body:       "something",
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "PUT not supported",
+	},
+}, {
+	about: "field include handler when HandlePut returns an error",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": FieldIncludeHandler(FieldIncludeHandlerParams{
+				Key: 0,
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+					return errgo.WithCausef(nil, params.ErrNotFound, "message")
+				},
+			}),
+		},
+	},
+	urlStr:     "/precise/wordpress-23/meta/foo",
+	body:       "something",
+	expectCode: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: "message",
+	},
+}, {
+	about: "meta put to field include handler with several errors",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": FieldIncludeHandler(FieldIncludeHandlerParams{
+				Key: 0,
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+					return errgo.WithCausef(nil, params.ErrNotFound, "foo error")
+				},
+				Update: nopUpdate,
+			}),
+			"bar": FieldIncludeHandler(FieldIncludeHandlerParams{
+				Key: 0,
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+					return errgo.New("bar error")
+				},
+				Update: nopUpdate,
+			}),
+			"baz": FieldIncludeHandler(FieldIncludeHandlerParams{
+				Key: 0,
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+					return nil
+				},
+				Update: nopUpdate,
+			}),
+		},
+	},
+	urlStr: "/precise/wordpress-23/meta/any",
+	body: params.MetaAnyResponse{
+		Meta: map[string]interface{}{
+			"foo": "one",
+			"bar": "two",
+			"baz": "three",
+		},
+	},
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Code:    params.ErrMultipleErrors,
+		Message: "multiple (2) errors",
+		Info: map[string]*params.Error{
+			"foo": {
+				Code:    params.ErrNotFound,
+				Message: "foo error",
+			},
+			"bar": {
+				Message: "bar error",
+			},
+		},
+	},
+}, {
+	about: "meta/any put with update error",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo/": FieldIncludeHandler(FieldIncludeHandlerParams{
+				Key: 0,
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+					if path == "/bad" {
+						return fmt.Errorf("foo/bad error")
+					}
+					return nil
+				},
+				Update: func(id *charm.Reference, fields map[string]interface{}) error {
+					return params.ErrBadRequest
+				},
+			}),
+			"bar": FieldIncludeHandler(FieldIncludeHandlerParams{
+				Key: 1,
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+					return fmt.Errorf("bar error")
+				},
+			}),
+		},
+	},
+	urlStr: "/precise/wordpress-23/meta/any",
+	body: params.MetaAnyResponse{
+		Meta: map[string]interface{}{
+			"foo/one": "one",
+			"foo/two": "two",
+			"foo/bad": "bad",
+			"bar":     "bar",
+		},
+	},
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Code:    params.ErrMultipleErrors,
+		Message: "multiple (4) errors",
+		Info: map[string]*params.Error{
+			// All endpoints that share the same bulk key should
+			// get the same error, as the update pertains to all of them,
+			// but endpoints for which the HandlePut failed will
+			// not be included in that.
+			"foo/one": {
+				Code:    params.ErrBadRequest,
+				Message: "bad request",
+			},
+			"foo/two": {
+				Code:    params.ErrBadRequest,
+				Message: "bad request",
+			},
+			"foo/bad": {
+				Message: "foo/bad error",
+			},
+			"bar": {
+				Message: "bar error",
+			},
+		},
+	},
+}, {
+	about: "bulk meta/any put with several errors",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": FieldIncludeHandler(FieldIncludeHandlerParams{
+				Key: 0,
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+					return nil
+				},
+				Update: nopUpdate,
+			}),
+			"bar": FieldIncludeHandler(FieldIncludeHandlerParams{
+				Key: 0,
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+					return errgo.WithCausef(nil, params.ErrNotFound, "bar error")
+				},
+				Update: nopUpdate,
+			}),
+		},
+	},
+	resolveURL: func(id *charm.Reference) error {
+		if id.Name == "bad" {
+			return params.ErrBadRequest
+		}
+		return nil
+	},
+	urlStr: "/meta/any",
+	body: map[string]params.MetaAnyResponse{
+		"precise/mysql-123": {
+			Meta: map[string]interface{}{
+				"foo": "fooval",
+				"bar": "barval",
+			},
+		},
+		"bad": {
+			Meta: map[string]interface{}{
+				"foo": "foo-wordpress-val",
+				"bar": "bar-wordpress-val",
+			},
+		},
+	},
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Code:    params.ErrMultipleErrors,
+		Message: "multiple (2) errors",
+		Info: map[string]*params.Error{
+			"precise/mysql-123": {
+				Code:    params.ErrMultipleErrors,
+				Message: "multiple (1) errors",
+				Info: map[string]*params.Error{
+					"bar": {
+						Code:    params.ErrNotFound,
+						Message: "bar error",
+					},
+				},
+			},
+			"bad": {
+				Message: "bad request",
+				Code:    params.ErrBadRequest,
+			},
+		},
+	},
+}, {
+	about: "meta put with unresolved URL",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	urlStr:     "/wordpress/meta/foo",
+	resolveURL: newResolveURL("series", 245),
+	expectCode: http.StatusOK,
+	body:       "hello",
+	expectRecordedCalls: []interface{}{
+		metaHandlerTestPutParams{
+			NumHandlers: 1,
+			Id:          "cs:series/wordpress-245",
+			Paths:       []string{""},
+			Values:      []interface{}{"hello"},
+		},
+	},
+}, {
+	about: "bulk put with unresolved URL",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	urlStr:     "/meta/foo",
+	resolveURL: newResolveURL("series", 245),
+	expectCode: http.StatusOK,
+	body: map[string]string{
+		"wordpress": "hello",
+	},
+	expectRecordedCalls: []interface{}{
+		metaHandlerTestPutParams{
+			NumHandlers: 1,
+			Id:          "cs:series/wordpress-245",
+			Paths:       []string{""},
+			Values:      []interface{}{"hello"},
+		},
+	},
+}, {
+	about: "bulk put with ids specified in URL",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	urlStr:     "/meta/foo?id=wordpress",
+	expectCode: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "ids may not be specified in meta PUT request",
+	},
+}}
+
+func nopUpdate(id *charm.Reference, fields map[string]interface{}) error {
+	return nil
+}
+
+func (s *RouterSuite) TestRouterPut(c *gc.C) {
+	for i, test := range routerPutTests {
+		c.Logf("test %d: %s", i, test.about)
+		ResetRecordedCalls()
+		resolve := noResolveURL
+		if test.resolveURL != nil {
+			resolve = test.resolveURL
+		}
+		bodyVal, err := json.Marshal(test.body)
+		c.Assert(err, gc.IsNil)
+		router := New(&test.handlers, resolve)
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler: router,
+			URL:     test.urlStr,
+			Body:    bytes.NewReader(bodyVal),
+			Method:  "PUT",
+			Header: map[string][]string{
+				"Content-Type": {"application/json"},
+			},
+			ExpectStatus: test.expectCode,
+			ExpectBody: test.expectBody,
+		})
+		c.Assert(RecordedCalls(), jc.DeepEquals, test.expectRecordedCalls)
+	}
+}
+
+var routerPutWithInvalidContentTests = []struct {
+	about       string
+	urlStr      string
+	contentType string
+	body        string
+	expectCode  int
+	expectBody  interface{}
+}{{
+	about:       "invalid content type with meta",
+	urlStr:      "/precise/wordpress-23/meta/foo",
+	contentType: "foo/bar",
+	expectCode:  http.StatusBadRequest,
+	expectBody: params.Error{
+		Message: `unexpected Content-Type "foo/bar"; expected "application/json"`,
+		Code:    params.ErrBadRequest,
+	},
+}, {
+	about:       "invalid content type with bulk meta",
+	urlStr:      "/meta/foo",
+	contentType: "foo/bar",
+	expectCode:  http.StatusBadRequest,
+	expectBody: params.Error{
+		Message: `unexpected Content-Type "foo/bar"; expected "application/json"`,
+		Code:    params.ErrBadRequest,
+	},
+}, {
+	about:       "bad JSON with meta",
+	urlStr:      "/precise/wordpress-23/meta/foo",
+	contentType: "application/json",
+	body:        `"foo`,
+	expectCode:  http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: `cannot unmarshal body: unexpected EOF`,
+	},
+}, {
+	about:       "bad JSON with bulk meta",
+	urlStr:      "/meta/foo",
+	contentType: "application/json",
+	body:        `"foo`,
+	expectCode:  http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: `cannot unmarshal body: unexpected EOF`,
+	},
+}}
+
+func (s *RouterSuite) TestRouterPutWithInvalidContent(c *gc.C) {
+	for i, test := range routerPutWithInvalidContentTests {
+		c.Logf("test %d: %s", i, test.about)
+		handlers := &Handlers{
+			Meta: map[string]BulkIncludeHandler{
+				"foo": testMetaHandler(0),
+			},
+		}
+		router := New(handlers, noResolveURL)
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler: router,
+			URL:     test.urlStr,
+			Body:    strings.NewReader(test.body),
+			Method:  "PUT",
+			Header: map[string][]string{
+				"Content-Type": {test.contentType},
+			},
+			ExpectStatus: test.expectCode,
+			ExpectBody: test.expectBody,
+		})
+	}
+}
+
+func (s *RouterSuite) TestMethodsThatPassThroughUnresolvedId(c *gc.C) {
 	// We omit HEAD because net/http does not send back the body
 	// when doing a HEAD request. Given that there's no actual logic
 	// in the code that is HEAD specific, it seems reasonable to drop the this case.
@@ -738,45 +1343,28 @@ func (s *RouterSuite) TestRouterMethodsThatPassThroughUnresolvedId(c *gc.C) {
 	header := http.Header{
 		"Content-Type": {"application/zip"},
 	}
+	handlers := Handlers{
+		Id: map[string]IdHandler{
+			"idhandler": testIdHandler,
+		},
+	}
 
 	for method, resolves := range alwaysResolves {
 		c.Logf("test %s", method)
-		// First try with a metadata handler. This should always resolve,
-		// regardless of the method.
-		handlers := Handlers{
-			Id: map[string]IdHandler{
-				"idhandler": testIdHandler,
-			},
-			Meta: map[string]BulkIncludeHandler{
-				"metahandler": testMetaHandler,
-			},
+		resp := idHandlerTestResp{
+			Method: method,
 		}
-		router := New(&handlers, newResolveURL("series", 1234))
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler: router,
-			Method:  method,
-			URL:     "/wordpress/meta/metahandler",
-			Body:    strings.NewReader(""),
-			Header:  header,
-			ExpectBody: &metaHandlerTestResp{
-				CharmURL: "cs:series/wordpress-1234",
-				Method:   method,
-			},
-		})
-
-		// Then try with an id handler. This should only resolve
-		// for some methods.
-		var resp idHandlerTestResp
 		if resolves {
 			resp.CharmURL = "cs:series/wordpress-1234"
 		} else {
 			resp.CharmURL = "cs:wordpress"
 		}
+		router := New(&handlers, newResolveURL("series", 1234))
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 			Handler:    router,
-			Method:     method,
 			Body:       strings.NewReader(""),
 			Header:     header,
+			Method:     method,
 			URL:        "/wordpress/idhandler",
 			ExpectBody: resp,
 		})
@@ -796,27 +1384,24 @@ var getMetadataTests = []struct {
 	id:       "~rog/precise/wordpress-2",
 	includes: []string{"item1", "item2", "test"},
 	expectResult: map[string]interface{}{
-		"item1": fieldSelectHandleInfo{
+		"item1": fieldSelectHandleGetInfo{
 			HandlerId: "handler1",
 			Doc: fieldSelectQueryInfo{
 				Id:       mustParseReference("cs:~rog/precise/wordpress-2"),
 				Selector: map[string]int{"item1": 1, "item2": 1},
 			},
-			Id:     mustParseReference("cs:~rog/precise/wordpress-2"),
-			Method: "GET",
+			Id: mustParseReference("cs:~rog/precise/wordpress-2"),
 		},
-		"item2": fieldSelectHandleInfo{
+		"item2": fieldSelectHandleGetInfo{
 			HandlerId: "handler2",
 			Doc: fieldSelectQueryInfo{
 				Id:       mustParseReference("cs:~rog/precise/wordpress-2"),
 				Selector: map[string]int{"item1": 1, "item2": 1},
 			},
-			Id:     mustParseReference("cs:~rog/precise/wordpress-2"),
-			Method: "GET",
+			Id: mustParseReference("cs:~rog/precise/wordpress-2"),
 		},
 		"test": &metaHandlerTestResp{
 			CharmURL: "cs:~rog/precise/wordpress-2",
-			Method:   "GET",
 		},
 	},
 }, {
@@ -832,7 +1417,7 @@ func (s *RouterSuite) TestGetMetadata(c *gc.C) {
 			Meta: map[string]BulkIncludeHandler{
 				"item1": fieldSelectHandler("handler1", 0, "item1"),
 				"item2": fieldSelectHandler("handler2", 0, "item2"),
-				"test":  testMetaHandler,
+				"test":  testMetaHandler(0),
 			},
 		}, noResolveURL)
 		id := mustParseReference(test.id)
@@ -986,7 +1571,7 @@ func (s *RouterSuite) TestWriteError(c *gc.C) {
 	var errResp params.Error
 	err := json.Unmarshal(rec.Body.Bytes(), &errResp)
 	c.Assert(err, gc.IsNil)
-	c.Assert(errResp, gc.Equals, params.Error{Message: "an error"})
+	c.Assert(errResp, gc.DeepEquals, params.Error{Message: "an error"})
 	c.Assert(rec.Code, gc.Equals, http.StatusInternalServerError)
 
 	rec = httptest.NewRecorder()
@@ -998,7 +1583,7 @@ func (s *RouterSuite) TestWriteError(c *gc.C) {
 	var errResp1 params.Error
 	err = json.Unmarshal(rec.Body.Bytes(), &errResp1)
 	c.Assert(err, gc.IsNil)
-	c.Assert(errResp1, gc.Equals, errResp0)
+	c.Assert(errResp1, gc.DeepEquals, errResp0)
 	c.Assert(rec.Code, gc.Equals, http.StatusInternalServerError)
 }
 
@@ -1132,8 +1717,9 @@ type Foo struct {
 }
 
 type ReqInfo struct {
-	Path string
-	Form url.Values `json:",omitempty"`
+	Path   string
+	Method string
+	Form   url.Values `json:",omitempty"`
 }
 
 func (s *RouterSuite) TestHandlers(c *gc.C) {
@@ -1153,6 +1739,7 @@ func errorIdHandler(charmId *charm.Reference, w http.ResponseWriter, req *http.R
 }
 
 type idHandlerTestResp struct {
+	Method   string
 	CharmURL string
 	Path     string
 }
@@ -1161,6 +1748,7 @@ func testIdHandler(charmId *charm.Reference, w http.ResponseWriter, req *http.Re
 	WriteJSON(w, http.StatusOK, idHandlerTestResp{
 		CharmURL: charmId.String(),
 		Path:     req.URL.Path,
+		Method:   req.Method,
 	})
 	return nil
 }
@@ -1168,29 +1756,92 @@ func testIdHandler(charmId *charm.Reference, w http.ResponseWriter, req *http.Re
 type metaHandlerTestResp struct {
 	CharmURL string
 	Path     string
-	Method   string
 	Flags    url.Values
 }
 
-var testMetaHandler = SingleIncludeHandler(
-	func(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
+var testMetaGetHandler = SingleIncludeHandler(
+	func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 		if len(flags) == 0 {
 			flags = nil
 		}
 		return &metaHandlerTestResp{
 			CharmURL: id.String(),
 			Path:     path,
-			Method:   method,
 			Flags:    flags,
 		}, nil
 	},
 )
 
+type testMetaHandler int
+
+func (testMetaHandler) Key() interface{} {
+	type testMetaHandlerKey struct{}
+	return testMetaHandlerKey{}
+}
+
+func (testMetaHandler) HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error) {
+	results := make([]interface{}, len(hs))
+	for i, h := range hs {
+		_ = h.(testMetaHandler)
+		if len(flags) == 0 {
+			flags = nil
+		}
+		results[i] = &metaHandlerTestResp{
+			CharmURL: id.String(),
+			Path:     paths[i],
+			Flags:    flags,
+		}
+	}
+	return results, nil
+}
+
+type metaHandlerTestPutParams struct {
+	Id          string
+	NumHandlers int
+	Paths       []string
+	Values      []interface{}
+}
+
+func (testMetaHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Reference, paths []string, rawValues []*json.RawMessage) []error {
+	// Handlers are provided in arbitrary order,
+	// so we order them (and their associated paths
+	// and values) to enable easier testing.
+	keys := make(sort.StringSlice, len(hs))
+	for i, h := range hs {
+		// Sort by handler primary, path secondary.
+		keys[i] = fmt.Sprintf("%d.%s", int(h.(testMetaHandler)), paths[i])
+	}
+	sort.Sort(groupSort{
+		key: keys,
+		other: []swapper{
+			sort.StringSlice(paths),
+			swapFunc(func(i, j int) {
+				rawValues[i], rawValues[j] = rawValues[j], rawValues[i]
+			}),
+		},
+	})
+
+	values := make([]interface{}, len(rawValues))
+	for i, val := range rawValues {
+		err := json.Unmarshal(*val, &values[i])
+		if err != nil {
+			panic(err)
+		}
+	}
+	RecordCall(metaHandlerTestPutParams{
+		NumHandlers: len(hs),
+		Id:          id.String(),
+		Paths:       paths,
+		Values:      values,
+	})
+	return nil
+}
+
 // constMetaHandler returns a handler that always returns the given
 // value.
 func constMetaHandler(val interface{}) BulkIncludeHandler {
 	return SingleIncludeHandler(
-		func(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
+		func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 			return val, nil
 		},
 	)
@@ -1198,7 +1849,7 @@ func constMetaHandler(val interface{}) BulkIncludeHandler {
 
 func errorMetaHandler(err error) BulkIncludeHandler {
 	return SingleIncludeHandler(
-		func(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
+		func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 			return nil, err
 		},
 	)
@@ -1209,22 +1860,91 @@ type fieldSelectQueryInfo struct {
 	Selector map[string]int
 }
 
-type fieldSelectHandleInfo struct {
+type fieldSelectHandleGetInfo struct {
 	HandlerId string
 	Doc       fieldSelectQueryInfo
 	Id        *charm.Reference
 	Path      string
-	Method    string
 	Flags     url.Values
+}
+
+type fieldSelectHandleUpdateInfo struct {
+	Id     string
+	Fields map[string]fieldSelectHandlePutInfo
+}
+
+type fieldSelectHandlePutInfo struct {
+	Id    string
+	Path  string
+	Value interface{}
 }
 
 var queryCount int32
 
+var (
+	callRecordsMutex sync.Mutex
+	callRecords      byJSON
+)
+
+// RecordCall adds a value that can be retrieved later with
+// RecordedCalls.
+//
+// This is used to check the parameters passed to
+// handlers that do not return results.
+func RecordCall(x interface{}) {
+	callRecordsMutex.Lock()
+	defer callRecordsMutex.Unlock()
+	callRecords = append(callRecords, x)
+}
+
+// ResetRecordedCalls clears the call records.
+func ResetRecordedCalls() {
+	callRecordsMutex.Lock()
+	defer callRecordsMutex.Unlock()
+	callRecords = nil
+}
+
+// RecordedCalls returns the values passed to RecordCall,
+// ordered by their JSON serialization.
+func RecordedCalls() []interface{} {
+	callRecordsMutex.Lock()
+	defer callRecordsMutex.Unlock()
+
+	sort.Sort(callRecords)
+	return callRecords
+}
+
+type byJSON []interface{}
+
+func (b byJSON) Less(i, j int) bool {
+	idata, err := json.Marshal(b[i])
+	if err != nil {
+		panic(err)
+	}
+	jdata, err := json.Marshal(b[j])
+	if err != nil {
+		panic(err)
+	}
+	return bytes.Compare(idata, jdata) < 0
+}
+
+func (b byJSON) Swap(i, j int) {
+	b[i], b[j] = b[j], b[i]
+}
+
+func (b byJSON) Len() int {
+	return len(b)
+}
+
 // fieldSelectHandler returns a BulkIncludeHandler that returns
 // information about the call for testing purposes.
-// When the handler is invoked, it returns a fieldSelectHandleInfo value
+// When the GET handler is invoked, it returns a fieldSelectHandleGetInfo value
 // with the given handlerId. Key holds the grouping key,
 // and fields holds the fields to select.
+//
+// When the PUT handler is invoked SetCallRecord is called with
+// a fieldSelectHandlePutInfo value holding the parameters that were
+// provided.
 func fieldSelectHandler(handlerId string, key interface{}, fields ...string) BulkIncludeHandler {
 	query := func(id *charm.Reference, selector map[string]int) (interface{}, error) {
 		atomic.AddInt32(&queryCount, 1)
@@ -1233,26 +1953,68 @@ func fieldSelectHandler(handlerId string, key interface{}, fields ...string) Bul
 			Selector: selector,
 		}, nil
 	}
-	handle := func(doc interface{}, id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
+	handleGet := func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 		if len(flags) == 0 {
 			flags = nil
 		}
-		return fieldSelectHandleInfo{
+		return fieldSelectHandleGetInfo{
 			HandlerId: handlerId,
 			Doc:       doc.(fieldSelectQueryInfo),
 			Id:        id,
 			Path:      path,
-			Method:    method,
 			Flags:     flags,
 		}, nil
 	}
-	return FieldIncludeHandler(key, query, fields, handle)
+
+	handlePut := func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+		var vali interface{}
+		err := json.Unmarshal(*val, &vali)
+		if err != nil {
+			panic(err)
+		}
+		for _, field := range fields {
+			updater.UpdateField(field+path, fieldSelectHandlePutInfo{
+				Id:    id.String(),
+				Value: vali,
+			})
+		}
+		return nil
+	}
+
+	update := func(id *charm.Reference, fields map[string]interface{}) error {
+		// We make information on how update and handlePut have
+		// been called by calling SetCallRecord with the above
+		// parameters. The fields will have been created by
+		// handlePut, and therefore are known to contain
+		// fieldSelectHandlePutInfo values. We convert the
+		// values to static types so that it is more obvious
+		// what the values in fieldSelectHandleUpdateInfo.Fields
+		// contain.
+		infoFields := make(map[string]fieldSelectHandlePutInfo)
+		for name, val := range fields {
+			infoFields[name] = val.(fieldSelectHandlePutInfo)
+		}
+		RecordCall(fieldSelectHandleUpdateInfo{
+			Id:     id.String(),
+			Fields: infoFields,
+		})
+		return nil
+	}
+
+	return FieldIncludeHandler(FieldIncludeHandlerParams{
+		Key:       key,
+		Query:     query,
+		Fields:    fields,
+		HandleGet: handleGet,
+		HandlePut: handlePut,
+		Update:    update,
+	})
 }
 
 // selectiveIdHandler handles metadata by returning the
 // data found in the map for the requested id.
 func selectiveIdHandler(m map[string]interface{}) BulkIncludeHandler {
-	return SingleIncludeHandler(func(id *charm.Reference, path string, method string, flags url.Values) (interface{}, error) {
+	return SingleIncludeHandler(func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 		return m[id.String()], nil
 	})
 }
@@ -1263,4 +2025,34 @@ func mustParseReference(url string) *charm.Reference {
 		panic(err)
 	}
 	return ref
+}
+
+type swapper interface {
+	Swap(i, j int)
+}
+
+type swapFunc func(i, j int)
+
+func (f swapFunc) Swap(i, j int) {
+	f(i, j)
+}
+
+type groupSort struct {
+	key   sort.Interface
+	other []swapper
+}
+
+func (g groupSort) Less(i, j int) bool {
+	return g.key.Less(i, j)
+}
+
+func (g groupSort) Swap(i, j int) {
+	g.key.Swap(i, j)
+	for _, o := range g.other {
+		o.Swap(i, j)
+	}
+}
+
+func (g groupSort) Len() int {
+	return g.key.Len()
 }

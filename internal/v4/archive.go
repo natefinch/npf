@@ -52,7 +52,7 @@ func (h *handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 	}
 	r, size, err := h.openBlob(id)
 	if err != nil {
-		return err
+		return errgo.Mask(err)
 	}
 	defer r.Close()
 	// TODO frankban 2014-08-22: log possible IncCounter errors.
