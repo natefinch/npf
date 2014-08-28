@@ -45,10 +45,9 @@ type JSONCallParams struct {
 	// Password, if specified, is used for HTTP basic authentication.
 	Password string
 
-	// ExpectCode holds the expected HTTP status code.
+	// ExpectStatus holds the expected HTTP status code.
 	// http.StatusOK is assumed if this is zero.
-	// TODO(rog) change this to ExpectStatus
-	ExpectCode int
+	ExpectStatus int
 
 	// ExpectBody holds the expected JSON body.
 	ExpectBody interface{}
@@ -58,8 +57,8 @@ type JSONCallParams struct {
 // the given parameters, the result is as specified.
 func AssertJSONCall(c *gc.C, p JSONCallParams) {
 	c.Logf("JSON call, url %q", p.URL)
-	if p.ExpectCode == 0 {
-		p.ExpectCode = http.StatusOK
+	if p.ExpectStatus == 0 {
+		p.ExpectStatus = http.StatusOK
 	}
 	rec := DoRequest(c, DoRequestParams{
 		Handler:       p.Handler,
@@ -71,7 +70,7 @@ func AssertJSONCall(c *gc.C, p JSONCallParams) {
 		Username:      p.Username,
 		Password:      p.Password,
 	})
-	c.Assert(rec.Code, gc.Equals, p.ExpectCode, gc.Commentf("body: %s", rec.Body.Bytes()))
+	c.Assert(rec.Code, gc.Equals, p.ExpectStatus, gc.Commentf("body: %s", rec.Body.Bytes()))
 	if p.ExpectBody == nil {
 		c.Assert(rec.Body.Bytes(), gc.HasLen, 0)
 		return

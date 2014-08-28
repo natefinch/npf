@@ -151,10 +151,10 @@ func (s *ArchiveSuite) TestPostErrors(c *gc.C) {
 			Header: http.Header{
 				"Content-Type": {"application/zip"},
 			},
-			Body:       body,
-			Username:   serverParams.AuthUsername,
-			Password:   serverParams.AuthPassword,
-			ExpectCode: test.expectStatus,
+			Body:         body,
+			Username:     serverParams.AuthUsername,
+			Password:     serverParams.AuthPassword,
+			ExpectStatus: test.expectStatus,
 			ExpectBody: params.Error{
 				Message: test.expectMessage,
 				Code:    test.expectCode,
@@ -318,10 +318,10 @@ func (s *ArchiveSuite) TestPostHashMismatch(c *gc.C) {
 		Header: http.Header{
 			"Content-Type": {"application/zip"},
 		},
-		Body:       bytes.NewReader(content),
-		Username:   serverParams.AuthUsername,
-		Password:   serverParams.AuthPassword,
-		ExpectCode: http.StatusInternalServerError,
+		Body:         bytes.NewReader(content),
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: "cannot put archive blob: hash mismatch",
 		},
@@ -368,10 +368,10 @@ func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSee
 		Header: http.Header{
 			"Content-Type": {"application/zip"},
 		},
-		Body:       content,
-		Username:   serverParams.AuthUsername,
-		Password:   serverParams.AuthPassword,
-		ExpectCode: http.StatusInternalServerError,
+		Body:         content,
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: errorMessage,
 		},
@@ -490,10 +490,10 @@ func (s *ArchiveSuite) TestArchiveFileErrors(c *gc.C) {
 	for i, test := range archiveFileErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    s.srv,
-			URL:        storeURL(test.path),
-			Method:     "GET",
-			ExpectCode: test.expectStatus,
+			Handler:      s.srv,
+			URL:          storeURL(test.path),
+			Method:       "GET",
+			ExpectStatus: test.expectStatus,
 			ExpectBody: params.Error{
 				Message: test.expectMessage,
 				Code:    test.expectCode,
@@ -658,12 +658,12 @@ func (s *ArchiveSuite) TestDelete(c *gc.C) {
 
 	// Delete the charm using the API.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    s.srv,
-		URL:        storeURL(id + "/archive"),
-		Method:     "DELETE",
-		Username:   serverParams.AuthUsername,
-		Password:   serverParams.AuthPassword,
-		ExpectCode: http.StatusOK,
+		Handler:      s.srv,
+		URL:          storeURL(id + "/archive"),
+		Method:       "DELETE",
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusOK,
 	})
 
 	// The entity has been deleted.
@@ -687,12 +687,12 @@ func (s *ArchiveSuite) TestDeleteSpecificCharm(c *gc.C) {
 
 	// Delete the second charm using the API.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    s.srv,
-		URL:        storeURL("utopic/mysql-42/archive"),
-		Method:     "DELETE",
-		Username:   serverParams.AuthUsername,
-		Password:   serverParams.AuthPassword,
-		ExpectCode: http.StatusOK,
+		Handler:      s.srv,
+		URL:          storeURL("utopic/mysql-42/archive"),
+		Method:       "DELETE",
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusOK,
 	})
 
 	// The other two charms are still present in the database.
@@ -710,12 +710,12 @@ func (s *ArchiveSuite) TestDeleteSpecificCharm(c *gc.C) {
 func (s *ArchiveSuite) TestDeleteNotFound(c *gc.C) {
 	// Try to delete a non existing charm using the API.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    s.srv,
-		URL:        storeURL("utopic/no-such-0/archive"),
-		Method:     "DELETE",
-		Username:   serverParams.AuthUsername,
-		Password:   serverParams.AuthPassword,
-		ExpectCode: http.StatusNotFound,
+		Handler:      s.srv,
+		URL:          storeURL("utopic/no-such-0/archive"),
+		Method:       "DELETE",
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
 			Message: params.ErrNotFound.Error(),
 			Code:    params.ErrNotFound,
@@ -732,12 +732,12 @@ func (s *ArchiveSuite) TestDeleteError(c *gc.C) {
 
 	// Try to delete the charm using the API.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    s.srv,
-		URL:        storeURL(id + "/archive"),
-		Method:     "DELETE",
-		Username:   serverParams.AuthUsername,
-		Password:   serverParams.AuthPassword,
-		ExpectCode: http.StatusInternalServerError,
+		Handler:      s.srv,
+		URL:          storeURL(id + "/archive"),
+		Method:       "DELETE",
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: `cannot remove blob no-such-name: resource at path "global/no-such-name" not found`,
 		},
@@ -818,13 +818,13 @@ func checkAuthErrors(c *gc.C, handler http.Handler, method, url string) {
 			test.header.Add("Content-Type", "application/zip")
 		}
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    handler,
-			URL:        archiveURL,
-			Method:     method,
-			Header:     test.header,
-			Username:   test.username,
-			Password:   test.password,
-			ExpectCode: http.StatusUnauthorized,
+			Handler:      handler,
+			URL:          archiveURL,
+			Method:       method,
+			Header:       test.header,
+			Username:     test.username,
+			Password:     test.password,
+			ExpectStatus: http.StatusUnauthorized,
 			ExpectBody: params.Error{
 				Message: test.expectMessage,
 				Code:    params.ErrUnauthorized,

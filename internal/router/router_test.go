@@ -36,7 +36,7 @@ var routerGetTests = []struct {
 	about            string
 	handlers         Handlers
 	urlStr           string
-	expectCode       int
+	expectStatus     int
 	expectBody       interface{}
 	expectQueryCount int32
 	resolveURL       func(*charm.Reference) error
@@ -52,8 +52,8 @@ var routerGetTests = []struct {
 			}),
 		},
 	},
-	urlStr:     "/foo",
-	expectCode: http.StatusOK,
+	urlStr:       "/foo",
+	expectStatus: http.StatusOK,
 	expectBody: ReqInfo{
 		Path: "",
 	},
@@ -69,8 +69,8 @@ var routerGetTests = []struct {
 			}),
 		},
 	},
-	urlStr:     "/foo/bar/a/b?a=1&b=two",
-	expectCode: http.StatusOK,
+	urlStr:       "/foo/bar/a/b?a=1&b=two",
+	expectStatus: http.StatusOK,
 	expectBody: ReqInfo{
 		Path: "/a/b",
 		Form: url.Values{
@@ -79,9 +79,9 @@ var routerGetTests = []struct {
 		},
 	},
 }, {
-	about:      "invalid form",
-	urlStr:     "/foo?a=%",
-	expectCode: http.StatusInternalServerError,
+	about:        "invalid form",
+	urlStr:       "/foo?a=%",
+	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: `cannot parse form: invalid URL escape "%"`,
 	},
@@ -92,8 +92,8 @@ var routerGetTests = []struct {
 			"foo": testIdHandler,
 		},
 	},
-	urlStr:     "/precise/wordpress-34/foo",
-	expectCode: http.StatusOK,
+	urlStr:       "/precise/wordpress-34/foo",
+	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-34",
 	},
@@ -104,8 +104,8 @@ var routerGetTests = []struct {
 			"foo/": testIdHandler,
 		},
 	},
-	urlStr:     "/precise/wordpress-34/foo/blah/arble",
-	expectCode: http.StatusOK,
+	urlStr:       "/precise/wordpress-34/foo/blah/arble",
+	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-34",
 		Path:     "/blah/arble",
@@ -117,8 +117,8 @@ var routerGetTests = []struct {
 			"foo/": testIdHandler,
 		},
 	},
-	urlStr:     "/precise/wordpress-34/foo",
-	expectCode: http.StatusNotFound,
+	urlStr:       "/precise/wordpress-34/foo",
+	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
 		Message: "not found",
@@ -130,8 +130,8 @@ var routerGetTests = []struct {
 			"foo": testIdHandler,
 		},
 	},
-	urlStr:     "/precise/wordpress-34/foo/blah",
-	expectCode: http.StatusNotFound,
+	urlStr:       "/precise/wordpress-34/foo/blah",
+	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
 		Message: "not found",
@@ -143,8 +143,8 @@ var routerGetTests = []struct {
 			"foo": testIdHandler,
 		},
 	},
-	urlStr:     "/~joe/precise/wordpress-34/foo",
-	expectCode: http.StatusOK,
+	urlStr:       "/~joe/precise/wordpress-34/foo",
+	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
 		CharmURL: "cs:~joe/precise/wordpress-34",
 	},
@@ -155,8 +155,8 @@ var routerGetTests = []struct {
 			"foo/": testIdHandler,
 		},
 	},
-	urlStr:     "/~joe/precise/wordpress-34/foo/blah/arble",
-	expectCode: http.StatusOK,
+	urlStr:       "/~joe/precise/wordpress-34/foo/blah/arble",
+	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
 		CharmURL: "cs:~joe/precise/wordpress-34",
 		Path:     "/blah/arble",
@@ -168,8 +168,8 @@ var routerGetTests = []struct {
 			"foo/": errorIdHandler,
 		},
 	},
-	urlStr:     "/~joe/precise/wordpress-34/foo/blah/arble",
-	expectCode: http.StatusInternalServerError,
+	urlStr:       "/~joe/precise/wordpress-34/foo/blah/arble",
+	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "errorIdHandler error",
 	},
@@ -182,8 +182,8 @@ var routerGetTests = []struct {
 			},
 		},
 	},
-	urlStr:     "/~joe/precise/wordpress-34/foo",
-	expectCode: http.StatusNotFound,
+	urlStr:       "/~joe/precise/wordpress-34/foo",
+	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Message: "not found",
 		Code:    params.ErrNotFound,
@@ -197,8 +197,8 @@ var routerGetTests = []struct {
 			},
 		},
 	},
-	urlStr:     "/~joe/precise/wordpress-34/foo",
-	expectCode: http.StatusInternalServerError,
+	urlStr:       "/~joe/precise/wordpress-34/foo",
+	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "a message",
 		Code:    "foo",
@@ -210,9 +210,9 @@ var routerGetTests = []struct {
 			"foo": testIdHandler,
 		},
 	},
-	urlStr:     "/~joe/wordpress/foo",
-	resolveURL: newResolveURL("precise", 34),
-	expectCode: http.StatusOK,
+	urlStr:       "/~joe/wordpress/foo",
+	resolveURL:   newResolveURL("precise", 34),
+	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
 		CharmURL: "cs:~joe/precise/wordpress-34",
 	},
@@ -223,9 +223,9 @@ var routerGetTests = []struct {
 			"foo": testIdHandler,
 		},
 	},
-	urlStr:     "/wordpress/meta",
-	resolveURL: resolveURLError(errgo.New("resolve URL error")),
-	expectCode: http.StatusInternalServerError,
+	urlStr:       "/wordpress/meta",
+	resolveURL:   resolveURLError(errgo.New("resolve URL error")),
+	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "resolve URL error",
 	},
@@ -236,9 +236,9 @@ var routerGetTests = []struct {
 			"foo": testIdHandler,
 		},
 	},
-	urlStr:     "/wordpress/meta",
-	resolveURL: resolveURLError(params.ErrNotFound),
-	expectCode: http.StatusNotFound,
+	urlStr:       "/wordpress/meta",
+	resolveURL:   resolveURLError(params.ErrNotFound),
+	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Message: "not found",
 		Code:    params.ErrNotFound,
@@ -251,9 +251,9 @@ var routerGetTests = []struct {
 			"bar": testMetaHandler,
 		},
 	},
-	urlStr:     "/precise/wordpress-42/meta",
-	expectCode: http.StatusOK,
-	expectBody: []string{"bar", "foo"},
+	urlStr:       "/precise/wordpress-42/meta",
+	expectStatus: http.StatusOK,
+	expectBody:   []string{"bar", "foo"},
 }, {
 	about: "meta handler",
 	handlers: Handlers{
@@ -261,8 +261,8 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler,
 		},
 	},
-	urlStr:     "/precise/wordpress-42/meta/foo",
-	expectCode: http.StatusOK,
+	urlStr:       "/precise/wordpress-42/meta/foo",
+	expectStatus: http.StatusOK,
 	expectBody: &metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
 		Method:   "GET",
@@ -274,8 +274,8 @@ var routerGetTests = []struct {
 			"foo/": testMetaHandler,
 		},
 	},
-	urlStr:     "/precise/wordpress-42/meta/foo/bar/baz",
-	expectCode: http.StatusOK,
+	urlStr:       "/precise/wordpress-42/meta/foo/bar/baz",
+	expectStatus: http.StatusOK,
 	expectBody: metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
 		Method:   "GET",
@@ -288,8 +288,8 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler,
 		},
 	},
-	urlStr:     "/precise/wordpress-42/meta/foo?one=a&two=b&one=c",
-	expectCode: http.StatusOK,
+	urlStr:       "/precise/wordpress-42/meta/foo?one=a&two=b&one=c",
+	expectStatus: http.StatusOK,
 	expectBody: metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
 		Method:   "GET",
@@ -299,9 +299,9 @@ var routerGetTests = []struct {
 		},
 	},
 }, {
-	about:      "meta handler that's not found",
-	urlStr:     "/precise/wordpress-42/meta/foo",
-	expectCode: http.StatusNotFound,
+	about:        "meta handler that's not found",
+	urlStr:       "/precise/wordpress-42/meta/foo",
+	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
 		Message: "not found",
@@ -313,8 +313,8 @@ var routerGetTests = []struct {
 			"foo": constMetaHandler(nil),
 		},
 	},
-	urlStr:     "/precise/wordpress-42/meta/foo",
-	expectCode: http.StatusNotFound,
+	urlStr:       "/precise/wordpress-42/meta/foo",
+	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrMetadataNotFound,
 		Message: "metadata not found",
@@ -326,8 +326,8 @@ var routerGetTests = []struct {
 			"foo": constMetaHandler((*struct{})(nil)),
 		},
 	},
-	urlStr:     "/precise/wordpress-42/meta/foo",
-	expectCode: http.StatusNotFound,
+	urlStr:       "/precise/wordpress-42/meta/foo",
+	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrMetadataNotFound,
 		Message: "metadata not found",
@@ -340,7 +340,7 @@ var routerGetTests = []struct {
 			"foo": fieldSelectHandler("handler1", 0, "field1", "field2"),
 		},
 	},
-	expectCode:       http.StatusOK,
+	expectStatus:     http.StatusOK,
 	expectQueryCount: 1,
 	expectBody: fieldSelectHandleInfo{
 		HandlerId: "handler1",
@@ -359,15 +359,15 @@ var routerGetTests = []struct {
 			"foo": errorMetaHandler(errgo.WithCausef(nil, params.ErrorCode("arble"), "a message")),
 		},
 	},
-	expectCode: http.StatusInternalServerError,
+	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Code:    "arble",
 		Message: "a message",
 	},
 }, {
-	about:      "meta/any, no includes",
-	urlStr:     "/precise/wordpress-42/meta/any",
-	expectCode: http.StatusOK,
+	about:        "meta/any, no includes",
+	urlStr:       "/precise/wordpress-42/meta/any",
+	expectStatus: http.StatusOK,
 	expectBody: params.MetaAnyResponse{
 		Id: mustParseReference("cs:precise/wordpress-42"),
 	},
@@ -382,7 +382,7 @@ var routerGetTests = []struct {
 		},
 	},
 	expectQueryCount: 1,
-	expectCode:       http.StatusOK,
+	expectStatus:     http.StatusOK,
 	expectBody: params.MetaAnyResponse{
 		Id: mustParseReference("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
@@ -426,7 +426,7 @@ var routerGetTests = []struct {
 		},
 	},
 	expectQueryCount: 1,
-	expectCode:       http.StatusOK,
+	expectStatus:     http.StatusOK,
 	expectBody: params.MetaAnyResponse{
 		Id: mustParseReference("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
@@ -471,7 +471,7 @@ var routerGetTests = []struct {
 			"typednil": constMetaHandler((*struct{})(nil)),
 		},
 	},
-	expectCode: http.StatusOK,
+	expectStatus: http.StatusOK,
 	expectBody: params.MetaAnyResponse{
 		Id: mustParseReference("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
@@ -489,7 +489,7 @@ var routerGetTests = []struct {
 			"error": errorMetaHandler(errgo.WithCausef(nil, params.ErrorCode("foo"), "a message")),
 		},
 	},
-	expectCode: http.StatusInternalServerError,
+	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Code:    "foo",
 		Message: "a message",
@@ -502,7 +502,7 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler,
 		},
 	},
-	expectCode: http.StatusOK,
+	expectStatus: http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"precise/wordpress-42": {
 			CharmURL: "cs:precise/wordpress-42",
@@ -517,7 +517,7 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler,
 		},
 	},
-	expectCode: http.StatusOK,
+	expectStatus: http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"precise/wordpress-42": {
 			CharmURL: "cs:precise/wordpress-42",
@@ -537,7 +537,7 @@ var routerGetTests = []struct {
 			"bar/": testMetaHandler,
 		},
 	},
-	expectCode: http.StatusOK,
+	expectStatus: http.StatusOK,
 	expectBody: map[string]params.MetaAnyResponse{
 		"precise/wordpress-42": {
 			Id: mustParseReference("cs:precise/wordpress-42"),
@@ -576,8 +576,8 @@ var routerGetTests = []struct {
 			"foo/": testMetaHandler,
 		},
 	},
-	resolveURL: newResolveURL("precise", 100),
-	expectCode: http.StatusOK,
+	resolveURL:   newResolveURL("precise", 100),
+	expectStatus: http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"wordpress": {
 			CharmURL: "cs:precise/wordpress-100",
@@ -593,8 +593,8 @@ var routerGetTests = []struct {
 			"foo/": testMetaHandler,
 		},
 	},
-	resolveURL: newResolveURL("precise", 100),
-	expectCode: http.StatusOK,
+	resolveURL:   newResolveURL("precise", 100),
+	expectStatus: http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"wordpress": {
 			CharmURL: "cs:precise/wordpress-100",
@@ -614,7 +614,7 @@ var routerGetTests = []struct {
 			"foo/": testMetaHandler,
 		},
 	},
-	expectCode: http.StatusInternalServerError,
+	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "no ids specified in meta request",
 	},
@@ -632,7 +632,7 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler,
 		},
 	},
-	expectCode: http.StatusOK,
+	expectStatus: http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"precise/wordpress-23": {
 			CharmURL: "cs:precise/wordpress-23",
@@ -653,7 +653,7 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler,
 		},
 	},
-	expectCode: http.StatusInternalServerError,
+	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "an error",
 	},
@@ -667,7 +667,7 @@ var routerGetTests = []struct {
 			}),
 		},
 	},
-	expectCode: http.StatusOK,
+	expectStatus: http.StatusOK,
 	expectBody: map[string]string{
 		"bundle/something-24": "bundlefoo",
 	},
@@ -710,10 +710,10 @@ func (s *RouterSuite) TestRouterGet(c *gc.C) {
 		// a query is made.
 		queryCount = 0
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    router,
-			URL:        test.urlStr,
-			ExpectCode: test.expectCode,
-			ExpectBody: test.expectBody,
+			Handler:      router,
+			URL:          test.urlStr,
+			ExpectStatus: test.expectStatus,
+			ExpectBody:   test.expectBody,
 		})
 		c.Assert(queryCount, gc.Equals, test.expectQueryCount)
 	}
@@ -1013,9 +1013,9 @@ func (s *RouterSuite) TestServeMux(c *gc.C) {
 		ExpectBody: Foo{"hello"},
 	})
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    mux,
-		URL:        "/foo",
-		ExpectCode: http.StatusNotFound,
+		Handler:      mux,
+		URL:          "/foo",
+		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
 			Message: "not found",
 			Code:    params.ErrNotFound,
@@ -1024,18 +1024,18 @@ func (s *RouterSuite) TestServeMux(c *gc.C) {
 }
 
 var handlerTests = []struct {
-	about      string
-	handler    http.Handler
-	urlStr     string
-	expectCode int
-	expectBody interface{}
+	about        string
+	handler      http.Handler
+	urlStr       string
+	expectStatus int
+	expectBody   interface{}
 }{{
 	about: "handleErrors, normal error",
 	handler: HandleErrors(func(http.ResponseWriter, *http.Request) error {
 		return errgo.Newf("an error")
 	}),
-	urlStr:     "",
-	expectCode: http.StatusInternalServerError,
+	urlStr:       "",
+	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "an error",
 	},
@@ -1047,8 +1047,8 @@ var handlerTests = []struct {
 			Code:    "snafu",
 		}
 	}),
-	urlStr:     "",
-	expectCode: http.StatusInternalServerError,
+	urlStr:       "",
+	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "something went wrong",
 		Code:    "snafu",
@@ -1059,13 +1059,13 @@ var handlerTests = []struct {
 		w.WriteHeader(http.StatusTeapot)
 		return nil
 	}),
-	expectCode: http.StatusTeapot,
+	expectStatus: http.StatusTeapot,
 }, {
 	about: "handleErrors, params error",
 	handler: HandleErrors(func(w http.ResponseWriter, req *http.Request) error {
 		return params.ErrMetadataNotFound
 	}),
-	expectCode: http.StatusNotFound,
+	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Message: "metadata not found",
 		Code:    params.ErrMetadataNotFound,
@@ -1076,7 +1076,7 @@ var handlerTests = []struct {
 		err := params.ErrMetadataNotFound
 		return errgo.NoteMask(err, "annotation", errgo.Is(params.ErrMetadataNotFound))
 	}),
-	expectCode: http.StatusNotFound,
+	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Message: "annotation: metadata not found",
 		Code:    params.ErrMetadataNotFound,
@@ -1086,7 +1086,7 @@ var handlerTests = []struct {
 	handler: HandleErrors(func(w http.ResponseWriter, req *http.Request) error {
 		return params.ErrBadRequest
 	}),
-	expectCode: http.StatusBadRequest,
+	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
 		Message: "bad request",
 		Code:    params.ErrBadRequest,
@@ -1096,7 +1096,7 @@ var handlerTests = []struct {
 	handler: HandleErrors(func(w http.ResponseWriter, req *http.Request) error {
 		return params.ErrForbidden
 	}),
-	expectCode: http.StatusForbidden,
+	expectStatus: http.StatusForbidden,
 	expectBody: params.Error{
 		Message: "forbidden",
 		Code:    params.ErrForbidden,
@@ -1106,21 +1106,21 @@ var handlerTests = []struct {
 	handler: HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
 		return Foo{"hello"}, nil
 	}),
-	expectCode: http.StatusOK,
-	expectBody: Foo{"hello"},
+	expectStatus: http.StatusOK,
+	expectBody:   Foo{"hello"},
 }, {
 	about: "handleJSON, error case",
 	handler: HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
 		return nil, errgo.Newf("an error")
 	}),
-	expectCode: http.StatusInternalServerError,
+	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "an error",
 	},
 }, {
-	about:      "NotFoundHandler",
-	handler:    NotFoundHandler(),
-	expectCode: http.StatusNotFound,
+	about:        "NotFoundHandler",
+	handler:      NotFoundHandler(),
+	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Message: "not found",
 		Code:    params.ErrNotFound,
@@ -1140,10 +1140,10 @@ func (s *RouterSuite) TestHandlers(c *gc.C) {
 	for i, test := range handlerTests {
 		c.Logf("test %d: %s", i, test.about)
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    test.handler,
-			URL:        "",
-			ExpectCode: test.expectCode,
-			ExpectBody: test.expectBody,
+			Handler:      test.handler,
+			URL:          "",
+			ExpectStatus: test.expectStatus,
+			ExpectBody:   test.expectBody,
 		})
 	}
 }
