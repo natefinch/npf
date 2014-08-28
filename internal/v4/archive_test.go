@@ -52,14 +52,22 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
 	c.Assert(err, gc.IsNil)
 
-	rec := storetesting.DoRequest(c, s.srv, "GET", storeURL("precise/wordpress-0/archive"), nil, 0, nil, "", "")
+	archiveUrl := storeURL("precise/wordpress-0/archive")
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     archiveUrl,
+	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
 
 	// Check that the HTTP range logic is plugged in OK. If this
 	// is working, we assume that the whole thing is working OK,
 	// as net/http is well-tested.
-	rec = storetesting.DoRequest(c, s.srv, "GET", storeURL("precise/wordpress-0/archive"), nil, 0, http.Header{"Range": {"bytes=10-100"}}, "", "")
+	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     archiveUrl,
+		Header:  http.Header{"Range": {"bytes=10-100"}},
+	})
 	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
 	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
@@ -78,7 +86,10 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Download the charm archive using the API.
-	rec := storetesting.DoRequest(c, s.srv, "GET", storeURL(id+"/archive"), nil, 0, nil, "", "")
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL(id + "/archive"),
+	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 
 	// Check that the downloads count for the entity has been updated.
@@ -527,7 +538,10 @@ func (s *ArchiveSuite) assertArchiveFileContents(c *gc.C, zipFile *zip.ReadClose
 
 	// Make the request.
 	url := storeURL(path)
-	rec := storetesting.DoRequest(c, s.srv, "GET", url, nil, 0, nil, "", "")
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     url,
+	})
 
 	// Ensure the response is what we expect.
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
@@ -743,7 +757,13 @@ func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Delete the charm using the API.
-	rec := storetesting.DoRequest(c, s.srv, "DELETE", storeURL(id+"/archive"), nil, 0, nil, serverParams.AuthUsername, serverParams.AuthPassword)
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler:  s.srv,
+		Method:   "DELETE",
+		URL:      storeURL(id + "/archive"),
+		Username: serverParams.AuthUsername,
+		Password: serverParams.AuthPassword,
+	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 
 	// Check that the delete count for the entity has been updated.

@@ -15,8 +15,7 @@ import (
 )
 
 // JSONCallParams holds parameters for AssertJSONCall.
-// If left empty, some fields will automatically be filled
-// with defaults.
+// If left empty, some fields will automatically be filled with defaults.
 type JSONCallParams struct {
 	// Handler holds the handler to use to make the request.
 	Handler http.Handler
@@ -59,13 +58,19 @@ type JSONCallParams struct {
 // the given parameters, the result is as specified.
 func AssertJSONCall(c *gc.C, p JSONCallParams) {
 	c.Logf("JSON call, url %q", p.URL)
-	if p.Method == "" {
-		p.Method = "GET"
-	}
 	if p.ExpectCode == 0 {
 		p.ExpectCode = http.StatusOK
 	}
-	rec := DoRequest(c, p.Handler, p.Method, p.URL, p.Body, p.ContentLength, p.Header, p.Username, p.Password)
+	rec := DoRequest(c, DoRequestParams{
+		Handler:       p.Handler,
+		Method:        p.Method,
+		URL:           p.URL,
+		Body:          p.Body,
+		Header:        p.Header,
+		ContentLength: p.ContentLength,
+		Username:      p.Username,
+		Password:      p.Password,
+	})
 	c.Assert(rec.Code, gc.Equals, p.ExpectCode, gc.Commentf("body: %s", rec.Body.Bytes()))
 	if p.ExpectBody == nil {
 		c.Assert(rec.Body.Bytes(), gc.HasLen, 0)
@@ -88,26 +93,57 @@ func AssertJSONCall(c *gc.C, p JSONCallParams) {
 	c.Assert(gotBodyVal, jc.DeepEquals, expectBodyVal)
 }
 
+// DoRequestParams holds parameters for DoRequest.
+// If left empty, some fields will automatically be filled with defaults.
+type DoRequestParams struct {
+	// Handler holds the handler to use to make the request.
+	Handler http.Handler
+
+	// Method holds the HTTP method to use for the call.
+	// GET is assumed if this is empty.
+	Method string
+
+	// URL holds the URL to pass when making the request.
+	URL string
+
+	// Body holds the body to send in the request.
+	Body io.Reader
+
+	// Header specifies the HTTP headers to use when making
+	// the request.
+	Header http.Header
+
+	// ContentLength specifies the length of the body.
+	// It may be zero, in which case the default net/http
+	// content-length behaviour will be used.
+	ContentLength int64
+
+	// Username, if specified, is used for HTTP basic authentication.
+	Username string
+
+	// Password, if specified, is used for HTTP basic authentication.
+	Password string
+}
+
 // DoRequest invokes a request on the given handler with the given
-// method, URL, body, content length and headers.
-func DoRequest(c *gc.C, handler http.Handler, method string, urlStr string, body io.Reader, contentLength int64, header map[string][]string, username, password string) *httptest.ResponseRecorder {
-	// TODO frankban: this function has too many arguments.
-	//   Use something like RequestParams.
-	srv := httptest.NewServer(handler)
+// parameters.
+func DoRequest(c *gc.C, p DoRequestParams) *httptest.ResponseRecorder {
+	if p.Method == "" {
+		p.Method = "GET"
+	}
+	srv := httptest.NewServer(p.Handler)
 	defer srv.Close()
 
-	urlStr = srv.URL + urlStr
-
-	req, err := http.NewRequest(method, urlStr, body)
+	req, err := http.NewRequest(p.Method, srv.URL+p.URL, p.Body)
 	c.Assert(err, gc.IsNil)
-	if header != nil {
-		req.Header = header
+	if p.Header != nil {
+		req.Header = p.Header
 	}
-	if contentLength != 0 {
-		req.ContentLength = contentLength
+	if p.ContentLength != 0 {
+		req.ContentLength = p.ContentLength
 	}
-	if username != "" || password != "" {
-		req.SetBasicAuth(username, password)
+	if p.Username != "" || p.Password != "" {
+		req.SetBasicAuth(p.Username, p.Password)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	c.Assert(err, gc.IsNil)

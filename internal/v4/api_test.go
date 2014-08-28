@@ -677,7 +677,10 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 		// Download the entity archive for the requested number of times.
 		archiveUrl := storeURL(test.url + "/archive")
 		for i := 0; i < int(test.downloads); i++ {
-			rec := storetesting.DoRequest(c, s.srv, "GET", archiveUrl, nil, 0, nil, "", "")
+			rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+				Handler: s.srv,
+				URL:     archiveUrl,
+			})
 			c.Assert(rec.Code, gc.Equals, http.StatusOK)
 		}
 
