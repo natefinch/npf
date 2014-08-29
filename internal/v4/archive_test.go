@@ -372,48 +372,27 @@ func (s *ArchiveSuite) TestPostFailureCounters(c *gc.C) {
 	}
 
 	hash, _ := hashOf(invalidZip())
+	doPost := func(url string, expectCode int) {
+		rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+			Handler: s.srv,
+			URL:     storeURL(url),
+			Method:  "POST",
+			Header: http.Header{
+				"Content-Type": {"application/zip"},
+			},
+			Body:     invalidZip(),
+			Username: serverParams.AuthUsername,
+			Password: serverParams.AuthPassword,
+		})
+		c.Assert(rec.Code, gc.Equals, expectCode)
+	}
 
-	// Send a first bad request (revision specified).
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL("utopic/wordpress-42/archive"),
-		Method:  "POST",
-		Header: http.Header{
-			"Content-Type": {"application/zip"},
-		},
-		Body:     invalidZip(),
-		Username: serverParams.AuthUsername,
-		Password: serverParams.AuthPassword,
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusBadRequest)
-
-	// Send a second bad request (no hash).
-	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL("utopic/wordpress/archive"),
-		Method:  "POST",
-		Header: http.Header{
-			"Content-Type": {"application/zip"},
-		},
-		Body:     invalidZip(),
-		Username: serverParams.AuthUsername,
-		Password: serverParams.AuthPassword,
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusBadRequest)
-
-	// Send a third bad request (invalid zip).
-	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL("utopic/wordpress/archive?hash=" + hash),
-		Method:  "POST",
-		Header: http.Header{
-			"Content-Type": {"application/zip"},
-		},
-		Body:     invalidZip(),
-		Username: serverParams.AuthUsername,
-		Password: serverParams.AuthPassword,
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusInternalServerError)
+	// Send a first invalid request (revision specified).
+	doPost("utopic/wordpress-42/archive", http.StatusBadRequest)
+	// Send a second invalid request (no hash).
+	doPost("utopic/wordpress/archive", http.StatusBadRequest)
+	// Send a third invalid request (invalid zip).
+	doPost("utopic/wordpress/archive?hash="+hash, http.StatusInternalServerError)
 
 	// Check that the failed upload count for the entity has been updated.
 	key := []string{params.StatsArchiveFailedUpload, "utopic", "wordpress"}
