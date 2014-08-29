@@ -46,7 +46,7 @@ func (h *handler) metaCharmRelated(entity *mongodoc.Entity, id *charm.Reference,
 
 	// Retrieve the entities from the database.
 	var entities []mongodoc.Entity
-	if err := h.store.DB.Entities().Find(query).Select(fields).All(&entities); err != nil {
+	if err := h.store.DB.Entities().Find(query).Select(fields).Sort("_id").All(&entities); err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related charms")
 	}
 
@@ -166,6 +166,7 @@ func (h *handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 	if err := h.store.DB.Entities().
 		Find(bson.D{{"bundlecharms", &searchId}}).
 		Select(bson.D{{"_id", 1}, {"bundlecharms", 1}}).
+		Sort("_id").
 		All(&entities); err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related bundles")
 	}

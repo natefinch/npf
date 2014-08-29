@@ -348,9 +348,9 @@ func (s *ArchiveSuite) TestPostInvalidBundleData(c *gc.C) {
 	// Here we exercise both bundle internal verification (bad relation) and
 	// validation with respect to charms (wordpress and mysql are missing).
 	expectErr := `bundle verification failed: [` +
-		`"service \"wordpress\" refers to non-existent charm \"wordpress\"",` +
+		`"relation [\"foo:db\" \"mysql:server\"] refers to service \"foo\" not defined in this bundle",` +
 		`"service \"mysql\" refers to non-existent charm \"mysql\"",` +
-		`"relation [\"foo:db\" \"mysql:server\"] refers to service \"foo\" not defined in this bundle"]`
+		`"service \"wordpress\" refers to non-existent charm \"wordpress\""]`
 	s.assertCannotUpload(c, "bundle/wordpress", f, expectErr)
 }
 

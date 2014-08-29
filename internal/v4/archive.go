@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -133,6 +134,7 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 			return errgo.Notef(err, "cannot retrieve bundle charms")
 		}
 		if err := bundleData.VerifyWithCharms(verifyConstraints, charms); err != nil {
+			// TODO frankban: use multiError (defined in internal/router).
 			return errgo.Notef(verificationError(err), "bundle verification failed")
 		}
 		if err := h.store.AddBundle(id, b, name, hash, req.ContentLength); err != nil {
@@ -324,6 +326,7 @@ func verificationError(err error) error {
 	for i, err := range verr.Errors {
 		messages[i] = err.Error()
 	}
+	sort.Strings(messages)
 	encodedMessages, err := json.Marshal(messages)
 	if err != nil {
 		// This should never happen.
