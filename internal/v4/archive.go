@@ -81,7 +81,19 @@ func (h *handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter,
 	return nil
 }
 
-func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
+	defer func() {
+		// Upload stats don't include revision: it is assumed that each
+		// entity revision is only uploaded once.
+		id.Revision = -1
+		kind := params.StatsArchiveUpload
+		if err != nil {
+			kind = params.StatsArchiveFailedUpload
+		}
+		// TODO frankban 2014-08-29: log possible IncCounter errors.
+		go h.store.IncCounter(entityStatsKey(id, kind))
+	}()
+
 	// Validate the request parameters.
 	if id.Series == "" {
 		return badRequestf(nil, "series not specified")
@@ -100,7 +112,7 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 	// Upload the actual blob, and make sure that it is removed
 	// if we fail later.
 	name := bson.NewObjectId().Hex()
-	err := h.store.BlobStore.PutUnchallenged(req.Body, name, req.ContentLength, hash)
+	err = h.store.BlobStore.PutUnchallenged(req.Body, name, req.ContentLength, hash)
 	if err != nil {
 		return errgo.Notef(err, "cannot put archive blob")
 	}

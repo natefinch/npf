@@ -354,6 +354,72 @@ func (s *ArchiveSuite) TestPostInvalidBundleData(c *gc.C) {
 	s.assertCannotUpload(c, "bundle/wordpress", f, expectErr)
 }
 
+func (s *ArchiveSuite) TestPostCounters(c *gc.C) {
+	if !storetesting.MongoJSEnabled() {
+		c.Skip("MongoDB JavaScript not available")
+	}
+
+	s.assertUploadCharm(c, mustParseReference("precise/wordpress-0"), "wordpress")
+
+	// Check that the upload count for the entity has been updated.
+	key := []string{params.StatsArchiveUpload, "precise", "wordpress"}
+	checkCounterSum(c, s.store, key, false, 1)
+}
+
+func (s *ArchiveSuite) TestPostFailureCounters(c *gc.C) {
+	if !storetesting.MongoJSEnabled() {
+		c.Skip("MongoDB JavaScript not available")
+	}
+
+	hash, _ := hashOf(invalidZip())
+
+	// Send a first bad request (revision specified).
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("utopic/wordpress-42/archive"),
+		Method:  "POST",
+		Header: http.Header{
+			"Content-Type": {"application/zip"},
+		},
+		Body:     invalidZip(),
+		Username: serverParams.AuthUsername,
+		Password: serverParams.AuthPassword,
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusBadRequest)
+
+	// Send a second bad request (no hash).
+	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("utopic/wordpress/archive"),
+		Method:  "POST",
+		Header: http.Header{
+			"Content-Type": {"application/zip"},
+		},
+		Body:     invalidZip(),
+		Username: serverParams.AuthUsername,
+		Password: serverParams.AuthPassword,
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusBadRequest)
+
+	// Send a third bad request (invalid zip).
+	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("utopic/wordpress/archive?hash=" + hash),
+		Method:  "POST",
+		Header: http.Header{
+			"Content-Type": {"application/zip"},
+		},
+		Body:     invalidZip(),
+		Username: serverParams.AuthUsername,
+		Password: serverParams.AuthPassword,
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusInternalServerError)
+
+	// Check that the failed upload count for the entity has been updated.
+	key := []string{params.StatsArchiveFailedUpload, "utopic", "wordpress"}
+	checkCounterSum(c, s.store, key, false, 3)
+}
+
 func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSeeker, errorMessage string) {
 	hash, size := hashOf(content)
 	_, err := content.Seek(0, 0)

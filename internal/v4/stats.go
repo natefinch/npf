@@ -26,7 +26,10 @@ import (
 //   - kind:trusty:django:42:who -> a specific user charm.
 // The above also applies to bundles (where the series is "bundle").
 func entityStatsKey(url *charm.Reference, kind string) []string {
-	key := []string{kind, url.Series, url.Name, strconv.Itoa(url.Revision)}
+	key := []string{kind, url.Series, url.Name}
+	if url.Revision != -1 {
+		key = append(key, strconv.Itoa(url.Revision))
+	}
 	if url.User != "" {
 		key = append(key, url.User)
 	}
