@@ -5,9 +5,11 @@ package v4
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 
 	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v3"
@@ -58,11 +60,19 @@ func New(store *charmstore.Store, config charmstore.ServerParams) http.Handler {
 			"manifest":            h.entityHandler(h.metaManifest, "blobname"),
 			"revision-info":       router.SingleIncludeHandler(h.metaRevisionInfo),
 			"stats":               h.entityHandler(h.metaStats),
+			"extra-info": h.puttableEntityHandler(
+				h.metaExtraInfo,
+				h.putMetaExtraInfo,
+				"extrainfo",
+			),
+			"extra-info/": h.puttableEntityHandler(
+				h.metaExtraInfoWithKey,
+				h.putMetaExtraInfoWithKey,
+				"extrainfo",
+			),
 
 			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
-			"color":       router.SingleIncludeHandler(h.metaColor),
-			"extra-info":  router.SingleIncludeHandler(h.metaExtraInfo),
-			"extra-info/": router.SingleIncludeHandler(h.metaExtraInfoWithKey),
+			"color": router.SingleIncludeHandler(h.metaColor),
 		},
 	}, h.resolveURL)
 	return h
@@ -103,9 +113,13 @@ type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.Reference, path s
 // entityHandler returns a handler that calls f with a *mongodoc.Entity that
 // contains at least the given fields. It allows only GET requests.
 func (h *handler) entityHandler(f entityHandlerFunc, fields ...string) router.BulkIncludeHandler {
+	return h.puttableEntityHandler(f, nil, fields...)
+}
+
+func (h *handler) puttableEntityHandler(get entityHandlerFunc, put router.FieldPutFunc, fields ...string) router.BulkIncludeHandler {
 	handleGet := func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 		edoc := doc.(*mongodoc.Entity)
-		val, err := f(edoc, id, path, flags)
+		val, err := get(edoc, id, path, flags)
 		return val, errgo.Mask(err, errgo.Any)
 	}
 	type entityHandlerKey struct{}
@@ -114,7 +128,17 @@ func (h *handler) entityHandler(f entityHandlerFunc, fields ...string) router.Bu
 		Query:     h.entityQuery,
 		Fields:    fields,
 		HandleGet: handleGet,
+		HandlePut: put,
+		Update:    h.updateEntity,
 	})
+}
+
+func (h *handler) updateEntity(id *charm.Reference, fields map[string]interface{}) error {
+	err := h.store.DB.Entities().UpdateId(id, bson.D{{"$set", fields}})
+	if err != nil {
+		return errgo.Notef(err, "cannot update %q", id)
+	}
+	return nil
 }
 
 func (h *handler) entityQuery(id *charm.Reference, selector map[string]int) (interface{}, error) {
@@ -124,7 +148,7 @@ func (h *handler) entityQuery(id *charm.Reference, selector map[string]int) (int
 		Select(selector).
 		One(&val)
 	if err == mgo.ErrNotFound {
-		return nil, params.ErrNotFound
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "")
 	}
 	if err != nil {
 		return nil, errgo.Mask(err)
@@ -342,7 +366,7 @@ func (h *handler) metaRevisionInfo(id *charm.Reference, path string, flags url.V
 	}
 
 	if len(docs) == 0 {
-		return "", params.ErrNotFound
+		return "", errgo.WithCausef(nil, params.ErrNotFound, "")
 	}
 
 	// Sort in descending order by revision.
@@ -373,18 +397,60 @@ func (s entitiesByRevision) Less(i, j int) bool { return s[i].URL.Revision > s[j
 
 // GET id/meta/extra-info
 // http://tinyurl.com/keos7wd
-func (h *handler) metaExtraInfo(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
-}
-
-type FieldUpdater interface {
-	UpdateField(name string, val interface{})
+func (h *handler) metaExtraInfo(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	// The extra-info is stored in mongo as simple byte
+	// slices, so convert the values to json.RawMessages
+	// so that the client will see the original JSON.
+	m := make(map[string]*json.RawMessage)
+	for key, val := range entity.ExtraInfo {
+		jmsg := json.RawMessage(val)
+		m[key] = &jmsg
+	}
+	return m, nil
 }
 
 // GET id/meta/extra-info/key
 // http://tinyurl.com/polrbn7
-func (h *handler) metaExtraInfoWithKey(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
-	return nil, errNotImplemented
+func (h *handler) metaExtraInfoWithKey(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	path = strings.TrimPrefix(path, "/")
+	var data json.RawMessage = entity.ExtraInfo[path]
+	if len(data) == 0 {
+		return nil, nil
+	}
+	return &data, nil
+}
+
+func (h *handler) putMetaExtraInfo(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater) error {
+	var fields map[string]*json.RawMessage
+	if err := json.Unmarshal(*val, &fields); err != nil {
+		return errgo.Notef(err, "cannot unmarshal extra info body")
+	}
+	// Check all the fields are OK before adding any fields to be updated.
+	for key := range fields {
+		if err := checkExtraInfoKey(key); err != nil {
+			return err
+		}
+	}
+	for key, val := range fields {
+		updater.UpdateField("extrainfo."+key, *val)
+	}
+	return nil
+}
+
+func (h *handler) putMetaExtraInfoWithKey(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater) error {
+	key := strings.TrimPrefix(path, "/")
+	if err := checkExtraInfoKey(key); err != nil {
+		return err
+	}
+	updater.UpdateField("extrainfo."+key, *val)
+	return nil
+}
+
+func checkExtraInfoKey(key string) error {
+	if strings.ContainsAny(key, "./$") {
+		return errgo.WithCausef(nil, params.ErrBadRequest, "bad key for extra-info")
+	}
+	return nil
 }
 
 // GET id/meta/archive-upload-time

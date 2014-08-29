@@ -31,6 +31,10 @@ type Entity struct {
 
 	UploadTime time.Time
 
+	// ExtraInfo holds arbitrary extra metadata associated with
+	// the entity. The byte slices hold JSON-encoded data.
+	ExtraInfo map[string][]byte
+
 	// TODO(rog) verify that all these types marshal to the expected
 	// JSON form.
 	CharmMeta    *charm.Meta

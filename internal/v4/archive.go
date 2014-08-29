@@ -232,7 +232,7 @@ func (h *handler) findBlobName(id *charm.Reference) (string, error) {
 		Select(bson.D{{"blobname", 1}}).
 		One(&entity); err != nil {
 		if err == mgo.ErrNotFound {
-			return "", params.ErrNotFound
+			return "", errgo.WithCausef(nil, params.ErrNotFound, "")
 		}
 		return "", errgo.Notef(err, "cannot get %s", id)
 	}

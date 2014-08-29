@@ -38,7 +38,7 @@ func entityStatsKey(url *charm.Reference, kind string) []string {
 func (s *handler) serveStatsCounter(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 	base := strings.TrimPrefix(r.URL.Path, "/")
 	if strings.Index(base, "/") > 0 {
-		return nil, params.ErrNotFound
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "")
 	}
 	if base == "" {
 		return nil, params.ErrForbidden

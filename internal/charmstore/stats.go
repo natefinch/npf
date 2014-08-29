@@ -63,7 +63,7 @@ func (s *Store) statsKey(db StoreDatabase, key []string, write bool) (string, er
 			err = tokens.Find(bson.D{{"t", key[i]}}).One(&t)
 			if err == mgo.ErrNotFound {
 				if !write {
-					return "", params.ErrNotFound
+					return "", errgo.WithCausef(nil, params.ErrNotFound, "")
 				}
 				t.Id, err = tokens.Count()
 				if err != nil {
