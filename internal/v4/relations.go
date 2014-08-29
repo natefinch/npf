@@ -188,14 +188,14 @@ func (h *handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 	}
 
 	// Prepare and return the response.
-	response := make([]params.MetaAnyResponse, 0, len(entities))
+	response := make([]*params.MetaAnyResponse, 0, len(entities))
 	includes := flags["include"]
 	for _, e := range entities {
 		meta, err := h.GetMetadata(e.URL, includes)
 		if err != nil {
 			return nil, errgo.Notef(err, "cannot retrieve bundle metadata")
 		}
-		response = append(response, params.MetaAnyResponse{
+		response = append(response, &params.MetaAnyResponse{
 			Id:   e.URL,
 			Meta: meta,
 		})
