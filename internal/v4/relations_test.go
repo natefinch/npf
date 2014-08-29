@@ -126,9 +126,9 @@ var metaCharmRelatedTests = []struct {
 		},
 		Requires: map[string][]params.MetaAnyResponse{
 			"http": []params.MetaAnyResponse{{
-				Id: mustParseReference("trusty/haproxy-47"),
-			}, {
 				Id: mustParseReference("precise/haproxy-48"),
+			}, {
+				Id: mustParseReference("trusty/haproxy-47"),
 			}},
 		},
 	},
@@ -230,11 +230,102 @@ var metaCharmRelatedTests = []struct {
 	expectBody: params.RelatedResponse{
 		Provides: map[string][]params.MetaAnyResponse{
 			"memcache": []params.MetaAnyResponse{{
-				Id: mustParseReference("utopic/memcached-1"),
+				Id: mustParseReference("utopic/memcached-3"),
 			}, {
 				Id: mustParseReference("utopic/memcached-2"),
 			}, {
-				Id: mustParseReference("utopic/memcached-3"),
+				Id: mustParseReference("utopic/memcached-1"),
+			}},
+		},
+	},
+}, {
+	about: "reference ordering",
+	charms: map[string]charm.Charm{
+		"trusty/wordpress-0": &relationTestingCharm{
+			requires: map[string]charm.Relation{
+				"cache": {
+					Name:      "cache",
+					Role:      "requirer",
+					Interface: "memcache",
+				},
+				"nfs": {
+					Name:      "nfs",
+					Role:      "requirer",
+					Interface: "mount",
+				},
+			},
+		},
+		"utopic/memcached-1": &relationTestingCharm{
+			provides: map[string]charm.Relation{
+				"cache": {
+					Name:      "cache",
+					Role:      "provider",
+					Interface: "memcache",
+				},
+			},
+		},
+		"utopic/memcached-2": &relationTestingCharm{
+			provides: map[string]charm.Relation{
+				"cache": {
+					Name:      "cache",
+					Role:      "provider",
+					Interface: "memcache",
+				},
+			},
+		},
+		"utopic/redis-90": &relationTestingCharm{
+			provides: map[string]charm.Relation{
+				"cache": {
+					Name:      "cache",
+					Role:      "provider",
+					Interface: "memcache",
+				},
+			},
+		},
+		"trusty/nfs-47": &relationTestingCharm{
+			provides: map[string]charm.Relation{
+				"nfs": {
+					Name:      "nfs",
+					Role:      "provider",
+					Interface: "mount",
+				},
+			},
+		},
+		"precise/nfs-42": &relationTestingCharm{
+			provides: map[string]charm.Relation{
+				"nfs": {
+					Name:      "nfs",
+					Role:      "provider",
+					Interface: "mount",
+				},
+			},
+		},
+		"precise/nfs-47": &relationTestingCharm{
+			provides: map[string]charm.Relation{
+				"nfs": {
+					Name:      "nfs",
+					Role:      "provider",
+					Interface: "mount",
+				},
+			},
+		},
+	},
+	id: "trusty/wordpress-0",
+	expectBody: params.RelatedResponse{
+		Provides: map[string][]params.MetaAnyResponse{
+			"memcache": []params.MetaAnyResponse{{
+				Id: mustParseReference("utopic/memcached-2"),
+			}, {
+				Id: mustParseReference("utopic/memcached-1"),
+			}, {
+				Id: mustParseReference("utopic/redis-90"),
+			}},
+			"mount": []params.MetaAnyResponse{{
+				Id: mustParseReference("precise/nfs-47"),
+			}, {
+				Id: mustParseReference("precise/nfs-42"),
+			}, {
+				Id: mustParseReference("trusty/nfs-47"),
 			}},
 		},
 	},
@@ -359,6 +450,12 @@ var metaBundlesContainingBundles = map[string]charm.Bundle{
 			"cs:utopic/mysql-0",
 		},
 	},
+	"bundle/wordpress-simple-1": &relationTestingBundle{
+		urls: []string{
+			"cs:utopic/wordpress-47",
+			"cs:utopic/mysql-1",
+		},
+	},
 	"bundle/wordpress-complex-1": &relationTestingBundle{
 		urls: []string{
 			"cs:utopic/wordpress-42",
@@ -403,11 +500,11 @@ var metaBundlesContainingTests = []struct {
 	id:           "utopic/wordpress-42",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/wordpress-simple-0"),
+		Id: mustParseReference("bundle/useless-0"),
 	}, {
 		Id: mustParseReference("bundle/wordpress-complex-1"),
 	}, {
-		Id: mustParseReference("bundle/useless-0"),
+		Id: mustParseReference("bundle/wordpress-simple-0"),
 	}},
 }, {
 	about:        "specific charm present in one bundle",
@@ -446,9 +543,9 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?any-series=1",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/wordpress-simple-0"),
-	}, {
 		Id: mustParseReference("bundle/wordpress-complex-1"),
+	}, {
+		Id: mustParseReference("bundle/wordpress-simple-0"),
 	}},
 }, {
 	about:        "invalid any series",
@@ -465,9 +562,9 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?any-revision=1",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/wordpress-complex-1"),
-	}, {
 		Id: mustParseReference("bundle/django-generic-42"),
+	}, {
+		Id: mustParseReference("bundle/wordpress-complex-1"),
 	}},
 }, {
 	about:        "invalid any revision",
@@ -484,13 +581,15 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?any-series=1&any-revision=1",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/wordpress-simple-0"),
-	}, {
-		Id: mustParseReference("bundle/wordpress-complex-1"),
-	}, {
 		Id: mustParseReference("bundle/django-generic-42"),
 	}, {
 		Id: mustParseReference("bundle/mediawiki-47"),
+	}, {
+		Id: mustParseReference("bundle/wordpress-complex-1"),
+	}, {
+		Id: mustParseReference("bundle/wordpress-simple-1"),
+	}, {
+		Id: mustParseReference("bundle/wordpress-simple-0"),
 	}},
 }, {
 	about:        "any series and revision with includes",
@@ -498,10 +597,10 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?any-series=1&any-revision=1&include=archive-size&include=bundle-metadata",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/wordpress-simple-0"),
+		Id: mustParseReference("bundle/useless-0"),
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
-			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-simple-0"].Data(),
+			"bundle-metadata": metaBundlesContainingBundles["bundle/useless-0"].Data(),
 		},
 	}, {
 		Id: mustParseReference("bundle/wordpress-complex-1"),
@@ -510,10 +609,16 @@ var metaBundlesContainingTests = []struct {
 			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-complex-1"].Data(),
 		},
 	}, {
-		Id: mustParseReference("bundle/useless-0"),
+		Id: mustParseReference("bundle/wordpress-simple-1"),
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
-			"bundle-metadata": metaBundlesContainingBundles["bundle/useless-0"].Data(),
+			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-simple-1"].Data(),
+		},
+	}, {
+		Id: mustParseReference("bundle/wordpress-simple-0"),
+		Meta: map[string]interface{}{
+			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
+			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-simple-0"].Data(),
 		},
 	}},
 }, {

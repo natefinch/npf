@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -324,6 +325,7 @@ func verificationError(err error) error {
 	for i, err := range verr.Errors {
 		messages[i] = err.Error()
 	}
+	sort.Strings(messages)
 	encodedMessages, err := json.Marshal(messages)
 	if err != nil {
 		// This should never happen.

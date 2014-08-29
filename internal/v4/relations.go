@@ -5,6 +5,7 @@ package v4
 
 import (
 	"net/url"
+	"sort"
 
 	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v3"
@@ -134,6 +135,7 @@ func (h *handler) getRelatedIfaceResponses(
 			}
 		}
 	}
+	sort.Sort(byId(responses))
 	return responses, nil
 }
 
@@ -187,18 +189,19 @@ func (h *handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 	}
 
 	// Prepare and return the response.
-	response := make([]*params.MetaAnyResponse, 0, len(entities))
+	response := make([]params.MetaAnyResponse, 0, len(entities))
 	includes := flags["include"]
 	for _, e := range entities {
 		meta, err := h.GetMetadata(e.URL, includes)
 		if err != nil {
 			return nil, errgo.Notef(err, "cannot retrieve bundle metadata")
 		}
-		response = append(response, &params.MetaAnyResponse{
+		response = append(response, params.MetaAnyResponse{
 			Id:   e.URL,
 			Meta: meta,
 		})
 	}
+	sort.Sort(byId(response))
 	return response, nil
 }
 
@@ -212,4 +215,29 @@ func filterEntities(entities []mongodoc.Entity, predicate func(*mongodoc.Entity)
 		}
 	}
 	return results
+}
+
+// byId implements sort.Interface for []params.MetaAnyResponse based on the Id
+// field. For the same base charm, the most recent revisions come first.
+type byId []params.MetaAnyResponse
+
+func (s byId) Len() int           { return len(s) }
+func (s byId) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s byId) Less(i, j int) bool { return referenceLess(s[i].Id, s[j].Id) }
+
+// referenceLess reports whether ref1 should sort before ref2.
+// Alphabetical order of the reference string representation
+// (without the revision) is considered. If ref1 and ref2 have the same base
+// string representation, the most recent revision comes first.
+// This function can be used when implementing sort.Interface in data
+// structures requiring reference sorting.
+func referenceLess(ref1, ref2 *charm.Reference) bool {
+	base1, base2 := *ref1, *ref2
+	base1.Revision = -1
+	base2.Revision = -1
+	str1, str2 := base1.String(), base2.String()
+	if str1 != str2 {
+		return str1 < str2
+	}
+	return ref1.Revision > ref2.Revision
 }
