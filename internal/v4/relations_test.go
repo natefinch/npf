@@ -230,11 +230,11 @@ var metaCharmRelatedTests = []struct {
 	expectBody: params.RelatedResponse{
 		Provides: map[string][]params.MetaAnyResponse{
 			"memcache": []params.MetaAnyResponse{{
-				Id: mustParseReference("utopic/memcached-3"),
+				Id: mustParseReference("utopic/memcached-1"),
 			}, {
 				Id: mustParseReference("utopic/memcached-2"),
 			}, {
-				Id: mustParseReference("utopic/memcached-1"),
+				Id: mustParseReference("utopic/memcached-3"),
 			}},
 		},
 	},
@@ -314,16 +314,16 @@ var metaCharmRelatedTests = []struct {
 	expectBody: params.RelatedResponse{
 		Provides: map[string][]params.MetaAnyResponse{
 			"memcache": []params.MetaAnyResponse{{
-				Id: mustParseReference("utopic/memcached-2"),
-			}, {
 				Id: mustParseReference("utopic/memcached-1"),
+			}, {
+				Id: mustParseReference("utopic/memcached-2"),
 			}, {
 				Id: mustParseReference("utopic/redis-90"),
 			}},
 			"mount": []params.MetaAnyResponse{{
-				Id: mustParseReference("precise/nfs-47"),
-			}, {
 				Id: mustParseReference("precise/nfs-42"),
+			}, {
+				Id: mustParseReference("precise/nfs-47"),
 			}, {
 				Id: mustParseReference("trusty/nfs-47"),
 			}},
@@ -587,9 +587,9 @@ var metaBundlesContainingTests = []struct {
 	}, {
 		Id: mustParseReference("bundle/wordpress-complex-1"),
 	}, {
-		Id: mustParseReference("bundle/wordpress-simple-1"),
-	}, {
 		Id: mustParseReference("bundle/wordpress-simple-0"),
+	}, {
+		Id: mustParseReference("bundle/wordpress-simple-1"),
 	}},
 }, {
 	about:        "any series and revision with includes",
@@ -609,16 +609,16 @@ var metaBundlesContainingTests = []struct {
 			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-complex-1"].Data(),
 		},
 	}, {
-		Id: mustParseReference("bundle/wordpress-simple-1"),
-		Meta: map[string]interface{}{
-			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
-			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-simple-1"].Data(),
-		},
-	}, {
 		Id: mustParseReference("bundle/wordpress-simple-0"),
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
 			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-simple-0"].Data(),
+		},
+	}, {
+		Id: mustParseReference("bundle/wordpress-simple-1"),
+		Meta: map[string]interface{}{
+			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
+			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-simple-1"].Data(),
 		},
 	}},
 }, {

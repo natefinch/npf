@@ -134,6 +134,7 @@ func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 			return errgo.Notef(err, "cannot retrieve bundle charms")
 		}
 		if err := bundleData.VerifyWithCharms(verifyConstraints, charms); err != nil {
+			// TODO frankban: use multiError (defined in internal/router).
 			return errgo.Notef(verificationError(err), "bundle verification failed")
 		}
 		if err := h.store.AddBundle(id, b, name, hash, req.ContentLength); err != nil {
