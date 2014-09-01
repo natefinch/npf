@@ -93,7 +93,7 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 
 	// Check that the downloads count for the entity has been updated.
-	key := []string{params.StatsArchiveDownload, "utopic", "mysql", "42"}
+	key := []string{params.StatsArchiveDownload, "utopic", "mysql", "", "42"}
 	checkCounterSum(c, s.store, key, false, 1)
 }
 
@@ -362,7 +362,7 @@ func (s *ArchiveSuite) TestPostCounters(c *gc.C) {
 	s.assertUploadCharm(c, mustParseReference("precise/wordpress-0"), "wordpress")
 
 	// Check that the upload count for the entity has been updated.
-	key := []string{params.StatsArchiveUpload, "precise", "wordpress"}
+	key := []string{params.StatsArchiveUpload, "precise", "wordpress", ""}
 	checkCounterSum(c, s.store, key, false, 1)
 }
 
@@ -395,7 +395,7 @@ func (s *ArchiveSuite) TestPostFailureCounters(c *gc.C) {
 	doPost("utopic/wordpress/archive?hash="+hash, http.StatusInternalServerError)
 
 	// Check that the failed upload count for the entity has been updated.
-	key := []string{params.StatsArchiveFailedUpload, "utopic", "wordpress"}
+	key := []string{params.StatsArchiveFailedUpload, "utopic", "wordpress", ""}
 	checkCounterSum(c, s.store, key, false, 3)
 }
 
@@ -812,7 +812,7 @@ func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 
 	// Check that the delete count for the entity has been updated.
-	key := []string{params.StatsArchiveDelete, "utopic", "mysql", "42"}
+	key := []string{params.StatsArchiveDelete, "utopic", "mysql", "", "42"}
 	checkCounterSum(c, s.store, key, false, 1)
 }
 

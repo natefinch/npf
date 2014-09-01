@@ -18,20 +18,22 @@ import (
 
 // entityStatsKey returns a stats key for the given charm or bundle
 // reference and the given kind.
-// Entities' stats can then be retrieved like the following:
+// Entity stats keys are generated using the following schema:
+//   kind:series:name:user:revision
+// where user can be empty (for promulgated charms/bundles) and revision is
+// optional (e.g. when uploading an entity the revision is not specified).
+// For instance, entities' stats can then be retrieved like the following:
 //   - kind:utopic:* -> all charms of a specific series;
-//   - kind:trusty:django:* -> all revisions of a specific charm;
-//   - kind:trusty:django:42 -> a specific promulgated charm;
-//   - kind:trusty:django:42:* -> all user owned variations of a charm;
-//   - kind:trusty:django:42:who -> a specific user charm.
+//   - kind:trusty:django:* -> all revisions and user variations of a charm;
+//   - kind:trusty:django::* -> all revisions of a promulgated charm;
+//   - kind:trusty:django::42 -> a specific promulgated charm;
+//   - kind:trusty:django:who:* -> all revisions of a user owned charm;
+//   - kind:trusty:django:who:42 -> a specific user owned charm;
 // The above also applies to bundles (where the series is "bundle").
 func entityStatsKey(url *charm.Reference, kind string) []string {
-	key := []string{kind, url.Series, url.Name}
+	key := []string{kind, url.Series, url.Name, url.User}
 	if url.Revision != -1 {
 		key = append(key, strconv.Itoa(url.Revision))
-	}
-	if url.User != "" {
-		key = append(key, url.User)
 	}
 	return key
 }

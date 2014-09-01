@@ -686,10 +686,7 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 
 		// Wait until the counters are updated.
 		url := mustParseReference(test.url)
-		key := []string{params.StatsArchiveDownload, url.Series, url.Name, strconv.Itoa(url.Revision)}
-		if url.User != "" {
-			key = append(key, url.User)
-		}
+		key := []string{params.StatsArchiveDownload, url.Series, url.Name, url.User, strconv.Itoa(url.Revision)}
 		checkCounterSum(c, s.store, key, false, test.downloads)
 
 		// Ensure the meta/stats response reports the correct downloads count.
