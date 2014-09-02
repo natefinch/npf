@@ -130,7 +130,7 @@ func WriteJSON(w http.ResponseWriter, code int, val interface{}) error {
 // returns a JSON error response.
 func NotFoundHandler() http.Handler {
 	return HandleErrors(func(w http.ResponseWriter, req *http.Request) error {
-		return errgo.WithCausef(nil, params.ErrNotFound, "not found")
+		return errgo.WithCausef(nil, params.ErrNotFound, params.ErrNotFound.Error())
 	})
 }
 
