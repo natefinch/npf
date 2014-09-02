@@ -130,7 +130,7 @@ func WriteJSON(w http.ResponseWriter, code int, val interface{}) error {
 // returns a JSON error response.
 func NotFoundHandler() http.Handler {
 	return HandleErrors(func(w http.ResponseWriter, req *http.Request) error {
-		return params.ErrNotFound
+		return errgo.WithCausef(nil, params.ErrNotFound, params.ErrNotFound.Error())
 	})
 }
 
@@ -151,7 +151,7 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	h, pattern := mux.Handler(req)
 	if pattern == "" {
-		WriteError(w, params.ErrNotFound)
+		WriteError(w, errgo.WithCausef(nil, params.ErrNotFound, "no handler for %q", req.URL.Path))
 		return
 	}
 	h.ServeHTTP(w, req)

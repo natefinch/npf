@@ -71,7 +71,7 @@ func (s *StatsSuite) TestServerStatsStatus(c *gc.C) {
 	}, {
 		path:    "stats/counter/any/",
 		status:  http.StatusNotFound,
-		message: "not found",
+		message: "invalid key",
 		code:    params.ErrNotFound,
 	}, {
 		path:    "stats/",

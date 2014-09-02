@@ -7,6 +7,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"reflect"
@@ -216,6 +217,28 @@ var metaEndpoints = []metaEndpoint{{
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data, gc.FitsTypeOf, (*params.StatsResponse)(nil))
 	},
+}, {
+	name: "extra-info",
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		return map[string]string{
+			"key": "value " + url.String(),
+		}, nil
+	},
+	checkURL: "cs:precise/wordpress-23",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.DeepEquals, map[string]string{
+			"key": "value cs:precise/wordpress-23",
+		})
+	},
+}, {
+	name: "extra-info/key",
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		return "value " + url.String(), nil
+	},
+	checkURL: "cs:precise/wordpress-23",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.Equals, "value cs:precise/wordpress-23")
+	},
 }}
 
 // TestEndpointGet tries to ensure that the endpoint
@@ -248,6 +271,9 @@ func (s *APISuite) addTestEntities(c *gc.C) []*charm.Reference {
 		} else {
 			s.addCharm(c, url.Name, e)
 		}
+		// Associate some extra-info data with the entity.
+		key := strings.TrimPrefix(e, "cs:") + "/meta/extra-info/key"
+		s.assertPut(c, key, "value "+e)
 		urls[i] = url
 	}
 	return urls
@@ -260,14 +286,14 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 		tested := false
 		for _, url := range urls {
 			charmId := strings.TrimPrefix(url.String(), "cs:")
-			storeURL := storeURL(charmId + "/meta/" + ep.name)
+			path := charmId + "/meta/" + ep.name
 			expectData, err := ep.get(s.store, url)
 			c.Assert(err, gc.IsNil)
 			c.Logf("	expected data for %q: %#v", url, expectData)
 			if isNull(expectData) {
 				storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 					Handler:      s.srv,
-					URL:          storeURL,
+					URL:          storeURL(path),
 					ExpectStatus: http.StatusNotFound,
 					ExpectBody: params.Error{
 						Message: params.ErrMetadataNotFound.Error(),
@@ -277,16 +303,155 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 				continue
 			}
 			tested = true
-			storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-				Handler:    s.srv,
-				URL:        storeURL,
-				ExpectBody: expectData,
-			})
-
+			s.assertGet(c, path, expectData)
 		}
 		if !tested {
 			c.Errorf("endpoint %q is null for all endpoints, so is not properly tested", ep.name)
 		}
+	}
+}
+
+func (s *APISuite) TestExtraInfo(c *gc.C) {
+	id := "precise/wordpress-23"
+	s.addCharm(c, "wordpress", id)
+
+	// Add one value and check that it's there.
+	s.assertPut(c, id+"/meta/extra-info/foo", "fooval")
+	s.assertGet(c, id+"/meta/extra-info/foo", "fooval")
+	s.assertGet(c, id+"/meta/extra-info", map[string]string{
+		"foo": "fooval",
+	})
+
+	// Add another value and check that both values are there.
+	s.assertPut(c, id+"/meta/extra-info/bar", "barval")
+	s.assertGet(c, id+"/meta/extra-info/bar", "barval")
+	s.assertGet(c, id+"/meta/extra-info", map[string]string{
+		"foo": "fooval",
+		"bar": "barval",
+	})
+
+	// Overwrite a value and check that it's changed.
+	s.assertPut(c, id+"/meta/extra-info/foo", "fooval2")
+	s.assertGet(c, id+"/meta/extra-info/foo", "fooval2")
+	s.assertGet(c, id+"/meta/extra-info", map[string]string{
+		"foo": "fooval2",
+		"bar": "barval",
+	})
+
+	// Write several values at once.
+	s.assertPut(c, id+"/meta/any", params.MetaAnyResponse{
+		Meta: map[string]interface{}{
+			"extra-info": map[string]string{
+				"foo": "fooval3",
+				"baz": "bazval",
+			},
+			"extra-info/frob": []int{1, 4, 6},
+		},
+	})
+	s.assertGet(c, id+"/meta/extra-info", map[string]interface{}{
+		"foo":  "fooval3",
+		"baz":  "bazval",
+		"bar":  "barval",
+		"frob": []int{1, 4, 6},
+	})
+}
+
+var extraInfoBadPutRequestsTests = []struct {
+	about        string
+	path         string
+	body         interface{}
+	contentType  string
+	expectStatus int
+	expectBody   params.Error
+}{{
+	about:        "key with extra element",
+	path:         "precise/wordpress-23/meta/extra-info/foo/bar",
+	body:         "hello",
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: "bad key for extra-info",
+	},
+}, {
+	about:        "key with a dot",
+	path:         "precise/wordpress-23/meta/extra-info/foo.bar",
+	body:         "hello",
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: "bad key for extra-info",
+	},
+}, {
+	about:        "key with a dollar",
+	path:         "precise/wordpress-23/meta/extra-info/foo$bar",
+	body:         "hello",
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: "bad key for extra-info",
+	},
+}, {
+	about: "multi key with extra element",
+	path:  "precise/wordpress-23/meta/extra-info",
+	body: map[string]string{
+		"foo/bar": "value",
+	},
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: "bad key for extra-info",
+	},
+}, {
+	about: "multi key with dot",
+	path:  "precise/wordpress-23/meta/extra-info",
+	body: map[string]string{
+		".bar": "value",
+	},
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: "bad key for extra-info",
+	},
+}, {
+	about: "multi key with dollar",
+	path:  "precise/wordpress-23/meta/extra-info",
+	body: map[string]string{
+		"$bar": "value",
+	},
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: "bad key for extra-info",
+	},
+}, {
+	about:        "multi key with bad map",
+	path:         "precise/wordpress-23/meta/extra-info",
+	body:         "bad",
+	expectStatus: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: `cannot unmarshal extra info body: json: cannot unmarshal string into Go value of type map[string]*json.RawMessage`,
+	},
+}}
+
+func (s *APISuite) TestExtraInfoBadPutRequests(c *gc.C) {
+	s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
+	for i, test := range extraInfoBadPutRequestsTests {
+		c.Logf("test %d: %s", i, test.about)
+		contentType := test.contentType
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler: s.srv,
+			URL:     storeURL(test.path),
+			Method:  "PUT",
+			Header: http.Header{
+				"Content-Type": {contentType},
+			},
+			Body:         strings.NewReader(mustMarshalJSON(test.body)),
+			ExpectStatus: test.expectStatus,
+			ExpectBody:   test.expectBody,
+		})
 	}
 }
 
@@ -320,12 +485,7 @@ func (s *APISuite) TestMetaEndpointsAny(c *gc.C) {
 				expectData.Meta[ep.name] = val
 			}
 		}
-		storeURL := storeURL(charmId + "/meta/any?" + strings.Join(flags, "&"))
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:    s.srv,
-			URL:        storeURL,
-			ExpectBody: expectData,
-		})
+		s.assertGet(c, charmId+"/meta/any?"+strings.Join(flags, "&"), expectData)
 	}
 }
 
@@ -333,21 +493,15 @@ func (s *APISuite) TestMetaEndpointsAny(c *gc.C) {
 // dummy charm that has actions included.
 func (s *APISuite) TestMetaCharmActions(c *gc.C) {
 	url, dummy := s.addCharm(c, "dummy", "cs:precise/dummy-10")
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    s.srv,
-		URL:        storeURL("precise/dummy-10/meta/charm-actions"),
-		ExpectBody: dummy.Actions(),
-	})
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler: s.srv,
-		URL:     storeURL("precise/dummy-10/meta/any?include=charm-actions"),
-		ExpectBody: params.MetaAnyResponse{
+	s.assertGet(c, "precise/dummy-10/meta/charm-actions", dummy.Actions())
+	s.assertGet(c, "precise/dummy-10/meta/any?include=charm-actions",
+		params.MetaAnyResponse{
 			Id: url,
 			Meta: map[string]interface{}{
 				"charm-actions": dummy.Actions(),
 			},
 		},
-	})
+	)
 }
 
 func (s *APISuite) TestBulkMeta(c *gc.C) {
@@ -357,14 +511,13 @@ func (s *APISuite) TestBulkMeta(c *gc.C) {
 
 	_, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	_, mysql := s.addCharm(c, "mysql", "cs:precise/mysql-10")
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler: s.srv,
-		URL:     storeURL("meta/charm-metadata?id=precise/wordpress-23&id=precise/mysql-10"),
-		ExpectBody: map[string]*charm.Meta{
+	s.assertGet(c,
+		"meta/charm-metadata?id=precise/wordpress-23&id=precise/mysql-10",
+		map[string]*charm.Meta{
 			"precise/wordpress-23": wordpress.Meta(),
 			"precise/mysql-10":     mysql.Meta(),
 		},
-	})
+	)
 }
 
 func (s *APISuite) TestBulkMetaAny(c *gc.C) {
@@ -374,10 +527,9 @@ func (s *APISuite) TestBulkMetaAny(c *gc.C) {
 
 	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
 	mysqlURL, mysql := s.addCharm(c, "mysql", "cs:precise/mysql-10")
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler: s.srv,
-		URL:     storeURL("meta/any?include=charm-metadata&include=charm-config&id=precise/wordpress-23&id=precise/mysql-10"),
-		ExpectBody: map[string]params.MetaAnyResponse{
+	s.assertGet(c,
+		"meta/any?include=charm-metadata&include=charm-config&id=precise/wordpress-23&id=precise/mysql-10",
+		map[string]params.MetaAnyResponse{
 			"precise/wordpress-23": {
 				Id: wordpressURL,
 				Meta: map[string]interface{}{
@@ -393,7 +545,7 @@ func (s *APISuite) TestBulkMetaAny(c *gc.C) {
 				},
 			},
 		},
-	})
+	)
 }
 
 func (s *APISuite) TestIdsAreResolved(c *gc.C) {
@@ -402,18 +554,14 @@ func (s *APISuite) TestIdsAreResolved(c *gc.C) {
 	// defined, and the ResolveURL tests, this should
 	// be sufficient to "join the dots".
 	_, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:    s.srv,
-		URL:        storeURL("wordpress/meta/charm-metadata"),
-		ExpectBody: wordpress.Meta(),
-	})
+	s.assertGet(c, "wordpress/meta/charm-metadata", wordpress.Meta())
 }
 
 func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
 	for i, ep := range metaEndpoints {
 		c.Logf("test %d: %s", i, ep.name)
 		expected := params.Error{
-			Message: params.ErrNotFound.Error(),
+			Message: "no matching charm or bundle for cs:precise/wordpress-23",
 			Code:    params.ErrNotFound,
 		}
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
@@ -598,7 +746,7 @@ var serveMetaRevisionInfoTests = []struct {
 }, {
 	about: "no entities found",
 	url:   "precise/no-such-33",
-	err:   "not found",
+	err:   "no matching charm or bundle for cs:precise/no-such-33",
 }}
 
 func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
@@ -690,14 +838,8 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 		checkCounterSum(c, s.store, key, false, test.downloads)
 
 		// Ensure the meta/stats response reports the correct downloads count.
-		statsURL := storeURL(test.url + "/meta/stats")
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:      s.srv,
-			URL:          statsURL,
-			ExpectStatus: http.StatusOK,
-			ExpectBody: params.StatsResponse{
-				ArchiveDownloadCount: test.downloads,
-			},
+		s.assertGet(c, test.url+"/meta/stats", params.StatsResponse{
+			ArchiveDownloadCount: test.downloads,
 		})
 	}
 }
@@ -779,6 +921,38 @@ func (s *APISuite) addBundle(c *gc.C, bundleName string, curl string) (*charm.Re
 	err := s.store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
 	return url, bundle
+}
+
+func (s *APISuite) assertPut(c *gc.C, url string, val interface{}) {
+	body, err := json.Marshal(val)
+	c.Assert(err, gc.IsNil)
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL(url),
+		Method:  "PUT",
+		Header: http.Header{
+			"Content-Type": {"application/json"},
+		},
+		Body: bytes.NewReader(body),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %s", rec.Body.String()))
+	c.Assert(rec.Body.String(), gc.HasLen, 0)
+}
+
+func (s *APISuite) assertGet(c *gc.C, url string, expectVal interface{}) {
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:    s.srv,
+		URL:        storeURL(url),
+		ExpectBody: expectVal,
+	})
+}
+
+func mustMarshalJSON(val interface{}) string {
+	data, err := json.Marshal(val)
+	if err != nil {
+		panic(fmt.Errorf("cannot marshal %#v: %v", val, err))
+	}
+	return string(data)
 }
 
 func mustParseReference(url string) *charm.Reference {

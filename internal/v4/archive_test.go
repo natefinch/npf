@@ -513,7 +513,7 @@ var archiveFileErrorsTests = []struct {
 	about:         "entity not found",
 	path:          "trusty/no-such-42/archive/icon.svg",
 	expectStatus:  http.StatusNotFound,
-	expectMessage: "not found",
+	expectMessage: "entity not found",
 	expectCode:    params.ErrNotFound,
 }, {
 	about:         "directory listing",
@@ -764,7 +764,7 @@ func (s *ArchiveSuite) TestDeleteNotFound(c *gc.C) {
 		Password:     serverParams.AuthPassword,
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
-			Message: params.ErrNotFound.Error(),
+			Message: "entity not found",
 			Code:    params.ErrNotFound,
 		},
 	})
