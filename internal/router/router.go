@@ -203,7 +203,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 		return errgo.Mask(err, errgo.Any)
 	}
 	if key != "meta/" && key != "meta" {
-		return errgo.WithCausef(nil, params.ErrNotFound, "")
+		return errgo.WithCausef(nil, params.ErrNotFound, params.ErrNotFound.Error())
 	}
 	req.URL.Path = path
 	return r.serveMeta(url, w, req)
@@ -281,7 +281,7 @@ func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface
 		}
 		return results[0], nil
 	}
-	return nil, errgo.WithCausef(nil, params.ErrNotFound, "")
+	return nil, errgo.WithCausef(nil, params.ErrNotFound, "unknown metadata %q", key)
 }
 
 const jsonContentType = "application/json"

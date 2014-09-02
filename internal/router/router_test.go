@@ -314,7 +314,7 @@ var routerGetTests = []struct {
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
-		Message: "not found",
+		Message: `unknown metadata "foo"`,
 	},
 }, {
 	about: "meta handler with nil data",
@@ -1602,7 +1602,7 @@ func (s *RouterSuite) TestServeMux(c *gc.C) {
 		URL:          "/foo",
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
-			Message: "not found",
+			Message: `no handler for "/foo"`,
 			Code:    params.ErrNotFound,
 		},
 	})

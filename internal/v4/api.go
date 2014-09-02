@@ -148,7 +148,7 @@ func (h *handler) entityQuery(id *charm.Reference, selector map[string]int) (int
 		Select(selector).
 		One(&val)
 	if err == mgo.ErrNotFound {
-		return nil, errgo.WithCausef(nil, params.ErrNotFound, "")
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
 	if err != nil {
 		return nil, errgo.Mask(err)
@@ -366,7 +366,7 @@ func (h *handler) metaRevisionInfo(id *charm.Reference, path string, flags url.V
 	}
 
 	if len(docs) == 0 {
-		return "", errgo.WithCausef(nil, params.ErrNotFound, "")
+		return "", errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
 
 	// Sort in descending order by revision.

@@ -271,9 +271,9 @@ func (s *APISuite) addTestEntities(c *gc.C) []*charm.Reference {
 		} else {
 			s.addCharm(c, url.Name, e)
 		}
-		// associate some extra-info data with the entity
-
-		s.assertPut(c, strings.TrimPrefix(e, "cs:")+"/meta/extra-info/key", "value "+e)
+		// Associate some extra-info data with the entity.
+		key := strings.TrimPrefix(e, "cs:") + "/meta/extra-info/key"
+		s.assertPut(c, key, "value "+e)
 		urls[i] = url
 	}
 	return urls
@@ -313,7 +313,7 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 
 func (s *APISuite) TestExtraInfo(c *gc.C) {
 	id := "precise/wordpress-23"
-	s.addCharm(c, "wordpress", "cs:"+id)
+	s.addCharm(c, "wordpress", id)
 
 	// Add one value and check that it's there.
 	s.assertPut(c, id+"/meta/extra-info/foo", "fooval")
@@ -561,7 +561,7 @@ func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
 	for i, ep := range metaEndpoints {
 		c.Logf("test %d: %s", i, ep.name)
 		expected := params.Error{
-			Message: params.ErrNotFound.Error(),
+			Message: "no matching charm or bundle for cs:precise/wordpress-23",
 			Code:    params.ErrNotFound,
 		}
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
@@ -746,7 +746,7 @@ var serveMetaRevisionInfoTests = []struct {
 }, {
 	about: "no entities found",
 	url:   "precise/no-such-33",
-	err:   "not found",
+	err:   "no matching charm or bundle for cs:precise/no-such-33",
 }}
 
 func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {

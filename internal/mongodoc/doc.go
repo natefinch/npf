@@ -33,7 +33,7 @@ type Entity struct {
 
 	// ExtraInfo holds arbitrary extra metadata associated with
 	// the entity. The byte slices hold JSON-encoded data.
-	ExtraInfo map[string][]byte
+	ExtraInfo map[string][]byte `bson:",omitempty"`
 
 	// TODO(rog) verify that all these types marshal to the expected
 	// JSON form.

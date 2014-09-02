@@ -4,6 +4,7 @@
 package charmstore_test
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -86,12 +87,13 @@ func assertServesVersion(c *gc.C, h http.Handler, vers string) {
 }
 
 func assertDoesNotServeVersion(c *gc.C, h http.Handler, vers string) {
+	url := "/" + vers + "/debug"
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:      h,
-		URL:          "/" + vers + "/debug",
+		URL:          url,
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
-			Message: "not found",
+			Message: fmt.Sprintf("no handler for %q", url),
 			Code:    params.ErrNotFound,
 		},
 	})
