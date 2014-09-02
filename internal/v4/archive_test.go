@@ -78,23 +78,25 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 		c.Skip("MongoDB JavaScript not available")
 	}
 
-	// Add a charm to the database (including the archive).
-	id := "utopic/mysql-42"
-	err := s.store.AddCharmWithArchive(
-		mustParseReference(id),
-		charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"))
-	c.Assert(err, gc.IsNil)
+	for i, id := range []string{"utopic/mysql-42", "~who/utopic/mysql-42"} {
+		c.Logf("test %d: %s", i, id)
+		url := mustParseReference(id)
 
-	// Download the charm archive using the API.
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL(id + "/archive"),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+		// Add a charm to the database (including the archive).
+		err := s.store.AddCharmWithArchive(url, charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"))
+		c.Assert(err, gc.IsNil)
 
-	// Check that the downloads count for the entity has been updated.
-	key := []string{params.StatsArchiveDownload, "utopic", "mysql", "42"}
-	checkCounterSum(c, s.store, key, false, 1)
+		// Download the charm archive using the API.
+		rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+			Handler: s.srv,
+			URL:     storeURL(id + "/archive"),
+		})
+		c.Assert(rec.Code, gc.Equals, http.StatusOK)
+
+		// Check that the downloads count for the entity has been updated.
+		key := []string{params.StatsArchiveDownload, "utopic", "mysql", url.User, "42"}
+		checkCounterSum(c, s.store, key, false, 1)
+	}
 }
 
 var archivePostErrorsTests = []struct {
@@ -352,6 +354,51 @@ func (s *ArchiveSuite) TestPostInvalidBundleData(c *gc.C) {
 		`"service \"mysql\" refers to non-existent charm \"mysql\"",` +
 		`"service \"wordpress\" refers to non-existent charm \"wordpress\""]`
 	s.assertCannotUpload(c, "bundle/wordpress", f, expectErr)
+}
+
+func (s *ArchiveSuite) TestPostCounters(c *gc.C) {
+	if !storetesting.MongoJSEnabled() {
+		c.Skip("MongoDB JavaScript not available")
+	}
+
+	s.assertUploadCharm(c, mustParseReference("precise/wordpress-0"), "wordpress")
+
+	// Check that the upload count for the entity has been updated.
+	key := []string{params.StatsArchiveUpload, "precise", "wordpress", ""}
+	checkCounterSum(c, s.store, key, false, 1)
+}
+
+func (s *ArchiveSuite) TestPostFailureCounters(c *gc.C) {
+	if !storetesting.MongoJSEnabled() {
+		c.Skip("MongoDB JavaScript not available")
+	}
+
+	hash, _ := hashOf(invalidZip())
+	doPost := func(url string, expectCode int) {
+		rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+			Handler: s.srv,
+			URL:     storeURL(url),
+			Method:  "POST",
+			Header: http.Header{
+				"Content-Type": {"application/zip"},
+			},
+			Body:     invalidZip(),
+			Username: serverParams.AuthUsername,
+			Password: serverParams.AuthPassword,
+		})
+		c.Assert(rec.Code, gc.Equals, expectCode)
+	}
+
+	// Send a first invalid request (revision specified).
+	doPost("utopic/wordpress-42/archive", http.StatusBadRequest)
+	// Send a second invalid request (no hash).
+	doPost("utopic/wordpress/archive", http.StatusBadRequest)
+	// Send a third invalid request (invalid zip).
+	doPost("utopic/wordpress/archive?hash="+hash, http.StatusInternalServerError)
+
+	// Check that the failed upload count for the entity has been updated.
+	key := []string{params.StatsArchiveFailedUpload, "utopic", "wordpress", ""}
+	checkCounterSum(c, s.store, key, false, 3)
 }
 
 func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSeeker, errorMessage string) {
@@ -767,7 +814,7 @@ func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 
 	// Check that the delete count for the entity has been updated.
-	key := []string{params.StatsArchiveDelete, "utopic", "mysql", "42"}
+	key := []string{params.StatsArchiveDelete, "utopic", "mysql", "", "42"}
 	checkCounterSum(c, s.store, key, false, 1)
 }
 
