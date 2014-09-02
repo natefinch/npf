@@ -78,23 +78,25 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 		c.Skip("MongoDB JavaScript not available")
 	}
 
-	// Add a charm to the database (including the archive).
-	id := "utopic/mysql-42"
-	err := s.store.AddCharmWithArchive(
-		mustParseReference(id),
-		charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"))
-	c.Assert(err, gc.IsNil)
+	for i, id := range []string{"utopic/mysql-42", "~who/utopic/mysql-42"} {
+		c.Logf("test %d: %s", i, id)
+		url := mustParseReference(id)
 
-	// Download the charm archive using the API.
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL(id + "/archive"),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+		// Add a charm to the database (including the archive).
+		err := s.store.AddCharmWithArchive(url, charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"))
+		c.Assert(err, gc.IsNil)
 
-	// Check that the downloads count for the entity has been updated.
-	key := []string{params.StatsArchiveDownload, "utopic", "mysql", "", "42"}
-	checkCounterSum(c, s.store, key, false, 1)
+		// Download the charm archive using the API.
+		rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+			Handler: s.srv,
+			URL:     storeURL(id + "/archive"),
+		})
+		c.Assert(rec.Code, gc.Equals, http.StatusOK)
+
+		// Check that the downloads count for the entity has been updated.
+		key := []string{params.StatsArchiveDownload, "utopic", "mysql", url.User, "42"}
+		checkCounterSum(c, s.store, key, false, 1)
+	}
 }
 
 var archivePostErrorsTests = []struct {
