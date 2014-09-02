@@ -116,7 +116,7 @@ func (h *handler) entityHandler(f entityHandlerFunc, fields ...string) router.Bu
 	return h.puttableEntityHandler(f, nil, fields...)
 }
 
-func (h *handler) puttableEntityHandler(get entityHandlerFunc, put router.FieldPutFunc, fields ...string) router.BulkIncludeHandler {
+func (h *handler) puttableEntityHandler(get entityHandlerFunc, handlePut router.FieldPutFunc, fields ...string) router.BulkIncludeHandler {
 	handleGet := func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 		edoc := doc.(*mongodoc.Entity)
 		val, err := get(edoc, id, path, flags)
@@ -128,7 +128,7 @@ func (h *handler) puttableEntityHandler(get entityHandlerFunc, put router.FieldP
 		Query:     h.entityQuery,
 		Fields:    fields,
 		HandleGet: handleGet,
-		HandlePut: put,
+		HandlePut: handlePut,
 		Update:    h.updateEntity,
 	})
 }
