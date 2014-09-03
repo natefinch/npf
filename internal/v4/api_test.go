@@ -220,13 +220,18 @@ var metaEndpoints = []metaEndpoint{{
 }, {
 	name: "extra-info",
 	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
-		return map[string]string{
+		expectExtraInfo := map[string]interface{}{
 			"key": "value " + url.String(),
-		}, nil
+		}
+		if url.Series == "bundle" {
+			// The bundle used for tests has two units.
+			expectExtraInfo["units-count"] = 2
+		}
+		return expectExtraInfo, nil
 	},
 	checkURL: "cs:precise/wordpress-23",
 	assertCheckData: func(c *gc.C, data interface{}) {
-		c.Assert(data, gc.DeepEquals, map[string]string{
+		c.Assert(data, gc.DeepEquals, map[string]interface{}{
 			"key": "value cs:precise/wordpress-23",
 		})
 	},

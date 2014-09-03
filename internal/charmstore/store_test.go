@@ -130,6 +130,9 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 			mustParseReference("mysql"),
 			mustParseReference("wordpress"),
 		},
+		ExtraInfo: map[string][]byte{
+			"units-count": []byte("2"),
+		},
 	})
 
 	// The bundle archive has been properly added to the blob store.
