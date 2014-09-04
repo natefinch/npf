@@ -1,9 +1,7 @@
 package blobstore
 
 import (
-	"crypto/md5"
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/sha512"
 	"fmt"
 	"hash"
 	"io"
@@ -13,8 +11,6 @@ import (
 	"github.com/juju/errgo"
 	"github.com/juju/errors"
 	"gopkg.in/mgo.v2"
-
-	"github.com/juju/charmstore/internal/multihash"
 )
 
 type ReadSeekCloser interface {
@@ -52,7 +48,7 @@ type ContentChallengeResponse struct {
 
 // NewHash is used to calculate checksums for the blob store.
 func NewHash() hash.Hash {
-	return multihash.New(md5.New(), sha256.New())
+	return sha512.New384()
 }
 
 // NewContentChallengeResponse can be used by a client to respond to a content
@@ -97,8 +93,7 @@ func (s *Store) challengeResponse(resp *ContentChallengeResponse) error {
 	if err != nil {
 		return errgo.Newf("invalid request id %q", id)
 	}
-	rh := newResourceHash(resp.Hash)
-	return s.mstore.ProofOfAccessResponse(blobstore.NewPutResponse(id, rh.MD5Hash, rh.SHA256Hash))
+	return s.mstore.ProofOfAccessResponse(blobstore.NewPutResponse(id, resp.Hash))
 }
 
 // Put tries to stream the content from the given reader into blob
@@ -121,11 +116,10 @@ func (s *Store) Put(r io.Reader, name string, size int64, hash string, proof *Co
 		// was created, so continue on with uploading
 		// the content as if there was no previous challenge.
 	}
-	rh := newResourceHash(hash)
-	resp, err := s.mstore.PutForEnvironmentRequest("", name, rh)
+	resp, err := s.mstore.PutForEnvironmentRequest("", name, hash)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			if err := s.mstore.PutForEnvironmentAndCheckHash("", name, r, size, rh); err != nil {
+			if err := s.mstore.PutForEnvironmentAndCheckHash("", name, r, size, hash); err != nil {
 				return nil, errgo.Mask(err)
 			}
 			return nil, nil
@@ -144,8 +138,7 @@ func (s *Store) Put(r io.Reader, name string, size int64, hash string, proof *Co
 // size and hash. In this case a challenge is never returned and a proof
 // is not required.
 func (s *Store) PutUnchallenged(r io.Reader, name string, size int64, hash string) error {
-	rh := newResourceHash(hash)
-	return s.mstore.PutForEnvironmentAndCheckHash("", name, r, size, rh)
+	return s.mstore.PutForEnvironmentAndCheckHash("", name, r, size, hash)
 }
 
 // Open opens the entry with the given name.
@@ -160,20 +153,4 @@ func (s *Store) Open(name string) (ReadSeekCloser, int64, error) {
 // Remove the given name from the Store.
 func (s *Store) Remove(name string) error {
 	return s.mstore.RemoveForEnvironment("", name)
-}
-
-// newResourceHash returns a ResourceHash equivalent to the
-// given hashSum. It does not complain if hashSum is invalid - the
-// lower levels will fail appropriately.
-func newResourceHash(hashSum string) blobstore.ResourceHash {
-	p := hex.EncodedLen(md5.Size)
-	if len(hashSum) < p {
-		return blobstore.ResourceHash{
-			MD5Hash: hashSum,
-		}
-	}
-	return blobstore.ResourceHash{
-		MD5Hash:    hashSum[0:p],
-		SHA256Hash: hashSum[p:],
-	}
 }
