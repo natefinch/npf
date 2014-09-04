@@ -1,4 +1,5 @@
-//package multihash
+package multihash
+
 //
 //import (
 //	"hash"
@@ -16,8 +17,8 @@
 //}
 
 //func (h *multiHash) Write(buf []byte) (int, error) {
-	// Note: Hash.Write never returns an error.
-	// See http://golang.org/pkg/hash/#Hash
+// Note: Hash.Write never returns an error.
+// See http://golang.org/pkg/hash/#Hash
 //	h.h1.Write(buf)
 //	h.h2.Write(buf)
 //	return len(buf), nil
@@ -39,6 +40,6 @@
 //}
 
 //func (h *multiHash) BlockSize() int {
-	// better: use least common multiple of both block sizes.
+// better: use least common multiple of both block sizes.
 //	return h.h1.BlockSize()
 //}

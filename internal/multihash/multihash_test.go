@@ -1,4 +1,4 @@
-//package multihash_test
+package multihash_test
 
 //import (
 //	"crypto/md5"
