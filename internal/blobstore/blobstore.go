@@ -103,7 +103,7 @@ func (s *Store) challengeResponse(resp *ContentChallengeResponse) error {
 // satisfied by a client to prove that they have access to the content.
 // If the proof has already been acquired, it should be passed in as the
 // proof argument.
-func (s *Store) Put(r io.Reader, name string, size int64, hash384 string, proof *ContentChallengeResponse) (*ContentChallenge, error) {
+func (s *Store) Put(r io.Reader, name string, size int64, hash string, proof *ContentChallengeResponse) (*ContentChallenge, error) {
 	if proof != nil {
 		err := s.challengeResponse(proof)
 		if err == nil {
@@ -116,10 +116,10 @@ func (s *Store) Put(r io.Reader, name string, size int64, hash384 string, proof 
 		// was created, so continue on with uploading
 		// the content as if there was no previous challenge.
 	}
-	resp, err := s.mstore.PutForEnvironmentRequest("", name, hash384)
+	resp, err := s.mstore.PutForEnvironmentRequest("", name, hash)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			if err := s.mstore.PutForEnvironmentAndCheckHash("", name, r, size, hash384); err != nil {
+			if err := s.mstore.PutForEnvironmentAndCheckHash("", name, r, size, hash); err != nil {
 				return nil, errgo.Mask(err)
 			}
 			return nil, nil
@@ -137,8 +137,8 @@ func (s *Store) Put(r io.Reader, name string, size int64, hash384 string, proof 
 // storage, with the provided name. The content should have the given
 // size and hash. In this case a challenge is never returned and a proof
 // is not required.
-func (s *Store) PutUnchallenged(r io.Reader, name string, size int64, hash384 string) error {
-	return s.mstore.PutForEnvironmentAndCheckHash("", name, r, size, hash384)
+func (s *Store) PutUnchallenged(r io.Reader, name string, size int64, hash string) error {
+	return s.mstore.PutForEnvironmentAndCheckHash("", name, r, size, hash)
 }
 
 // Open opens the entry with the given name.
