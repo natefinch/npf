@@ -224,7 +224,8 @@ var metaEndpoints = []metaEndpoint{{
 			"key": "value " + url.String(),
 		}
 		if url.Series == "bundle" {
-			// The bundle used for tests has two units.
+			// The bundle used for tests has two machines and two units.
+			expectExtraInfo["machines-count"] = 2
 			expectExtraInfo["units-count"] = 2
 		}
 		return expectExtraInfo, nil

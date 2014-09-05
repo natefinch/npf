@@ -131,7 +131,8 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 			mustParseReference("wordpress"),
 		},
 		ExtraInfo: map[string][]byte{
-			"units-count": []byte("2"),
+			"machines-count": []byte("2"),
+			"units-count":    []byte("2"),
 		},
 	})
 
