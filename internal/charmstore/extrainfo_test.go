@@ -210,7 +210,7 @@ var machinesCountTests = []struct {
 			"haproxy": {
 				Charm:    "cs:trusty/haproxy-47",
 				NumUnits: 1,
-				To:       []string{"django/1"},
+				To:       []string{"django/0"},
 			},
 		},
 	},
@@ -315,7 +315,7 @@ var machinesCountTests = []struct {
 			"haproxy": {
 				Charm:    "cs:trusty/haproxy-47",
 				NumUnits: 3,
-				To:       []string{"django/1", "django/2", "new"},
+				To:       []string{"django/0", "django/1", "new"},
 			},
 		},
 	},
@@ -344,7 +344,7 @@ var machinesCountTests = []struct {
 			"1": nil, "2": nil, "3": nil,
 		},
 	},
-	expectMachines: 2 + 0 + 1,
+	expectMachines: 2 + 1 + 0,
 }, {
 	about: "multiple machines (partial placement in a container)",
 	data: &charm.BundleData{
