@@ -201,10 +201,6 @@ func (s *Store) AddBundle(url *charm.Reference, b charm.Bundle, blobName, blobHa
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	extraInfo, err := bundleExtraInfo(bundleData)
-	if err != nil {
-		return errgo.Mask(err)
-	}
 	err = s.DB.Entities().Insert(&mongodoc.Entity{
 		URL:          url,
 		BaseURL:      baseURL(url),
@@ -213,9 +209,10 @@ func (s *Store) AddBundle(url *charm.Reference, b charm.Bundle, blobName, blobHa
 		Size:         blobSize,
 		UploadTime:   time.Now(),
 		BundleData:   bundleData,
+		BundleUnitCount: newInt(bundleUnitCount(bundleData)),
+		BundleMachineCount: newInt(bundleMachineCount(bundleData)),
 		BundleReadMe: b.ReadMe(),
 		BundleCharms: urls,
-		ExtraInfo:    extraInfo,
 	})
 	if mgo.IsDup(err) {
 		return params.ErrDuplicateUpload
@@ -223,6 +220,56 @@ func (s *Store) AddBundle(url *charm.Reference, b charm.Bundle, blobName, blobHa
 	return errgo.Mask(err)
 }
 
+func newInt(x int) *int {
+	return &x
+}
+
+// bundleUnitCount returns the number of units created by the bundle.
+func bundleUnitCount(b *charm.BundleData) int {
+	count := 0
+	for _, service := range b.Services {
+		count += service.NumUnits
+	}
+	return count
+}
+
+// bundleMachineCount returns the number of machines
+// that will be created or used by the bundle.
+func bundleMachineCount(b *charm.BundleData) int {
+	// Calculate the number of units and machines in the bundle.
+	count := len(b.Machines)
+	for _, service := range b.Services {
+		// The default placement is "new".
+		placement := &charm.UnitPlacement{
+			Machine: "new",
+		}
+		// Check for "new" placements, which means a new machine
+		// must be added.
+		for _, location := range service.To {
+			var err error
+			placement, err = charm.ParsePlacement(location)
+			if err != nil {
+				// Ignore invalid placements - a bundle should always
+				// be verified before adding to the charm store so this
+				// should never happen in practice.
+				continue
+			}
+			if placement.Machine == "new" {
+				count++
+			}
+		}
+		// If there are less elements in To than NumUnits, the last placement
+		// element is replicated. For this reason, if the last element is
+		// "new", we need to add more machines.
+		if placement != nil && placement.Machine == "new" {
+			count += service.NumUnits - len(service.To)
+		}
+	}
+	return count
+}
+
+// bundleCharms returns all the charm URLs used by a bundle,
+// without duplicates.
 func bundleCharms(data *charm.BundleData) ([]*charm.Reference, error) {
 	// Use a map to de-duplicate the URL list: a bundle can include services
 	// deployed by the same charm.

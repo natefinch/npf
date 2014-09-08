@@ -57,6 +57,14 @@ type Entity struct {
 	// not already included.
 	BundleCharms []*charm.Reference
 
+	// BundleMachineCount counts the machines used or created
+	// by the bundle. It is nil for charms.
+	BundleMachineCount *int
+
+	// BundleUnitCount counts the units created by the bundle.
+	// It is nil for charms.
+	BundleUnitCount *int
+
 	// TODO Add fields denormalized for search purposes
 	// and search ranking field(s).
 }

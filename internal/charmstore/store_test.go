@@ -130,10 +130,8 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 			mustParseReference("mysql"),
 			mustParseReference("wordpress"),
 		},
-		ExtraInfo: map[string][]byte{
-			"machines-count": []byte("2"),
-			"units-count":    []byte("2"),
-		},
+		BundleMachineCount: newInt(2),
+		BundleUnitCount:    newInt(2),
 	})
 
 	// The bundle archive has been properly added to the blob store.
@@ -231,6 +229,415 @@ func (s *StoreSuite) TestExpandURL(c *gc.C) {
 	}
 }
 
+var bundleUnitCountTests = []struct {
+	about       string
+	data        *charm.BundleData
+	expectUnits int
+}{{
+	about: "empty bundle",
+	data:  &charm.BundleData{},
+}, {
+	about: "no units",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:utopic/django-0",
+				NumUnits: 0,
+			},
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-0",
+				NumUnits: 0,
+			},
+		},
+	},
+}, {
+	about: "a single unit",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:trusty/django-42",
+				NumUnits: 1,
+			},
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-47",
+				NumUnits: 0,
+			},
+		},
+	},
+	expectUnits: 1,
+}, {
+	about: "multiple units",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:utopic/django-1",
+				NumUnits: 1,
+			},
+			"haproxy": {
+				Charm:    "cs:utopic/haproxy-2",
+				NumUnits: 2,
+			},
+			"postgres": {
+				Charm:    "cs:utopic/postgres-3",
+				NumUnits: 5,
+			},
+		},
+	},
+	expectUnits: 8,
+}}
+
+func (s *StoreSuite) TestBundleUnitCount(c *gc.C) {
+	store, err := NewStore(s.Session.DB("foo"))
+	c.Assert(err, gc.IsNil)
+	entities := store.DB.Entities()
+	for i, test := range bundleUnitCountTests {
+		c.Logf("test %d: %s", i, test.about)
+		url := &charm.Reference{
+			Schema:   "cs",
+			Series:   "utopic",
+			Name:     "django",
+			Revision: i,
+		}
+
+		// Add the bundle used for this test.
+		err := store.AddBundle(url, &testingBundle{
+			data: test.data,
+		}, "blobName", fakeBlobHash, fakeBlobSize)
+		c.Assert(err, gc.IsNil)
+
+		// Retrieve the bundle from the database.
+		var doc mongodoc.Entity
+		err = entities.FindId(url).One(&doc)
+		c.Assert(err, gc.IsNil)
+
+		c.Assert(*doc.BundleUnitCount, gc.Equals, test.expectUnits)
+	}
+}
+
+var bundleMachineCountTests = []struct {
+	about          string
+	data           *charm.BundleData
+	expectMachines int
+}{{
+	about: "no machines",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:utopic/django-0",
+				NumUnits: 0,
+			},
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-0",
+				NumUnits: 0,
+			},
+		},
+	},
+}, {
+	about: "a single machine (no placement)",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:trusty/django-42",
+				NumUnits: 1,
+			},
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-47",
+				NumUnits: 0,
+			},
+		},
+	},
+	expectMachines: 1,
+}, {
+	about: "a single machine (machine placement)",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:trusty/django-42",
+				NumUnits: 1,
+				To:       []string{"1"},
+			},
+		},
+		Machines: map[string]*charm.MachineSpec{
+			"1": nil,
+		},
+	},
+	expectMachines: 1,
+}, {
+	about: "a single machine (hulk smash)",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:trusty/django-42",
+				NumUnits: 1,
+				To:       []string{"1"},
+			},
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-47",
+				NumUnits: 1,
+				To:       []string{"1"},
+			},
+		},
+		Machines: map[string]*charm.MachineSpec{
+			"1": nil,
+		},
+	},
+	expectMachines: 1,
+}, {
+	about: "a single machine (co-location)",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:trusty/django-42",
+				NumUnits: 1,
+			},
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-47",
+				NumUnits: 1,
+				To:       []string{"django/0"},
+			},
+		},
+	},
+	expectMachines: 1,
+}, {
+	about: "a single machine (containerization)",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:trusty/django-42",
+				NumUnits: 1,
+				To:       []string{"1"},
+			},
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-47",
+				NumUnits: 1,
+				To:       []string{"lxc:1"},
+			},
+			"postgres": {
+				Charm:    "cs:utopic/postgres-3",
+				NumUnits: 2,
+				To:       []string{"kvm:1"},
+			},
+		},
+		Machines: map[string]*charm.MachineSpec{
+			"1": nil,
+		},
+	},
+	expectMachines: 1,
+}, {
+	about: "multiple machines (no placement)",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:utopic/django-1",
+				NumUnits: 1,
+			},
+			"haproxy": {
+				Charm:    "cs:utopic/haproxy-2",
+				NumUnits: 2,
+			},
+			"postgres": {
+				Charm:    "cs:utopic/postgres-3",
+				NumUnits: 5,
+			},
+		},
+	},
+	expectMachines: 1 + 2 + 5,
+}, {
+	about: "multiple machines (machine placement)",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:utopic/django-1",
+				NumUnits: 2,
+				To:       []string{"1", "3"},
+			},
+			"haproxy": {
+				Charm:    "cs:utopic/haproxy-2",
+				NumUnits: 1,
+				To:       []string{"2"},
+			},
+		},
+		Machines: map[string]*charm.MachineSpec{
+			"1": nil, "2": nil, "3": nil,
+		},
+	},
+	expectMachines: 2 + 1,
+}, {
+	about: "multiple machines (hulk smash)",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:trusty/django-42",
+				NumUnits: 1,
+				To:       []string{"1"},
+			},
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-47",
+				NumUnits: 1,
+				To:       []string{"2"},
+			},
+			"postgres": {
+				Charm:    "cs:utopic/postgres-3",
+				NumUnits: 2,
+				To:       []string{"1", "2"},
+			},
+		},
+		Machines: map[string]*charm.MachineSpec{
+			"1": nil, "2": nil,
+		},
+	},
+	expectMachines: 1 + 1 + 0,
+}, {
+	about: "multiple machines (co-location)",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:trusty/django-42",
+				NumUnits: 2,
+			},
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-47",
+				NumUnits: 3,
+				To:       []string{"django/0", "django/1", "new"},
+			},
+		},
+	},
+	expectMachines: 2 + 1,
+}, {
+	about: "multiple machines (containerization)",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:trusty/django-42",
+				NumUnits: 2,
+				To:       []string{"1", "2"},
+			},
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-47",
+				NumUnits: 4,
+				To:       []string{"lxc:1", "lxc:2", "lxc:3", "lxc:3"},
+			},
+			"postgres": {
+				Charm:    "cs:utopic/postgres-3",
+				NumUnits: 1,
+				To:       []string{"kvm:2"},
+			},
+		},
+		Machines: map[string]*charm.MachineSpec{
+			"1": nil, "2": nil, "3": nil,
+		},
+	},
+	expectMachines: 2 + 1 + 0,
+}, {
+	about: "multiple machines (partial placement in a container)",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:trusty/django-42",
+				NumUnits: 1,
+				To:       []string{"1"},
+			},
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-47",
+				NumUnits: 10,
+				To:       []string{"lxc:1", "lxc:2"},
+			},
+		},
+		Machines: map[string]*charm.MachineSpec{
+			"1": nil, "2": nil,
+		},
+	},
+	expectMachines: 1 + 1,
+}, {
+	about: "multiple machines (partial placement in a new machine)",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:trusty/django-42",
+				NumUnits: 1,
+				To:       []string{"1"},
+			},
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-47",
+				NumUnits: 10,
+				To:       []string{"lxc:1", "1", "new"},
+			},
+		},
+		Machines: map[string]*charm.MachineSpec{
+			"1": nil,
+		},
+	},
+	expectMachines: 1 + 8,
+}, {
+	about: "multiple machines (partial placement with new machines)",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"django": {
+				Charm:    "cs:trusty/django-42",
+				NumUnits: 3,
+			},
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-47",
+				NumUnits: 6,
+				To:       []string{"new", "1", "lxc:1", "new"},
+			},
+			"postgres": {
+				Charm:    "cs:utopic/postgres-3",
+				NumUnits: 10,
+				To:       []string{"kvm:2", "lxc:django/1", "new", "new", "kvm:2"},
+			},
+		},
+		Machines: map[string]*charm.MachineSpec{
+			"1": nil, "2": nil,
+		},
+	},
+	expectMachines: 3 + 5 + 3,
+}, {
+	about: "placement into container on new machine",
+	data: &charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"haproxy": {
+				Charm:    "cs:trusty/haproxy-47",
+				NumUnits: 6,
+				To:       []string{"lxc:new", "1", "lxc:1", "kvm:new"},
+			},
+		},
+		Machines: map[string]*charm.MachineSpec{
+			"1": nil,
+		},
+	},
+	expectMachines: 4 + 1,
+}}
+
+func (s *StoreSuite) TestBundleMachineCount(c *gc.C) {
+	store, err := NewStore(s.Session.DB("foo"))
+	c.Assert(err, gc.IsNil)
+	entities := store.DB.Entities()
+	for i, test := range bundleMachineCountTests {
+		c.Logf("test %d: %s", i, test.about)
+		url := &charm.Reference{
+			Schema:   "cs",
+			Series:   "utopic",
+			Name:     "django",
+			Revision: i,
+		}
+		err := test.data.Verify(func(string) error { return nil })
+		c.Assert(err, gc.IsNil)
+		// Add the bundle used for this test.
+		err = store.AddBundle(url, &testingBundle{
+			data: test.data,
+		}, "blobName", fakeBlobHash, fakeBlobSize)
+		c.Assert(err, gc.IsNil)
+
+		// Retrieve the bundle from the database.
+		var doc mongodoc.Entity
+		err = entities.FindId(url).One(&doc)
+		c.Assert(err, gc.IsNil)
+
+		c.Assert(*doc.BundleMachineCount, gc.Equals, test.expectMachines)
+	}
+}
+
 func urlStrings(urls []*charm.Reference) []string {
 	urlStrs := make([]string, len(urls))
 	for i, url := range urls {
@@ -302,3 +709,27 @@ func mustParseReference(url string) *charm.Reference {
 	}
 	return ref
 }
+
+// testingBundle implements charm.Bundle, allowing tests
+// to create a bundle with custom data.
+type testingBundle struct {
+	data *charm.BundleData
+}
+
+func (b *testingBundle) Data() *charm.BundleData {
+	return b.data
+}
+
+func (b *testingBundle) ReadMe() string {
+	// For the purposes of this implementation, the charm readme is not
+	// relevant.
+	return ""
+}
+
+// Define fake blob attributes to be used in tests.
+var fakeBlobSize, fakeBlobHash = func() (int64, string) {
+	b := []byte("fake content")
+	h := blobstore.NewHash()
+	h.Write(b)
+	return int64(len(b)), fmt.Sprintf("%x", h.Sum(nil))
+}()

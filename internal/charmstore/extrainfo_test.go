@@ -30,7 +30,7 @@ type extraInfoSuite struct {
 	store *charmstore.Store
 }
 
-var _ = gc.Suite(&extraInfoSuite{})
+// var _ = gc.Suite(&extraInfoSuite{})
 
 func (s *extraInfoSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
