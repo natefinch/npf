@@ -606,7 +606,7 @@ var bundleMachineCountTests = []struct {
 			"1": nil,
 		},
 	},
-	expectMachines: 4 + 1,
+	expectMachines: 5,
 }}
 
 func (s *StoreSuite) TestBundleMachineCount(c *gc.C) {

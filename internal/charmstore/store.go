@@ -236,7 +236,6 @@ func bundleUnitCount(b *charm.BundleData) int {
 // bundleMachineCount returns the number of machines
 // that will be created or used by the bundle.
 func bundleMachineCount(b *charm.BundleData) int {
-	// Calculate the number of units and machines in the bundle.
 	count := len(b.Machines)
 	for _, service := range b.Services {
 		// The default placement is "new".
