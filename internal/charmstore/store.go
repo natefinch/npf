@@ -202,17 +202,17 @@ func (s *Store) AddBundle(url *charm.Reference, b charm.Bundle, blobName, blobHa
 		return errgo.Mask(err)
 	}
 	err = s.DB.Entities().Insert(&mongodoc.Entity{
-		URL:          url,
-		BaseURL:      baseURL(url),
-		BlobHash:     blobHash,
-		BlobName:     blobName,
-		Size:         blobSize,
-		UploadTime:   time.Now(),
-		BundleData:   bundleData,
-		BundleUnitCount: newInt(bundleUnitCount(bundleData)),
+		URL:                url,
+		BaseURL:            baseURL(url),
+		BlobHash:           blobHash,
+		BlobName:           blobName,
+		Size:               blobSize,
+		UploadTime:         time.Now(),
+		BundleData:         bundleData,
+		BundleUnitCount:    newInt(bundleUnitCount(bundleData)),
 		BundleMachineCount: newInt(bundleMachineCount(bundleData)),
-		BundleReadMe: b.ReadMe(),
-		BundleCharms: urls,
+		BundleReadMe:       b.ReadMe(),
+		BundleCharms:       urls,
 	})
 	if mgo.IsDup(err) {
 		return params.ErrDuplicateUpload

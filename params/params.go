@@ -69,3 +69,10 @@ type RelatedResponse struct {
 type RevisionInfoResponse struct {
 	Revisions []*charm.Reference
 }
+
+// BundleCount holds the result of an id/meta/bundle-unit-count
+// or bundle-machine-count GET request. See http://tinyurl.com/mkvowub
+// and http://tinyurl.com/qfuubrv
+type BundleCount struct {
+	Count int
+}
