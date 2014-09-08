@@ -49,17 +49,19 @@ func New(store *charmstore.Store, config charmstore.ServerParams) http.Handler {
 			"resources": h.serveResources,
 		},
 		Meta: map[string]router.BulkIncludeHandler{
-			"archive-size":        h.entityHandler(h.metaArchiveSize, "size"),
-			"archive-upload-time": h.entityHandler(h.metaArchiveUploadTime, "uploadtime"),
-			"bundle-metadata":     h.entityHandler(h.metaBundleMetadata, "bundledata"),
-			"bundles-containing":  h.entityHandler(h.metaBundlesContaining),
-			"charm-actions":       h.entityHandler(h.metaCharmActions, "charmactions"),
-			"charm-config":        h.entityHandler(h.metaCharmConfig, "charmconfig"),
-			"charm-metadata":      h.entityHandler(h.metaCharmMetadata, "charmmeta"),
-			"charm-related":       h.entityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces"),
-			"manifest":            h.entityHandler(h.metaManifest, "blobname"),
-			"revision-info":       router.SingleIncludeHandler(h.metaRevisionInfo),
-			"stats":               h.entityHandler(h.metaStats),
+			"archive-size":         h.entityHandler(h.metaArchiveSize, "size"),
+			"archive-upload-time":  h.entityHandler(h.metaArchiveUploadTime, "uploadtime"),
+			"bundle-metadata":      h.entityHandler(h.metaBundleMetadata, "bundledata"),
+			"bundle-unit-count":    h.entityHandler(h.metaBundleUnitCount, "bundleunitcount"),
+			"bundle-machine-count": h.entityHandler(h.metaBundleMachineCount, "bundlemachinecount"),
+			"bundles-containing":   h.entityHandler(h.metaBundlesContaining),
+			"charm-actions":        h.entityHandler(h.metaCharmActions, "charmactions"),
+			"charm-config":         h.entityHandler(h.metaCharmConfig, "charmconfig"),
+			"charm-metadata":       h.entityHandler(h.metaCharmMetadata, "charmmeta"),
+			"charm-related":        h.entityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces"),
+			"manifest":             h.entityHandler(h.metaManifest, "blobname"),
+			"revision-info":        router.SingleIncludeHandler(h.metaRevisionInfo),
+			"stats":                h.entityHandler(h.metaStats),
 			"extra-info": h.puttableEntityHandler(
 				h.metaExtraInfo,
 				h.putMetaExtraInfo,
@@ -278,6 +280,27 @@ func (h *handler) metaCharmMetadata(entity *mongodoc.Entity, id *charm.Reference
 // http://tinyurl.com/ozshbtb
 func (h *handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return entity.BundleData, nil
+}
+
+// GET id/meta/bundle-unit-count
+// http://tinyurl.com/mkvowub
+func (h *handler) metaBundleUnitCount(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	return bundleCount(entity.BundleUnitCount), nil
+}
+
+// GET id/meta/bundle-machine-count
+// http://tinyurl.com/qfuubrv
+func (h *handler) metaBundleMachineCount(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	return bundleCount(entity.BundleMachineCount), nil
+}
+
+func bundleCount(x *int) interface{} {
+	if x == nil {
+		return nil
+	}
+	return params.BundleCount{
+		Count: *x,
+	}
 }
 
 // GET id/meta/manifest

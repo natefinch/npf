@@ -113,6 +113,32 @@ var metaEndpoints = []metaEndpoint{{
 		c.Assert(data.(*charm.BundleData).Services["wordpress"].Charm, gc.Equals, "wordpress")
 	},
 }, {
+	name:      "bundle-unit-count",
+	exclusive: bundleOnly,
+	get: entityGetter(func(entity *mongodoc.Entity) interface{} {
+		if entity.BundleData == nil {
+			return nil
+		}
+		return params.BundleCount{*entity.BundleUnitCount}
+	}),
+	checkURL: "cs:bundle/wordpress-42",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data.(params.BundleCount).Count, gc.Equals, 2)
+	},
+}, {
+	name:      "bundle-machine-count",
+	exclusive: bundleOnly,
+	get: entityGetter(func(entity *mongodoc.Entity) interface{} {
+		if entity.BundleData == nil {
+			return nil
+		}
+		return params.BundleCount{*entity.BundleMachineCount}
+	}),
+	checkURL: "cs:bundle/wordpress-42",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data.(params.BundleCount).Count, gc.Equals, 2)
+	},
+}, {
 	name:      "charm-actions",
 	exclusive: charmOnly,
 	get:       entityFieldGetter("CharmActions"),
