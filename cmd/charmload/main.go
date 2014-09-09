@@ -194,6 +194,11 @@ NewTip:
 		authhash := base64.StdEncoding.EncodeToString([]byte(storeUser))
 		logger.Tracef("encoded Authorization %v", authhash)
 		request.Header["Authorization"] = []string{"Basic " + authhash}
+		// go1.2.1 has a bug requiring Content-Type to be sent
+		// since we are posting to a go server which may be running on
+		// 1.2.1, we should send this header
+		// https://code.google.com/p/go/source/detail?r=a768c0592b88
+		request.Header["Content-Type"] = []string{"application/octet-stream"}
 		request.ContentLength = int64(counter)
 		resp, err := http.DefaultClient.Do(request)
 		defer resp.Body.Close()
