@@ -31,10 +31,7 @@ func NewAPIHandler(store *charmstore.Store, config charmstore.ServerParams) http
 }
 
 func (h *Handler) handle(path string, handler http.HandlerFunc) {
-	prefix := path
-	if strings.HasSuffix(prefix, "/") {
-		prefix = prefix[0 : len(prefix)-1]
-	}
+	prefix := strings.TrimSuffix(path, "/")
 	h.mux.Handle(path, http.StripPrefix(prefix, handler))
 }
 
