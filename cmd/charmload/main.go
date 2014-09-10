@@ -127,7 +127,7 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.URL, err err
 		branchURL = "lp:" + name
 	}
 	if len(u) < 5 || u[1] != "charms" || u[4] != "trunk" || len(u[0]) == 0 || u[0][0] != '~' {
-		return "", nil, fmt.Errorf("unwanted branch name: %s", name)
+		return "", nil, fmt.Errorf("unsupported branch name: %s", name)
 	}
 	charmURL, err = charm.ParseURL(fmt.Sprintf("cs:%s/%s/%s", u[0], u[2], u[3]))
 	if err != nil {
