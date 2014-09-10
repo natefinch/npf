@@ -36,7 +36,7 @@ func load() error {
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	staging := flags.Bool("staging", false, "use the launchpad staging server")
 	storeURL := flags.String("storeurl", "http://localhost:8080/v4/", "the URL of the charmstore")
-	loggingConfig := flags.String("logging-config", "", "specify log levels for modules")
+	loggingConfig := flags.String("logging-config", "", "specify log levels for modules e.g. <root>=TRACE")
 	showLog := flags.Bool("show-log", false, "if set, write log messages to stderr")
 	storeUser := flags.String("user", "admin:example-passwd", "the colon separated user:password for charmstore")
 	err := flags.Parse(os.Args[1:])
