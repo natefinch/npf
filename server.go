@@ -11,6 +11,7 @@ import (
 	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/internal/charmstore"
+	"github.com/juju/charmstore/internal/legacy"
 	"github.com/juju/charmstore/internal/v4"
 )
 

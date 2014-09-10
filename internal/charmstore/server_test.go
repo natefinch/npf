@@ -75,7 +75,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	assertServesVersion(c, h, "version2")
 	assertServesVersion(c, h, "version3")
 
-	h, err = NewServer(db, serverParams, map[string]NewAPIHandler{
+	h, err = NewServer(db, serverParams, map[string]NewAPIHandlerFunc{
 		"version1": serveVersion("version1"),
 		"":         serveVersion(""),
 	})
