@@ -143,10 +143,7 @@ func New(handlers *Handlers, resolveURL func(url *charm.Reference) error) *Route
 	mux.Handle("/meta/", http.StripPrefix("/meta", HandleErrors(r.serveBulkMeta)))
 	for path, handler := range r.handlers.Global {
 		path = "/" + path
-		prefix := path
-		if strings.HasSuffix(prefix, "/") {
-			prefix = prefix[0 : len(prefix)-1]
-		}
+		prefix := strings.TrimSuffix(path, "/")
 		mux.Handle(path, http.StripPrefix(prefix, handler))
 	}
 	mux.Handle("/", HandleErrors(r.serveIds))

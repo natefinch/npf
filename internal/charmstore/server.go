@@ -45,5 +45,9 @@ func NewServer(db *mgo.Database, config ServerParams, versions map[string]NewAPI
 }
 
 func handle(mux *router.ServeMux, path string, handler http.Handler) {
-	mux.Handle(path+"/", http.StripPrefix(path, handler))
+	if path != "/" {
+		handler = http.StripPrefix(path, handler)
+		path += "/"
+	}
+	mux.Handle(path, handler)
 }

@@ -55,7 +55,7 @@ type versionResponse struct {
 }
 
 func (s *ServerSuite) TestVersions(c *gc.C) {
-	c.Assert(charmstore.Versions(), gc.DeepEquals, []string{"v4"})
+	c.Assert(charmstore.Versions(), gc.DeepEquals, []string{"", "v4"})
 }
 
 func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
