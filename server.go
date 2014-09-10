@@ -16,11 +16,13 @@ import (
 
 // Versions of the API that can be served.
 const (
-	V4 = "v4"
+	V4     = "v4"
+	Legacy = ""
 )
 
 var versions = map[string]charmstore.NewAPIHandlerFunc{
-	V4: v4.NewAPIHandler,
+	V4:     v4.NewAPIHandler,
+	Legacy: legacy.NewAPIHandler,
 }
 
 // Versions returns all known API version strings in alphabetical order.

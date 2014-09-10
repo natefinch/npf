@@ -74,6 +74,14 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	assertServesVersion(c, h, "version1")
 	assertServesVersion(c, h, "version2")
 	assertServesVersion(c, h, "version3")
+
+	h, err = NewServer(db, serverParams, map[string]NewAPIHandler{
+		"version1": serveVersion("version1"),
+		"":         serveVersion(""),
+	})
+	c.Assert(err, gc.IsNil)
+	assertServesVersion(c, h, "")
+	assertServesVersion(c, h, "version1")
 }
 
 func (s *ServerSuite) TestNewServerWithConfig(c *gc.C) {
@@ -94,9 +102,13 @@ func (s *ServerSuite) TestNewServerWithConfig(c *gc.C) {
 }
 
 func assertServesVersion(c *gc.C, h http.Handler, vers string) {
+	path := vers
+	if path != "" {
+		path = "/" + path
+	}
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler: h,
-		URL:     "/" + vers + "/some/path",
+		URL:     path + "/some/path",
 		ExpectBody: versionResponse{
 			Version: vers,
 			Path:    "/some/path",
