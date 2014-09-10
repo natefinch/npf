@@ -22,15 +22,15 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
-type handler struct {
+type Handler struct {
 	*router.Router
 	store  *charmstore.Store
 	config charmstore.ServerParams
 }
 
 // New returns a new instance of the v4 API handler.
-func New(store *charmstore.Store, config charmstore.ServerParams) http.Handler {
-	h := &handler{
+func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
+	h := &Handler{
 		store:  store,
 		config: config,
 	}
@@ -80,7 +80,14 @@ func New(store *charmstore.Store, config charmstore.ServerParams) http.Handler {
 	return h
 }
 
-func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+// NewAPIHandler returns a new Handler as an http Handler.
+// It is defined for the convenience of callers that require a
+// charmstore.NewAPIHandlerFunc.
+func NewAPIHandler(store *charmstore.Store, config charmstore.ServerParams) http.Handler {
+	return New(store, config)
+}
+
+func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	h.Router.ServeHTTP(w, req)
 }
 
@@ -106,19 +113,19 @@ func noMatchingURLError(url *charm.Reference) error {
 	return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
 }
 
-func (h *handler) resolveURL(url *charm.Reference) error {
+func (h *Handler) resolveURL(url *charm.Reference) error {
 	return ResolveURL(h.store, url)
 }
 
 type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error)
 
-// entityHandler returns a handler that calls f with a *mongodoc.Entity that
+// entityHandler returns a Handler that calls f with a *mongodoc.Entity that
 // contains at least the given fields. It allows only GET requests.
-func (h *handler) entityHandler(f entityHandlerFunc, fields ...string) router.BulkIncludeHandler {
+func (h *Handler) entityHandler(f entityHandlerFunc, fields ...string) router.BulkIncludeHandler {
 	return h.puttableEntityHandler(f, nil, fields...)
 }
 
-func (h *handler) puttableEntityHandler(get entityHandlerFunc, handlePut router.FieldPutFunc, fields ...string) router.BulkIncludeHandler {
+func (h *Handler) puttableEntityHandler(get entityHandlerFunc, handlePut router.FieldPutFunc, fields ...string) router.BulkIncludeHandler {
 	handleGet := func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 		edoc := doc.(*mongodoc.Entity)
 		val, err := get(edoc, id, path, flags)
@@ -135,7 +142,7 @@ func (h *handler) puttableEntityHandler(get entityHandlerFunc, handlePut router.
 	})
 }
 
-func (h *handler) updateEntity(id *charm.Reference, fields map[string]interface{}) error {
+func (h *Handler) updateEntity(id *charm.Reference, fields map[string]interface{}) error {
 	err := h.store.DB.Entities().UpdateId(id, bson.D{{"$set", fields}})
 	if err != nil {
 		return errgo.Notef(err, "cannot update %q", id)
@@ -143,7 +150,7 @@ func (h *handler) updateEntity(id *charm.Reference, fields map[string]interface{
 	return nil
 }
 
-func (h *handler) entityQuery(id *charm.Reference, selector map[string]int) (interface{}, error) {
+func (h *Handler) entityQuery(id *charm.Reference, selector map[string]int) (interface{}, error) {
 	var val mongodoc.Entity
 	err := h.store.DB.Entities().
 		Find(bson.D{{"_id", id}}).
@@ -206,19 +213,19 @@ var errNotImplemented = errgo.Newf("method not implemented")
 
 // GET search[?text=text][&autocomplete=1][&filter=value…][&limit=limit][&include=meta]
 // http://tinyurl.com/qzobc69
-func (h *handler) serveSearch(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) serveSearch(w http.ResponseWriter, req *http.Request) {
 	router.WriteError(w, errNotImplemented)
 }
 
 // GET search/interesting[?limit=limit][&include=meta]
 // http://tinyurl.com/ntmdrg8
-func (h *handler) serveSearchInteresting(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) serveSearchInteresting(w http.ResponseWriter, req *http.Request) {
 	router.WriteError(w, errNotImplemented)
 }
 
 // GET /debug
 // http://tinyurl.com/m63xhz8
-func (h *handler) serveDebug(w http.ResponseWriter, req *http.Request) {
+func (h *Handler) serveDebug(w http.ResponseWriter, req *http.Request) {
 	router.WriteError(w, errNotImplemented)
 }
 
@@ -230,13 +237,13 @@ func (h *handler) serveDebug(w http.ResponseWriter, req *http.Request) {
 //
 // PUT id/resources/[~user/]series/name.stream-revision/arch?sha256=hash
 // http://tinyurl.com/k8l8kdg
-func (h *handler) serveResources(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveResources(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	return errNotImplemented
 }
 
 // GET id/expand-id
 // https://docs.google.com/a/canonical.com/document/d/1TgRA7jW_mmXoKH3JiwBbtPvQu7WiM6XMrz1wSrhTMXw/edit#bookmark=id.4xdnvxphb2si
-func (h *handler) serveExpandId(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveExpandId(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	// Mutate the given id so that it represents a base URL.
 	id.Revision = -1
 	id.Series = ""
@@ -272,25 +279,25 @@ func badRequestf(underlying error, f string, a ...interface{}) error {
 
 // GET id/meta/charm-metadata
 // http://tinyurl.com/poeoulw
-func (h *handler) metaCharmMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaCharmMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return entity.CharmMeta, nil
 }
 
 // GET id/meta/bundle-metadata
 // http://tinyurl.com/ozshbtb
-func (h *handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return entity.BundleData, nil
 }
 
 // GET id/meta/bundle-unit-count
 // http://tinyurl.com/mkvowub
-func (h *handler) metaBundleUnitCount(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaBundleUnitCount(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return bundleCount(entity.BundleUnitCount), nil
 }
 
 // GET id/meta/bundle-machine-count
 // http://tinyurl.com/qfuubrv
-func (h *handler) metaBundleMachineCount(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaBundleMachineCount(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return bundleCount(entity.BundleMachineCount), nil
 }
 
@@ -305,7 +312,7 @@ func bundleCount(x *int) interface{} {
 
 // GET id/meta/manifest
 // http://tinyurl.com/p3xdcto
-func (h *handler) metaManifest(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaManifest(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	r, size, err := h.store.BlobStore.Open(entity.BlobName)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot open archive data for %s", id)
@@ -332,25 +339,25 @@ func (h *handler) metaManifest(entity *mongodoc.Entity, id *charm.Reference, pat
 
 // GET id/meta/charm-actions
 // http://tinyurl.com/kfd2h34
-func (h *handler) metaCharmActions(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaCharmActions(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return entity.CharmActions, nil
 }
 
 // GET id/meta/charm-config
 // http://tinyurl.com/oxxyujx
-func (h *handler) metaCharmConfig(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaCharmConfig(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return entity.CharmConfig, nil
 }
 
 // GET id/meta/color
 // http://tinyurl.com/o2t3j4p
-func (h *handler) metaColor(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaColor(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/archive-size
 // http://tinyurl.com/m8b9geq
-func (h *handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return &params.ArchiveSizeResponse{
 		Size: entity.Size,
 	}, nil
@@ -358,7 +365,7 @@ func (h *handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, 
 
 // GET id/meta/stats/
 // http://tinyurl.com/lvyp2l5
-func (h *handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	req := charmstore.CounterRequest{
 		Key: entityStatsKey(id, params.StatsArchiveDownload),
 	}
@@ -376,7 +383,7 @@ func (h *handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path s
 
 // GET id/meta/revision-info
 // http://tinyurl.com/q6xos7f
-func (h *handler) metaRevisionInfo(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaRevisionInfo(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	baseURL := *id
 	baseURL.Revision = -1
 	baseURL.Series = ""
@@ -420,7 +427,7 @@ func (s entitiesByRevision) Less(i, j int) bool { return s[i].URL.Revision > s[j
 
 // GET id/meta/extra-info
 // http://tinyurl.com/keos7wd
-func (h *handler) metaExtraInfo(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaExtraInfo(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	// The extra-info is stored in mongo as simple byte
 	// slices, so convert the values to json.RawMessages
 	// so that the client will see the original JSON.
@@ -434,7 +441,7 @@ func (h *handler) metaExtraInfo(entity *mongodoc.Entity, id *charm.Reference, pa
 
 // GET id/meta/extra-info/key
 // http://tinyurl.com/polrbn7
-func (h *handler) metaExtraInfoWithKey(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaExtraInfoWithKey(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	path = strings.TrimPrefix(path, "/")
 	var data json.RawMessage = entity.ExtraInfo[path]
 	if len(data) == 0 {
@@ -443,7 +450,7 @@ func (h *handler) metaExtraInfoWithKey(entity *mongodoc.Entity, id *charm.Refere
 	return &data, nil
 }
 
-func (h *handler) putMetaExtraInfo(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater) error {
+func (h *Handler) putMetaExtraInfo(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater) error {
 	var fields map[string]*json.RawMessage
 	if err := json.Unmarshal(*val, &fields); err != nil {
 		return errgo.Notef(err, "cannot unmarshal extra info body")
@@ -460,7 +467,7 @@ func (h *handler) putMetaExtraInfo(id *charm.Reference, path string, val *json.R
 	return nil
 }
 
-func (h *handler) putMetaExtraInfoWithKey(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater) error {
+func (h *Handler) putMetaExtraInfoWithKey(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater) error {
 	key := strings.TrimPrefix(path, "/")
 	if err := checkExtraInfoKey(key); err != nil {
 		return err
@@ -478,7 +485,7 @@ func checkExtraInfoKey(key string) error {
 
 // GET id/meta/archive-upload-time
 // http://tinyurl.com/nmujuqk
-func (h *handler) metaArchiveUploadTime(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaArchiveUploadTime(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return &params.ArchiveUploadTimeResponse{
 		UploadTime: entity.UploadTime.UTC(),
 	}, nil

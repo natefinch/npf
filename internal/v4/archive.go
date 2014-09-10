@@ -34,7 +34,7 @@ import (
 
 // DELETE id/archive
 // http://tinyurl.com/ojmlwos
-func (h *handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
 	default:
 		// TODO(rog) params.ErrMethodNotAllowed
@@ -62,7 +62,7 @@ func (h *handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 	return nil
 }
 
-func (h *handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	// Retrieve the entity blob name from the database.
 	blobName, err := h.findBlobName(id)
 	if err != nil {
@@ -81,7 +81,7 @@ func (h *handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter,
 	return nil
 }
 
-func (h *handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
+func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
 	defer func() {
 		// Upload stats don't include revision: it is assumed that each
 		// entity revision is only uploaded once.
@@ -173,7 +173,7 @@ func verifyConstraints(s string) error {
 
 // GET id/archive/…
 // http://tinyurl.com/lampm24
-func (h *handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	r, size, err := h.openBlob(id)
 	if err != nil {
 		return err
@@ -224,7 +224,7 @@ func (r *readerAtSeeker) ReadAt(buf []byte, p int64) (int, error) {
 	return r.r.Read(buf)
 }
 
-func (h *handler) nextRevisionForId(id *charm.Reference) (int, error) {
+func (h *Handler) nextRevisionForId(id *charm.Reference) (int, error) {
 	id1 := *id
 	id1.Revision = -1
 	err := ResolveURL(h.store, &id1)
@@ -237,7 +237,7 @@ func (h *handler) nextRevisionForId(id *charm.Reference) (int, error) {
 	return 0, nil
 }
 
-func (h *handler) findBlobName(id *charm.Reference) (string, error) {
+func (h *Handler) findBlobName(id *charm.Reference) (string, error) {
 	var entity mongodoc.Entity
 	if err := h.store.DB.Entities().
 		FindId(id).
@@ -251,7 +251,7 @@ func (h *handler) findBlobName(id *charm.Reference) (string, error) {
 	return entity.BlobName, nil
 }
 
-func (h *handler) openBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64, error) {
+func (h *Handler) openBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64, error) {
 	blobName, err := h.findBlobName(id)
 	if err != nil {
 		return nil, 0, err
@@ -263,7 +263,7 @@ func (h *handler) openBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64
 	return r, size, nil
 }
 
-func (h *handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
+func (h *Handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 	numIds := len(ids)
 	urls := make([]*charm.Reference, 0, numIds)
 	idKeys := make([]string, 0, numIds)

@@ -10,5 +10,5 @@ import (
 )
 
 func BundleCharms(h http.Handler) func([]string) (map[string]charm.Charm, error) {
-	return h.(*handler).bundleCharms
+	return h.(*Handler).bundleCharms
 }

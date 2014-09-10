@@ -16,7 +16,7 @@ import (
 
 // GET id/meta/charm-related[?include=meta[&include=meta…]]
 // http://tinyurl.com/q7vdmzl
-func (h *handler) metaCharmRelated(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	if id.Series == "bundle" {
 		return nil, nil
 	}
@@ -92,7 +92,7 @@ type entityRelatedInterfacesGetter func(mongodoc.Entity) []string
 //           {Id: "cs:utopic/memcached-0", Meta: ...},
 //       },
 //   }
-func (h *handler) getRelatedCharmsResponse(
+func (h *Handler) getRelatedCharmsResponse(
 	ifaces []string,
 	entities []mongodoc.Entity,
 	getInterfaces entityRelatedInterfacesGetter,
@@ -110,7 +110,7 @@ func (h *handler) getRelatedCharmsResponse(
 	return results, nil
 }
 
-func (h *handler) getRelatedIfaceResponses(
+func (h *Handler) getRelatedIfaceResponses(
 	iface string,
 	entities []mongodoc.Entity,
 	getInterfaces entityRelatedInterfacesGetter,
@@ -139,7 +139,7 @@ func (h *handler) getRelatedIfaceResponses(
 
 // GET id/meta/bundles-containing[?include=meta[&include=meta…]][&any-series=1][&any-revision=1]
 // http://tinyurl.com/oqc386r
-func (h *handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	if id.Series == "bundle" {
 		return nil, nil
 	}
