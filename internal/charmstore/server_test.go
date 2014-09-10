@@ -36,7 +36,7 @@ type versionResponse struct {
 
 func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	db := s.Session.DB("foo")
-	serveVersion := func(vers string) NewAPIHandler {
+	serveVersion := func(vers string) NewAPIHandlerFunc {
 		return func(store *Store, config ServerParams) http.Handler {
 			c.Assert(store.DB.Database, gc.Equals, db)
 			return router.HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
@@ -48,7 +48,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 		}
 	}
 
-	h, err := NewServer(db, serverParams, map[string]NewAPIHandler{
+	h, err := NewServer(db, serverParams, map[string]NewAPIHandlerFunc{
 		"version1": serveVersion("version1"),
 	})
 	c.Assert(err, gc.IsNil)
@@ -56,7 +56,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	assertDoesNotServeVersion(c, h, "version2")
 	assertDoesNotServeVersion(c, h, "version3")
 
-	h, err = NewServer(db, serverParams, map[string]NewAPIHandler{
+	h, err = NewServer(db, serverParams, map[string]NewAPIHandlerFunc{
 		"version1": serveVersion("version1"),
 		"version2": serveVersion("version2"),
 	})
@@ -65,7 +65,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	assertServesVersion(c, h, "version2")
 	assertDoesNotServeVersion(c, h, "version3")
 
-	h, err = NewServer(db, serverParams, map[string]NewAPIHandler{
+	h, err = NewServer(db, serverParams, map[string]NewAPIHandlerFunc{
 		"version1": serveVersion("version1"),
 		"version2": serveVersion("version2"),
 		"version3": serveVersion("version3"),
@@ -82,7 +82,7 @@ func (s *ServerSuite) TestNewServerWithConfig(c *gc.C) {
 			return config, nil
 		})
 	}
-	h, err := NewServer(s.Session.DB("foo"), serverParams, map[string]NewAPIHandler{
+	h, err := NewServer(s.Session.DB("foo"), serverParams, map[string]NewAPIHandlerFunc{
 		"version1": serveConfig,
 	})
 	c.Assert(err, gc.IsNil)

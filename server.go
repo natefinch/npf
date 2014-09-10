@@ -19,8 +19,8 @@ const (
 	V4 = "v4"
 )
 
-var versions = map[string]charmstore.NewAPIHandler{
-	V4: v4.NewHTTPHandler,
+var versions = map[string]charmstore.NewAPIHandlerFunc{
+	V4: v4.NewAPIHandler,
 }
 
 // Versions returns all known API version strings in alphabetical order.
@@ -43,7 +43,7 @@ type ServerParams struct {
 // its data in the given database. The handler will serve the specified
 // versions of the API using the given configuration.
 func NewServer(db *mgo.Database, config ServerParams, serveVersions ...string) (http.Handler, error) {
-	newAPIs := make(map[string]charmstore.NewAPIHandler)
+	newAPIs := make(map[string]charmstore.NewAPIHandlerFunc)
 	for _, vers := range serveVersions {
 		newAPI := versions[vers]
 		if newAPI == nil {

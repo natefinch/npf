@@ -80,10 +80,10 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 	return h
 }
 
-// NewHTTPHandler returns a new Handler as an http Handler.
+// NewAPIHandler returns a new Handler as an http Handler.
 // It is defined for the convenience of callers that require a
-// function with this signature.
-func NewHTTPHandler(store *charmstore.Store, config charmstore.ServerParams) http.Handler {
+// charmstore.NewAPIHandlerFunc.
+func NewAPIHandler(store *charmstore.Store, config charmstore.ServerParams) http.Handler {
 	return New(store, config)
 }
 
