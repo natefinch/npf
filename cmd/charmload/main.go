@@ -35,9 +35,9 @@ func main() {
 func load() error {
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	staging := flags.Bool("staging", false, "use the launchpad staging server")
-	storeurl := flags.String("storeurl", "http://localhost:8080/v4/", "the url of the charmstore")
+	storeURL := flags.String("storeurl", "http://localhost:8080/v4/", "the URL of the charmstore")
 	loggingConfig := flags.String("logging-config", "", "specify log levels for modules")
-	showlog := flags.Bool("show-log", false, "if set, write log messages to stderr")
+	showLog := flags.Bool("show-log", false, "if set, write log messages to stderr")
 	storeUser := flags.String("user", "admin:example-passwd", "the colon separated user:password for charmstore")
 	err := flags.Parse(os.Args[1:])
 	if flag.ErrHelp == err {
@@ -50,7 +50,7 @@ func load() error {
 	if *loggingConfig != "" {
 		loggo.ConfigureLoggers(*loggingConfig)
 	}
-	if *showlog {
+	if *showLog {
 		writer := loggo.NewSimpleWriter(os.Stderr, &loggo.DefaultFormatter{})
 		_, err := loggo.ReplaceDefaultWriter(writer)
 		if err != nil {
@@ -76,7 +76,7 @@ func load() error {
 			continue
 		}
 		logger.Tracef("getting uniqueNameURLs for %v", tip.UniqueName)
-		branchurl, charmurl, err := uniqueNameURLs(tip.UniqueName)
+		branchURL, charmURL, err := uniqueNameURLs(tip.UniqueName)
 		if err != nil {
 			logger.Infof("could not get uniqueNameURLs for %v: %v", tip.UniqueName, err)
 			continue
@@ -85,21 +85,21 @@ func load() error {
 			logger.Tracef("skipping %v no revision", tip.UniqueName)
 			continue
 		}
-		urls := []*charm.URL{charmurl}
-		schema, name := charmurl.Schema, charmurl.Name
+		URLs := []*charm.URL{charmURL}
+		schema, name := charmURL.Schema, charmURL.Name
 		for _, series := range tip.OfficialSeries {
-			nextcharmurl := &charm.URL{
+			nextCharmURL := &charm.URL{
 				Schema:   schema,
 				Name:     name,
 				Revision: -1,
 				Series:   series,
 			}
-			urls = append(urls, nextcharmurl)
-			logger.Debugf("added url %v to urls list for %v", nextcharmurl, tip.UniqueName)
+			URLs = append(URLs, nextCharmURL)
+			logger.Debugf("added URL %v to URLs list for %v", nextCharmURL, tip.UniqueName)
 		}
-		err = publishBazaarBranch(*storeurl, *storeUser, urls, branchurl, tip.Revision)
+		err = publishBazaarBranch(*storeURL, *storeUser, URLs, branchURL, tip.Revision)
 		if err != nil {
-			logger.Errorf("publishing branch %v to charmstore: %v", branchurl, err)
+			logger.Errorf("publishing branch %v to charmstore: %v", branchURL, err)
 		}
 		if _, ok := err.(*UnauthorizedError); ok {
 			return err
@@ -118,25 +118,25 @@ func load() error {
 // For testing purposes, if name has a prefix preceding a string in
 // this format, the prefix is stripped out for computing the charm
 // URL, and the unique name is returned unchanged as the branch URL.
-func uniqueNameURLs(name string) (burl string, charmurl *charm.URL, err error) {
+func uniqueNameURLs(name string) (branchURL string, charmURL *charm.URL, err error) {
 	u := strings.Split(name, "/")
 	if len(u) > 5 {
 		u = u[len(u)-5:]
-		burl = name
+		branchURL = name
 	} else {
-		burl = "lp:" + name
+		branchURL = "lp:" + name
 	}
 	if len(u) < 5 || u[1] != "charms" || u[4] != "trunk" || len(u[0]) == 0 || u[0][0] != '~' {
 		return "", nil, fmt.Errorf("unwanted branch name: %s", name)
 	}
-	charmurl, err = charm.ParseURL(fmt.Sprintf("cs:%s/%s/%s", u[0], u[2], u[3]))
+	charmURL, err = charm.ParseURL(fmt.Sprintf("cs:%s/%s/%s", u[0], u[2], u[3]))
 	if err != nil {
 		return "", nil, err
 	}
-	return burl, charmurl, nil
+	return branchURL, charmURL, nil
 }
 
-func publishBazaarBranch(storeurl string, storeUser string, urls []*charm.URL, branchurl string, digest string) error {
+func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, branchURL string, digest string) error {
 
 	var branchDir string
 NewTip:
@@ -151,8 +151,8 @@ NewTip:
 		}
 		defer os.RemoveAll(tempDir)
 		branchDir = filepath.Join(tempDir, "branch")
-		logger.Debugf("running bzr checkout ... %v", branchurl)
-		output, err := exec.Command("bzr", "checkout", "--lightweight", branchurl, branchDir).CombinedOutput()
+		logger.Debugf("running bzr checkout ... %v", branchURL)
+		output, err := exec.Command("bzr", "checkout", "--lightweight", branchURL, branchDir).CombinedOutput()
 		if err != nil {
 			return outputErr(output, err)
 		}
@@ -187,10 +187,10 @@ NewTip:
 			thischarm.ArchiveTo(writer)
 			writer.Close()
 		}()
-		id := urls[0]
-		url := storeurl + id.Path() + "/archive?hash=" + hash1str
-		logger.Infof("posting to %v", url)
-		request, err := http.NewRequest("POST", url, reader)
+		id := URLs[0]
+		URL := storeURL + id.Path() + "/archive?hash=" + hash1str
+		logger.Infof("posting to %v", URL)
+		request, err := http.NewRequest("POST", URL, reader)
 		authhash := base64.StdEncoding.EncodeToString([]byte(storeUser))
 		logger.Tracef("encoded Authorization %v", authhash)
 		request.Header["Authorization"] = []string{"Basic " + authhash}
