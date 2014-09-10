@@ -18,7 +18,7 @@ const basicRealm = "CharmStore4"
 // authenticate checks that the request's headers HTTP basic auth credentials
 // match the superuser credentials stored in the API handler.
 // A params.ErrUnauthorized is returned if the authentication fails.
-func (h *handler) authenticate(w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) authenticate(w http.ResponseWriter, req *http.Request) error {
 	user, passwd, err := parseCredentials(req)
 	if err != nil {
 		return unauthorized(w, "authentication failed", err)

@@ -20,7 +20,7 @@ const (
 )
 
 var versions = map[string]charmstore.NewAPIHandler{
-	V4: v4.New,
+	V4: v4.NewHTTPHandler,
 }
 
 // Versions returns all known API version strings in alphabetical order.

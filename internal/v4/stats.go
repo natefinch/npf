@@ -40,7 +40,7 @@ func entityStatsKey(url *charm.Reference, kind string) []string {
 
 // GET stats/counter/key[:key]...?[by=unit]&start=date][&stop=date][&list=1]
 // http://tinyurl.com/nkdovcf
-func (s *handler) serveStatsCounter(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+func (s *Handler) serveStatsCounter(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 	base := strings.TrimPrefix(r.URL.Path, "/")
 	if strings.Index(base, "/") > 0 {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "invalid key")

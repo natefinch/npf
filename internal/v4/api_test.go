@@ -52,7 +52,7 @@ func newServer(c *gc.C, session *mgo.Session, config charmstore.ServerParams) (h
 	db := session.DB("charmstore")
 	store, err := charmstore.NewStore(db)
 	c.Assert(err, gc.IsNil)
-	srv, err := charmstore.NewServer(db, config, map[string]charmstore.NewAPIHandler{"v4": v4.New})
+	srv, err := charmstore.NewServer(db, config, map[string]charmstore.NewAPIHandler{"v4": v4.NewHTTPHandler})
 	c.Assert(err, gc.IsNil)
 	return srv, store
 }
@@ -298,7 +298,7 @@ func (s *APISuite) addTestEntities(c *gc.C) []*charm.Reference {
 			s.addCharm(c, url.Name, e)
 		}
 		// Associate some extra-info data with the entity.
-		key := strings.TrimPrefix(e, "cs:") + "/meta/extra-info/key"
+		key := url.Path() + "/meta/extra-info/key"
 		s.assertPut(c, key, "value "+e)
 		urls[i] = url
 	}
