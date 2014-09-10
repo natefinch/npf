@@ -84,6 +84,8 @@ func load() error {
 		if tip.Revision == "" {
 			logger.Tracef("skipping %v no revision", tip.UniqueName)
 			continue
+		} else {
+			logger.Tracef("found %v with revision %v", tip.UniqueName, tip.Revision)
 		}
 		URLs := []*charm.URL{charmURL}
 		schema, name := charmURL.Schema, charmURL.Name
@@ -138,41 +140,28 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.URL, err err
 
 func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, branchURL string, digest string) error {
 
-	var branchDir string
-NewTip:
+	// Retrieve the branch with a lightweight checkout, so that it
+	// builds a working tree as cheaply as possible. History
+	// doesn't matter here.
+	tempDir, err := ioutil.TempDir("", "publish-branch-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tempDir)
+	branchDir := filepath.Join(tempDir, "branch")
+	logger.Debugf("running bzr checkout ... %v", branchURL)
+	output, err := exec.Command("bzr", "checkout", "--lightweight", branchURL, branchDir).CombinedOutput()
+	if err != nil {
+		return outputErr(output, err)
+	}
 
-	if branchDir == "" {
-		// Retrieve the branch with a lightweight checkout, so that it
-		// builds a working tree as cheaply as possible. History
-		// doesn't matter here.
-		tempDir, err := ioutil.TempDir("", "publish-branch-")
-		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(tempDir)
-		branchDir = filepath.Join(tempDir, "branch")
-		logger.Debugf("running bzr checkout ... %v", branchURL)
-		output, err := exec.Command("bzr", "checkout", "--lightweight", branchURL, branchDir).CombinedOutput()
-		if err != nil {
-			return outputErr(output, err)
-		}
-
-		// Pick actual digest from tip. Publishing the real tip
-		// revision rather than the revision for the digest provided is
-		// strictly necessary to prevent a race condition. If the
-		// provided digest was published instead, there's a chance
-		// another publisher concurrently running could have found a
-		// newer revision and published that first, and the digest
-		// parameter provided is in fact an old version that would
-		// overwrite the new version.
-		tipDigest, err := bzrRevisionId(branchDir)
-		if err != nil {
-			return err
-		}
-		if tipDigest != digest {
-			digest = tipDigest
-			goto NewTip
-		}
+	tipDigest, err := bzrRevisionId(branchDir)
+	if err != nil {
+		return err
+	}
+	if tipDigest != digest {
+		digest = tipDigest
+		logger.Warningf("tipDigest %v != digest %v", digest, tipDigest)
 	}
 
 	thischarm, err := charm.ReadCharmDir(branchDir)
