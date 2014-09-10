@@ -53,11 +53,13 @@ func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 	}
 	r, size, err := h.openBlob(id)
 	if err != nil {
-		return errgo.Mask(err)
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	defer r.Close()
 	// TODO frankban 2014-08-22: log possible IncCounter errors.
 	go h.store.IncCounter(entityStatsKey(id, params.StatsArchiveDownload))
+	// TODO(rog) should we set connection=close here?
+	// See https://codereview.appspot.com/5958045
 	serveContent(w, req, size, r)
 	return nil
 }
@@ -66,7 +68,7 @@ func (h *Handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter,
 	// Retrieve the entity blob name from the database.
 	blobName, err := h.findBlobName(id)
 	if err != nil {
-		return err
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	// Remove the entity.
 	if err := h.store.DB.Entities().RemoveId(id); err != nil {
@@ -176,7 +178,7 @@ func verifyConstraints(s string) error {
 func (h *Handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	r, size, err := h.openBlob(id)
 	if err != nil {
-		return err
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	defer r.Close()
 	zipReader, err := zip.NewReader(&readerAtSeeker{r}, size)
@@ -254,7 +256,7 @@ func (h *Handler) findBlobName(id *charm.Reference) (string, error) {
 func (h *Handler) openBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64, error) {
 	blobName, err := h.findBlobName(id)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	r, size, err := h.store.BlobStore.Open(blobName)
 	if err != nil {
