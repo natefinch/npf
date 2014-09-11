@@ -11,7 +11,7 @@ github.com/juju/schema	git	27a52be50766490a6fd3531865095fda6c0eeb6d
 github.com/juju/testing	git	8bdbb45d87dd9724c254eb6afeacd84b127d7e76	
 github.com/juju/txn	git	ee0346875f2ae9a21442f3ff64409f750f37afbc	
 github.com/juju/utils	git	68554773385c32c354bf6357f8b6edd8a4742682	
-gopkg.in/juju/charm.v3	git	eb7dae8ed9dfa44b89e4e8eee6e21f80e31a3b69	
+gopkg.in/juju/charm.v3	git	14ee49844221d5700512989cef15ea95b30969d5	
 gopkg.in/mgo.v2	git	dc255bb679efa273b6544a03261c4053505498a4	
 gopkg.in/yaml.v1	git	1b9791953ba4027efaeb728c7355e542a203be5e	
 launchpad.net/gocheck	bzr	gustavo@niemeyer.net-20140225173054-xu9zlkf9kxhvow02	87
