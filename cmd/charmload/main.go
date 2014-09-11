@@ -165,6 +165,7 @@ func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, b
 	}
 
 	thischarm, err := charm.ReadCharmDir(branchDir)
+	logger.Tracef("read CharmDir from branchDir %v", thischarm, branchDir)
 	if err == nil {
 		reader, writer := io.Pipe()
 		hash1 := sha512.New384()
@@ -190,7 +191,6 @@ func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, b
 		request.Header["Content-Type"] = []string{"application/octet-stream"}
 		request.ContentLength = int64(counter)
 		resp, err := http.DefaultClient.Do(request)
-		defer resp.Body.Close()
 		if resp.StatusCode == http.StatusUnauthorized {
 			logger.Errorf("invalid charmstore credentials")
 			return &UnauthorizedError{}
