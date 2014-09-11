@@ -5,6 +5,7 @@ package charmstore
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -675,6 +676,61 @@ func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
 	)
 	c.Assert(err, gc.IsNil)
 	s.checkAddBundle(c, bundleArchive)
+}
+
+func (s *StoreSuite) TestOpenBlob(c *gc.C) {
+	charmArchive := testing.Charms.CharmArchive(c.MkDir(), "wordpress")
+
+	store, err := NewStore(s.Session.DB("foo"))
+	c.Assert(err, gc.IsNil)
+	url := mustParseReference("cs:precise/wordpress-23")
+
+	err = store.AddCharmWithArchive(url, charmArchive)
+	c.Assert(err, gc.IsNil)
+
+	r, size, err := store.OpenBlob(url)
+	c.Assert(err, gc.IsNil)
+	defer r.Close()
+
+	f, err := os.Open(charmArchive.Path)
+	c.Assert(err, gc.IsNil)
+	defer f.Close()
+	c.Assert(hashOfReader(c, r), gc.Equals, hashOfReader(c, f))
+
+	info, err := f.Stat()
+	c.Assert(err, gc.IsNil)
+	c.Assert(size, gc.Equals, info.Size())
+}
+
+func (s *StoreSuite) TestBlobName(c *gc.C) {
+	charmArchive := testing.Charms.CharmArchive(c.MkDir(), "wordpress")
+
+	store, err := NewStore(s.Session.DB("foo"))
+	c.Assert(err, gc.IsNil)
+	url := mustParseReference("cs:precise/wordpress-23")
+
+	err = store.AddCharmWithArchive(url, charmArchive)
+	c.Assert(err, gc.IsNil)
+
+	name, err := store.BlobName(url)
+	c.Assert(err, gc.IsNil)
+
+	r, _, err := store.BlobStore.Open(name)
+	c.Assert(err, gc.IsNil)
+	defer r.Close()
+
+	f, err := os.Open(charmArchive.Path)
+	c.Assert(err, gc.IsNil)
+	defer f.Close()
+	c.Assert(hashOfReader(c, r), gc.Equals, hashOfReader(c, f))
+
+}
+
+func hashOfReader(c *gc.C, r io.Reader) string {
+	hash := sha256.New()
+	_, err := io.Copy(hash, r)
+	c.Assert(err, gc.IsNil)
+	return fmt.Sprintf("%x", hash.Sum(nil))
 }
 
 func mustGetSizeAndHash(c interface{}) (int64, string) {
