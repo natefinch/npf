@@ -220,6 +220,38 @@ func (s *Store) AddBundle(url *charm.Reference, b charm.Bundle, blobName, blobHa
 	return errgo.Mask(err)
 }
 
+// OpenBlob opens a blob given its entity id; it returns the blob's
+// data source and its size. It returns a params.ErrNotFound
+// error if the entity does not exist.
+func (s *Store) OpenBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64, error) {
+	blobName, err := s.BlobName(id)
+	if err != nil {
+		return nil, 0, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	r, size, err := s.BlobStore.Open(blobName)
+	if err != nil {
+		return nil, 0, errgo.Notef(err, "cannot open archive data for %s", id)
+	}
+	return r, size, nil
+}
+
+// BlobName returns the name that is used to store the blob
+// for the entity with the given id. It returns a params.ErrNotFound
+// error if the entity does not exist.
+func (s *Store) BlobName(id *charm.Reference) (string, error) {
+	var entity mongodoc.Entity
+	if err := s.DB.Entities().
+		FindId(id).
+		Select(bson.D{{"blobname", 1}}).
+		One(&entity); err != nil {
+		if err == mgo.ErrNotFound {
+			return "", errgo.WithCausef(nil, params.ErrNotFound, "entity not found")
+		}
+		return "", errgo.Notef(err, "cannot get %s", id)
+	}
+	return entity.BlobName, nil
+}
+
 func newInt(x int) *int {
 	return &x
 }

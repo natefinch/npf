@@ -17,10 +17,8 @@ import (
 
 	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v3"
-	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/params"
@@ -51,7 +49,7 @@ func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 		return h.servePostArchive(id, w, req)
 	case "GET":
 	}
-	r, size, err := h.openBlob(id)
+	r, size, err := h.store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
@@ -66,7 +64,7 @@ func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 
 func (h *Handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	// Retrieve the entity blob name from the database.
-	blobName, err := h.findBlobName(id)
+	blobName, err := h.store.BlobName(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
@@ -176,7 +174,7 @@ func verifyConstraints(s string) error {
 // GET id/archive/…
 // http://tinyurl.com/lampm24
 func (h *Handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
-	r, size, err := h.openBlob(id)
+	r, size, err := h.store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
@@ -237,32 +235,6 @@ func (h *Handler) nextRevisionForId(id *charm.Reference) (int, error) {
 		return 0, errgo.Notef(err, "cannot resolve id")
 	}
 	return 0, nil
-}
-
-func (h *Handler) findBlobName(id *charm.Reference) (string, error) {
-	var entity mongodoc.Entity
-	if err := h.store.DB.Entities().
-		FindId(id).
-		Select(bson.D{{"blobname", 1}}).
-		One(&entity); err != nil {
-		if err == mgo.ErrNotFound {
-			return "", errgo.WithCausef(nil, params.ErrNotFound, "entity not found")
-		}
-		return "", errgo.Notef(err, "cannot get %s", id)
-	}
-	return entity.BlobName, nil
-}
-
-func (h *Handler) openBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64, error) {
-	blobName, err := h.findBlobName(id)
-	if err != nil {
-		return nil, 0, errgo.Mask(err, errgo.Is(params.ErrNotFound))
-	}
-	r, size, err := h.store.BlobStore.Open(blobName)
-	if err != nil {
-		return nil, 0, errgo.Notef(err, "cannot open archive data for %s", id)
-	}
-	return r, size, nil
 }
 
 func (h *Handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {

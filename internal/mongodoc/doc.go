@@ -22,6 +22,11 @@ type Entity struct {
 	// as created by blobstore.NewHash.
 	BlobHash string
 
+	// BlobHash256 holds the SHA256 hash checksum of the blob,
+	// in hexadecimal format. This is only used by the legacy
+	// API, and is calculated lazily the first time it is required.
+	BlobHash256 string
+
 	// Size holds the size of the archive blob.
 	// TODO(rog) rename this to BlobSize.
 	Size int64
