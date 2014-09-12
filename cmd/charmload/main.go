@@ -93,16 +93,7 @@ func load() error {
 		}
 		URLs := []*charm.URL{charmURL}
 		schema, name := charmURL.Schema, charmURL.Name
-		for _, series := range tip.OfficialSeries {
-			nextCharmURL := &charm.URL{
-				Schema:   schema,
-				Name:     name,
-				Revision: -1,
-				Series:   series,
-			}
-			URLs = append(URLs, nextCharmURL)
-			logger.Debugf("added URL %v to URLs list for %v", nextCharmURL, tip.UniqueName)
-		}
+		addPromulgatedCharmURLs(tip.OfficialSeries, schema, name, URLs)
 		err = publishBazaarBranch(*storeURL, *storeUser, URLs, branchURL, tip.Revision)
 		if err != nil {
 			logger.Errorf("publishing branch %v to charmstore: %v", branchURL, err)
@@ -113,6 +104,22 @@ func load() error {
 
 	}
 	return nil
+}
+
+// addPromulgatedCharmURLs adds urls from officialSeries to
+// the URLs slice for the given schema, name.
+// Promulgated charms have OfficialSeries in launchpad.
+func addPromulgatedCharmURLs(officialSeries []string, schema, name string, URLs []*charm.URL) {
+	for _, series := range officialSeries {
+		nextCharmURL := &charm.URL{
+			Schema:   schema,
+			Name:     name,
+			Revision: -1,
+			Series:   series,
+		}
+		URLs = append(URLs, nextCharmURL)
+		logger.Debugf("added URL %v to URLs list for %v", nextCharmURL, URLs[0])
+	}
 }
 
 // uniqueNameURLs returns the branch URL and the charm URL for the
@@ -143,7 +150,6 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.URL, err err
 }
 
 func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, branchURL string, digest string) error {
-
 	// Retrieve the branch with a lightweight checkout, so that it
 	// builds a working tree as cheaply as possible. History
 	// doesn't matter here.
