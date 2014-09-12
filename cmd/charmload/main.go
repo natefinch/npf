@@ -174,43 +174,44 @@ func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, b
 		logger.Warningf("tipDigest %v != digest %v", digest, tipDigest)
 	}
 
-	thischarm, err := charm.ReadCharmDir(branchDir)
-	logger.Tracef("read CharmDir from branchDir %v", thischarm, branchDir)
-	if err == nil {
-		reader, writer := io.Pipe()
-		hash1 := sha512.New384()
-		var counter Counter
-		mwriter := io.MultiWriter(hash1, &counter)
-		thischarm.ArchiveTo(mwriter)
-		hash1str := fmt.Sprintf("%x", hash1.Sum(nil))
-		go func() {
-			thischarm.ArchiveTo(writer)
-			writer.Close()
-		}()
-		id := URLs[0]
-		URL := storeURL + id.Path() + "/archive?hash=" + hash1str
-		logger.Infof("posting to %v", URL)
-		request, err := http.NewRequest("POST", URL, reader)
-		authhash := base64.StdEncoding.EncodeToString([]byte(storeUser))
-		logger.Tracef("encoded Authorization %v", authhash)
-		request.Header["Authorization"] = []string{"Basic " + authhash}
-		// go1.2.1 has a bug requiring Content-Type to be sent
-		// since we are posting to a go server which may be running on
-		// 1.2.1, we should send this header
-		// https://code.google.com/p/go/source/detail?r=a768c0592b88
-		request.Header["Content-Type"] = []string{"application/octet-stream"}
-		request.ContentLength = int64(counter)
-		resp, err := http.DefaultClient.Do(request)
-		if resp.StatusCode == http.StatusUnauthorized {
-			logger.Errorf("invalid charmstore credentials")
-			return &UnauthorizedError{}
-		}
-		if err != nil || resp.StatusCode != http.StatusOK {
-			logger.Warningf("error posting:", err, resp.Header)
-			io.Copy(os.Stdout, resp.Body)
-		}
-		logger.Tracef("response: %v", resp)
+	logger.Tracef("read CharmDir from branchDir %v", branchDir)
+	thisCharm, err := charm.ReadCharmDir(branchDir)
+	if err != nil {
+		return err
 	}
+	reader, writer := io.Pipe()
+	hash1 := sha512.New384()
+	var counter Counter
+	mwriter := io.MultiWriter(hash1, &counter)
+	thisCharm.ArchiveTo(mwriter)
+	hash1str := fmt.Sprintf("%x", hash1.Sum(nil))
+	go func() {
+		thisCharm.ArchiveTo(writer)
+		writer.Close()
+	}()
+	id := URLs[0]
+	URL := storeURL + id.Path() + "/archive?hash=" + hash1str
+	logger.Infof("posting to %v", URL)
+	request, err := http.NewRequest("POST", URL, reader)
+	authhash := base64.StdEncoding.EncodeToString([]byte(storeUser))
+	logger.Tracef("encoded Authorization %v", authhash)
+	request.Header["Authorization"] = []string{"Basic " + authhash}
+	// go1.2.1 has a bug requiring Content-Type to be sent
+	// since we are posting to a go server which may be running on
+	// 1.2.1, we should send this header
+	// https://code.google.com/p/go/source/detail?r=a768c0592b88
+	request.Header["Content-Type"] = []string{"application/octet-stream"}
+	request.ContentLength = int64(counter)
+	resp, err := http.DefaultClient.Do(request)
+	if resp.StatusCode == http.StatusUnauthorized {
+		logger.Errorf("invalid charmstore credentials")
+		return &UnauthorizedError{}
+	}
+	if err != nil || resp.StatusCode != http.StatusOK {
+		logger.Warningf("error posting:", err, resp.Header)
+		io.Copy(os.Stdout, resp.Body)
+	}
+	logger.Tracef("response: %v", resp)
 
 	return err
 }
