@@ -193,6 +193,9 @@ func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, b
 	URL := storeURL + id.Path() + "/archive?hash=" + hash1str
 	logger.Infof("posting to %v", URL)
 	request, err := http.NewRequest("POST", URL, reader)
+	if err != nil {
+		return err
+	}
 	authhash := base64.StdEncoding.EncodeToString([]byte(storeUser))
 	logger.Tracef("encoded Authorization %v", authhash)
 	request.Header["Authorization"] = []string{"Basic " + authhash}
