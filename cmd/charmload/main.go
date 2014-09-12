@@ -220,8 +220,7 @@ func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, b
 func bzrRevisionId(branchDir string) (string, error) {
 	cmd := exec.Command("bzr", "revision-info")
 	cmd.Dir = branchDir
-	stderr := &bytes.Buffer{}
-	cmd.Stderr = stderr
+	cmd.Stderr = &bytes.Buffer{}
 	output, err := cmd.Output()
 	if err != nil {
 		output = append(output, '\n')
