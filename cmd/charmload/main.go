@@ -25,6 +25,7 @@ import (
 )
 
 var logger = loggo.GetLogger("charmload_v4")
+var failsLogger = loggo.GetLogger("charmload_v4.loadfails")
 
 func main() {
 	err := load()
@@ -62,6 +63,15 @@ func load() error {
 			return err
 		}
 	}
+	writer, err := os.OpenFile("charmload-err", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+	registerLoadFailsWriter(writer)
+	if err != nil {
+		return err
+	}
 	oauth := &lpad.OAuth{Anonymous: true, Consumer: "juju"}
 	root, err := lpad.Login(server, oauth)
 	if err != nil {
@@ -98,7 +108,7 @@ func load() error {
 		URLs = addPromulgatedCharmURLs(tip.OfficialSeries, schema, name, URLs)
 		err = publishBazaarBranch(*storeURL, *storeUser, URLs, branchURL, tip.Revision)
 		if err != nil {
-			logger.Errorf("cannot publish branch %v to charm store: %v", branchURL, err)
+			failsLogger.Errorf("cannot publish branch %v to charm store: %v", branchURL, err)
 		}
 		if _, ok := err.(*UnauthorizedError); ok {
 			return err
@@ -309,4 +319,24 @@ type UnauthorizedError struct{}
 
 func (*UnauthorizedError) Error() string {
 	return "invalid charmstore credentials"
+}
+
+func registerLoadFailsWriter(writer io.Writer) error {
+	loadFailsWriter := &LoadFailsWriter{writer}
+	err := loggo.RegisterWriter("loadfails", loadFailsWriter, loggo.TRACE)
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+type LoadFailsWriter struct {
+	w io.Writer
+}
+
+func (writer *LoadFailsWriter) Write(level loggo.Level, name, filename string, line int, timestamp time.Time, message string) {
+	if name == failsLogger.Name() {
+		logLine := (&loggo.DefaultFormatter{}).Format(level, name, filename, line, timestamp, message)
+		fmt.Fprintf(writer.w, "%s\n", logLine)
+	}
 }
