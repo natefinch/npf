@@ -22,7 +22,7 @@ import (
 	"launchpad.net/lpad"
 )
 
-var logger = loggo.GetLogger("charmload")
+var logger = loggo.GetLogger("charmload_v4")
 
 func main() {
 	err := load()
@@ -32,6 +32,10 @@ func main() {
 	}
 }
 
+// login to launchpad anonymously using juju Consumer name
+// and get all the Branch Tips in the charms Distro.
+// For each Branch Tip with name ending in /trunk, publish in
+// charmstore
 func load() error {
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	staging := flags.Bool("staging", false, "use the launchpad staging server")
