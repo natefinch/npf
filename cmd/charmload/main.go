@@ -13,9 +13,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/juju/errgo"
 	"github.com/juju/loggo"
 	"gopkg.in/juju/charm.v3"
 
@@ -42,7 +44,7 @@ func load() error {
 	storeURL := flags.String("storeurl", "http://localhost:8080/v4/", "the URL of the charmstore")
 	loggingConfig := flags.String("logging-config", "", "specify log levels for modules e.g. <root>=TRACE")
 	showLog := flags.Bool("show-log", false, "if set, write log messages to stderr")
-	storeUser := flags.String("user", "admin:example-passwd", "the colon separated user:password for charmstore")
+	storeUser := flags.String("u", "admin:example-passwd", "the colon separated user:password for charmstore")
 	err := flags.Parse(os.Args[1:])
 	if flag.ErrHelp == err {
 		flag.Usage()
@@ -54,9 +56,8 @@ func load() error {
 	if *loggingConfig != "" {
 		loggo.ConfigureLoggers(*loggingConfig)
 	}
-	if *showLog {
-		writer := loggo.NewSimpleWriter(os.Stderr, &loggo.DefaultFormatter{})
-		_, err := loggo.ReplaceDefaultWriter(writer)
+	if !*showLog {
+		_, _, err := loggo.RemoveWriter("default")
 		if err != nil {
 			return err
 		}
@@ -76,6 +77,7 @@ func load() error {
 		return err
 	}
 	for _, tip := range tips {
+		// TODO(jay) need to process bundles as well (there is a card)
 		if !strings.HasSuffix(tip.UniqueName, "/trunk") {
 			continue
 		}
@@ -86,17 +88,17 @@ func load() error {
 			continue
 		}
 		if tip.Revision == "" {
-			logger.Tracef("skipping %v no revision", tip.UniqueName)
+			logger.Errorf("skipping branch %v with no revisions", tip.UniqueName)
 			continue
 		} else {
-			logger.Tracef("found %v with revision %v", tip.UniqueName, tip.Revision)
+			logger.Debugf("found %v with revision %v", tip.UniqueName, tip.Revision)
 		}
 		URLs := []*charm.URL{charmURL}
 		schema, name := charmURL.Schema, charmURL.Name
-		addPromulgatedCharmURLs(tip.OfficialSeries, schema, name, URLs)
+		URLs = addPromulgatedCharmURLs(tip.OfficialSeries, schema, name, URLs)
 		err = publishBazaarBranch(*storeURL, *storeUser, URLs, branchURL, tip.Revision)
 		if err != nil {
-			logger.Errorf("publishing branch %v to charmstore: %v", branchURL, err)
+			logger.Errorf("cannot publish branch %v to charm store: %v", branchURL, err)
 		}
 		if _, ok := err.(*UnauthorizedError); ok {
 			return err
@@ -107,9 +109,9 @@ func load() error {
 }
 
 // addPromulgatedCharmURLs adds urls from officialSeries to
-// the URLs slice for the given schema, name.
+// the URLs slice for the given schema and name.
 // Promulgated charms have OfficialSeries in launchpad.
-func addPromulgatedCharmURLs(officialSeries []string, schema, name string, URLs []*charm.URL) {
+func addPromulgatedCharmURLs(officialSeries []string, schema, name string, URLs []*charm.URL) []*charm.URL {
 	for _, series := range officialSeries {
 		nextCharmURL := &charm.URL{
 			Schema:   schema,
@@ -120,6 +122,7 @@ func addPromulgatedCharmURLs(officialSeries []string, schema, name string, URLs 
 		URLs = append(URLs, nextCharmURL)
 		logger.Debugf("added URL %v to URLs list for %v", nextCharmURL, URLs[0])
 	}
+	return URLs
 }
 
 // uniqueNameURLs returns the branch URL and the charm URL for the
@@ -185,6 +188,7 @@ func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, b
 	mwriter := io.MultiWriter(hash1, &counter)
 	thisCharm.ArchiveTo(mwriter)
 	hash1str := fmt.Sprintf("%x", hash1.Sum(nil))
+	// Asyncronously write the archive while the http requestreads from the Pipe.
 	go func() {
 		thisCharm.ArchiveTo(writer)
 		writer.Close()
@@ -194,25 +198,45 @@ func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, b
 	logger.Infof("posting to %v", URL)
 	request, err := http.NewRequest("POST", URL, reader)
 	if err != nil {
+		errgo.Notef(err, "cannot make new request")
 		return err
 	}
-	authhash := base64.StdEncoding.EncodeToString([]byte(storeUser))
-	logger.Tracef("encoded Authorization %v", authhash)
-	request.Header["Authorization"] = []string{"Basic " + authhash}
+	authBasic := base64.StdEncoding.EncodeToString([]byte(storeUser))
+	logger.Tracef("encoded Authorization %v", authBasic)
+	request.Header["Authorization"] = []string{"Basic " + authBasic}
 	// go1.2.1 has a bug requiring Content-Type to be sent
 	// since we are posting to a go server which may be running on
 	// 1.2.1, we should send this header
 	// https://code.google.com/p/go/source/detail?r=a768c0592b88
 	request.Header["Content-Type"] = []string{"application/octet-stream"}
 	request.ContentLength = int64(counter)
+
+	err = doCharmStorePost(request)
+
+	return err
+}
+
+func doCharmStorePost(request *http.Request) error {
 	resp, err := http.DefaultClient.Do(request)
 	if resp.StatusCode == http.StatusUnauthorized {
-		logger.Errorf("invalid charmstore credentials")
 		return &UnauthorizedError{}
 	}
+	defer resp.Body.Close()
 	if err != nil || resp.StatusCode != http.StatusOK {
-		logger.Warningf("error posting:", err, resp.Header)
-		io.Copy(os.Stdout, resp.Body)
+		var body string
+		if len(resp.Header["Content-Length"]) > 0 {
+			bodySize, err := strconv.Atoi(resp.Header["Content-Length"][0])
+			if err == nil {
+				//limit to 128 bytes
+				if bodySize > 128 {
+					bodySize = 128
+				}
+				var buffer bytes.Buffer
+				io.CopyN(&buffer, resp.Body, int64(bodySize))
+				body = buffer.String()
+			}
+		}
+		logger.Errorf("error posting: %v StatusCode: %v Headers:%v Body:%v", err, resp.StatusCode, resp.Header, body)
 	}
 	logger.Tracef("response: %v", resp)
 
@@ -223,7 +247,8 @@ func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, b
 func bzrRevisionId(branchDir string) (string, error) {
 	cmd := exec.Command("bzr", "revision-info")
 	cmd.Dir = branchDir
-	cmd.Stderr = &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	cmd.Stderr = stderr
 	output, err := cmd.Output()
 	if err != nil {
 		output = append(output, '\n')
@@ -258,6 +283,6 @@ func (c *Counter) Write(p []byte) (n int, err error) {
 
 type UnauthorizedError struct{}
 
-func (_ *UnauthorizedError) Error() string {
-	return "UnauthorizedError"
+func (*UnauthorizedError) Error() string {
+	return "invalid charmstore credentials"
 }
