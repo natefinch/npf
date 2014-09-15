@@ -114,14 +114,12 @@ func (h *Handler) serveCharmInfo(w http.ResponseWriter, req *http.Request) (inte
 			c.CanonicalURL = curl.String()
 			c.Sha256 = entity.BlobHash256
 			c.Revision = curl.Revision
-			// TODO frankban 2014-09-15: log possible IncCounter errors.
-			go h.store.IncCounter(charmStatsKey(curl, params.StatsCharmInfo))
+			h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmInfo))
 			// TODO(rog) include Digest if it exists in extra-info ?
 		} else {
 			c.Errors = append(c.Errors, err.Error())
 			if curl != nil {
-				// TODO frankban 2014-09-15: log possible IncCounter errors.
-				go h.store.IncCounter(charmStatsKey(curl, params.StatsCharmMissing))
+				h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmMissing))
 			}
 		}
 	}

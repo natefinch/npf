@@ -22,7 +22,7 @@ import (
 // is defined for external code clarity.
 
 // StatsGranularity holds the time granularity of statistics
-// gathering. IncCounter calls within this duration
+// gathering. IncCounter(Async) calls within this duration
 // may be aggregated.
 const StatsGranularity = time.Minute
 
@@ -155,15 +155,22 @@ func timeToStamp(t time.Time) int32 {
 	return int32(t.Unix() - counterEpoch)
 }
 
+// IncCounterAsync increases by one the counter associated with the composed
+// key. The action is done in the background using a separate goroutine.
+func (s *Store) IncCounterAsync(key []string) {
+	// TODO frankban 2014-09-15: log possible IncCounter errors.
+	go s.IncCounter(key)
+}
+
 // IncCounter increases by one the counter associated with the composed key.
 func (s *Store) IncCounter(key []string) error {
 	return s.IncCounterAtTime(key, time.Now())
 }
 
-// IncCounter increases by one the counter associated with the composed key,
-// associating it with the given time, which should be time.Now.
+// IncCounterAtTime increases by one the counter associated with the composed
+// key, associating it with the given time, which should be time.Now.
 // This method is exposed for testing purposes only - production
-// code should always call IncCounter.
+// code should always call IncCounter or IncCounterAsync.
 func (s *Store) IncCounterAtTime(key []string, t time.Time) error {
 	db := s.DB.Copy()
 	defer db.Close()

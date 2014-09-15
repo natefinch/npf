@@ -54,8 +54,7 @@ func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	defer r.Close()
-	// TODO frankban 2014-08-22: log possible IncCounter errors.
-	go h.store.IncCounter(entityStatsKey(id, params.StatsArchiveDownload))
+	h.store.IncCounterAsync(entityStatsKey(id, params.StatsArchiveDownload))
 	// TODO(rog) should we set connection=close here?
 	// See https://codereview.appspot.com/5958045
 	serveContent(w, req, size, r)
@@ -76,8 +75,7 @@ func (h *Handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter,
 	if err := h.store.BlobStore.Remove(blobName); err != nil {
 		return errgo.Notef(err, "cannot remove blob %s", blobName)
 	}
-	// TODO frankban 2014-08-25: log possible IncCounter errors.
-	go h.store.IncCounter(entityStatsKey(id, params.StatsArchiveDelete))
+	h.store.IncCounterAsync(entityStatsKey(id, params.StatsArchiveDelete))
 	return nil
 }
 
@@ -90,8 +88,7 @@ func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 		if err != nil {
 			kind = params.StatsArchiveFailedUpload
 		}
-		// TODO frankban 2014-08-29: log possible IncCounter errors.
-		go h.store.IncCounter(entityStatsKey(id, kind))
+		h.store.IncCounterAsync(entityStatsKey(id, kind))
 	}()
 
 	// Validate the request parameters.
