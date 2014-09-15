@@ -4,14 +4,14 @@
 package params
 
 // Define the kinds to be included in stats keys.
-// TODO frankban 2014-08-29: hook up StatsInfo and StatsMissing.
 const (
 	StatsArchiveDownload     = "archive-download"
 	StatsArchiveDelete       = "archive-delete"
 	StatsArchiveFailedUpload = "archive-failed-upload"
 	StatsArchiveUpload       = "archive-upload"
-	StatsInfo                = "info"
-	StatsMissing             = "missing"
+	// The following kinds are in use in the legacy API.
+	StatsCharmInfo    = "charm-info"
+	StatsCharmMissing = "charm-missing"
 )
 
 // Statistic holds one element of a stats/counter
