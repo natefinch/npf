@@ -178,44 +178,76 @@ func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, b
 	}
 
 	logger.Tracef("read CharmDir from branchDir %v", branchDir)
-	thisCharm, err := charm.ReadCharmDir(branchDir)
+	charmDir, err := charm.ReadCharmDir(branchDir)
 	if err != nil {
 		return err
 	}
-	reader, writer := io.Pipe()
-	hash1 := sha512.New384()
-	var counter Counter
-	mwriter := io.MultiWriter(hash1, &counter)
-	thisCharm.ArchiveTo(mwriter)
-	hash1str := fmt.Sprintf("%x", hash1.Sum(nil))
-	// Asyncronously write the archive while the http requestreads from the Pipe.
-	go func() {
-		thisCharm.ArchiveTo(writer)
-		writer.Close()
-	}()
-	id := URLs[0]
-	URL := storeURL + id.Path() + "/archive?hash=" + hash1str
-	logger.Infof("posting to %v", URL)
-	request, err := http.NewRequest("POST", URL, reader)
+	tempFile, hash, postSize, err := getPostDataFromCharmDir(charmDir)
+	defer tempFile.Close()
+	defer os.Remove(tempFile.Name())
 	if err != nil {
-		errgo.Notef(err, "cannot make new request")
 		return err
 	}
 	authBasic := base64.StdEncoding.EncodeToString([]byte(storeUser))
-	logger.Tracef("encoded Authorization %v", authBasic)
-	request.Header["Authorization"] = []string{"Basic " + authBasic}
-	// go1.2.1 has a bug requiring Content-Type to be sent
-	// since we are posting to a go server which may be running on
-	// 1.2.1, we should send this header
-	// https://code.google.com/p/go/source/detail?r=a768c0592b88
-	request.Header["Content-Type"] = []string{"application/octet-stream"}
-	request.ContentLength = int64(counter)
+	for _, id := range URLs {
+		URL := storeURL + id.Path() + "/archive?hash=" + hash
+		logger.Infof("posting to %v", URL)
+		request, err := http.NewRequest("POST", URL, tempFile)
+		if err != nil {
+			errgo.Notef(err, "cannot make new request")
+			return err
+		}
+		request.Header["Authorization"] = []string{"Basic " + authBasic}
+		// go1.2.1 has a bug requiring Content-Type to be sent
+		// since we are posting to a go server which may be running on
+		// 1.2.1, we should send this header
+		// https://code.google.com/p/go/source/detail?r=a768c0592b88
+		request.Header["Content-Type"] = []string{"application/octet-stream"}
+		request.ContentLength = postSize
 
-	err = doCharmStorePost(request)
-
+		err = doCharmStorePost(request)
+		tempFile.Seek(0, 0)
+	}
 	return err
 }
 
+// getPostDataFromCharmDir archives the charmDir to a temporary file
+// and computes the hash needed for posting calls stat on the file to get its
+// size.
+func getPostDataFromCharmDir(charmDir *charm.CharmDir) (tempFile *os.File, hash string, size int64, err error) {
+	sha384 := sha512.New384()
+	tempFile, err = ioutil.TempFile("", "publish-charm")
+	logger.Debugf("writing charm to temporary file %s", tempFile.Name())
+	if err != nil {
+		return tempFile, "", 0, err
+	}
+	err = charmDir.ArchiveTo(tempFile)
+	if err != nil {
+		return tempFile, "", 0, err
+	}
+	_, err = tempFile.Seek(0, 0)
+	if err != nil {
+		return tempFile, "", 0, err
+	}
+	_, err = io.Copy(sha384, tempFile)
+	if err != nil {
+		return tempFile, "", 0, err
+	}
+	_, err = tempFile.Seek(0, 0)
+	if err != nil {
+		return tempFile, "", 0, err
+	}
+	hash = fmt.Sprintf("%x", sha384.Sum(nil))
+	fileInfo, err := tempFile.Stat()
+	if err != nil {
+		return tempFile, "", 0, err
+	}
+	size = fileInfo.Size()
+	return tempFile, hash, size, err
+}
+
+// doCharmStorePost performs the request and returns an error or nil
+// if the post request succeeded.
 func doCharmStorePost(request *http.Request) error {
 	resp, err := http.DefaultClient.Do(request)
 	if resp.StatusCode == http.StatusUnauthorized {
@@ -271,14 +303,6 @@ func outputErr(output []byte, err error) error {
 		return fmt.Errorf("%v\n%s", err, output)
 	}
 	return err
-}
-
-type Counter int
-
-func (c *Counter) Write(p []byte) (n int, err error) {
-	size := len(p)
-	*c += Counter(size)
-	return size, nil
 }
 
 type UnauthorizedError struct{}
