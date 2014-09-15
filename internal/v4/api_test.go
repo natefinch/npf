@@ -26,6 +26,7 @@ import (
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
+	"github.com/juju/charmstore/internal/storetesting/stats"
 	"github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
 )
@@ -861,7 +862,7 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 		// Wait until the counters are updated.
 		url := mustParseReference(test.url)
 		key := []string{params.StatsArchiveDownload, url.Series, url.Name, url.User, strconv.Itoa(url.Revision)}
-		checkCounterSum(c, s.store, key, false, test.downloads)
+		stats.CheckCounterSum(c, s.store, key, false, test.downloads)
 
 		// Ensure the meta/stats response reports the correct downloads count.
 		s.assertGet(c, test.url+"/meta/stats", params.StatsResponse{

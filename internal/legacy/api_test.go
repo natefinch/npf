@@ -22,6 +22,7 @@ import (
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/legacy"
 	"github.com/juju/charmstore/internal/storetesting"
+	"github.com/juju/charmstore/internal/storetesting/stats"
 	"github.com/juju/charmstore/params"
 )
 
@@ -179,8 +180,48 @@ func (s *APISuite) TestServerCharmInfo(c *gc.C) {
 			},
 		})
 	}
+}
 
-	// TODO(rog) check stats events
+func (s *APISuite) TestCharmInfoCounters(c *gc.C) {
+	if !storetesting.MongoJSEnabled() {
+		c.Skip("MongoDB JavaScript not available")
+	}
+
+	// Add two charms to the database, a promulgated one and a user owned one.
+	s.addCharm(c, "wordpress", "cs:utopic/wordpress-42")
+	s.addCharm(c, "wordpress", "cs:~who/trusty/wordpress-47")
+
+	requestInfo := func(id string, times int) {
+		for i := 0; i < times; i++ {
+			rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+				Handler: s.srv,
+				URL:     "/charm-info?charms=" + id,
+			})
+			c.Assert(rec.Code, gc.Equals, http.StatusOK)
+		}
+	}
+
+	// Request charm info several times for the promulgated charm,
+	// the user owned one and a missing charm.
+	requestInfo("utopic/wordpress-42", 4)
+	requestInfo("~who/trusty/wordpress-47", 3)
+	requestInfo("precise/django-0", 2)
+
+	// The charm-info count for the promulgated charm has been updated.
+	key := []string{params.StatsCharmInfo, "utopic", "wordpress"}
+	stats.CheckCounterSum(c, s.store, key, false, 4)
+
+	// The charm-info count for the user owned charm has been updated.
+	key = []string{params.StatsCharmInfo, "trusty", "wordpress", "who"}
+	stats.CheckCounterSum(c, s.store, key, false, 3)
+
+	// The charm-missing count for the missing charm has been updated.
+	key = []string{params.StatsCharmMissing, "precise", "django"}
+	stats.CheckCounterSum(c, s.store, key, false, 2)
+
+	// The charm-info count for the missing charm is still zero.
+	key = []string{params.StatsCharmInfo, "precise", "django"}
+	stats.CheckCounterSum(c, s.store, key, false, 0)
 }
 
 func fileSHA256(c *gc.C, path string) string {

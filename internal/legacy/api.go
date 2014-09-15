@@ -73,6 +73,14 @@ func (h *Handler) resolveURLStr(urlStr string) (*charm.Reference, error) {
 	return curl, nil
 }
 
+// charmStatsKey returns a stats key for the given charm reference and kind.
+func charmStatsKey(url *charm.Reference, kind string) []string {
+	if url.User == "" {
+		return []string{kind, url.Series, url.Name}
+	}
+	return []string{kind, url.Series, url.Name, url.User}
+}
+
 var errNotFound = fmt.Errorf("entry not found")
 
 func (h *Handler) serveCharmInfo(w http.ResponseWriter, req *http.Request) (interface{}, error) {
@@ -80,8 +88,8 @@ func (h *Handler) serveCharmInfo(w http.ResponseWriter, req *http.Request) (inte
 	for _, url := range req.Form["charms"] {
 		c := &charm.InfoResponse{}
 		response[url] = c
-		curl, err := h.resolveURLStr(url)
 		var entity mongodoc.Entity
+		curl, err := h.resolveURLStr(url)
 		if err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				err = errNotFound
@@ -100,15 +108,19 @@ func (h *Handler) serveCharmInfo(w http.ResponseWriter, req *http.Request) (inte
 			// non-legacy code with that task.
 			entity.BlobHash256, err = h.updateEntitySHA256(curl)
 		}
+
+		// Prepare the response part for this charm.
 		if err == nil {
-			// TODO(rog) increment charm-info stats counter?
 			c.CanonicalURL = curl.String()
 			c.Sha256 = entity.BlobHash256
 			c.Revision = curl.Revision
+			h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmInfo))
 			// TODO(rog) include Digest if it exists in extra-info ?
 		} else {
-			// TODO(rog) increment charm-missing stats counter?
 			c.Errors = append(c.Errors, err.Error())
+			if curl != nil {
+				h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmMissing))
+			}
 		}
 	}
 	return response, nil

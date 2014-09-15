@@ -29,6 +29,7 @@ import (
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
+	"github.com/juju/charmstore/internal/storetesting/stats"
 	"github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
 )
@@ -95,7 +96,7 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 
 		// Check that the downloads count for the entity has been updated.
 		key := []string{params.StatsArchiveDownload, "utopic", "mysql", url.User, "42"}
-		checkCounterSum(c, s.store, key, false, 1)
+		stats.CheckCounterSum(c, s.store, key, false, 1)
 	}
 }
 
@@ -365,7 +366,7 @@ func (s *ArchiveSuite) TestPostCounters(c *gc.C) {
 
 	// Check that the upload count for the entity has been updated.
 	key := []string{params.StatsArchiveUpload, "precise", "wordpress", ""}
-	checkCounterSum(c, s.store, key, false, 1)
+	stats.CheckCounterSum(c, s.store, key, false, 1)
 }
 
 func (s *ArchiveSuite) TestPostFailureCounters(c *gc.C) {
@@ -398,7 +399,7 @@ func (s *ArchiveSuite) TestPostFailureCounters(c *gc.C) {
 
 	// Check that the failed upload count for the entity has been updated.
 	key := []string{params.StatsArchiveFailedUpload, "utopic", "wordpress", ""}
-	checkCounterSum(c, s.store, key, false, 3)
+	stats.CheckCounterSum(c, s.store, key, false, 3)
 }
 
 func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSeeker, errorMessage string) {
@@ -815,7 +816,7 @@ func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 
 	// Check that the delete count for the entity has been updated.
 	key := []string{params.StatsArchiveDelete, "utopic", "mysql", "", "42"}
-	checkCounterSum(c, s.store, key, false, 1)
+	stats.CheckCounterSum(c, s.store, key, false, 1)
 }
 
 func (s *ArchiveSuite) TestPostAuthErrors(c *gc.C) {
