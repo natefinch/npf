@@ -937,13 +937,7 @@ var changesPublishedTests = []struct {
 }}
 
 func (s *APISuite) TestChangesPublished(c *gc.C) {
-	// populate a range of charms with known time stamps.
-	for _, ch := range publishedCharms {
-		s.addCharm(c, "wordpress", ch.id)
-		t := ch.published().PublishTime
-		err := s.store.DB.Entities().UpdateId(ch.id, bson.D{{"$set", bson.D{{"uploadtime", t}}}})
-		c.Assert(err, gc.IsNil)
-	}
+	s.publishCharmsAtKnownTimes(c, publishedCharms)
 	for i, test := range changesPublishedTests {
 		c.Logf("test %d: %q", i, test.args)
 		expect := make([]params.Published, len(test.expect))
@@ -955,6 +949,71 @@ func (s *APISuite) TestChangesPublished(c *gc.C) {
 			URL:        storeURL("changes/published") + test.args,
 			ExpectBody: expect,
 		})
+	}
+}
+
+var changesPublishedErrorsTests = []struct {
+	args   string
+	expect params.Error
+	status int
+}{{
+	args: "?limit=0",
+	expect: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: "invalid 'limit' value",
+	},
+	status: http.StatusBadRequest,
+}, {
+	args: "?limit=-1",
+	expect: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: "invalid 'limit' value",
+	},
+	status: http.StatusBadRequest,
+}, {
+	args: "?limit=-9999",
+	expect: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: "invalid 'limit' value",
+	},
+	status: http.StatusBadRequest,
+}, {
+	args: "?start=baddate",
+	expect: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: `invalid 'start' value "baddate": parsing time "baddate" as "2006-01-02": cannot parse "baddate" as "2006"`,
+	},
+	status: http.StatusBadRequest,
+}, {
+	args: "?stop=baddate",
+	expect: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: `invalid 'stop' value "baddate": parsing time "baddate" as "2006-01-02": cannot parse "baddate" as "2006"`,
+	},
+	status: http.StatusBadRequest,
+}}
+
+func (s *APISuite) TestChangesPublishedErrors(c *gc.C) {
+	s.publishCharmsAtKnownTimes(c, publishedCharms)
+	for i, test := range changesPublishedErrorsTests {
+		c.Logf("test %d: %q", i, test.args)
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:      s.srv,
+			URL:          storeURL("changes/published") + test.args,
+			ExpectStatus: test.status,
+			ExpectBody:   test.expect,
+		})
+	}
+}
+
+// publishCharmsAtKnownTimes populates the store with
+// a range of charms with known time stamps.
+func (s *APISuite) publishCharmsAtKnownTimes(c *gc.C, charms []publishSpec) {
+	for _, ch := range publishedCharms {
+		s.addCharm(c, "wordpress", ch.id)
+		t := ch.published().PublishTime
+		err := s.store.DB.Entities().UpdateId(ch.id, bson.D{{"$set", bson.D{{"uploadtime", t}}}})
+		c.Assert(err, gc.IsNil)
 	}
 }
 

@@ -38,12 +38,12 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 	}
 	h.Router = router.New(&router.Handlers{
 		Global: map[string]http.Handler{
+			"changes/published":  router.HandleJSON(h.serveChangesPublished),
 			"debug":              http.HandlerFunc(h.serveDebug),
 			"search":             http.HandlerFunc(h.serveSearch),
 			"search/interesting": http.HandlerFunc(h.serveSearchInteresting),
 			"stats/":             router.NotFoundHandler(),
 			"stats/counter/":     router.HandleJSON(h.serveStatsCounter),
-			"changes/published":  router.HandleJSON(h.serveChangesPublished),
 		},
 		Id: map[string]router.IdHandler{
 			"archive":   h.serveArchive,
@@ -509,7 +509,7 @@ func (h *Handler) serveChangesPublished(w http.ResponseWriter, r *http.Request) 
 	limit := -1
 	if limitStr := r.Form.Get("limit"); limitStr != "" {
 		limit, err = strconv.Atoi(limitStr)
-		if err != nil {
+		if err != nil || limit <= 0 {
 			return nil, badRequestf(nil, "invalid 'limit' value")
 		}
 	}
