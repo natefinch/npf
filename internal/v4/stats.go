@@ -5,6 +5,7 @@ package v4
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +39,30 @@ func entityStatsKey(url *charm.Reference, kind string) []string {
 	return key
 }
 
+const dateFormat = "2006-01-02"
+
+// parseDateRange parses a date range as specified in an http
+// request. The returned times will be zero if not specified.
+func parseDateRange(form url.Values) (start, stop time.Time, err error) {
+	if v := form.Get("start"); v != "" {
+		var err error
+		start, err = time.Parse(dateFormat, v)
+		if err != nil {
+			return time.Time{}, time.Time{}, badRequestf(err, "invalid 'start' value %q", v)
+		}
+	}
+	if v := form.Get("stop"); v != "" {
+		var err error
+		stop, err = time.Parse(dateFormat, v)
+		if err != nil {
+			return time.Time{}, time.Time{}, badRequestf(err, "invalid 'stop' value %q", v)
+		}
+		// Cover all timestamps within the stop day.
+		stop = stop.Add(24*time.Hour - 1*time.Second)
+	}
+	return
+}
+
 // GET stats/counter/key[:key]...?[by=unit]&start=date][&stop=date][&list=1]
 // http://tinyurl.com/nkdovcf
 func (s *Handler) serveStatsCounter(w http.ResponseWriter, r *http.Request) (interface{}, error) {
@@ -64,21 +89,10 @@ func (s *Handler) serveStatsCounter(w http.ResponseWriter, r *http.Request) (int
 		List: r.Form.Get("list") == "1",
 		By:   by,
 	}
-	if v := r.Form.Get("start"); v != "" {
-		var err error
-		req.Start, err = time.Parse("2006-01-02", v)
-		if err != nil {
-			return nil, badRequestf(err, "invalid 'start' value %q", v)
-		}
-	}
-	if v := r.Form.Get("stop"); v != "" {
-		var err error
-		req.Stop, err = time.Parse("2006-01-02", v)
-		if err != nil {
-			return nil, badRequestf(err, "invalid 'stop' value %q", v)
-		}
-		// Cover all timestamps within the stop day.
-		req.Stop = req.Stop.Add(24*time.Hour - 1*time.Second)
+	var err error
+	req.Start, req.Stop, err = parseDateRange(r.Form)
+	if err != nil {
+		return nil, errgo.Mask(err, errgo.Is(params.ErrBadRequest))
 	}
 	if req.Key[len(req.Key)-1] == "*" {
 		req.Prefix = true

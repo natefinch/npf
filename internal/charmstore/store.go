@@ -57,6 +57,9 @@ func (s *Store) ensureIndexes() error {
 	}, {
 		s.DB.Entities(),
 		mgo.Index{Key: []string{"baseurl"}},
+	}, {
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"uploadtime"}},
 	}}
 	for _, idx := range indexes {
 		err := idx.c.EnsureIndex(idx.i)

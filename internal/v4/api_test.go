@@ -871,6 +871,93 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 	}
 }
 
+type publishSpec struct {
+	id   string
+	time string
+}
+
+func (p publishSpec) published() params.Published {
+	id := mustParseReference(p.id)
+	t, err := time.Parse("2006-01-02 15:04", p.time)
+	if err != nil {
+		panic(err)
+	}
+	return params.Published{id, t}
+}
+
+var publishedCharms = []publishSpec{{
+	id:   "cs:precise-wordpress-1",
+	time: "5432-10-12 00:00",
+}, {
+	id:   "cs:precise-mysql-1",
+	time: "5432-10-12 13:00",
+}, {
+	id:   "cs:precise-wordpress-2",
+	time: "5432-10-12 23:59",
+}, {
+	id:   "cs:precise-mysql-2",
+	time: "5432-10-13 00:00",
+}, {
+	id:   "cs:precise-mysql-5",
+	time: "5432-10-13 10:00",
+}, {
+	id:   "cs:precise-wordpress-3",
+	time: "5432-10-14 01:00",
+}}
+
+var changesPublishedTests = []struct {
+	args string
+	// expect holds indexes into publishedCharms
+	// of the expected indexes returned by charms/published
+	expect []int
+}{{
+	args:   "",
+	expect: []int{5, 4, 3, 2, 1, 0},
+}, {
+	args:   "?start=5432-10-13",
+	expect: []int{5, 4, 3},
+}, {
+	args:   "?stop=5432-10-13",
+	expect: []int{4, 3, 2, 1, 0},
+}, {
+	args:   "?start=5432-10-13&stop=5432-10-13",
+	expect: []int{4, 3},
+}, {
+	args:   "?start=5432-10-12&stop=5432-10-13",
+	expect: []int{4, 3, 2, 1, 0},
+}, {
+	args:   "?start=5432-10-13&stop=5432-10-12",
+	expect: []int{},
+}, {
+	args:   "?limit=3",
+	expect: []int{5, 4, 3},
+}, {
+	args:   "?start=5432-10-12&stop=5432-10-13&limit=2",
+	expect: []int{4, 3},
+}}
+
+func (s *APISuite) TestChangesPublished(c *gc.C) {
+	// populate a range of charms with known time stamps.
+	for _, ch := range publishedCharms {
+		s.addCharm(c, "wordpress", ch.id)
+		t := ch.published().PublishTime
+		err := s.store.DB.Entities().UpdateId(ch.id, bson.D{{"$set", bson.D{{"uploadtime", t}}}})
+		c.Assert(err, gc.IsNil)
+	}
+	for i, test := range changesPublishedTests {
+		c.Logf("test %d: %q", i, test.args)
+		expect := make([]params.Published, len(test.expect))
+		for j, index := range test.expect {
+			expect[j] = publishedCharms[index].published()
+		}
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:    s.srv,
+			URL:        storeURL("changes/published") + test.args,
+			ExpectBody: expect,
+		})
+	}
+}
+
 func assertNotImplemented(c *gc.C, h http.Handler, path string) {
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:      h,
