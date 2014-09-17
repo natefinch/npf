@@ -11,8 +11,8 @@ import (
 	"os"
 	"strings"
 
-	"gopkg.in/errgo.v1"
-	"gopkg.in/v1/yaml"
+	"github.com/juju/errgo"
+	"gopkg.in/yaml.v1"
 )
 
 type Config struct {
