@@ -5,16 +5,15 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"gopkg.in/mgo.v2"
-	"gopkg.in/yaml.v1"
 
 	"github.com/juju/charmstore"
+	"github.com/juju/charmstore/config"
+	"github.com/juju/charmstore/internal/debug"
 )
 
 func main() {
@@ -35,11 +34,8 @@ func serve() error {
 	if confPath == "" {
 		return fmt.Errorf("usage: %s <config path>", filepath.Base(os.Args[0]))
 	}
-	conf, err := readConfig(confPath)
+	conf, err := config.Read(confPath)
 	if err != nil {
-		return err
-	}
-	if err := conf.validate(); err != nil {
 		return err
 	}
 	session, err := mgo.Dial(conf.MongoURL)
@@ -56,50 +52,5 @@ func serve() error {
 	if err != nil {
 		return err
 	}
-	return http.ListenAndServe(conf.APIAddr, server)
-}
-
-type config struct {
-	MongoURL     string `yaml:"mongo-url"`
-	APIAddr      string `yaml:"api-addr"`
-	AuthUsername string `yaml:"auth-username"`
-	AuthPassword string `yaml:"auth-password"`
-}
-
-func (c *config) validate() error {
-	var missing []string
-	if c.MongoURL == "" {
-		missing = append(missing, "mongo-url")
-	}
-	if c.APIAddr == "" {
-		missing = append(missing, "api-addr")
-	}
-	if c.AuthUsername == "" {
-		missing = append(missing, "auth-username")
-	}
-	if c.AuthPassword == "" {
-		missing = append(missing, "auth-password")
-	}
-	if len(missing) != 0 {
-		return fmt.Errorf("missing fields %s in config file", strings.Join(missing, ", "))
-	}
-	return nil
-}
-
-func readConfig(path string) (*config, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("opening config file: %v", err)
-	}
-	defer f.Close()
-	data, err := ioutil.ReadAll(f)
-	if err != nil {
-		return nil, fmt.Errorf("reading config file: %v", err)
-	}
-	var conf config
-	err = yaml.Unmarshal(data, &conf)
-	if err != nil {
-		return nil, fmt.Errorf("processing config file: %v", err)
-	}
-	return &conf, nil
+	return http.ListenAndServe(conf.APIAddr, debug.Handler("", server))
 }
