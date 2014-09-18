@@ -13,7 +13,7 @@ import (
 // every time the request is invoked.
 func Handler(msg string, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		log.Printf("%s got request at URL %q", msg, req.URL)
+		log.Printf("%s got request at URL %q; headers %q", msg, req.URL, req.Header)
 		h.ServeHTTP(w, req)
 	})
 }

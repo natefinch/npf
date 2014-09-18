@@ -3,8 +3,8 @@ package main
 import (
 	"bytes"
 	"crypto/sha512"
-
 	"encoding/base64"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -13,68 +13,106 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/juju/errgo"
 	"github.com/juju/loggo"
 	"gopkg.in/juju/charm.v3"
-
 	"launchpad.net/lpad"
+
+	"github.com/juju/charmstore/config"
+	"github.com/juju/charmstore/params"
 )
 
-var logger = loggo.GetLogger("charmload_v4")
+var logger = loggo.GetLogger("charmload")
+
+var (
+	staging       = flag.Bool("staging", false, "use the launchpad staging server")
+	storeAddr     = flag.String("storeaddr", "localhost:8080", "the address of the charmstore; overrides configuration file")
+	loggingConfig = flag.String("logging-config", "", "specify log levels for modules e.g. <root>=TRACE")
+	storeUser     = flag.String("u", "", "the colon separated user:password for charmstore; overrides configuration file")
+	configPath    = flag.String("config", "", "path to charm store configuration file")
+)
 
 func main() {
-	err := load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "usage: charmload [flags]\n")
+		flag.PrintDefaults()
+		os.Exit(2)
+	}
+	flag.Parse()
+	if err := load(); err != nil {
+		fmt.Fprintf(os.Stderr, "charmload: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-// login to launchpad anonymously using juju Consumer name
-// and get all the Branch Tips in the charms Distro.
-// For each Branch Tip with name ending in /trunk, publish in
-// charmstore
 func load() error {
-	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	staging := flags.Bool("staging", false, "use the launchpad staging server")
-	storeURL := flags.String("storeurl", "http://localhost:8080/v4/", "the URL of the charmstore")
-	loggingConfig := flags.String("logging-config", "", "specify log levels for modules e.g. <root>=TRACE")
-	showLog := flags.Bool("show-log", false, "if set, write log messages to stderr")
-	storeUser := flags.String("u", "admin:example-passwd", "the colon separated user:password for charmstore")
-	err := flags.Parse(os.Args[1:])
-	if flag.ErrHelp == err {
-		flag.Usage()
-	}
-	server := lpad.Production
-	if *staging {
-		server = lpad.Staging
-	}
 	if *loggingConfig != "" {
-		loggo.ConfigureLoggers(*loggingConfig)
-	}
-	if !*showLog {
-		_, _, err := loggo.RemoveWriter("default")
-		if err != nil {
-			return err
+		if err := loggo.ConfigureLoggers(*loggingConfig); err != nil {
+			return errgo.Notef(err, "cannot configure loggers")
 		}
 	}
+	var cl charmLoader
+
+	cl.launchpadServer = lpad.Production
+	if *staging {
+		cl.launchpadServer = lpad.Staging
+	}
+	var cfg *config.Config
+	if *configPath != "" {
+		var err error
+		cfg, err = config.Read(*configPath)
+		if err != nil {
+			return errgo.Notef(err, "cannot read config file")
+		}
+		logger.Infof("config: %#v", cfg)
+	}
+	if *storeUser != "" {
+		parts := strings.SplitN(*storeUser, ":", 2)
+		if len(parts) != 2 || len(parts[0]) == 0 {
+			return errgo.Newf("invalid user name:password %q", *storeUser)
+		}
+		cl.storeUser, cl.storePassword = parts[0], parts[1]
+	} else if cfg != nil {
+		cl.storeUser, cl.storePassword = cfg.AuthUsername, cfg.AuthPassword
+	}
+	if *storeAddr == "" {
+		*storeAddr = cfg.APIAddr
+	}
+	cl.storeURL = "http://" + *storeAddr + "/v4/"
+
+	if err := cl.run(); err != nil {
+		return errgo.Mask(err)
+	}
+	return nil
+}
+
+type charmLoader struct {
+	launchpadServer lpad.APIBase
+	storeURL        string
+	storeUser       string
+	storePassword   string
+}
+
+// run logs in anonymously to launchpad using the juju Consumer name,
+// gets all the branch tips in the charms Distro and publishes each
+// branch tip whose name ends in /trunk.
+func (cl *charmLoader) run() error {
 	oauth := &lpad.OAuth{Anonymous: true, Consumer: "juju"}
-	root, err := lpad.Login(server, oauth)
+	root, err := lpad.Login(cl.launchpadServer, oauth)
 	if err != nil {
-		return err
+		return errgo.Notef(err, "cannot log in to launchpad")
 	}
 
 	charmsDistro, err := root.Distro("charms")
 	if err != nil {
-		return err
+		return errgo.Notef(err, "cannot get charms distro")
 	}
 	tips, err := charmsDistro.BranchTips(time.Time{})
 	if err != nil {
-		return err
+		return errgo.Notef(err, "cannot get branch tips")
 	}
 	for _, tip := range tips {
 		// TODO(jay) need to process bundles as well (there is a card)
@@ -84,36 +122,38 @@ func load() error {
 		logger.Tracef("getting uniqueNameURLs for %v", tip.UniqueName)
 		branchURL, charmURL, err := uniqueNameURLs(tip.UniqueName)
 		if err != nil {
-			logger.Infof("could not get uniqueNameURLs for %v: %v", tip.UniqueName, err)
+			logger.Warningf("could not get uniqueNameURLs for %v: %v", tip.UniqueName, err)
 			continue
 		}
 		if tip.Revision == "" {
 			logger.Errorf("skipping branch %v with no revisions", tip.UniqueName)
 			continue
-		} else {
-			logger.Debugf("found %v with revision %v", tip.UniqueName, tip.Revision)
 		}
-		URLs := []*charm.URL{charmURL}
-		schema, name := charmURL.Schema, charmURL.Name
-		URLs = addPromulgatedCharmURLs(tip.OfficialSeries, schema, name, URLs)
-		err = publishBazaarBranch(*storeURL, *storeUser, URLs, branchURL, tip.Revision)
+		logger.Infof("found %v with revision %v", tip.UniqueName, tip.Revision)
+		URLs := []*charm.Reference{charmURL}
+		URLs = appendPromulgatedCharmURLs(
+			tip.OfficialSeries,
+			charmURL.Schema,
+			charmURL.Name,
+			URLs,
+		)
+		err = cl.publishBazaarBranch(URLs, branchURL, tip.Revision)
 		if err != nil {
 			logger.Errorf("cannot publish branch %v to charm store: %v", branchURL, err)
 		}
-		if _, ok := err.(*UnauthorizedError); ok {
-			return err
+		if errgo.Cause(err) == params.ErrUnauthorized {
+			return errgo.NoteMask(err, "fatal error", errgo.Is(params.ErrUnauthorized))
 		}
-
 	}
 	return nil
 }
 
-// addPromulgatedCharmURLs adds urls from officialSeries to
+// appendPromulgatedCharmURLs adds urls from officialSeries to
 // the URLs slice for the given schema and name.
 // Promulgated charms have OfficialSeries in launchpad.
-func addPromulgatedCharmURLs(officialSeries []string, schema, name string, URLs []*charm.URL) []*charm.URL {
+func appendPromulgatedCharmURLs(officialSeries []string, schema, name string, URLs []*charm.Reference) []*charm.Reference {
 	for _, series := range officialSeries {
-		nextCharmURL := &charm.URL{
+		nextCharmURL := &charm.Reference{
 			Schema:   schema,
 			Name:     name,
 			Revision: -1,
@@ -134,7 +174,7 @@ func addPromulgatedCharmURLs(officialSeries []string, schema, name string, URLs 
 // For testing purposes, if name has a prefix preceding a string in
 // this format, the prefix is stripped out for computing the charm
 // URL, and the unique name is returned unchanged as the branch URL.
-func uniqueNameURLs(name string) (branchURL string, charmURL *charm.URL, err error) {
+func uniqueNameURLs(name string) (branchURL string, charmURL *charm.Reference, err error) {
 	u := strings.Split(name, "/")
 	if len(u) > 5 {
 		u = u[len(u)-5:]
@@ -145,20 +185,20 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.URL, err err
 	if len(u) < 5 || u[1] != "charms" || u[4] != "trunk" || len(u[0]) == 0 || u[0][0] != '~' {
 		return "", nil, fmt.Errorf("unsupported branch name: %s", name)
 	}
-	charmURL, err = charm.ParseURL(fmt.Sprintf("cs:%s/%s/%s", u[0], u[2], u[3]))
+	charmURL, err = charm.ParseReference(fmt.Sprintf("cs:%s/%s/%s", u[0], u[2], u[3]))
 	if err != nil {
-		return "", nil, err
+		return "", nil, errgo.Mask(err)
 	}
 	return branchURL, charmURL, nil
 }
 
-func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, branchURL string, digest string) error {
+func (cl *charmLoader) publishBazaarBranch(URLs []*charm.Reference, branchURL string, digest string) error {
 	// Retrieve the branch with a lightweight checkout, so that it
 	// builds a working tree as cheaply as possible. History
 	// doesn't matter here.
 	tempDir, err := ioutil.TempDir("", "publish-branch-")
 	if err != nil {
-		return err
+		return errgo.Notef(err, "cannot make temp dir")
 	}
 	defer os.RemoveAll(tempDir)
 	branchDir := filepath.Join(tempDir, "branch")
@@ -170,109 +210,114 @@ func publishBazaarBranch(storeURL string, storeUser string, URLs []*charm.URL, b
 
 	tipDigest, err := bzrRevisionId(branchDir)
 	if err != nil {
-		return err
+		return errgo.Notef(err, "cannot get revision id")
 	}
 	if tipDigest != digest {
 		digest = tipDigest
 		logger.Warningf("tipDigest %v != digest %v", digest, tipDigest)
 	}
-
-	logger.Tracef("read CharmDir from branchDir %v", branchDir)
 	charmDir, err := charm.ReadCharmDir(branchDir)
 	if err != nil {
-		return err
+		return errgo.Notef(err, "cannot read charm dir")
 	}
-	tempFile, hash, postSize, err := getPostDataFromCharmDir(charmDir)
-	defer tempFile.Close()
-	defer os.Remove(tempFile.Name())
+	tempFile, hash, archiveSize, err := cl.archiveCharmDir(charmDir, tempDir)
 	if err != nil {
-		return err
+		return errgo.Notef(err, "cannot make archive")
 	}
-	authBasic := base64.StdEncoding.EncodeToString([]byte(storeUser))
+	defer tempFile.Close()
 	for _, id := range URLs {
-		URL := storeURL + id.Path() + "/archive?hash=" + hash
-		logger.Infof("posting to %v", URL)
-		request, err := http.NewRequest("POST", URL, tempFile)
-		if err != nil {
-			errgo.Notef(err, "cannot make new request")
-			return err
+		if _, err := tempFile.Seek(0, 0); err != nil {
+			return errgo.Notef(err, "cannot seek")
 		}
-		request.Header["Authorization"] = []string{"Basic " + authBasic}
-		// go1.2.1 has a bug requiring Content-Type to be sent
-		// since we are posting to a go server which may be running on
-		// 1.2.1, we should send this header
-		// https://code.google.com/p/go/source/detail?r=a768c0592b88
-		request.Header["Content-Type"] = []string{"application/octet-stream"}
-		request.ContentLength = postSize
-
-		err = doCharmStorePost(request)
-		tempFile.Seek(0, 0)
+		finalId, err := cl.postArchive(tempFile, id, archiveSize, hash)
+		if err != nil {
+			return errgo.NoteMask(err, "cannot post archive", errgo.Is(params.ErrUnauthorized))
+		}
+		logger.Infof("posted %s", finalId)
 	}
 	return err
 }
 
-// getPostDataFromCharmDir archives the charmDir to a temporary file
-// and computes the hash needed for posting calls stat on the file to get its
-// size.
-func getPostDataFromCharmDir(charmDir *charm.CharmDir) (tempFile *os.File, hash string, size int64, err error) {
+// archiveCharmDir archives the charmDir to a temporary file
+// inside tempDir and returns the file, its hash and size.
+func (cl *charmLoader) archiveCharmDir(charmDir *charm.CharmDir, tempDir string) (archiveFile *os.File, hash string, size int64, err error) {
+	f, err := os.Create(filepath.Join(tempDir, "archive.zip"))
+	if err != nil {
+		return nil, "", 0, errgo.Notef(err, "cannot create temp file")
+	}
+	logger.Debugf("writing charm to temporary file %s", f.Name())
+	if err != nil {
+		return nil, "", 0, errgo.Notef(err, "cannot make temp file")
+	}
+	defer func() {
+		if err != nil {
+			f.Close()
+		}
+	}()
 	sha384 := sha512.New384()
-	tempFile, err = ioutil.TempFile("", "publish-charm")
-	logger.Debugf("writing charm to temporary file %s", tempFile.Name())
+	err = charmDir.ArchiveTo(io.MultiWriter(f, sha384))
 	if err != nil {
-		return tempFile, "", 0, err
+		return nil, "", 0, errgo.Notef(err, "cannot archive charm")
 	}
-	err = charmDir.ArchiveTo(tempFile)
+	fileInfo, err := f.Stat()
 	if err != nil {
-		return tempFile, "", 0, err
-	}
-	_, err = tempFile.Seek(0, 0)
-	if err != nil {
-		return tempFile, "", 0, err
-	}
-	_, err = io.Copy(sha384, tempFile)
-	if err != nil {
-		return tempFile, "", 0, err
-	}
-	_, err = tempFile.Seek(0, 0)
-	if err != nil {
-		return tempFile, "", 0, err
+		return nil, "", 0, errgo.Notef(err, "cannot stat temporary file")
 	}
 	hash = fmt.Sprintf("%x", sha384.Sum(nil))
-	fileInfo, err := tempFile.Stat()
-	if err != nil {
-		return tempFile, "", 0, err
-	}
-	size = fileInfo.Size()
-	return tempFile, hash, size, err
+	return f, hash, fileInfo.Size(), nil
 }
 
-// doCharmStorePost performs the request and returns an error or nil
-// if the post request succeeded.
-func doCharmStorePost(request *http.Request) error {
-	resp, err := http.DefaultClient.Do(request)
-	if resp.StatusCode == http.StatusUnauthorized {
-		return &UnauthorizedError{}
+func (cl *charmLoader) postArchive(r io.Reader, id *charm.Reference, size int64, hash string) (*charm.Reference, error) {
+	URL := cl.storeURL + id.Path() + "/archive?hash=" + hash
+	logger.Infof("posting to %v", URL)
+	req, err := http.NewRequest("POST", URL, r)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot make http request")
+	}
+	req.Header.Set("Content-Type", "application/zip")
+	req.ContentLength = size
+
+	var resp params.ArchivePostResponse
+	err = cl.doCharmStoreRequest(req, &resp)
+	if err != nil {
+		return nil, errgo.Mask(err, errgo.Is(params.ErrUnauthorized))
+	}
+	return resp.Id, nil
+}
+
+// doCharmStoreRequest adds appropriate headers to the given HTTP request,
+// sends it to the charm store acting as the given user
+//  and parses the result as JSON into the
+// given result value, which should be a pointer to the expected data.
+// TODO(rog) factor this into a general charm store client package.
+func (cl *charmLoader) doCharmStoreRequest(req *http.Request, result interface{}) error {
+	userPass := cl.storeUser + ":" + cl.storePassword
+	authBasic := base64.StdEncoding.EncodeToString([]byte(userPass))
+	req.Header.Set("Authorization", "Basic "+authBasic)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errgo.Mask(err)
 	}
 	defer resp.Body.Close()
-	if err != nil || resp.StatusCode != http.StatusOK {
-		var body string
-		if len(resp.Header["Content-Length"]) > 0 {
-			bodySize, err := strconv.Atoi(resp.Header["Content-Length"][0])
-			if err == nil {
-				//limit to 128 bytes
-				if bodySize > 128 {
-					bodySize = 128
-				}
-				var buffer bytes.Buffer
-				io.CopyN(&buffer, resp.Body, int64(bodySize))
-				body = buffer.String()
-			}
+	dec := json.NewDecoder(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		var perr params.Error
+		if err := dec.Decode(&perr); err != nil {
+			return errgo.Notef(err, "cannot unmarshal error response")
 		}
-		logger.Errorf("error posting: %v StatusCode: %v Headers:%v Body:%v", err, resp.StatusCode, resp.Header, body)
+		if perr.Message == "" {
+			return errgo.New("error response with empty message")
+		}
+		return &perr
 	}
-	logger.Tracef("response: %v", resp)
-
-	return err
+	if err := dec.Decode(result); err != nil {
+		// TODO(rog) return a more informative error in this case
+		// (we might actually be talking to a proxy, which may
+		// return any sort of error)
+		return errgo.Notef(err, "cannot unmarshal response")
+	}
+	return nil
 }
 
 // bzrRevisionId returns the Bazaar revision id for the branch in branchDir.
@@ -303,10 +348,4 @@ func outputErr(output []byte, err error) error {
 		return fmt.Errorf("%v\n%s", err, output)
 	}
 	return err
-}
-
-type UnauthorizedError struct{}
-
-func (*UnauthorizedError) Error() string {
-	return "invalid charmstore credentials"
 }

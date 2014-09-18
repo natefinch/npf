@@ -1,7 +1,7 @@
 // Copyright 2012, 2013 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package main
+package config_test
 
 import (
 	"io/ioutil"
@@ -11,6 +11,8 @@ import (
 	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	gc "launchpad.net/gocheck"
+
+	"github.com/juju/charmstore/config"
 )
 
 func TestPackage(t *testing.T) {
@@ -32,21 +34,20 @@ auth-username: myuser
 auth-password: mypasswd
 `
 
-func (s *ConfigSuite) makeConfig(c *gc.C, content string) *config {
+func (s *ConfigSuite) readConfig(c *gc.C, content string) (*config.Config, error) {
 	// Write the configuration content to file.
 	path := path.Join(c.MkDir(), "charmd.conf")
 	err := ioutil.WriteFile(path, []byte(content), 0666)
 	c.Assert(err, gc.IsNil)
 
 	// Read the configuration.
-	conf, err := readConfig(path)
-	c.Assert(err, gc.IsNil)
-	return conf
+	return config.Read(path)
 }
 
-func (s *ConfigSuite) TestReadConfig(c *gc.C) {
-	conf := s.makeConfig(c, testConfig)
-	c.Assert(conf, jc.DeepEquals, &config{
+func (s *ConfigSuite) TestRead(c *gc.C) {
+	conf, err := s.readConfig(c, testConfig)
+	c.Assert(err, gc.IsNil)
+	c.Assert(conf, jc.DeepEquals, &config.Config{
 		MongoURL:     "localhost:23456",
 		APIAddr:      "blah:2324",
 		AuthUsername: "myuser",
@@ -55,18 +56,13 @@ func (s *ConfigSuite) TestReadConfig(c *gc.C) {
 }
 
 func (s *ConfigSuite) TestReadConfigError(c *gc.C) {
-	_, err := readConfig(path.Join(c.MkDir(), "charmd.conf"))
+	cfg, err := config.Read(path.Join(c.MkDir(), "charmd.conf"))
 	c.Assert(err, gc.ErrorMatches, ".* no such file or directory")
-}
-
-func (s *ConfigSuite) TestValidateConfig(c *gc.C) {
-	conf := s.makeConfig(c, testConfig)
-	err := conf.validate()
-	c.Assert(err, gc.IsNil)
+	c.Assert(cfg, gc.IsNil)
 }
 
 func (s *ConfigSuite) TestValidateConfigError(c *gc.C) {
-	conf := s.makeConfig(c, "")
-	err := conf.validate()
+	cfg, err := s.readConfig(c, "")
 	c.Assert(err, gc.ErrorMatches, "missing fields mongo-url, api-addr, auth-username, auth-password in config file")
+	c.Assert(cfg, gc.IsNil)
 }
