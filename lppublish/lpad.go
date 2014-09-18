@@ -55,7 +55,7 @@ type Params struct {
 	StorePassword string
 
 	// Limit holds the number of charm/bundles to upload.
-	// A zero value means no all the entities are processed.
+	// A zero value means that all the entities are processed.
 	Limit int
 
 	// NumPublishers holds the number of publishers that
