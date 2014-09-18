@@ -544,7 +544,7 @@ func (h *Handler) serveChangesPublished(w http.ResponseWriter, r *http.Request) 
 	for iter := query.Iter(); iter.Next(&entity); {
 		results = append(results, params.Published{
 			Id:          entity.URL,
-			PublishTime: entity.UploadTime,
+			PublishTime: entity.UploadTime.UTC(),
 		})
 	}
 	return results, nil
