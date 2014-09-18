@@ -25,6 +25,8 @@ var (
 	loggingConfig = flag.String("logging-config", "", "specify log levels for modules e.g. <root>=TRACE")
 	storeUser     = flag.String("u", "", "the colon separated user:password for charmstore; overrides configuration file")
 	configPath    = flag.String("config", "", "path to charm store configuration file")
+	limit         = flag.Int("limit", 0, "limit the number of charms/bundles to process")
+	numPublishers = flag.Int("p", 10, "the number of publishers that can be run in parallel")
 )
 
 func main() {
@@ -52,6 +54,17 @@ func load() error {
 	if *staging {
 		params.LaunchpadServer = lpad.Staging
 	}
+
+	// Validate the command line arguments.
+	if *limit < 0 {
+		return errgo.Newf("invalid limit %d", *limit)
+	}
+	params.Limit = *limit
+	if *numPublishers < 1 {
+		return errgo.Newf("invalid number of publishers %d", *numPublishers)
+	}
+	params.NumPublishers = *numPublishers
+
 	var cfg *config.Config
 	if *configPath != "" {
 		var err error
@@ -73,8 +86,10 @@ func load() error {
 	if *storeAddr == "" {
 		*storeAddr = cfg.APIAddr
 	}
+
 	params.StoreURL = "http://" + *storeAddr + "/v4/"
 
+	// Start the ingestion.
 	if err := lppublish.PublishCharmsDistro(params); err != nil {
 		return errgo.Mask(err)
 	}

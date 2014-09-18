@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/juju/errgo"
@@ -52,6 +53,14 @@ type Params struct {
 
 	// StoreUser holds the authentication password.
 	StorePassword string
+
+	// Limit holds the number of charm/bundles to upload.
+	// A zero value means that all the entities are processed.
+	Limit int
+
+	// NumPublishers holds the number of publishers that
+	// can be run in parallel.
+	NumPublishers int
 }
 
 type charmLoader Params
@@ -64,7 +73,7 @@ func PublishCharmsDistro(p Params) error {
 	return cl.run()
 }
 
-// run logs in anonymously to launchpad using the juju Consumer name,
+// run logs in anonymously to Launchpad using the Juju Consumer name,
 // gets all the branch tips in the charms Distro and publishes each
 // branch tip whose name ends in /trunk.
 func (cl *charmLoader) run() error {
@@ -82,6 +91,54 @@ func (cl *charmLoader) run() error {
 	if err != nil {
 		return errgo.Notef(err, "cannot get branch tips")
 	}
+	logger.Infof("starting ingestion with %d publisher(s)", cl.NumPublishers)
+
+	// Start retrieving branches to be processed.
+	results := make(chan entityResult)
+	go func() {
+		defer close(results)
+		cl.processTips(tips, results)
+	}()
+
+	// Start goroutines to publish charm and bundles.
+	var wg sync.WaitGroup
+	wg.Add(cl.NumPublishers)
+	errs := make(chan error)
+	for i := 0; i < cl.NumPublishers; i++ {
+		go func() {
+			cl.publisher(results, errs)
+			wg.Done()
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(errs)
+	}()
+
+	// Wait until the errs channel is closed, and exit immediately if a
+	// params.ErrUnauthorized error is encountered.
+	for err := range errs {
+		if errgo.Cause(err) == params.ErrUnauthorized {
+			return errgo.NoteMask(err, "fatal error", errgo.Is(params.ErrUnauthorized))
+		}
+		logger.Errorf(err.Error())
+	}
+	return nil
+}
+
+// entityResult is the result of processing a charm or bundle branch tip.
+type entityResult struct {
+	tip       lpad.BranchTip
+	branchURL string
+	charmURL  *charm.Reference
+}
+
+// processTips loops over the given branch tips, and sends an entityResult for
+// each valid entity on the results channel.
+// It proceeds until all the tips have been processed or the user defined
+// limit is reached.
+func (cl *charmLoader) processTips(tips []lpad.BranchTip, results chan<- entityResult) {
+	counter := 0
 	for _, tip := range tips {
 		// TODO(jay) need to process bundles as well (there is a card)
 		if !strings.HasSuffix(tip.UniqueName, "/trunk") {
@@ -97,23 +154,41 @@ func (cl *charmLoader) run() error {
 			logger.Errorf("skipping branch %v with no revisions", tip.UniqueName)
 			continue
 		}
-		logger.Infof("found %v with revision %v", tip.UniqueName, tip.Revision)
-		URLs := []*charm.Reference{charmURL}
-		URLs = appendPromulgatedCharmURLs(
-			tip.OfficialSeries,
-			charmURL.Schema,
-			charmURL.Name,
-			URLs,
-		)
-		err = cl.publishBazaarBranch(URLs, branchURL, tip.Revision)
-		if err != nil {
-			logger.Errorf("cannot publish branch %v to charm store: %v", branchURL, err)
+		counter++
+		logger.Infof("#%d: found %v with revision %v", counter, tip.UniqueName, tip.Revision)
+		results <- entityResult{
+			tip:       tip,
+			branchURL: branchURL,
+			charmURL:  charmURL,
 		}
-		if errgo.Cause(err) == params.ErrUnauthorized {
-			return errgo.NoteMask(err, "fatal error", errgo.Is(params.ErrUnauthorized))
+		// If cl.Limit is 0, the check below never succeeds.
+		if counter == cl.Limit {
+			break
 		}
 	}
-	return nil
+}
+
+// publisher reads the entity results from the given channel and publishes
+// the corresponding URLs to the charm store. Errors encountered in the process
+// are sent to the given errs channel.
+func (cl *charmLoader) publisher(results <-chan entityResult, errs chan<- error) {
+	logger.Debugf("starting publisher")
+	for result := range results {
+		logger.Debugf("start publishing URLs for %s", result.charmURL)
+		URLs := []*charm.Reference{result.charmURL}
+		URLs = appendPromulgatedCharmURLs(
+			result.tip.OfficialSeries,
+			result.charmURL.Schema,
+			result.charmURL.Name,
+			URLs,
+		)
+		err := cl.publishBazaarBranch(URLs, result.branchURL, result.tip.Revision)
+		if err != nil {
+			errs <- errgo.NoteMask(err, "cannot publish branch "+result.branchURL, errgo.Is(params.ErrUnauthorized))
+		}
+		logger.Debugf("done publishing URLs for %s", result.charmURL)
+	}
+	logger.Debugf("quitting publisher")
 }
 
 // appendPromulgatedCharmURLs adds urls from officialSeries to
