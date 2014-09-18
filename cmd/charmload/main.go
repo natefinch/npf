@@ -161,6 +161,7 @@ func (cl *charmLoader) run() error {
 		if errgo.Cause(err) == params.ErrUnauthorized {
 			return errgo.NoteMask(err, "fatal error", errgo.Is(params.ErrUnauthorized))
 		}
+		logger.Errorf(err.Error())
 	}
 	return nil
 }
@@ -223,8 +224,7 @@ func (cl *charmLoader) publisher(results <-chan entityResult, errs chan<- error)
 		)
 		err := cl.publishBazaarBranch(URLs, result.branchURL, result.tip.Revision)
 		if err != nil {
-			logger.Errorf("cannot publish branch %v to charm store: %v", result.branchURL, err)
-			errs <- err
+			errs <- errgo.NoteMask(err, "cannot publish branch "+result.branchURL, errgo.Is(params.ErrUnauthorized))
 		}
 		logger.Debugf("done publishing URLs for %s", result.charmURL)
 	}
