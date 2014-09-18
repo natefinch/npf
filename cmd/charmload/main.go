@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -36,10 +35,7 @@ var (
 	storeUser     = flag.String("u", "", "the colon separated user:password for charmstore; overrides configuration file")
 	configPath    = flag.String("config", "", "path to charm store configuration file")
 	limit         = flag.Int("limit", 0, "limit the number of charms/bundles to process")
-	numPublishers = flag.Int(
-		// TODO frankban: given the amount of IO involved, is this a sane default?
-		"p", runtime.NumCPU(),
-		"the number of publishers that can be run in parallel, defaulting to the number of CPUs available")
+	numPublishers = flag.Int("p", 10, "the number of publishers that can be run in parallel")
 )
 
 func main() {
@@ -72,9 +68,11 @@ func load() error {
 	if *limit < 0 {
 		return errgo.Newf("invalid limit %d", *limit)
 	}
+	cl.limit = *limit
 	if *numPublishers < 1 {
 		return errgo.Newf("invalid number of publishers %d", *numPublishers)
 	}
+	cl.numPublishers = *numPublishers
 
 	var cfg *config.Config
 	if *configPath != "" {
@@ -111,6 +109,8 @@ type charmLoader struct {
 	storeURL        string
 	storeUser       string
 	storePassword   string
+	numPublishers   int
+	limit           int
 }
 
 // run logs in anonymously to launchpad using the Juju Consumer name,
@@ -131,14 +131,20 @@ func (cl *charmLoader) run() error {
 	if err != nil {
 		return errgo.Notef(err, "cannot get branch tips")
 	}
-	logger.Infof("starting ingestion with %d publisher(s)", *numPublishers)
-	results := processTips(tips)
+	logger.Infof("starting ingestion with %d publisher(s)", cl.numPublishers)
+
+	// Start retrieving branches to be processed.
+	results := make(chan entityResult)
+	go func() {
+		defer close(results)
+		cl.processTips(tips, results)
+	}()
 
 	// Start goroutines to publish charm and bundles.
 	var wg sync.WaitGroup
-	wg.Add(*numPublishers)
+	wg.Add(cl.numPublishers)
 	errs := make(chan error)
-	for i := 0; i < *numPublishers; i++ {
+	for i := 0; i < cl.numPublishers; i++ {
 		go func() {
 			cl.publisher(results, errs)
 			wg.Done()
@@ -166,44 +172,39 @@ type entityResult struct {
 	charmURL  *charm.Reference
 }
 
-// processTips starts a goroutine to loop over the given branch tips, and sends
-// an entityResult for each valid entity on the entityResult channel.
+// processTips loops over the given branch tips, and sends an entityResult for
+// each valid entity on the results channel.
 // It proceeds until all the tips have been processed or the user defined
-// limit is reached, then closes the entityResult channel.
-func processTips(tips []lpad.BranchTip) <-chan entityResult {
+// limit is reached.
+func (cl *charmLoader) processTips(tips []lpad.BranchTip, results chan<- entityResult) {
 	counter := 0
-	results := make(chan entityResult)
-	go func() {
-		defer close(results)
-		for _, tip := range tips {
-			// TODO(jay) need to process bundles as well (there is a card)
-			if !strings.HasSuffix(tip.UniqueName, "/trunk") {
-				continue
-			}
-			logger.Tracef("getting uniqueNameURLs for %v", tip.UniqueName)
-			branchURL, charmURL, err := uniqueNameURLs(tip.UniqueName)
-			if err != nil {
-				logger.Warningf("could not get uniqueNameURLs for %v: %v", tip.UniqueName, err)
-				continue
-			}
-			if tip.Revision == "" {
-				logger.Errorf("skipping branch %v with no revisions", tip.UniqueName)
-				continue
-			}
-			counter++
-			logger.Infof("#%d: found %v with revision %v", counter, tip.UniqueName, tip.Revision)
-			results <- entityResult{
-				tip:       tip,
-				branchURL: branchURL,
-				charmURL:  charmURL,
-			}
-			// If *limit is 0, the check below never succeeds.
-			if counter == *limit {
-				break
-			}
+	for _, tip := range tips {
+		// TODO(jay) need to process bundles as well (there is a card)
+		if !strings.HasSuffix(tip.UniqueName, "/trunk") {
+			continue
 		}
-	}()
-	return results
+		logger.Tracef("getting uniqueNameURLs for %v", tip.UniqueName)
+		branchURL, charmURL, err := uniqueNameURLs(tip.UniqueName)
+		if err != nil {
+			logger.Warningf("could not get uniqueNameURLs for %v: %v", tip.UniqueName, err)
+			continue
+		}
+		if tip.Revision == "" {
+			logger.Errorf("skipping branch %v with no revisions", tip.UniqueName)
+			continue
+		}
+		counter++
+		logger.Infof("#%d: found %v with revision %v", counter, tip.UniqueName, tip.Revision)
+		results <- entityResult{
+			tip:       tip,
+			branchURL: branchURL,
+			charmURL:  charmURL,
+		}
+		// If cl.limit is 0, the check below never succeeds.
+		if counter == cl.limit {
+			break
+		}
+	}
 }
 
 // publisher reads the entity results from the given channel and publishes
