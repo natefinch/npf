@@ -312,6 +312,9 @@ func (cl *charmLoader) doCharmStoreRequest(req *http.Request, result interface{}
 		return &perr
 	}
 	if err := dec.Decode(result); err != nil {
+		// TODO(rog) return a more informative error in this case
+		// (we might actually be talking to a proxy, which may
+		// return any sort of error)
 		return errgo.Notef(err, "cannot unmarshal response")
 	}
 	return nil
