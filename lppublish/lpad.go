@@ -313,7 +313,10 @@ func (cl *charmLoader) archiveCharmDir(charmDir *charm.CharmDir, tempDir string)
 func (cl *charmLoader) postArchive(r io.Reader, id *charm.Reference, size int64, hash string) (*charm.Reference, error) {
 	URL := cl.StoreURL + id.Path() + "/archive?hash=" + hash
 	logger.Infof("posting to %v", URL)
-	req, err := http.NewRequest("POST", URL, r)
+	// Note that http.Request.Do closes the body if implements
+	// io.Closer. This is unwarranted familiarity and we don't want
+	// it, so wrap the reader to prevent it happening.
+	req, err := http.NewRequest("POST", URL, ioutil.NopCloser(r))
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot make http request")
 	}
