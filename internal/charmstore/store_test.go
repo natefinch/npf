@@ -723,7 +723,42 @@ func (s *StoreSuite) TestBlobName(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	defer f.Close()
 	c.Assert(hashOfReader(c, r), gc.Equals, hashOfReader(c, f))
+}
 
+func (s *StoreSuite) TestCollections(c *gc.C) {
+	store, err := NewStore(s.Session.DB("foo"))
+	c.Assert(err, gc.IsNil)
+	colls := store.DB.Collections()
+	names, err := store.DB.CollectionNames()
+	c.Assert(err, gc.IsNil)
+	// Check that all collections mentioned by Collections are actually created.
+	for _, coll := range colls {
+		found := false
+		for _, name := range names {
+			if name == coll.Name {
+				found = true
+			}
+		}
+		if !found {
+			c.Errorf("collection %q not created", coll.Name)
+		}
+
+	}
+	// Check that all created collections are mentioned in Collections.
+	for _, name := range names {
+		if name == "system.indexes" || name == "managedStoredResources" {
+			continue
+		}
+		found := false
+		for _, coll := range colls {
+			if coll.Name == name {
+				found = true
+			}
+		}
+		if !found {
+			c.Errorf("extra collection %q found", name)
+		}
+	}
 }
 
 func hashOfReader(c *gc.C, r io.Reader) string {

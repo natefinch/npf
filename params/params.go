@@ -81,3 +81,10 @@ type Published struct {
 	Id          *charm.Reference
 	PublishTime time.Time
 }
+
+// DebugStatus holds the result of the status checks
+type DebugStatus struct {
+	Name   string
+	Value  string
+	Passed bool
+}

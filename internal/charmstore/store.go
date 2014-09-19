@@ -349,3 +349,21 @@ func (s StoreDatabase) Close() {
 func (s StoreDatabase) Entities() *mgo.Collection {
 	return s.C("entities")
 }
+
+// allCollections holds for each collection used by the charm store a
+// function returns that collection.
+var allCollections = []func(StoreDatabase) *mgo.Collection{
+	StoreDatabase.StatCounters,
+	StoreDatabase.StatTokens,
+	StoreDatabase.Entities,
+}
+
+// Collections returns a slice of all the collections used
+// by the charm store.
+func (s StoreDatabase) Collections() []*mgo.Collection {
+	cs := make([]*mgo.Collection, len(allCollections))
+	for i, f := range allCollections {
+		cs[i] = f(s)
+	}
+	return cs
+}

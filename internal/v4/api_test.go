@@ -1006,6 +1006,85 @@ func (s *APISuite) TestChangesPublishedErrors(c *gc.C) {
 	}
 }
 
+func (s *APISuite) TestStatus(c *gc.C) {
+	for _, id := range []string{
+		"cs:precise/wordpress-2",
+		"cs:precise/wordpress-3",
+		"cs:~foo/precise/arble-9",
+		"cs:~bar/quantal/arble-10",
+		"cs:bundle/oflaughs-3",
+		"cs:~bar/bundle/oflaughs-4",
+	} {
+		if strings.Contains(id, "bundle") {
+			s.addBundle(c, "wordpress", id)
+		} else {
+			s.addCharm(c, "wordpress", id)
+		}
+	}
+	now := time.Now()
+	s.PatchValue(v4.StartTime, now)
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("debug/status"),
+		ExpectStatus: http.StatusOK,
+		ExpectBody: map[string]params.DebugStatus{
+			"mongo_connected": {
+				Name:   "MongoDB is connected",
+				Value:  "Connected",
+				Passed: true,
+			},
+			"mongo_collections": {
+				Name:   "MongoDB collections",
+				Value:  "All required collections exist",
+				Passed: true,
+			},
+			"entities": {
+				Name:   "Entities in charm store",
+				Value:  "4 charms; 2 bundles; 3 promulgated",
+				Passed: true,
+			},
+			"server_started": {
+				Name:   "Server started",
+				Value:  now.String(),
+				Passed: true,
+			},
+		},
+	})
+}
+
+func (s *APISuite) TestStatusWithoutCorrectCollections(c *gc.C) {
+	s.store.DB.Entities().DropCollection()
+	now := time.Now()
+	s.PatchValue(v4.StartTime, now)
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("debug/status"),
+		ExpectStatus: http.StatusOK,
+		ExpectBody: map[string]params.DebugStatus{
+			"mongo_connected": {
+				Name:   "MongoDB is connected",
+				Value:  "Connected",
+				Passed: true,
+			},
+			"mongo_collections": {
+				Name:   "MongoDB collections",
+				Value:  "Missing collections: [" + s.store.DB.Entities().Name + "]",
+				Passed: false,
+			},
+			"entities": {
+				Name:   "Entities in charm store",
+				Value:  "0 charms; 0 bundles; 0 promulgated",
+				Passed: true,
+			},
+			"server_started": {
+				Name:   "Server started",
+				Value:  now.String(),
+				Passed: true,
+			},
+		},
+	})
+}
+
 // publishCharmsAtKnownTimes populates the store with
 // a range of charms with known time stamps.
 func (s *APISuite) publishCharmsAtKnownTimes(c *gc.C, charms []publishSpec) {
