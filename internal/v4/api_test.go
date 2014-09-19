@@ -1022,7 +1022,7 @@ func (s *APISuite) TestStatus(c *gc.C) {
 		}
 	}
 	now := time.Now()
-	s.PatchValue(&charmstore.StartTime, now)
+	s.PatchValue(v4.StartTime, now)
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("debug/status"),
@@ -1055,7 +1055,7 @@ func (s *APISuite) TestStatus(c *gc.C) {
 func (s *APISuite) TestStatusWithoutCorrectCollections(c *gc.C) {
 	s.store.DB.Entities().DropCollection()
 	now := time.Now()
-	s.PatchValue(&charmstore.StartTime, now)
+	s.PatchValue(v4.StartTime, now)
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("debug/status"),

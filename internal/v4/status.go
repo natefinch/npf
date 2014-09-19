@@ -6,8 +6,10 @@ package v4
 import (
 	"fmt"
 	"net/http"
+	"time"
 
-	"github.com/juju/charmstore/internal/charmstore"
+	"gopkg.in/mgo.v2/bson"
+
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/params"
 )
@@ -82,7 +84,7 @@ func (h *Handler) checkCollections() (string, bool) {
 }
 
 func (h *Handler) checkEntities() (string, bool) {
-	iter := h.store.DB.Entities().Find(nil).Iter()
+	iter := h.store.DB.Entities().Find(nil).Select(bson.D{{"_id", 1}}).Iter()
 	charms, bundles, promulgated := 0, 0, 0
 	var entity mongodoc.Entity
 	for iter.Next(&entity) {
@@ -101,6 +103,9 @@ func (h *Handler) checkEntities() (string, bool) {
 	return fmt.Sprintf("%d charms; %d bundles; %d promulgated", charms, bundles, promulgated), true
 }
 
+// startTime holds the time that the code started running.
+var startTime = time.Now()
+
 func (h *Handler) checkServerStarted() (string, bool) {
-	return charmstore.StartTime.String(), true
+	return startTime.String(), true
 }

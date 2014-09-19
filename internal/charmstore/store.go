@@ -19,10 +19,6 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
-// StartTime holds the time that the server executable
-// started running.
-var StartTime = time.Now()
-
 // Store represents the underlying charm and blob data stores.
 type Store struct {
 	DB        StoreDatabase
@@ -354,6 +350,8 @@ func (s StoreDatabase) Entities() *mgo.Collection {
 	return s.C("entities")
 }
 
+// allCollections holds for each collection used by the charm store a
+// function returns that collection.
 var allCollections = []func(StoreDatabase) *mgo.Collection{
 	StoreDatabase.StatCounters,
 	StoreDatabase.StatTokens,
