@@ -40,6 +40,7 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 		Global: map[string]http.Handler{
 			"changes/published":  router.HandleJSON(h.serveChangesPublished),
 			"debug":              http.HandlerFunc(h.serveDebug),
+			"debug/status":       router.HandleJSON(h.serveDebugStatus),
 			"search":             http.HandlerFunc(h.serveSearch),
 			"search/interesting": http.HandlerFunc(h.serveSearchInteresting),
 			"stats/":             router.NotFoundHandler(),
