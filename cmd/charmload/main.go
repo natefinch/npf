@@ -51,7 +51,7 @@ func load() error {
 			return errgo.Notef(err, "cannot configure loggers")
 		}
 	}
-	writer, err := os.OpenFile("charmload-err", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
+	writer, err := os.OpenFile("charmload.err", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
 	if err != nil {
 		return err
 	}
