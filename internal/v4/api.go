@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/juju/errgo"
 	"gopkg.in/juju/charm.v3"
@@ -36,6 +38,7 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 	}
 	h.Router = router.New(&router.Handlers{
 		Global: map[string]http.Handler{
+			"changes/published":  router.HandleJSON(h.serveChangesPublished),
 			"debug":              http.HandlerFunc(h.serveDebug),
 			"search":             http.HandlerFunc(h.serveSearch),
 			"search/interesting": http.HandlerFunc(h.serveSearchInteresting),
@@ -489,4 +492,60 @@ func (h *Handler) metaArchiveUploadTime(entity *mongodoc.Entity, id *charm.Refer
 	return &params.ArchiveUploadTimeResponse{
 		UploadTime: entity.UploadTime.UTC(),
 	}, nil
+}
+
+type PublishedResponse struct {
+	Id        *charm.Reference
+	Published time.Time
+}
+
+// GET changes/published[?limit=$count][&from=$fromdate][&to=$todate]
+// http://tinyurl.com/qx5zdee
+func (h *Handler) serveChangesPublished(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	start, stop, err := parseDateRange(r.Form)
+	if err != nil {
+		return nil, errgo.Mask(err, errgo.Is(params.ErrBadRequest))
+	}
+	limit := -1
+	if limitStr := r.Form.Get("limit"); limitStr != "" {
+		limit, err = strconv.Atoi(limitStr)
+		if err != nil || limit <= 0 {
+			return nil, badRequestf(nil, "invalid 'limit' value")
+		}
+	}
+	var tquery bson.D
+	if !start.IsZero() {
+		tquery = make(bson.D, 0, 2)
+		tquery = append(tquery, bson.DocElem{
+			Name:  "$gte",
+			Value: start,
+		})
+	}
+	if !stop.IsZero() {
+		tquery = append(tquery, bson.DocElem{
+			Name:  "$lte",
+			Value: stop,
+		})
+	}
+	var findQuery bson.D
+	if len(tquery) > 0 {
+		findQuery = bson.D{{"uploadtime", tquery}}
+	}
+	query := h.store.DB.Entities().
+		Find(findQuery).
+		Sort("-uploadtime").
+		Select(bson.D{{"_id", 1}, {"uploadtime", 1}})
+	if limit != -1 {
+		query = query.Limit(limit)
+	}
+
+	results := []params.Published{}
+	var entity mongodoc.Entity
+	for iter := query.Iter(); iter.Next(&entity); {
+		results = append(results, params.Published{
+			Id:          entity.URL,
+			PublishTime: entity.UploadTime.UTC(),
+		})
+	}
+	return results, nil
 }

@@ -76,3 +76,8 @@ type RevisionInfoResponse struct {
 type BundleCount struct {
 	Count int
 }
+
+type Published struct {
+	Id          *charm.Reference
+	PublishTime time.Time
+}

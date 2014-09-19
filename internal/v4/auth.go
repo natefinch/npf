@@ -23,7 +23,7 @@ func (h *Handler) authenticate(w http.ResponseWriter, req *http.Request) error {
 	if err != nil {
 		return unauthorized(w, "authentication failed", err)
 	}
-	if (user != h.config.AuthUsername) || (passwd != h.config.AuthPassword) {
+	if user != h.config.AuthUsername || passwd != h.config.AuthPassword {
 		return unauthorized(w, "invalid user name or password", nil)
 	}
 	return nil

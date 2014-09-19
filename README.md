@@ -52,7 +52,7 @@ a GridFS named "juju.charmfs".
 To populate the database with the charms published in Launchpad, run the
 following command:
 
-    charmload cmd/charmd/config.yaml
+    charmload -config cmd/charmd/config.yaml
 
 Note: the operation takes a large amount of time and disk space to complete:
 at the time of this writing it takes ~2:30h and ~4GB to store ~1050 charms,
@@ -61,6 +61,9 @@ The process can be stopped by typing ^C.
 To check the imported charm count, you can run the following:
 
     mongo --eval "db.getSiblingDB('juju').charms.count()"
+
+The charmload process logs errors to a charmload.err file in the current
+directory of the charmload process.
 
 ## Charmstore server
 
