@@ -28,6 +28,7 @@ import (
 )
 
 var logger = loggo.GetLogger("charmload")
+var failsLogger = loggo.GetLogger("charmload_v4.loadfails")
 
 type PublishBranchError struct {
 	URL string
@@ -184,6 +185,7 @@ func (cl *charmLoader) publisher(results <-chan entityResult, errs chan<- error)
 		)
 		err := cl.publishBazaarBranch(URLs, result.branchURL, result.tip.Revision)
 		if err != nil {
+			failsLogger.Errorf("cannot publish branch %v to charm store: %v", result.branchURL, err)
 			errs <- errgo.NoteMask(err, "cannot publish branch "+result.branchURL, errgo.Is(params.ErrUnauthorized))
 		}
 		logger.Debugf("done publishing URLs for %s", result.charmURL)

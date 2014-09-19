@@ -6,8 +6,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/juju/errgo"
 	"github.com/juju/loggo"
@@ -18,6 +20,7 @@ import (
 )
 
 var logger = loggo.GetLogger("charmload")
+var failsLogger = loggo.GetLogger("charmload_v4.loadfails")
 
 var (
 	staging       = flag.Bool("staging", false, "use the launchpad staging server")
@@ -48,6 +51,12 @@ func load() error {
 			return errgo.Notef(err, "cannot configure loggers")
 		}
 	}
+	writer, err := os.OpenFile("charmload.err", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+	defer writer.Close()
+	registerLoadFailsWriter(writer)
 	var params lppublish.Params
 
 	params.LaunchpadServer = lpad.Production
@@ -94,4 +103,24 @@ func load() error {
 		return errgo.Mask(err)
 	}
 	return nil
+}
+
+func registerLoadFailsWriter(writer io.Writer) error {
+	loadFailsWriter := &LoadFailsWriter{writer}
+	err := loggo.RegisterWriter("loadfails", loadFailsWriter, loggo.TRACE)
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+type LoadFailsWriter struct {
+	w io.Writer
+}
+
+func (writer *LoadFailsWriter) Write(level loggo.Level, name, filename string, line int, timestamp time.Time, message string) {
+	if name == failsLogger.Name() {
+		logLine := (&loggo.DefaultFormatter{}).Format(level, name, filename, line, timestamp, message)
+		fmt.Fprintf(writer.w, "%s\n", logLine)
+	}
 }
