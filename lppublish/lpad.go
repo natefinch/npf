@@ -239,22 +239,6 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.Reference, e
 
 const bzrDigestKey = "bzr-digest"
 
-func (cl *charmLoader) excludeExistingEntities(urls []*charm.Reference, digest string) []*charm.Reference {
-	missing := make([]*charm.Reference, 0, len(urls))
-	for _, id := range urls {
-		existingDigest, err := cl.getDigestExtraInfo(id)
-		if err == nil && existingDigest == digest {
-			logger.Infof("skipping %v: entity already present in the charm store with digest %v", id, digest)
-			continue
-		}
-		if err != nil && errgo.Cause(err) != params.ErrNotFound {
-			logger.Warningf("problem retrieving extra info for %v: %v", id, err)
-		}
-		missing = append(missing, id)
-	}
-	return missing
-}
-
 func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL string, digest string) error {
 	// Check whether the entity is already present in the charm store.
 	urls = cl.excludeExistingEntities(urls, digest)
@@ -317,9 +301,27 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 		if err := cl.putDigestExtraInfo(finalId, tipDigest); err != nil {
 			return errgo.Notef(err, "cannot add digest extra info")
 		}
-		logger.Infof("extra info pushed for %s", finalId)
+		logger.Infof("bzr digest for %s set to %s", finalId, tipDigest)
 	}
 	return err
+}
+
+// excludeExistingEntities filters the given URLs slice to only include
+// entities that are not already present in the charm store.
+func (cl *charmLoader) excludeExistingEntities(urls []*charm.Reference, digest string) []*charm.Reference {
+	missing := make([]*charm.Reference, 0, len(urls))
+	for _, id := range urls {
+		existingDigest, err := cl.getDigestExtraInfo(id)
+		if err == nil && existingDigest == digest {
+			logger.Infof("skipping %v: entity already present in the charm store with digest %v", id, digest)
+			continue
+		}
+		if err != nil && errgo.Cause(err) != params.ErrNotFound {
+			logger.Warningf("problem retrieving extra info for %v: %v", id, err)
+		}
+		missing = append(missing, id)
+	}
+	return missing
 }
 
 // archiveCharmDir archives the charmDir to a temporary file
