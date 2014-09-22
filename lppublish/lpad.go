@@ -176,14 +176,14 @@ func (cl *charmLoader) publisher(results <-chan entityResult, errs chan<- error)
 	logger.Debugf("starting publisher")
 	for result := range results {
 		logger.Debugf("start publishing URLs for %s", result.charmURL)
-		URLs := []*charm.Reference{result.charmURL}
-		URLs = appendPromulgatedCharmURLs(
+		urls := []*charm.Reference{result.charmURL}
+		urls = appendPromulgatedCharmURLs(
 			result.tip.OfficialSeries,
 			result.charmURL.Schema,
 			result.charmURL.Name,
-			URLs,
+			urls,
 		)
-		err := cl.publishBazaarBranch(URLs, result.branchURL, result.tip.Revision)
+		err := cl.publishBazaarBranch(urls, result.branchURL, result.tip.Revision)
 		if err != nil {
 			failsLogger.Errorf("cannot publish branch %v to charm store: %v", result.branchURL, err)
 			errs <- errgo.NoteMask(err, "cannot publish branch "+result.branchURL, errgo.Is(params.ErrUnauthorized))
@@ -196,7 +196,7 @@ func (cl *charmLoader) publisher(results <-chan entityResult, errs chan<- error)
 // appendPromulgatedCharmURLs adds urls from officialSeries to
 // the URLs slice for the given schema and name.
 // Promulgated charms have OfficialSeries in launchpad.
-func appendPromulgatedCharmURLs(officialSeries []string, schema, name string, URLs []*charm.Reference) []*charm.Reference {
+func appendPromulgatedCharmURLs(officialSeries []string, schema, name string, urls []*charm.Reference) []*charm.Reference {
 	for _, series := range officialSeries {
 		nextCharmURL := &charm.Reference{
 			Schema:   schema,
@@ -204,10 +204,10 @@ func appendPromulgatedCharmURLs(officialSeries []string, schema, name string, UR
 			Revision: -1,
 			Series:   series,
 		}
-		URLs = append(URLs, nextCharmURL)
-		logger.Debugf("added URL %v to URLs list for %v", nextCharmURL, URLs[0])
+		urls = append(urls, nextCharmURL)
+		logger.Debugf("added URL %v to URLs list for %v", nextCharmURL, urls[0])
 	}
-	return URLs
+	return urls
 }
 
 // uniqueNameURLs returns the branch URL and the charm URL for the
@@ -239,10 +239,9 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.Reference, e
 
 const bzrDigestKey = "bzr-digest"
 
-func (cl *charmLoader) publishBazaarBranch(URLs []*charm.Reference, branchURL string, digest string) error {
-	// Check whether the entity is already present in the charm store.
-	missingURLs := make([]*charm.Reference, 0, len(URLs))
-	for _, id := range URLs {
+func (cl *charmLoader) excludeExistingEntities(urls []*charm.Reference, digest string) []*charm.Reference {
+	missing := make([]*charm.Reference, 0, len(urls))
+	for _, id := range urls {
 		existingDigest, err := cl.getDigestExtraInfo(id)
 		if err == nil && existingDigest == digest {
 			logger.Infof("skipping %v: entity already present in the charm store with digest %v", id, digest)
@@ -251,9 +250,15 @@ func (cl *charmLoader) publishBazaarBranch(URLs []*charm.Reference, branchURL st
 		if err != nil && errgo.Cause(err) != params.ErrNotFound {
 			logger.Warningf("problem retrieving extra info for %v: %v", id, err)
 		}
-		missingURLs = append(missingURLs, id)
+		missing = append(missing, id)
 	}
-	if len(missingURLs) == 0 {
+	return missing
+}
+
+func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL string, digest string) error {
+	// Check whether the entity is already present in the charm store.
+	urls = cl.excludeExistingEntities(urls, digest)
+	if len(urls) == 0 {
 		logger.Debugf("nothing to do for %s", branchURL)
 		return nil
 	}
@@ -298,7 +303,7 @@ func (cl *charmLoader) publishBazaarBranch(URLs []*charm.Reference, branchURL st
 	defer tempFile.Close()
 
 	// Publish the entity to the corresponding URLs in the charm store.
-	for _, id := range missingURLs {
+	for _, id := range urls {
 		if _, err := tempFile.Seek(0, 0); err != nil {
 			return errgo.Notef(err, "cannot seek")
 		}
