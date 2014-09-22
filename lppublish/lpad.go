@@ -237,7 +237,7 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.Reference, e
 	return branchURL, charmURL, nil
 }
 
-const BZR_DIGEST_KEY = "bzr-digest"
+const bzrDigestKey = "bzr-digest"
 
 func (cl *charmLoader) publishBazaarBranch(URLs []*charm.Reference, branchURL string, digest string) error {
 	// Check whether the entity is already present in the charm store.
@@ -368,7 +368,7 @@ func (cl *charmLoader) postArchive(r io.Reader, id *charm.Reference, size int64,
 }
 
 func (cl *charmLoader) getDigestExtraInfo(id *charm.Reference) (string, error) {
-	url := cl.StoreURL + id.Path() + "/meta/extra-info/" + BZR_DIGEST_KEY
+	url := cl.StoreURL + id.Path() + "/meta/extra-info/" + bzrDigestKey
 	logger.Infof("getting extra info from %v", url)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -389,7 +389,7 @@ func (cl *charmLoader) putDigestExtraInfo(id *charm.Reference, digest string) er
 	if err != nil {
 		return errgo.Notef(err, "cannot marshal digest")
 	}
-	url := cl.StoreURL + id.Path() + "/meta/extra-info/" + BZR_DIGEST_KEY
+	url := cl.StoreURL + id.Path() + "/meta/extra-info/" + bzrDigestKey
 	logger.Infof("putting extra info to %v", url)
 	req, err := http.NewRequest("PUT", url, bytes.NewReader(body))
 	if err != nil {
