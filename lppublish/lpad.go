@@ -75,6 +75,7 @@ func PublishCharmsDistro(p Params) error {
 }
 
 func (cl *charmLoader) moveBundleTipsToEndOfList(tips []lpad.BranchTip) []lpad.BranchTip {
+	// TODO (urosj) improve/add control of memory usage
 	bundleTips := make([]lpad.BranchTip, 0, len(tips))
 	var bundleTipsLast []lpad.BranchTip
 	for _, tip := range tips {
