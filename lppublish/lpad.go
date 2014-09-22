@@ -298,7 +298,8 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 		logger.Infof("posted %s", finalId)
 
 		// Set the Bazaar digest as extra-info for the entity.
-		if err := cl.putDigestExtraInfo(finalId, tipDigest); err != nil {
+		path := finalId.Path() + "/meta/extra-info/" + bzrDigestKey
+		if err := cl.charmStorePut(path, tipDigest); err != nil {
 			return errgo.Notef(err, "cannot add digest extra info")
 		}
 		logger.Infof("bzr digest for %s set to %s", finalId, tipDigest)
@@ -311,8 +312,10 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 func (cl *charmLoader) excludeExistingEntities(urls []*charm.Reference, digest string) []*charm.Reference {
 	missing := make([]*charm.Reference, 0, len(urls))
 	for _, id := range urls {
-		existingDigest, err := cl.getDigestExtraInfo(id)
-		if err == nil && existingDigest == digest {
+		var resp string
+		path := id.Path() + "/meta/extra-info/" + bzrDigestKey
+		err := cl.charmStoreGet(path, &resp)
+		if err == nil && resp == digest {
 			logger.Infof("skipping %v: entity already present in the charm store with digest %v", id, digest)
 			continue
 		}
@@ -355,7 +358,7 @@ func (cl *charmLoader) archiveCharmDir(charmDir *charm.CharmDir, tempDir string)
 
 func (cl *charmLoader) postArchive(r io.Reader, id *charm.Reference, size int64, hash string) (*charm.Reference, error) {
 	url := cl.StoreURL + id.Path() + "/archive?hash=" + hash
-	logger.Infof("posting to %v", url)
+	logger.Infof("sending POST request to %v", url)
 	// Note that http.Request.Do closes the body if implements
 	// io.Closer. This is unwarranted familiarity and we don't want
 	// it, so wrap the reader to prevent it happening.
@@ -374,38 +377,40 @@ func (cl *charmLoader) postArchive(r io.Reader, id *charm.Reference, size int64,
 	return resp.Id, nil
 }
 
-func (cl *charmLoader) getDigestExtraInfo(id *charm.Reference) (string, error) {
-	url := cl.StoreURL + id.Path() + "/meta/extra-info/" + bzrDigestKey
-	logger.Infof("getting extra info from %v", url)
-
+// charmStorePut makes a GET request to the given URL path in
+// the charm store and parses the result as JSON into the given
+// resp value, which should be a pointer to the expected data.
+func (cl *charmLoader) charmStoreGet(path string, resp interface{}) error {
+	url := cl.StoreURL + path
+	logger.Infof("sending GET request to %v", url)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "", errgo.Notef(err, "cannot make HTTP GET request")
+		return errgo.Notef(err, "cannot make HTTP GET request")
 	}
 
-	var resp string
-	err = cl.doCharmStoreRequest(req, &resp)
-	if err != nil {
-		return "", errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	if err := cl.doCharmStoreRequest(req, resp); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
-	return resp, nil
+	return nil
 }
 
-func (cl *charmLoader) putDigestExtraInfo(id *charm.Reference, digest string) error {
-	body, err := json.Marshal(digest)
+// charmStorePut makes a PUT request to the given URL path in
+// the charm store with the given body.
+func (cl *charmLoader) charmStorePut(path string, body interface{}) error {
+	content, err := json.Marshal(body)
 	if err != nil {
-		return errgo.Notef(err, "cannot marshal digest")
+		return errgo.Notef(err, "cannot marshal body")
 	}
-	url := cl.StoreURL + id.Path() + "/meta/extra-info/" + bzrDigestKey
-	logger.Infof("putting extra info to %v", url)
-	req, err := http.NewRequest("PUT", url, bytes.NewReader(body))
+
+	url := cl.StoreURL + path
+	logger.Infof("sending PUT request to %v", url)
+	req, err := http.NewRequest("PUT", url, bytes.NewReader(content))
 	if err != nil {
 		return errgo.Notef(err, "cannot make HTTP PUT request")
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	err = cl.doCharmStoreRequest(req, nil)
-	if err != nil {
+	if err := cl.doCharmStoreRequest(req, nil); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrUnauthorized))
 	}
 	return nil
