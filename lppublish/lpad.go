@@ -75,8 +75,8 @@ func PublishCharmsDistro(p Params) error {
 }
 
 func (cl *charmLoader) moveBundleTipsToEndOfList(tips []lpad.BranchTip) []lpad.BranchTip {
-	bundleTips := make([]lpad.BranchTip, 0, 0)
-	bundleTipsLast := make([]lpad.BranchTip, 0, 0)
+	bundleTips := make([]lpad.BranchTip, 0, len(tips))
+	var bundleTipsLast []lpad.BranchTip
 	for _, tip := range tips {
 		if strings.HasSuffix(tip.UniqueName, "/bundle") {
 			bundleTipsLast = append(bundleTipsLast, tip)
@@ -84,9 +84,7 @@ func (cl *charmLoader) moveBundleTipsToEndOfList(tips []lpad.BranchTip) []lpad.B
 		}
 		bundleTips = append(bundleTips, tip)
 	}
-	for _, tip := range bundleTipsLast {
-		bundleTips = append(bundleTips, tip)
-	}
+	bundleTips = append(bundleTips, bundleTipsLast...)
 	return bundleTips
 }
 
@@ -277,7 +275,7 @@ func (cl *charmLoader) publishBazaarBranch(URLs []*charm.Reference, branchURL st
 		digest = tipDigest
 		logger.Warningf("tipDigest %v != digest %v", digest, tipDigest)
 	}
-	var archiveDir archiveToer
+	var archiveDir archiverTo
 	if URLs[0].Series == "bundles" {
 		// charmstore expects series named bundle instead of bundles
 		for _, url := range URLs {
@@ -311,13 +309,13 @@ func (cl *charmLoader) publishBazaarBranch(URLs []*charm.Reference, branchURL st
 	return err
 }
 
-type archiveToer interface {
+type archiverTo interface {
 	ArchiveTo(io.Writer) error
 }
 
 // archiveDir archives the archiver to a temporary file
 // inside tempDir and returns the file, its hash and size.
-func (cl *charmLoader) archiveDir(archiver archiveToer, tempDir string) (archiveFile *os.File, hash string, size int64, err error) {
+func (cl *charmLoader) archiveDir(archiver archiverTo, tempDir string) (archiveFile *os.File, hash string, size int64, err error) {
 	f, err := os.Create(filepath.Join(tempDir, "archive.zip"))
 	if err != nil {
 		return nil, "", 0, errgo.Notef(err, "cannot create temp file")
