@@ -190,14 +190,14 @@ func (cl *charmLoader) publisher(results <-chan entityResult, errs chan<- error)
 	logger.Debugf("starting publisher")
 	for result := range results {
 		logger.Debugf("start publishing URLs for %s", result.charmURL)
-		URLs := []*charm.Reference{result.charmURL}
-		URLs = appendPromulgatedCharmURLs(
+		urls := []*charm.Reference{result.charmURL}
+		urls = appendPromulgatedCharmURLs(
 			result.tip.OfficialSeries,
 			result.charmURL.Schema,
 			result.charmURL.Name,
-			URLs,
+			urls,
 		)
-		err := cl.publishBazaarBranch(URLs, result.branchURL, result.tip.Revision)
+		err := cl.publishBazaarBranch(urls, result.branchURL, result.tip.Revision)
 		if err != nil {
 			failsLogger.Errorf("cannot publish branch %v to charm store: %v", result.branchURL, err)
 			errs <- errgo.NoteMask(err, "cannot publish branch "+result.branchURL, errgo.Is(params.ErrUnauthorized))
@@ -210,7 +210,7 @@ func (cl *charmLoader) publisher(results <-chan entityResult, errs chan<- error)
 // appendPromulgatedCharmURLs adds urls from officialSeries to
 // the URLs slice for the given schema and name.
 // Promulgated charms have OfficialSeries in launchpad.
-func appendPromulgatedCharmURLs(officialSeries []string, schema, name string, URLs []*charm.Reference) []*charm.Reference {
+func appendPromulgatedCharmURLs(officialSeries []string, schema, name string, urls []*charm.Reference) []*charm.Reference {
 	for _, series := range officialSeries {
 		nextCharmURL := &charm.Reference{
 			Schema:   schema,
@@ -218,10 +218,10 @@ func appendPromulgatedCharmURLs(officialSeries []string, schema, name string, UR
 			Revision: -1,
 			Series:   series,
 		}
-		URLs = append(URLs, nextCharmURL)
-		logger.Debugf("added URL %v to URLs list for %v", nextCharmURL, URLs[0])
+		urls = append(urls, nextCharmURL)
+		logger.Debugf("added URL %v to URLs list for %v", nextCharmURL, urls[0])
 	}
-	return URLs
+	return urls
 }
 
 // uniqueNameURLs returns the branch URL and the charm URL for the
@@ -251,7 +251,16 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.Reference, e
 	return branchURL, charmURL, nil
 }
 
-func (cl *charmLoader) publishBazaarBranch(URLs []*charm.Reference, branchURL string, digest string) error {
+const bzrDigestKey = "bzr-digest"
+
+func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL string, digest string) error {
+	// Check whether the entity is already present in the charm store.
+	urls = cl.excludeExistingEntities(urls, digest)
+	if len(urls) == 0 {
+		logger.Debugf("nothing to do for %s", branchURL)
+		return nil
+	}
+
 	// Retrieve the branch with a lightweight checkout, so that it
 	// builds a working tree as cheaply as possible. History
 	// doesn't matter here.
@@ -267,6 +276,7 @@ func (cl *charmLoader) publishBazaarBranch(URLs []*charm.Reference, branchURL st
 		return outputErr(output, err)
 	}
 
+	// Retrieve the Bazaar digest of the branch.
 	tipDigest, err := bzrRevisionId(branchDir)
 	if err != nil {
 		return errgo.Notef(err, "cannot get revision id")
@@ -276,9 +286,9 @@ func (cl *charmLoader) publishBazaarBranch(URLs []*charm.Reference, branchURL st
 		logger.Warningf("tipDigest %v != digest %v", digest, tipDigest)
 	}
 	var archiveDir archiverTo
-	if URLs[0].Series == "bundles" {
+	if urls[0].Series == "bundles" {
 		// charmstore expects series named bundle instead of bundles
-		for _, url := range URLs {
+		for _, url := range urls {
 			url.Series = "bundle"
 		}
 		archiveDir, err = charm.ReadBundleDir(branchDir)
@@ -286,17 +296,22 @@ func (cl *charmLoader) publishBazaarBranch(URLs []*charm.Reference, branchURL st
 			return errgo.Notef(err, "cannot read bundle dir")
 		}
 	} else {
+		// Instantiate the entity from the branch directory.
 		archiveDir, err = charm.ReadCharmDir(branchDir)
 		if err != nil {
 			return errgo.Notef(err, "cannot read charm dir")
 		}
 	}
+	// Archive the entity in a temporary directory, and calculate its SHA384
+	// hash and archive size.
 	tempFile, hash, archiveSize, err := cl.archiveDir(archiveDir, tempDir)
 	if err != nil {
 		return errgo.Notef(err, "cannot make archive")
 	}
 	defer tempFile.Close()
-	for _, id := range URLs {
+
+	// Publish the entity to the corresponding URLs in the charm store.
+	for _, id := range urls {
 		if _, err := tempFile.Seek(0, 0); err != nil {
 			return errgo.Notef(err, "cannot seek")
 		}
@@ -305,8 +320,35 @@ func (cl *charmLoader) publishBazaarBranch(URLs []*charm.Reference, branchURL st
 			return errgo.NoteMask(err, "cannot post archive", errgo.Is(params.ErrUnauthorized))
 		}
 		logger.Infof("posted %s", finalId)
+
+		// Set the Bazaar digest as extra-info for the entity.
+		path := finalId.Path() + "/meta/extra-info/" + bzrDigestKey
+		if err := cl.charmStorePut(path, tipDigest); err != nil {
+			return errgo.Notef(err, "cannot add digest extra info")
+		}
+		logger.Infof("bzr digest for %s set to %s", finalId, tipDigest)
 	}
-	return err
+	return nil
+}
+
+// excludeExistingEntities filters the given URLs slice to only include
+// entities that are not already present in the charm store.
+func (cl *charmLoader) excludeExistingEntities(urls []*charm.Reference, digest string) []*charm.Reference {
+	missing := make([]*charm.Reference, 0, len(urls))
+	for _, id := range urls {
+		var resp string
+		path := id.Path() + "/meta/extra-info/" + bzrDigestKey
+		err := cl.charmStoreGet(path, &resp)
+		if err == nil && resp == digest {
+			logger.Infof("skipping %v: entity already present in the charm store with digest %v", id, digest)
+			continue
+		}
+		if err != nil && errgo.Cause(err) != params.ErrNotFound {
+			logger.Warningf("problem retrieving extra info for %v: %v", id, err)
+		}
+		missing = append(missing, id)
+	}
+	return missing
 }
 
 type archiverTo interface {
@@ -343,14 +385,14 @@ func (cl *charmLoader) archiveDir(archiver archiverTo, tempDir string) (archiveF
 }
 
 func (cl *charmLoader) postArchive(r io.Reader, id *charm.Reference, size int64, hash string) (*charm.Reference, error) {
-	URL := cl.StoreURL + id.Path() + "/archive?hash=" + hash
-	logger.Infof("posting to %v", URL)
+	url := cl.StoreURL + id.Path() + "/archive?hash=" + hash
+	logger.Infof("sending POST request to %v", url)
 	// Note that http.Request.Do closes the body if implements
 	// io.Closer. This is unwarranted familiarity and we don't want
 	// it, so wrap the reader to prevent it happening.
-	req, err := http.NewRequest("POST", URL, ioutil.NopCloser(r))
+	req, err := http.NewRequest("POST", url, ioutil.NopCloser(r))
 	if err != nil {
-		return nil, errgo.Notef(err, "cannot make http request")
+		return nil, errgo.Notef(err, "cannot make HTTP POST request")
 	}
 	req.Header.Set("Content-Type", "application/zip")
 	req.ContentLength = size
@@ -363,20 +405,62 @@ func (cl *charmLoader) postArchive(r io.Reader, id *charm.Reference, size int64,
 	return resp.Id, nil
 }
 
+// charmStorePut makes a GET request to the given URL path in
+// the charm store and parses the result as JSON into the given
+// resp value, which should be a pointer to the expected data.
+func (cl *charmLoader) charmStoreGet(path string, resp interface{}) error {
+	url := cl.StoreURL + path
+	logger.Infof("sending GET request to %v", url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return errgo.Notef(err, "cannot make HTTP GET request")
+	}
+
+	if err := cl.doCharmStoreRequest(req, resp); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	return nil
+}
+
+// charmStorePut makes a PUT request to the given URL path in
+// the charm store with the given body.
+func (cl *charmLoader) charmStorePut(path string, body interface{}) error {
+	content, err := json.Marshal(body)
+	if err != nil {
+		return errgo.Notef(err, "cannot marshal body")
+	}
+
+	url := cl.StoreURL + path
+	logger.Infof("sending PUT request to %v", url)
+	req, err := http.NewRequest("PUT", url, bytes.NewReader(content))
+	if err != nil {
+		return errgo.Notef(err, "cannot make HTTP PUT request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	if err := cl.doCharmStoreRequest(req, nil); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrUnauthorized))
+	}
+	return nil
+}
+
 // doCharmStoreRequest adds appropriate headers to the given HTTP request,
-// sends it to the charm store acting as the given user
-//  and parses the result as JSON into the
-// given result value, which should be a pointer to the expected data.
+// sends it to the charm store acting as the given user and parses the result
+// as JSON into the given result value, which should be a pointer to the
+// expected data, but may be nil if no result is expected.
 // TODO(rog) factor this into a general charm store client package.
 func (cl *charmLoader) doCharmStoreRequest(req *http.Request, result interface{}) error {
-	userPass := cl.StoreUser + ":" + cl.StorePassword
-	authBasic := base64.StdEncoding.EncodeToString([]byte(userPass))
-	req.Header.Set("Authorization", "Basic "+authBasic)
+	if req.Method == "POST" || req.Method == "PUT" {
+		userPass := cl.StoreUser + ":" + cl.StorePassword
+		authBasic := base64.StdEncoding.EncodeToString([]byte(userPass))
+		req.Header.Set("Authorization", "Basic "+authBasic)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return errgo.Mask(err)
 	}
+
 	defer resp.Body.Close()
 	dec := json.NewDecoder(resp.Body)
 	if resp.StatusCode != http.StatusOK {
@@ -388,6 +472,10 @@ func (cl *charmLoader) doCharmStoreRequest(req *http.Request, result interface{}
 			return errgo.New("error response with empty message")
 		}
 		return &perr
+	}
+	// Check if the caller is interested in the successful server response.
+	if result == nil {
+		return nil
 	}
 	if err := dec.Decode(result); err != nil {
 		// TODO(rog) return a more informative error in this case
