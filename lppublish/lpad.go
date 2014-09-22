@@ -412,9 +412,9 @@ func (cl *charmLoader) putDigestExtraInfo(id *charm.Reference, digest string) er
 }
 
 // doCharmStoreRequest adds appropriate headers to the given HTTP request,
-// sends it to the charm store acting as the given user
-// and parses the result as JSON into the given result value,
-// which should be a pointer to the expected data.
+// sends it to the charm store acting as the given user and parses the result
+// as JSON into the given result value, which should be a pointer to the
+// expected data, but may be nil if no result is expected.
 // TODO(rog) factor this into a general charm store client package.
 func (cl *charmLoader) doCharmStoreRequest(req *http.Request, result interface{}) error {
 	if req.Method == "POST" || req.Method == "PUT" {
