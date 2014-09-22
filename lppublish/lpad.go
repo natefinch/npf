@@ -303,7 +303,7 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 		}
 		logger.Infof("bzr digest for %s set to %s", finalId, tipDigest)
 	}
-	return err
+	return nil
 }
 
 // excludeExistingEntities filters the given URLs slice to only include
@@ -403,7 +403,6 @@ func (cl *charmLoader) putDigestExtraInfo(id *charm.Reference, digest string) er
 		return errgo.Notef(err, "cannot make HTTP PUT request")
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.ContentLength = int64(len(body))
 
 	err = cl.doCharmStoreRequest(req, nil)
 	if err != nil {
