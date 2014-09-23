@@ -1,3 +1,6 @@
+// Copyright 2014 Canonical Ltd.
+// Licensed under the AGPLv3, see LICENCE file for details.
+
 // The debug package holds various functions that may
 // be used for debugging but should not be included
 // in production code.

@@ -27,6 +27,10 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
+// BzrDigestKey is the extra-info key used to store the Bazaar digest
+// of an entity ingested from Launchpad.
+const BzrDigestKey = "bzr-digest"
+
 var logger = loggo.GetLogger("charmload")
 var failsLogger = loggo.GetLogger("charmload_v4.loadfails")
 
@@ -330,7 +334,7 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 		logger.Infof("posted %s", finalId)
 
 		// Set the Bazaar digest as extra-info for the entity.
-		path := finalId.Path() + "/meta/extra-info/" + bzrDigestKey
+		path := finalId.Path() + "/meta/extra-info/" + BzrDigestKey
 		if err := cl.charmStorePut(path, tipDigest); err != nil {
 			return errgo.Notef(err, "cannot add digest extra info")
 		}
@@ -345,7 +349,7 @@ func (cl *charmLoader) excludeExistingEntities(urls []*charm.Reference, digest s
 	missing := make([]*charm.Reference, 0, len(urls))
 	for _, id := range urls {
 		var resp string
-		path := id.Path() + "/meta/extra-info/" + bzrDigestKey
+		path := id.Path() + "/meta/extra-info/" + BzrDigestKey
 		err := cl.charmStoreGet(path, &resp)
 		if err == nil && resp == digest {
 			logger.Infof("skipping %v: entity already present in the charm store with digest %v", id, digest)
