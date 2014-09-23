@@ -48,7 +48,7 @@ func serve() error {
 		AuthUsername: conf.AuthUsername,
 		AuthPassword: conf.AuthPassword,
 	}
-	server, err := charmstore.NewServer(db, cfg, charmstore.V4)
+	server, err := charmstore.NewServer(db, cfg, charmstore.Legacy, charmstore.V4)
 	if err != nil {
 		return err
 	}
