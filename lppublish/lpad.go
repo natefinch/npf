@@ -237,8 +237,6 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.Reference, e
 	return branchURL, charmURL, nil
 }
 
-const bzrDigestKey = "bzr-digest"
-
 func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL string, digest string) error {
 	// Check whether the entity is already present in the charm store.
 	urls = cl.excludeExistingEntities(urls, digest)
@@ -298,7 +296,7 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 		logger.Infof("posted %s", finalId)
 
 		// Set the Bazaar digest as extra-info for the entity.
-		path := finalId.Path() + "/meta/extra-info/" + bzrDigestKey
+		path := finalId.Path() + "/meta/extra-info/" + params.BzrDigestKey
 		if err := cl.charmStorePut(path, tipDigest); err != nil {
 			return errgo.Notef(err, "cannot add digest extra info")
 		}
@@ -313,7 +311,7 @@ func (cl *charmLoader) excludeExistingEntities(urls []*charm.Reference, digest s
 	missing := make([]*charm.Reference, 0, len(urls))
 	for _, id := range urls {
 		var resp string
-		path := id.Path() + "/meta/extra-info/" + bzrDigestKey
+		path := id.Path() + "/meta/extra-info/" + params.BzrDigestKey
 		err := cl.charmStoreGet(path, &resp)
 		if err == nil && resp == digest {
 			logger.Infof("skipping %v: entity already present in the charm store with digest %v", id, digest)

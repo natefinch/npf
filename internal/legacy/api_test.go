@@ -5,6 +5,7 @@ package legacy_test
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -17,6 +18,7 @@ import (
 	"gopkg.in/juju/charm.v3"
 	charmtesting "gopkg.in/juju/charm.v3/testing"
 	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/charmstore"
@@ -129,39 +131,85 @@ func (s *APISuite) TestCharmInfoNotFound(c *gc.C) {
 func (s *APISuite) TestServerCharmInfo(c *gc.C) {
 	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-1")
 	hashSum := fileSHA256(c, wordpress.Path)
+	digest, err := json.Marshal("who@canonical.com-bzr-digest")
+	c.Assert(err, gc.IsNil)
+
 	tests := []struct {
+		about     string
 		url       string
+		extrainfo map[string][]byte
 		canonical string
 		sha       string
 		digest    string
 		revision  int
 		err       string
 	}{{
+		about: "full charm URL with digest extra info",
+		url:   wordpressURL.String(),
+		extrainfo: map[string][]byte{
+			params.BzrDigestKey: digest,
+		},
+		canonical: "cs:precise/wordpress-1",
+		sha:       hashSum,
+		digest:    "who@canonical.com-bzr-digest",
+		revision:  1,
+	}, {
+		about:     "full charm URL without digest extra info",
 		url:       wordpressURL.String(),
 		canonical: "cs:precise/wordpress-1",
 		sha:       hashSum,
 		revision:  1,
 	}, {
-		url: "cs:oneiric/non-existent",
-		err: "entry not found",
+		about: "partial charm URL with digest extra info",
+		url:   "cs:wordpress",
+		extrainfo: map[string][]byte{
+			params.BzrDigestKey: digest,
+		},
+		canonical: "cs:precise/wordpress-1",
+		sha:       hashSum,
+		digest:    "who@canonical.com-bzr-digest",
+		revision:  1,
 	}, {
+		about:     "partial charm URL without extra info",
 		url:       "cs:wordpress",
 		canonical: "cs:precise/wordpress-1",
 		sha:       hashSum,
 		revision:  1,
 	}, {
-		url: "cs:/bad",
-		err: `entry not found`,
+		about: "invalid digest extra info",
+		url:   "cs:wordpress",
+		extrainfo: map[string][]byte{
+			params.BzrDigestKey: []byte("[]"),
+		},
+		canonical: "cs:precise/wordpress-1",
+		sha:       hashSum,
+		revision:  1,
+		err:       `cannot unmarshal digest: json: cannot unmarshal array into Go value of type string`,
 	}, {
-		url: "gopher:archie-server",
-		err: `entry not found`,
+		about: "charm not found",
+		url:   "cs:oneiric/non-existent",
+		err:   "entry not found",
 	}, {
-		url: "/charm-info?charms=cs:not-found",
-		err: "entry not found",
+		about: "invalid charm URL",
+		url:   "cs:/bad",
+		err:   `entry not found`,
+	}, {
+		about: "invalid charm schema",
+		url:   "gopher:archie-server",
+		err:   `entry not found`,
+	}, {
+		about: "invalid URL",
+		url:   "/charm-info?charms=cs:not-found",
+		err:   "entry not found",
 	}}
 
+	entities := s.store.DB.Entities()
 	for i, test := range tests {
-		c.Logf("test %d: %s", i, test.url)
+		c.Logf("test %d: %s", i, test.about)
+		err = entities.UpdateId(wordpressURL, bson.D{{
+			"$set", bson.D{{"extrainfo", test.extrainfo}},
+		}})
+		c.Assert(err, gc.IsNil)
 		expectInfo := charm.InfoResponse{
 			CanonicalURL: test.canonical,
 			Sha256:       test.sha,

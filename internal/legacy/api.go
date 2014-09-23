@@ -5,6 +5,7 @@ package legacy
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -104,7 +105,7 @@ func (h *Handler) serveCharmInfo(w http.ResponseWriter, req *http.Request) (inte
 			}
 		}
 		if err == nil && entity.BlobHash256 == "" {
-			// Lazily calulate SHA256 so that we don't burden
+			// Lazily calculate SHA256 so that we don't burden
 			// non-legacy code with that task.
 			entity.BlobHash256, err = h.updateEntitySHA256(curl)
 		}
@@ -114,8 +115,12 @@ func (h *Handler) serveCharmInfo(w http.ResponseWriter, req *http.Request) (inte
 			c.CanonicalURL = curl.String()
 			c.Sha256 = entity.BlobHash256
 			c.Revision = curl.Revision
+			if digest, found := entity.ExtraInfo[params.BzrDigestKey]; found {
+				if err := json.Unmarshal(digest, &c.Digest); err != nil {
+					c.Errors = append(c.Errors, "cannot unmarshal digest: "+err.Error())
+				}
+			}
 			h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmInfo))
-			// TODO(rog) include Digest if it exists in extra-info ?
 		} else {
 			c.Errors = append(c.Errors, err.Error())
 			if curl != nil {
