@@ -242,7 +242,7 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.Reference, e
 	} else {
 		branchURL = "lp:" + name
 	}
-	if len(u) < 5 || u[1] != "charms" || (u[4] != "trunk" && u[4] != "bundle") || len(u[0]) == 0 || u[0][0] != '~' {
+	if notSupportedBranchName(u) {
 		return "", nil, fmt.Errorf("unsupported branch name: %s", name)
 	}
 	charmURL, err = charm.ParseReference(fmt.Sprintf("cs:%s/%s/%s", u[0], u[2], u[3]))
@@ -250,6 +250,13 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.Reference, e
 		return "", nil, errgo.Mask(err)
 	}
 	return branchURL, charmURL, nil
+}
+
+func notSupportedBranchName(u []string) bool {
+	if len(u) < 5 || u[1] != "charms" || (u[4] != "trunk" && u[4] != "bundle") || len(u[0]) == 0 || u[0][0] != '~' {
+		return true
+	}
+	return false
 }
 
 const bzrDigestKey = "bzr-digest"
