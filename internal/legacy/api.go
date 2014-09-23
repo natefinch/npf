@@ -21,6 +21,7 @@ import (
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/internal/v4"
+	"github.com/juju/charmstore/lppublish"
 	"github.com/juju/charmstore/params"
 )
 
@@ -115,7 +116,7 @@ func (h *Handler) serveCharmInfo(w http.ResponseWriter, req *http.Request) (inte
 			c.CanonicalURL = curl.String()
 			c.Sha256 = entity.BlobHash256
 			c.Revision = curl.Revision
-			if digest, found := entity.ExtraInfo[params.BzrDigestKey]; found {
+			if digest, found := entity.ExtraInfo[lppublish.BzrDigestKey]; found {
 				if err := json.Unmarshal(digest, &c.Digest); err != nil {
 					c.Errors = append(c.Errors, "cannot unmarshal digest: "+err.Error())
 				}

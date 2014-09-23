@@ -12,10 +12,6 @@ import (
 	"gopkg.in/juju/charm.v3"
 )
 
-// BzrDigestKey is the extra-info key used to store the Bazaar digest
-// of an entity ingested from Launchpad.
-const BzrDigestKey = "bzr-digest"
-
 // MetaAnyResponse holds the result of a meta/any
 // request. See http://tinyurl.com/q5vcjpk
 type MetaAnyResponse struct {
