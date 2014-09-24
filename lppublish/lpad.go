@@ -22,7 +22,7 @@ import (
 
 	"github.com/juju/errgo"
 	"github.com/juju/loggo"
-	"gopkg.in/juju/charm.v3"
+	"gopkg.in/juju/charm.v4"
 	"launchpad.net/lpad"
 
 	"github.com/juju/charmstore/params"

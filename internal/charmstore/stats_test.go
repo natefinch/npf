@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
+	gc "gopkg.in/check.v1"
 	"gopkg.in/mgo.v2/bson"
-	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/storetesting"

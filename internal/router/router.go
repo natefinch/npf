@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/juju/errgo"
-	charm "gopkg.in/juju/charm.v3"
+	charm "gopkg.in/juju/charm.v4"
 
 	"github.com/juju/charmstore/params"
 )
