@@ -1,0 +1,241 @@
+{
+    "entity" : {
+        "dynamic" : "false",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "index" : "not_analyzed",
+            "omit_norms" : true,
+            "index_options" : "docs"
+          },
+          "baseurl" : {
+            "type" : "string",
+            "omit_norms" : true,
+            "index_options" : "docs"
+          },
+          "blobhash" : {
+            "type" : "string",
+            "index" : "not_analyzed",
+            "omit_norms" : true,
+            "index_options" : "docs"
+          },
+          "uploadtime" : {
+            "type" : "date",
+            "format" : "dateOptionalTime"
+          },
+          "charmmeta" : {
+            "dynamic" : "false",
+            "properties" : {
+              "name" : {
+                "type" : "multi_field",
+                "fields" : {
+                  "name" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  },
+                  "ngrams" : {
+                    "type" : "string",
+                    "analyser" : "n3_20grams",
+                    "include_in_all" : false
+                  }
+                }
+              },
+              "summary" : {
+                "type" : "string"
+              },
+              "description" : {
+                "type" : "string"
+              },
+              "provides" : {
+                "dynamic" : "false",
+                "properties" : {
+                  "name" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  },
+                  "role" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  },
+                  "interface" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  },
+                  "scope" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  }
+                }
+              },
+              "requires" : {
+                "dynamic" : "false",
+                "properties" : {
+                  "name" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  },
+                  "role" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  },
+                  "interface" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  },
+                  "scope" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  }
+                }
+              },
+              "peers" : {
+                "dynamic" : "false",
+                "properties" : {
+                  "name" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  },
+                  "role" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  },
+                  "interface" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  },
+                  "scope" : {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  }
+                }
+              },
+              "categories" : {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
+              }
+            }
+          },
+          "charmconfig" : {
+            "dynamic" : "false",
+            "properties" : {
+              "options" : {
+                "dynamic" : "false",
+                "properties" : {
+                  "description" : {
+                    "type" : "string"
+                  },
+                  "default" : {
+                    "type" : "string"
+                  }
+                }
+              }
+            }
+          },
+          "charmactions" : {
+            "dynamic" : "false",
+            "properties" : {
+              "description" : {
+                "type" : "string"
+              },
+              "action_name" : {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
+              }
+            }
+          },
+          "charmprovidedinterfaces" : {
+            "type" : "string",
+            "index" : "not_analyzed",
+            "omit_norms" : true,
+            "index_options" : "docs"
+          },
+          "charmrequiredinterfaces" : {
+            "type" : "string",
+            "index" : "not_analyzed",
+            "omit_norms" : true,
+            "index_options" : "docs"
+          },
+
+
+          "bundledata" : {
+            "type": "object",
+            "dynamic": "false",
+            "properties" : {
+              "services" : {
+                "type": "object",
+                "dynamic": "false",
+                "properties": {
+                  "charm": {
+                    "type" : "string",
+                    "index" : "not_analyzed",
+                    "omit_norms" : true,
+                    "index_options" : "docs"
+                  },
+                  "numunits": {
+                    "type" : "integer",
+                    "index": "not_analyzed"
+                  }
+                }
+              },
+              "series" : {
+                "type" : "string"
+              },
+              "relations" : {
+                    "type" : "string",
+                    "index": "not_analyzed"
+                  }
+                }
+              }
+            }
+          },
+          "bundlereadme" : {
+            "type": "string",
+            "index": "not_analyzed",
+            "omit_norms" : true,
+            "index_options" : "docs"
+          },
+          "bundlecharms": {
+            "type": "string",
+            "index": "not_analyzed",
+            "omit_norms" : true,
+            "index_options" : "docs"
+          },
+          "bundlemachinecount": {
+            "type": "integer"
+          },
+          "bundleunitcount": {
+            "type": "integer"
+          }
+        }
+      }
+}
