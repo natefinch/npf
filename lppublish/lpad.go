@@ -266,15 +266,11 @@ func notSupportedBranchName(u []string) bool {
 
 const bzrDigestKey = "bzr-digest"
 
+// Copies bundles.yaml to bundle.yaml without the first line.
 func quickAndDirtyBundleFix(branchDir string) error {
 	//rename bundles.yaml to bundle.yaml
 	oldBundleYamlName := fmt.Sprint(branchDir, "/bundles.yaml")
 	newBundleYamlName := fmt.Sprint(branchDir, "/bundle.yaml")
-
-	//err := os.Rename(oldBundleYamlName, newBundleYamlName)
-	//if err != nil {
-	//	return errgo.Notef(err, "could not rename bunldes.yaml to bundle.yaml")
-	//}
 
 	file, err := os.Open(oldBundleYamlName)
 	if err != nil {
