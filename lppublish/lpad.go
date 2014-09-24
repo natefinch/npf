@@ -4,6 +4,7 @@
 package lppublish
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha512"
 	"encoding/base64"
@@ -265,6 +266,45 @@ func notSupportedBranchName(u []string) bool {
 
 const bzrDigestKey = "bzr-digest"
 
+func quickAndDirtyBundleFix(branchDir string) error {
+	//rename bundles.yaml to bundle.yaml
+	oldBundleYamlName := fmt.Sprint(branchDir, "/bundles.yaml")
+	newBundleYamlName := fmt.Sprint(branchDir, "/bundle.yaml")
+
+	//err := os.Rename(oldBundleYamlName, newBundleYamlName)
+	//if err != nil {
+	//	return errgo.Notef(err, "could not rename bunldes.yaml to bundle.yaml")
+	//}
+
+	file, err := os.Open(oldBundleYamlName)
+	if err != nil {
+		errgo.Notef(err, "could not open bundles.yaml")
+	}
+	defer file.Close()
+	newFile, err := os.Create(newBundleYamlName)
+	if err != nil {
+		errgo.Notef(err, "could not open bundle.yaml")
+	}
+	defer newFile.Close()
+
+	firstLine := true
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		if firstLine == false {
+			newFile.Write([]byte(scanner.Text()))
+			newFile.Write([]byte("\n"))
+		} else {
+			firstLine = false
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		errgo.Notef(err, "reading error")
+	}
+
+	return nil
+}
+
 func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL string, digest string) error {
 	// Check whether the entity is already present in the charm store.
 	urls = cl.excludeExistingEntities(urls, digest)
@@ -303,6 +343,8 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 		for _, url := range urls {
 			url.Series = "bundle"
 		}
+		quickAndDirtyBundleFix(branchDir)
+
 		archiveDir, err = charm.ReadBundleDir(branchDir)
 		if err != nil {
 			return errgo.Notef(err, "cannot read bundle dir")
