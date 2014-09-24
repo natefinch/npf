@@ -15,9 +15,9 @@ import (
 
 	"github.com/juju/errgo"
 	jc "github.com/juju/testing/checkers"
-	"gopkg.in/juju/charm.v3"
-	"gopkg.in/juju/charm.v3/testing"
-	gc "launchpad.net/gocheck"
+	gc "gopkg.in/check.v1"
+	"gopkg.in/juju/charm.v4"
+	"gopkg.in/juju/charm.v4/testing"
 
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/mongodoc"

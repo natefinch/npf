@@ -19,11 +19,11 @@ import (
 	"sync"
 
 	jc "github.com/juju/testing/checkers"
-	"gopkg.in/juju/charm.v3"
-	"gopkg.in/juju/charm.v3/testing"
-	charmtesting "gopkg.in/juju/charm.v3/testing"
+	gc "gopkg.in/check.v1"
+	"gopkg.in/juju/charm.v4"
+	"gopkg.in/juju/charm.v4/testing"
+	charmtesting "gopkg.in/juju/charm.v4/testing"
 	"gopkg.in/mgo.v2/bson"
-	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/charmstore"

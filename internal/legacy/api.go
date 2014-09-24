@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/juju/errgo"
-	"gopkg.in/juju/charm.v3"
+	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
