@@ -81,8 +81,9 @@ create-deps: $(GOPATH)/bin/godeps
 	godeps -t $(shell go list $(PROJECT)/...) > dependencies.tsv || true
 
 # Install packages required to develop the charm store and run tests.
+APT_BASED := $(shell command -v apt-get; echo $$?)
 sysdeps:
-ifeq ($(shell uname),Linux)
+ifeq ($(APT_BASED),0)
 ifeq ($(shell lsb_release -cs|sed -r 's/precise|quantal|raring/old/'),old)
 	@echo Adding PPAs for golang and mongodb
 	@sudo apt-add-repository --yes ppa:juju/golang
