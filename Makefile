@@ -82,6 +82,7 @@ create-deps: $(GOPATH)/bin/godeps
 
 # Install packages required to develop the charm store and run tests.
 sysdeps:
+ifeq ($(shell uname),Linux)
 ifeq ($(shell lsb_release -cs|sed -r 's/precise|quantal|raring/old/'),old)
 	@echo Adding PPAs for golang and mongodb
 	@sudo apt-add-repository --yes ppa:juju/golang
@@ -91,6 +92,7 @@ endif
 	@echo Installing dependencies
 	@sudo apt-get --yes install $(strip $(DEPENDENCIES)) \
 	$(shell apt-cache madison juju-mongodb mongodb-server | head -1 | cut -d '|' -f1)
+endif
 
 help:
 	@echo -e 'Charmstore - list of make targets:\n'
