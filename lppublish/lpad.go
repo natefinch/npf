@@ -4,6 +4,7 @@
 package lppublish
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha512"
 	"encoding/base64"
@@ -265,6 +266,33 @@ func notSupportedBranchName(u []string) bool {
 
 const bzrDigestKey = "bzr-digest"
 
+// Copies bundles.yaml to bundle.yaml without the first line.
+// TODO (rog, uros) Replace with proper bundle translation.
+func quickAndDirtyBundleFix(branchDir string) error {
+	oldBundleYamlName := fmt.Sprint(branchDir, "/bundles.yaml")
+	newBundleYamlName := fmt.Sprint(branchDir, "/bundle.yaml")
+
+	file, err := os.Open(oldBundleYamlName)
+	if err != nil {
+		return errgo.Notef(err, "could not open bundles.yaml")
+	}
+	defer file.Close()
+	newFile, err := os.Create(newBundleYamlName)
+	if err != nil {
+		return errgo.Notef(err, "could not open bundle.yaml")
+	}
+	defer newFile.Close()
+
+	r := bufio.NewReader(file)
+	if _, _, err := r.ReadLine(); err != nil {
+		return errgo.Newf("no first line")
+	}
+	if _, err := io.Copy(newFile, r); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL string, digest string) error {
 	// Check whether the entity is already present in the charm store.
 	urls = cl.excludeExistingEntities(urls, digest)
@@ -303,6 +331,12 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 		for _, url := range urls {
 			url.Series = "bundle"
 		}
+		// TODO (rog, uros) Replace with proper bundle translation.
+		err := quickAndDirtyBundleFix(branchDir)
+		if err != nil {
+			return errgo.Notef(err, "quick bundle fix failed")
+		}
+
 		archiveDir, err = charm.ReadBundleDir(branchDir)
 		if err != nil {
 			return errgo.Notef(err, "cannot read bundle dir")
