@@ -143,20 +143,51 @@ func (s *Store) AddCharm(url *charm.Reference, c charm.Charm, blobName, blobHash
 	return errgo.Mask(err)
 }
 
-// ExpandURL returns all the URLs that the given URL may refer to.
-func (s *Store) ExpandURL(url *charm.Reference) ([]*charm.Reference, error) {
-	var docs []mongodoc.Entity
-	err := s.DB.Entities().Find(bson.D{{
-		"baseurl", baseURL(url),
-	}}).Select(bson.D{{"_id", 1}}).All(&docs)
+// FindEntities finds all entities in the store matching the given URL.
+// If any fields are specified, only those fields will be
+// populated in the returned entities.
+func (s *Store) FindEntities(url *charm.Reference, fields ...string) ([]*mongodoc.Entity, error) {
+	var q bson.D
+	if url.Series == "" || url.Revision == -1 {
+		// The url can match several entities - select
+		// based on the base URL and filter afterwards.
+		q = bson.D{{"baseurl", baseURL(url)}}
+	} else {
+		q = bson.D{{"_id", url}}
+	}
+
+	query := s.DB.Entities().Find(q)
+	if len(fields) > 0 {
+		sel := make(bson.D, len(fields))
+		for i, field := range fields {
+			sel[i] = bson.DocElem{field, 1}
+		}
+		query = query.Select(sel)
+	}
+	var docs []*mongodoc.Entity
+	err := query.All(&docs)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
-	urls := make([]*charm.Reference, 0, len(docs))
+	last := 0
 	for _, doc := range docs {
-		if matchURL((*charm.Reference)(doc.URL), url) {
-			urls = append(urls, (*charm.Reference)(doc.URL))
+		if matchURL(doc.URL, url) {
+			docs[last] = doc
+			last++
 		}
+	}
+	return docs[0:last], nil
+}
+
+// ExpandURL returns all the URLs that the given URL may refer to.
+func (s *Store) ExpandURL(url *charm.Reference) ([]*charm.Reference, error) {
+	entities, err := s.FindEntities(url, "_id")
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	urls := make([]*charm.Reference, len(entities))
+	for i, entity := range entities {
+		urls[i] = entity.URL
 	}
 	return urls, nil
 }

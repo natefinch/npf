@@ -106,6 +106,18 @@ func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 		return badRequestf(nil, "Content-Length not specified")
 	}
 
+	oldId, oldHash, err := h.latestRevisionInfo(id)
+	if err != nil && errgo.Cause(err) != params.ErrNotFound {
+		return errgo.Notef(err, "cannot get hash of latest revision")
+	}
+	if oldHash == hash {
+		// The hash matches the hash of the latest revision, so
+		// no need to upload anything.
+		return router.WriteJSON(w, http.StatusOK, &params.ArchivePostResponse{
+			Id: oldId,
+		})
+	}
+
 	// Upload the actual blob, and make sure that it is removed
 	// if we fail later.
 	name := bson.NewObjectId().Hex()
@@ -161,6 +173,23 @@ func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 	return router.WriteJSON(w, http.StatusOK, &params.ArchivePostResponse{
 		Id: id,
 	})
+}
+
+func (h *Handler) latestRevisionInfo(id *charm.Reference) (*charm.Reference, string, error) {
+	entities, err := h.store.FindEntities(id, "_id", "blobhash")
+	if err != nil {
+		return nil, "", errgo.Mask(err)
+	}
+	if len(entities) == 0 {
+		return nil, "", params.ErrNotFound
+	}
+	latest := entities[0]
+	for _, entity := range entities {
+		if entity.URL.Revision > latest.URL.Revision {
+			latest = entity
+		}
+	}
+	return latest.URL, latest.BlobHash, nil
 }
 
 func verifyConstraints(s string) error {
