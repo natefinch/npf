@@ -29,6 +29,7 @@ import (
 
 var knownSeries = map[string]bool{
 	"bundle":  true,
+	"oneiric": true,
 	"precise": true,
 	"quantal": true,
 	"raring":  true,
