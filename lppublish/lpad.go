@@ -284,8 +284,7 @@ func quickAndDirtyBundleFix(branchDir string) error {
 	defer newFile.Close()
 
 	r := bufio.NewReader(file)
-	_, _, nerr := r.ReadLine()
-	if nerr != nil {
+	if _, _, err := r.ReadLine(); err != nil {
 		return errgo.Newf("no first line")
 	}
 	if _, err := io.Copy(newFile, r); err != nil {
