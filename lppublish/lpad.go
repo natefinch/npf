@@ -78,6 +78,21 @@ func PublishCharmsDistro(p Params) error {
 	return cl.run()
 }
 
+func (cl *charmLoader) moveBundleTipsToEndOfList(tips []lpad.BranchTip) []lpad.BranchTip {
+	// TODO (urosj) improve/add control of memory usage
+	bundleTips := make([]lpad.BranchTip, 0, len(tips))
+	var bundleTipsLast []lpad.BranchTip
+	for _, tip := range tips {
+		if strings.HasSuffix(tip.UniqueName, "/bundle") {
+			bundleTipsLast = append(bundleTipsLast, tip)
+			continue
+		}
+		bundleTips = append(bundleTips, tip)
+	}
+	bundleTips = append(bundleTips, bundleTipsLast...)
+	return bundleTips
+}
+
 // run logs in anonymously to Launchpad using the Juju Consumer name,
 // gets all the branch tips in the charms Distro and publishes each
 // branch tip whose name ends in /trunk.
@@ -96,6 +111,7 @@ func (cl *charmLoader) run() error {
 	if err != nil {
 		return errgo.Notef(err, "cannot get branch tips")
 	}
+	tips = cl.moveBundleTipsToEndOfList(tips)
 	logger.Infof("starting ingestion with %d publisher(s)", cl.NumPublishers)
 
 	// Start retrieving branches to be processed.
@@ -145,8 +161,7 @@ type entityResult struct {
 func (cl *charmLoader) processTips(tips []lpad.BranchTip, results chan<- entityResult) {
 	counter := 0
 	for _, tip := range tips {
-		// TODO(jay) need to process bundles as well (there is a card)
-		if !strings.HasSuffix(tip.UniqueName, "/trunk") {
+		if !strings.HasSuffix(tip.UniqueName, "/trunk") && !strings.HasSuffix(tip.UniqueName, "/bundle") {
 			continue
 		}
 		logger.Tracef("getting uniqueNameURLs for %v", tip.UniqueName)
@@ -231,7 +246,7 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.Reference, e
 	} else {
 		branchURL = "lp:" + name
 	}
-	if len(u) < 5 || u[1] != "charms" || u[4] != "trunk" || len(u[0]) == 0 || u[0][0] != '~' {
+	if notSupportedBranchName(u) {
 		return "", nil, fmt.Errorf("unsupported branch name: %s", name)
 	}
 	charmURL, err = charm.ParseReference(fmt.Sprintf("cs:%s/%s/%s", u[0], u[2], u[3]))
@@ -240,6 +255,15 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.Reference, e
 	}
 	return branchURL, charmURL, nil
 }
+
+func notSupportedBranchName(u []string) bool {
+	if len(u) < 5 || u[1] != "charms" || (u[4] != "trunk" && u[4] != "bundle") || len(u[0]) == 0 || u[0][0] != '~' {
+		return true
+	}
+	return false
+}
+
+const bzrDigestKey = "bzr-digest"
 
 func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL string, digest string) error {
 	// Check whether the entity is already present in the charm store.
@@ -273,16 +297,26 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 		digest = tipDigest
 		logger.Warningf("tipDigest %v != digest %v", digest, tipDigest)
 	}
-
-	// Instantiate the entity from the branch directory.
-	charmDir, err := charm.ReadCharmDir(branchDir)
-	if err != nil {
-		return errgo.Notef(err, "cannot read charm dir")
+	var archiveDir archiverTo
+	if urls[0].Series == "bundles" {
+		// charmstore expects series named bundle instead of bundles
+		for _, url := range urls {
+			url.Series = "bundle"
+		}
+		archiveDir, err = charm.ReadBundleDir(branchDir)
+		if err != nil {
+			return errgo.Notef(err, "cannot read bundle dir")
+		}
+	} else {
+		// Instantiate the entity from the branch directory.
+		archiveDir, err = charm.ReadCharmDir(branchDir)
+		if err != nil {
+			return errgo.Notef(err, "cannot read charm dir")
+		}
 	}
-
 	// Archive the entity in a temporary directory, and calculate its SHA384
 	// hash and archive size.
-	tempFile, hash, archiveSize, err := cl.archiveCharmDir(charmDir, tempDir)
+	tempFile, hash, archiveSize, err := cl.archiveDir(archiveDir, tempDir)
 	if err != nil {
 		return errgo.Notef(err, "cannot make archive")
 	}
@@ -329,9 +363,13 @@ func (cl *charmLoader) excludeExistingEntities(urls []*charm.Reference, digest s
 	return missing
 }
 
-// archiveCharmDir archives the charmDir to a temporary file
+type archiverTo interface {
+	ArchiveTo(io.Writer) error
+}
+
+// archiveDir archives the archiver to a temporary file
 // inside tempDir and returns the file, its hash and size.
-func (cl *charmLoader) archiveCharmDir(charmDir *charm.CharmDir, tempDir string) (archiveFile *os.File, hash string, size int64, err error) {
+func (cl *charmLoader) archiveDir(archiver archiverTo, tempDir string) (archiveFile *os.File, hash string, size int64, err error) {
 	f, err := os.Create(filepath.Join(tempDir, "archive.zip"))
 	if err != nil {
 		return nil, "", 0, errgo.Notef(err, "cannot create temp file")
@@ -346,7 +384,7 @@ func (cl *charmLoader) archiveCharmDir(charmDir *charm.CharmDir, tempDir string)
 		}
 	}()
 	sha384 := sha512.New384()
-	err = charmDir.ArchiveTo(io.MultiWriter(f, sha384))
+	err = archiver.ArchiveTo(io.MultiWriter(f, sha384))
 	if err != nil {
 		return nil, "", 0, errgo.Notef(err, "cannot archive charm")
 	}
