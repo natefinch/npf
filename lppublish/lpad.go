@@ -267,37 +267,32 @@ func notSupportedBranchName(u []string) bool {
 const bzrDigestKey = "bzr-digest"
 
 // Copies bundles.yaml to bundle.yaml without the first line.
+// TODO (rog, uros) Replace with proper bundle translation.
 func quickAndDirtyBundleFix(branchDir string) error {
-	//rename bundles.yaml to bundle.yaml
 	oldBundleYamlName := fmt.Sprint(branchDir, "/bundles.yaml")
 	newBundleYamlName := fmt.Sprint(branchDir, "/bundle.yaml")
 
 	file, err := os.Open(oldBundleYamlName)
 	if err != nil {
-		errgo.Notef(err, "could not open bundles.yaml")
+		return errgo.Notef(err, "could not open bundles.yaml")
 	}
 	defer file.Close()
 	newFile, err := os.Create(newBundleYamlName)
 	if err != nil {
-		errgo.Notef(err, "could not open bundle.yaml")
+		return errgo.Notef(err, "could not open bundle.yaml")
 	}
 	defer newFile.Close()
 
 	firstLine := true
 	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		if firstLine == false {
-			newFile.Write([]byte(scanner.Text()))
-			newFile.Write([]byte("\n"))
-		} else {
-			firstLine = false
-		}
+	r := bufio.NewReader(file)
+	_, _, err := r.ReadLine()
+	if err != nil {
+		return errgo.Newf("no first line")
 	}
-
-	if err := scanner.Err(); err != nil {
-		errgo.Notef(err, "reading error")
+	if _, err := io.Copy(newFile, r); err != nil {
+		return err
 	}
-
 	return nil
 }
 
@@ -339,7 +334,11 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 		for _, url := range urls {
 			url.Series = "bundle"
 		}
-		quickAndDirtyBundleFix(branchDir)
+		// TODO (rog, uros) Replace with proper bundle translation.
+		err := quickAndDirtyBundleFix(branchDir)
+		if err != nil {
+			return errgo.Notef(err, "quick bundle fix failed")
+		}
 
 		archiveDir, err = charm.ReadBundleDir(branchDir)
 		if err != nil {
