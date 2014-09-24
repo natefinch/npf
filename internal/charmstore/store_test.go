@@ -274,7 +274,6 @@ func (s entitiesByURL) Less(i, j int) bool {
 	return s[i].URL.String() < s[j].URL.String()
 }
 
-
 var bundleUnitCountTests = []struct {
 	about       string
 	data        *charm.BundleData

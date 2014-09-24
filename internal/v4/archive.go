@@ -106,7 +106,7 @@ func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 		return badRequestf(nil, "Content-Length not specified")
 	}
 
-	oldId, oldHash, err := h.hashOfLatestRevision(id)
+	oldId, oldHash, err := h.latestRevisionInfo(id)
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return errgo.Notef(err, "cannot get hash of latest revision")
 	}
@@ -175,8 +175,8 @@ func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 	})
 }
 
-func (h *Handler) hashOfLatestRevision(id *charm.Reference) (*charm.Reference, string, error) {
-	entities, err := h.store.FindEntities(id)
+func (h *Handler) latestRevisionInfo(id *charm.Reference) (*charm.Reference, string, error) {
+	entities, err := h.store.FindEntities(id, "_id", "blobhash")
 	if err != nil {
 		return nil, "", errgo.Mask(err)
 	}
