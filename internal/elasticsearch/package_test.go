@@ -87,7 +87,7 @@ func (es *ElasticSearchInstance) run() error {
 			listening <- nil
 		} else {
 			err := fmt.Errorf("elasticsearch failed to listen on port %v using config %v", es.HttpPort, configFile)
-			if strings.Contains(buf.String(), "Address alrady in use") {
+			if strings.Contains(buf.String(), "Address already in use") {
 				err = addrAlreadyInUseError{err}
 			}
 			listening <- err
