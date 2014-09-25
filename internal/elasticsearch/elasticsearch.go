@@ -1,75 +1,55 @@
+// Copyright 2014 Canonical Ltd.
+// Licensed under the LGPLv3, see LICENCE file for details.
+
 package elasticsearch
 
 import (
-    "time"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"net/http"
 
-    "gopkg.in/juju/charm.v3"
+	//"github.com/juju/charmstore/internal/mongodoc"
+	"github.com/juju/errgo"
 )
 
-// Entity holds the in-database representation of charm or bundle's
-// document in the charms collection.
-type Entity struct {
-    // URL holds the fully specified URL of the charm or bundle.
-    // e.g. cs:precise/wordpress-34, cs:~user/quantal/foo-2
-    URL *charm.Reference `bson:"_id"`
+type Database struct {
+	server string
+	port   int
+	index  string
+}
 
-    // BaseURL holds the reference URL of the charm or bundle
-    // (this omits the series and revision from URL)
-    // e.g. cs:wordpress, cs:~user/foo
-    BaseURL *charm.Reference
+// AddNewEntity takes a mongo document and indexes it in ElasticSearch.
+func (db *Database) AddNewEntity(doc interface{}) error {
+	// DELETE ME
+	// An example auto-index document creation:
+	//$ curl -XPOST 'http://localhost:9200/twitter/tweet' -d '{
+	//"user" : "kimchy",
+	//"post_date" : "2009-11-15T14:12:12",
+	//"message" : "trying out Elasticsearch"
+	//}'
+	json, err := json.Marshal(doc)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	buf := bytes.NewBuffer(json)
+	response, err := http.Post(db.url("entity"), "application/json", buf)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusCreated {
+		body, _ := ioutil.ReadAll(response.Body)
+		// Error checking within this error handler is not helpful.
+		return fmt.Errorf("ElasticSearch POST response status: %d, body: %s", response.StatusCode, body)
+	}
+	return nil
+}
 
-    // BlobHash holds the hash checksum of the blob, in hexadecimal format,
-    // as created by blobstore.NewHash.
-    BlobHash string
+// url constructs the URL for accessing the database.
+func (db *Database) url(entityName string) string {
 
-    // BlobHash256 holds the SHA256 hash checksum of the blob,
-    // in hexadecimal format. This is only used by the legacy
-    // API, and is calculated lazily the first time it is required.
-    BlobHash256 string
+	return fmt.Sprintf("http://%s:%d/%s/%s", db.server, db.port, db.index, entityName)
 
-    // Size holds the size of the archive blob.
-    // TODO(rog) rename this to BlobSize.
-    Size int64
-
-    // BlobName holds the name that the archive blob is given in the blob store.
-    BlobName string
-
-    UploadTime time.Time
-
-    // ExtraInfo holds arbitrary extra metadata associated with
-    // the entity. The byte slices hold JSON-encoded data.
-    ExtraInfo map[string][]byte `bson:",omitempty"`
-
-    // TODO(rog) verify that all these types marshal to the expected
-    // JSON form.
-    CharmMeta    *charm.Meta
-    CharmConfig  *charm.Config
-    CharmActions *charm.Actions
-
-    // CharmProvidedInterfaces holds all the relation
-    // interfaces provided by the charm
-    CharmProvidedInterfaces []string
-
-    // CharmRequiredInterfaces is similar to CharmProvidedInterfaces
-    // for required interfaces.
-    CharmRequiredInterfaces []string
-
-    BundleData   *charm.BundleData
-    BundleReadMe string
-
-    // BundleCharms includes all the charm URLs referenced
-    // by the bundle, including base URLs where they are
-    // not already included.
-    BundleCharms []*charm.Reference
-
-    // BundleMachineCount counts the machines used or created
-    // by the bundle. It is nil for charms.
-    BundleMachineCount *int
-
-    // BundleUnitCount counts the units created by the bundle.
-    // It is nil for charms.
-    BundleUnitCount *int
-
-    // TODO Add fields denormalized for search purposes
-    // and search ranking field(s).
 }
