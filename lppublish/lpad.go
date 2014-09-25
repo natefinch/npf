@@ -254,6 +254,10 @@ func uniqueNameURLs(name string) (branchURL string, charmURL *charm.Reference, e
 	if err != nil {
 		return "", nil, errgo.Mask(err)
 	}
+	// The charm store uses "bundle" for the series of a bundle, not "bundles".
+	if charmURL.Series == "bundles" {
+		charmURL.Series = "bundle"
+	}
 	return branchURL, charmURL, nil
 }
 
@@ -327,10 +331,6 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 	}
 	var archiveDir archiverTo
 	if urls[0].Series == "bundles" {
-		// charmstore expects series named bundle instead of bundles
-		for _, url := range urls {
-			url.Series = "bundle"
-		}
 		// TODO (rog, uros) Replace with proper bundle translation.
 		err := quickAndDirtyBundleFix(branchDir)
 		if err != nil {
