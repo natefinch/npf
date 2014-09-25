@@ -4,7 +4,7 @@
 package elasticsearch
 
 import (
-    "testing"
+	"testing"
 
 	jujutesting "github.com/juju/testing"
 	gc "launchpad.net/gocheck"
