@@ -11,21 +11,32 @@ import (
 )
 
 func TestPackage(t *testing.T) {
-	gc.TestingT(t)
+	ElasticSearchTestPackage(t)
 }
 
-type ElasticSearchSuite struct {
+type IsolatedElasticSearchSuite struct {
 	jujutesting.IsolationSuite
-	db Database
+	ElasticSearchSuite
 }
 
-var _ = gc.Suite(&ElasticSearchSuite{
-	db: Database{
-		server: "127.0.0.1",
-		port:   9200,
-		index:  "fakeindex",
-	},
-})
+func (s *IsolatedElasticSearchSuite) SetUpSuite(c *gc.C) {
+	s.IsolationSuite.SetUpSuite(c)
+	s.ElasticSearchSuite.SetUpSuite(c)
+}
+func (s *IsolatedElasticSearchSuite) TearDownSuite(c *gc.C) {
+	s.IsolationSuite.TearDownSuite(c)
+	s.ElasticSearchSuite.TearDownSuite(c)
+}
+func (s *IsolatedElasticSearchSuite) SetUpTest(c *gc.C) {
+	s.IsolationSuite.SetUpTest(c)
+	s.ElasticSearchSuite.SetUpTest(c)
+}
+func (s *IsolatedElasticSearchSuite) TearDownTest(c *gc.C) {
+	s.IsolationSuite.TearDownTest(c)
+	s.ElasticSearchSuite.TearDownTest(c)
+}
+
+var _ = gc.Suite(&IsolatedElasticSearchSuite{})
 
 func (s *ElasticSearchSuite) TestSuccessfulAdd(c *gc.C) {
 	doc := map[string]string{
