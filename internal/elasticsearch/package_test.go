@@ -36,7 +36,12 @@ var (
 	logger              = loggo.GetLogger("juju.testing.elasticsearchsuite")
 )
 
-const maxStartAttempts = 5
+const (
+	maxStartAttempts = 5
+
+	//elasticsearch exits with code 143 on SIGTERM
+	elasticSearchSigTermErrCode = 143
+)
 
 func ElasticSearchTestPackage(t *testing.T) {
 	if err := ElasticSearchServer.Start(); err != nil {
@@ -90,13 +95,19 @@ func (es *ElasticSearchInstance) run() error {
 		lines := readLastLines(prefix, io.MultiReader(&buf, out), 20)
 		err = server.Wait()
 		exitErr, _ := err.(*exec.ExitError)
+		defer close(exited)
+		if exitErr != nil {
+			exitCode := exitErr.Sys().(syscall.WaitStatus).ExitStatus()
+			if exitCode == elasticSearchSigTermErrCode {
+				return
+			}
+		}
 		if err != nil || exitErr != nil && exitErr.Exited() {
 			logger.Errorf("elasticsearch has exited without being killed")
 			for _, line := range lines {
 				logger.Errorf("elasticsearch: %s", line)
 			}
 		}
-		close(exited)
 	}()
 	es.exited = exited
 	err = server.Start()
@@ -168,28 +179,34 @@ func (es *ElasticSearchInstance) Start() error {
 	return err
 }
 
-func (es *ElasticSearchInstance) dropAll() error {
+func (es *ElasticSearchInstance) dropAll(db *Database) error {
 	//for index in curl 'localhost:9200/_cat/indices?v'
 	// delete index
+	names, err := db.CatIndices()
+	if err != nil {
+		return err
+	}
+	for _, name := range names {
+		db.DeleteIndex(name)
+	}
 	return nil
 }
 
 type ElasticSearchSuite struct {
-	ElasticSearchInstance
-	db Database
+	*ElasticSearchInstance
+	db *Database
 }
 
 func (s *ElasticSearchSuite) SetUpSuite(c *gc.C) {
+	s.ElasticSearchInstance = ElasticSearchServer
+	s.db = &Database{"127.0.0.1", ElasticSearchServer.HttpPort}
 }
 
 func (s *ElasticSearchSuite) TearDownSuite(c *gc.C) {
 }
 
 func (s *ElasticSearchSuite) SetUpTest(c *gc.C) {
-	s.db.server = "127.0.0.1"
-	s.db.port = ElasticSearchServer.HttpPort
-	s.db.index = "testindex"
-	s.dropAll()
+	s.dropAll(s.db)
 }
 
 func (s *ElasticSearchSuite) TearDownTest(c *gc.C) {
