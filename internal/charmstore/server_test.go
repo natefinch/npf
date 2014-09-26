@@ -6,7 +6,7 @@ package charmstore
 import (
 	"net/http"
 
-	gc "launchpad.net/gocheck"
+	gc "gopkg.in/check.v1"
 
 	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/internal/storetesting"

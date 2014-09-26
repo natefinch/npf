@@ -3,7 +3,7 @@ package mongodoc
 import (
 	"time"
 
-	"gopkg.in/juju/charm.v3"
+	"gopkg.in/juju/charm.v4"
 )
 
 // Entity holds the in-database representation of charm or bundle's

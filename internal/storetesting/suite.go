@@ -5,7 +5,7 @@ package storetesting
 
 import (
 	jujutesting "github.com/juju/testing"
-	gc "launchpad.net/gocheck"
+	gc "gopkg.in/check.v1"
 )
 
 type IsolatedMgoSuite struct {

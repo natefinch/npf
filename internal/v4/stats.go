@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/juju/errgo"
-	"gopkg.in/juju/charm.v3"
+	"gopkg.in/juju/charm.v4"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/params"

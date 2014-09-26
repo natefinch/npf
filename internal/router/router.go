@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/juju/errgo"
-	charm "gopkg.in/juju/charm.v3"
+	charm "gopkg.in/juju/charm.v4"
 
 	"github.com/juju/charmstore/params"
 )
@@ -29,6 +29,7 @@ import (
 
 var knownSeries = map[string]bool{
 	"bundle":  true,
+	"oneiric": true,
 	"precise": true,
 	"quantal": true,
 	"raring":  true,

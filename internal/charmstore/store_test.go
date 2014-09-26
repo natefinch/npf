@@ -15,9 +15,9 @@ import (
 
 	"github.com/juju/errgo"
 	jc "github.com/juju/testing/checkers"
-	"gopkg.in/juju/charm.v3"
-	"gopkg.in/juju/charm.v3/testing"
-	gc "launchpad.net/gocheck"
+	gc "gopkg.in/check.v1"
+	"gopkg.in/juju/charm.v4"
+	"gopkg.in/juju/charm.v4/testing"
 
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/mongodoc"
@@ -166,7 +166,7 @@ func (o orderedURLs) Len() int {
 	return len(o)
 }
 
-var expandURLTests = []struct {
+var urlFindingTests = []struct {
 	inStore []string
 	expand  string
 	expect  []string
@@ -209,8 +209,18 @@ var expandURLTests = []struct {
 }}
 
 func (s *StoreSuite) TestExpandURL(c *gc.C) {
+	s.testURLFinding(c, func(store *Store, expand *charm.Reference, expect []*charm.Reference) {
+		gotURLs, err := store.ExpandURL(expand)
+		c.Assert(err, gc.IsNil)
+
+		sort.Sort(orderedURLs(gotURLs))
+		c.Assert(gotURLs, jc.DeepEquals, expect)
+	})
+}
+
+func (s *StoreSuite) testURLFinding(c *gc.C, check func(store *Store, expand *charm.Reference, expect []*charm.Reference)) {
 	wordpress := testing.Charms.CharmDir("wordpress")
-	for i, test := range expandURLTests {
+	for i, test := range urlFindingTests {
 		c.Logf("test %d: %q from %q", i, test.expand, test.inStore)
 		store, err := NewStore(s.Session.DB("foo"))
 		c.Assert(err, gc.IsNil)
@@ -221,13 +231,47 @@ func (s *StoreSuite) TestExpandURL(c *gc.C) {
 			err := store.AddCharmWithArchive(url, wordpress)
 			c.Assert(err, gc.IsNil)
 		}
-		gotURLs, err := store.ExpandURL((*charm.Reference)(mustParseReference(test.expand)))
-		c.Assert(err, gc.IsNil)
-
-		gotURLStrs := urlStrings(gotURLs)
-		sort.Strings(gotURLStrs)
-		c.Assert(gotURLStrs, jc.DeepEquals, test.expect)
+		expectURLs := make([]*charm.Reference, len(test.expect))
+		for i, expect := range test.expect {
+			expectURLs[i] = mustParseReference(expect)
+		}
+		check(store, mustParseReference(test.expand), expectURLs)
 	}
+}
+
+func (s *StoreSuite) TestFindEntities(c *gc.C) {
+	s.testURLFinding(c, func(store *Store, expand *charm.Reference, expect []*charm.Reference) {
+		// check FindEntities works when just retrieving the id.
+		gotEntities, err := store.FindEntities(expand, "_id")
+		c.Assert(err, gc.IsNil)
+		sort.Sort(entitiesByURL(gotEntities))
+		c.Assert(gotEntities, gc.HasLen, len(expect))
+		for i, url := range expect {
+			c.Assert(gotEntities[i], jc.DeepEquals, &mongodoc.Entity{
+				URL: url,
+			})
+		}
+
+		// check FindEntities works when retrieving all fields.
+		gotEntities, err = store.FindEntities(expand)
+		c.Assert(err, gc.IsNil)
+		sort.Sort(entitiesByURL(gotEntities))
+		c.Assert(gotEntities, gc.HasLen, len(expect))
+		for i, url := range expect {
+			var entity mongodoc.Entity
+			err := store.DB.Entities().FindId(url).One(&entity)
+			c.Assert(err, gc.IsNil)
+			c.Assert(gotEntities[i], jc.DeepEquals, &entity)
+		}
+	})
+}
+
+type entitiesByURL []*mongodoc.Entity
+
+func (s entitiesByURL) Len() int      { return len(s) }
+func (s entitiesByURL) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s entitiesByURL) Less(i, j int) bool {
+	return s[i].URL.String() < s[j].URL.String()
 }
 
 var bundleUnitCountTests = []struct {

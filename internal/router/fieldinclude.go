@@ -5,7 +5,7 @@ import (
 	"net/url"
 
 	"github.com/juju/errgo"
-	"gopkg.in/juju/charm.v3"
+	"gopkg.in/juju/charm.v4"
 )
 
 // A FieldQueryFunc is used to retrieve a metadata document for the given URL,

@@ -19,11 +19,11 @@ import (
 	"sync"
 
 	jc "github.com/juju/testing/checkers"
-	"gopkg.in/juju/charm.v3"
-	"gopkg.in/juju/charm.v3/testing"
-	charmtesting "gopkg.in/juju/charm.v3/testing"
+	gc "gopkg.in/check.v1"
+	"gopkg.in/juju/charm.v4"
+	"gopkg.in/juju/charm.v4/testing"
+	charmtesting "gopkg.in/juju/charm.v4/testing"
 	"gopkg.in/mgo.v2/bson"
-	gc "launchpad.net/gocheck"
 
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/charmstore"
@@ -285,7 +285,7 @@ func (s *ArchiveSuite) TestPostCharm(c *gc.C) {
 
 	// Subsequent charm uploads should increment the
 	// revision by 1.
-	s.assertUploadCharm(c, mustParseReference("precise/wordpress-1"), "wordpress")
+	s.assertUploadCharm(c, mustParseReference("precise/wordpress-1"), "mysql")
 }
 
 func (s *ArchiveSuite) TestPostBundle(c *gc.C) {
@@ -298,13 +298,23 @@ func (s *ArchiveSuite) TestPostBundle(c *gc.C) {
 		mustParseReference("cs:utopic/wordpress-47"),
 		charmtesting.Charms.CharmArchive(c.MkDir(), "wordpress"))
 	c.Assert(err, gc.IsNil)
+	err = s.store.AddCharmWithArchive(
+		mustParseReference("cs:utopic/logging-1"),
+		charmtesting.Charms.CharmArchive(c.MkDir(), "logging"))
+	c.Assert(err, gc.IsNil)
 
 	// A bundle that did not exist before should get revision 0.
 	s.assertUploadBundle(c, mustParseReference("bundle/wordpress-0"), "wordpress")
 
 	// Subsequent bundle uploads should increment the
 	// revision by 1.
-	s.assertUploadBundle(c, mustParseReference("bundle/wordpress-1"), "wordpress")
+	s.assertUploadBundle(c, mustParseReference("bundle/wordpress-1"), "wordpress-with-logging")
+
+	// Uploading the same archive twice should not increment the revision...
+	s.assertUploadBundle(c, mustParseReference("bundle/wordpress-1"), "wordpress-with-logging")
+
+	// ... but uploading an archive used by a previous revision should.
+	s.assertUploadBundle(c, mustParseReference("bundle/wordpress-2"), "wordpress")
 }
 
 func (s *ArchiveSuite) TestPostHashMismatch(c *gc.C) {
