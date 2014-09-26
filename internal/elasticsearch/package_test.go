@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the LGPLv3, see LICENCE file for details.
 
-// This file is a simplyfied copy of github.com/juju/testing/mgo.go
+// This file is a simplified copy of github.com/juju/testing/mgo.go
 
 package elasticsearch
 
@@ -14,40 +14,60 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
+	"text/template"
 
+	"github.com/juju/errgo"
 	"github.com/juju/loggo"
 	jujutesting "github.com/juju/testing"
 
-	gc "launchpad.net/gocheck"
+	gc "gopkg.in/check.v1"
 )
 
 type ElasticSearchInstance struct {
 	Dir      string
-	HttpPort int
+	HTTPPort int
 	Server   *exec.Cmd
 	exited   <-chan struct{}
 }
 
 var (
-	ElasticSearchServer = &ElasticSearchInstance{}
+	elasticSearchServer = &ElasticSearchInstance{}
 	logger              = loggo.GetLogger("juju.testing.elasticsearchsuite")
 )
 
 const (
 	maxStartAttempts = 5
 
-	//elasticsearch exits with code 143 on SIGTERM
+	// ElasticSearch exits with code 143 on SIGTERM.
 	elasticSearchSigTermErrCode = 143
 )
 
+// Tests can be run using already running elasticsearch:
+// $ JUJU_TEST_ELASTICSEARCH=1234 go test -v ./internal/elasticsearch -gocheck.v
+// Tests can be disabled:
+// JUJU_TEST_ELASTICSEARCH=none go test -v ./internal/elasticsearch -gocheck.v
+// Tests can start an elasticsearch instance themselves (this take 6 seconds):
+// JUJU_TEST_ELASTICSEARCH= go test -v ./internal/elasticsearch -gocheck.v
 func ElasticSearchTestPackage(t *testing.T) {
-	if err := ElasticSearchServer.Start(); err != nil {
-		t.Fatal(err)
+	if os.Getenv("JUJU_TEST_ELASTICSEARCH") == "none" {
+		return
 	}
-	defer ElasticSearchServer.Destroy()
+	if os.Getenv("JUJU_TEST_ELASTICSEARCH") == "" {
+		if err := elasticSearchServer.Start(); err != nil {
+			t.Fatal(err)
+		}
+		defer elasticSearchServer.Destroy()
+	} else {
+		var err error
+		elasticSearchServer.HTTPPort, err = strconv.Atoi(os.Getenv("JUJU_TEST_ELASTICSEARCH"))
+		if err != nil {
+			panic("invalid JUJU_TEST_ELASTICSEARCH value. expect an valid tcp port or none")
+		}
+	}
 	gc.TestingT(t)
 }
 
@@ -57,6 +77,13 @@ func (es *ElasticSearchInstance) kill(sig syscall.Signal) {
 	es.Server = nil
 	es.exited = nil
 }
+
+var config = template.Must(template.New("").Parse(`
+path.data: {{.Dir}}/data
+path.logs: {{.Dir}}/log/
+network.host: 127.0.0.1
+http.port: {{.HTTPPort}}
+`))
 
 func (es *ElasticSearchInstance) run() error {
 	if es.Server != nil {
@@ -82,11 +109,11 @@ func (es *ElasticSearchInstance) run() error {
 			return
 		}
 		var buf bytes.Buffer
-		prefix := fmt.Sprintf("inet[/127.0.0.1:%v", es.HttpPort)
+		prefix := fmt.Sprintf("inet[/127.0.0.1:%v", es.HTTPPort)
 		if readUntilMatching(prefix, io.TeeReader(out, &buf), regexp.MustCompile("node.*started")) {
 			listening <- nil
 		} else {
-			err := fmt.Errorf("elasticsearch failed to listen on port %v using config %v", es.HttpPort, configFile)
+			err := errgo.Newf("elasticsearch failed to listen on port %v using config %v", es.HTTPPort, configFile)
 			if strings.Contains(buf.String(), "Address already in use") {
 				err = addrAlreadyInUseError{err}
 			}
@@ -126,25 +153,21 @@ func (es *ElasticSearchInstance) run() error {
 
 func (es *ElasticSearchInstance) writeConfig() (string, error) {
 	if es.Dir == "" {
-		return "", fmt.Errorf("directory not set")
+		return "", errgo.New("directory not set")
 	}
 	file, err := os.Create(es.Dir + "/elasticsearch.yml")
 	if err != nil {
 		return "", err
 	}
 	defer file.Close()
-	fmt.Fprintf(file, "cluster.name: elasticsearch_testing\n")
-	fmt.Fprintf(file, "path.data: %s/data\n", es.Dir)
-	fmt.Fprintf(file, "path.logs: %s/log/\n", es.Dir)
-	fmt.Fprintf(file, "network.host: 127.0.0.1\n")
-	fmt.Fprintf(file, "http.port: %d\n", es.HttpPort)
+	config.Execute(file, es)
 	return file.Name(), nil
 }
 
 func (es *ElasticSearchInstance) Destroy() {
 	if es.Server != nil {
 		term := syscall.SIGTERM
-		logger.Debugf("killing elasticsearch pid %d in %s on port %d with %s", es.Server.Process.Pid, es.Dir, es.HttpPort, term)
+		logger.Debugf("killing elasticsearch pid %d in %s on port %d with %s", es.Server.Process.Pid, es.Dir, es.HTTPPort, term)
 		es.kill(term)
 		os.RemoveAll(es.Dir)
 		es.Dir = ""
@@ -160,16 +183,16 @@ func (es *ElasticSearchInstance) Start() error {
 	es.Dir = dir
 	logger.Debugf("starting elasticsearch in ", es.Dir)
 	for i := 0; i < maxStartAttempts; i++ {
-		es.HttpPort = jujutesting.FindTCPPort()
+		es.HTTPPort = jujutesting.FindTCPPort()
 		err = es.run()
 		switch err.(type) {
 		case addrAlreadyInUseError:
 			logger.Debugf("failed to start elasticssearch: %v, trying another port", err)
 			continue
 		case nil:
-			logger.Debugf("started elasticsearch pid %d in %s on port %d", es.Server.Process.Pid, es.Dir, es.HttpPort)
+			logger.Debugf("started elasticsearch pid %d in %s on port %d", es.Server.Process.Pid, es.Dir, es.HTTPPort)
 		default:
-			es.HttpPort = 0
+			es.HTTPPort = 0
 			os.RemoveAll(es.Dir)
 			es.Dir = ""
 			logger.Warningf("failed to start elasticsearch %v", err)
@@ -198,8 +221,8 @@ type ElasticSearchSuite struct {
 }
 
 func (s *ElasticSearchSuite) SetUpSuite(c *gc.C) {
-	s.ElasticSearchInstance = ElasticSearchServer
-	s.db = &Database{"127.0.0.1", ElasticSearchServer.HttpPort}
+	s.ElasticSearchInstance = elasticSearchServer
+	s.db = &Database{"127.0.0.1", elasticSearchServer.HTTPPort}
 }
 
 func (s *ElasticSearchSuite) TearDownSuite(c *gc.C) {
