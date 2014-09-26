@@ -19,6 +19,7 @@ define DEPENDENCIES
   build-essential
   bzr
   juju-mongodb
+  mongodb-server
   $(GO_C)
 endef
 
