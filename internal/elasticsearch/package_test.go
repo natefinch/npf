@@ -205,7 +205,7 @@ func (es *ElasticSearchInstance) Start() error {
 func (es *ElasticSearchInstance) dropAll(db *Database) error {
 	//for index in curl 'localhost:9200/_cat/indices?v'
 	// delete index
-	names, err := db.CatIndices()
+	names, err := db.ListAllIndexes()
 	if err != nil {
 		return err
 	}
