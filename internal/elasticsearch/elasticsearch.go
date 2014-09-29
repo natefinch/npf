@@ -69,10 +69,10 @@ func (db *Database) delete(path string) (*http.Response, error) {
 	return http.DefaultClient.Do(req)
 }
 
-// CatIndices does a GET request to the Database and parses the string
+// ListAllIndexes does a GET request to the Database and parses the string
 // response returning a slice containing the name of each index.
 // http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/_list_all_indexes.html
-func (db *Database) CatIndices() ([]string, error) {
+func (db *Database) ListAllIndexes() ([]string, error) {
 	resp, err := http.Get(db.url("_cat/indices"))
 	if err != nil {
 		return nil, err

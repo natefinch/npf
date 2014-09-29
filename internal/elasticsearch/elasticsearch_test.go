@@ -57,19 +57,20 @@ func (s *IsolatedElasticSearchSuite) TestDelete(c *gc.C) {
 
 func (s *IsolatedElasticSearchSuite) TestDeleteErrorOnNonExistingIndex(c *gc.C) {
 	err := s.db.DeleteIndex("nope")
-	c.Assert(err, gc.NotNil)
-	//CHECK THE ERORR
+	terr := err.(*ErrNotFound)
+	c.Assert(terr.Message(), gc.Equals, "index nope not found")
 }
 
 func (s *IsolatedElasticSearchSuite) TestIndexesEmpty(c *gc.C) {
-	indexes, _ := s.db.CatIndices()
-	//CHECK THE ERORR
+	indexes, err := s.db.ListAllIndexes()
+	c.Assert(err, gc.IsNil)
 	c.Assert(indexes, gc.HasLen, 0)
 }
 
 func (s *IsolatedElasticSearchSuite) TestIndexesCreatedAutomatically(c *gc.C) {
 	doc := map[string]string{"a": "b"}
 	s.db.PostDocument("testindex", "testtype", doc)
-	indexes, _ := s.db.CatIndices()
+	indexes, err := s.db.ListAllIndexes()
+	c.Assert(err, gc.IsNil)
 	c.Assert(indexes[0], gc.Equals, "testindex")
 }
