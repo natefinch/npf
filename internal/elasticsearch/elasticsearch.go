@@ -30,13 +30,6 @@ type Database struct {
 }
 
 func (db *Database) PostDocument(index, type_ string, doc interface{}) error {
-	// DELETE ME
-	// An example auto-index document creation:
-	//$ curl -XPOST 'http://localhost:9200/twitter/tweet' -d '{
-	//"user" : "kimchy",
-	//"post_date" : "2009-11-15T14:12:12",
-	//"message" : "trying out Elasticsearch"
-	//}'
 	data, err := json.Marshal(doc)
 	if err != nil {
 		return errgo.Mask(err)
