@@ -21,6 +21,8 @@ define DEPENDENCIES
   juju-mongodb
   mongodb-server
   $(GO_C)
+  openjdk-7-jre-headless
+  elasticsearch
 endef
 
 default: build
@@ -82,19 +84,23 @@ create-deps: $(GOPATH)/bin/godeps
 	godeps -t $(shell go list $(PROJECT)/...) > dependencies.tsv || true
 
 # Install packages required to develop the charm store and run tests.
-APT_BASED := $(shell command -v apt-get; echo $$?)
+APT_BASED := $(shell command -v apt-get >/dev/null; echo $$?)
 sysdeps:
 ifeq ($(APT_BASED),0)
 ifeq ($(shell lsb_release -cs|sed -r 's/precise|quantal|raring/old/'),old)
 	@echo Adding PPAs for golang and mongodb
 	@sudo apt-add-repository --yes ppa:juju/golang
 	@sudo apt-add-repository --yes ppa:juju/stable
-	@sudo apt-get update
 endif
 	@echo Installing dependencies
+	[ "x$(apt-key export D88E42B4 2>&1 1>/dev/null)" = "x" ] || { curl -s http://packages.elasticsearch.org/GPG-KEY-elasticsearch | sudo apt-key add -;}
+	repo="http://packages.elasticsearch.org/elasticsearch/1.3/debian" file=/etc/apt/sources.list.d/packages_elasticsearch_org_elasticsearch_1_3_debian.list ; grep "$$repo" $$file || echo "deb $$repo stable main" | sudo tee $$file > /dev/null
+	sudo apt-get update
 	@sudo apt-get --yes install $(strip $(DEPENDENCIES)) \
 	$(shell apt-cache madison juju-mongodb mongodb-server | head -1 | cut -d '|' -f1)
 endif
+	@echo sysdeps runs only on systems with apt-get
+	@echo on MacOSX with homebrew try: brew install bazaar mongodb elasticsearch
 
 help:
 	@echo -e 'Charmstore - list of make targets:\n'

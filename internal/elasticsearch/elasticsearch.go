@@ -17,6 +17,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 
 	"github.com/juju/errgo"
@@ -55,8 +57,13 @@ func (db *Database) PostDocument(index, type_ string, doc interface{}) error {
 
 // url constructs the URL for accessing the database.
 func (db *Database) url(pathParts ...string) string {
-	path := strings.Join(pathParts, "/")
-	return fmt.Sprintf("http://%s:%d/%s/", db.server, db.port, path)
+	path := path.Join(pathParts...)
+	url := &url.URL{
+		Scheme: "http",
+		Host:   fmt.Sprintf("%s:%d", db.server, db.port),
+		Path:   path,
+	}
+	return url.String()
 
 }
 
