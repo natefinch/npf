@@ -11,7 +11,7 @@ copyright = "Nate Finch"
 	blog = "/:year/:month/:filename/"
 	code = "/:filename/"
 
-[taxonomies]
+[Taxonomies]
 	tag = "tags"
 	series = "series"
 	series-desc = "series-desc"
