@@ -86,7 +86,6 @@ func (db *Database) PutDocument(index, type_, id string, doc interface{}) error 
 	response, err := http.DefaultClient.Do(req)
 	defer response.Body.Close()
 	body, _ := ioutil.ReadAll(response.Body)
-	logger.Debugf("PutDocument response:%s", body)
 	if (response.StatusCode != http.StatusCreated) && (response.StatusCode != http.StatusOK) {
 		// Error checking within this error handler is not helpful.
 		return errgo.Newf("ElasticSearch PUT response status: %d %s, body: %s", response.StatusCode, response.Status, body)
