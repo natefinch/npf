@@ -47,6 +47,11 @@ func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 			return err
 		}
 		return h.servePostArchive(id, w, req)
+	case "PUT":
+		if err := h.authenticate(w, req); err != nil {
+			return err
+		}
+		return h.servePutArchive(id, w, req)
 	case "GET":
 	}
 	r, size, err := h.store.OpenBlob(id)
@@ -79,19 +84,20 @@ func (h *Handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter,
 	return nil
 }
 
-func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
-	defer func() {
-		// Upload stats don't include revision: it is assumed that each
-		// entity revision is only uploaded once.
-		id.Revision = -1
-		kind := params.StatsArchiveUpload
-		if err != nil {
-			kind = params.StatsArchiveFailedUpload
-		}
-		h.store.IncCounterAsync(entityStatsKey(id, kind))
-	}()
+func (h *Handler) updateStatsArchiveUpload(id *charm.Reference, err *error) {
+	// Upload stats don't include revision: it is assumed that each
+	// entity revision is only uploaded once.
+	id.Revision = -1
+	kind := params.StatsArchiveUpload
+	if *err != nil {
+		kind = params.StatsArchiveFailedUpload
+	}
+	h.store.IncCounterAsync(entityStatsKey(id, kind))
+}
 
-	// Validate the request parameters.
+func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
+	defer h.updateStatsArchiveUpload(id, &err)
+
 	if id.Series == "" {
 		return badRequestf(nil, "series not specified")
 	}
@@ -113,15 +119,58 @@ func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 	if oldHash == hash {
 		// The hash matches the hash of the latest revision, so
 		// no need to upload anything.
-		return router.WriteJSON(w, http.StatusOK, &params.ArchivePostResponse{
+		return router.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
 			Id: oldId,
 		})
 	}
 
+	// Choose the next revision number for the upload.
+	if oldId != nil {
+		id.Revision = oldId.Revision + 1
+	} else {
+		id.Revision = 0
+	}
+	if err := h.addBlobAndEntity(id, req.Body, hash, req.ContentLength); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
+	}
+	return router.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
+		Id: id,
+	})
+}
+
+func (h *Handler) servePutArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
+	defer h.updateStatsArchiveUpload(id, &err)
+	if id.Series == "" {
+		return badRequestf(nil, "series not specified")
+	}
+	if id.Revision == -1 {
+		return badRequestf(nil, "revision not specified")
+	}
+	hash := req.Form.Get("hash")
+	if hash == "" {
+		return badRequestf(nil, "hash parameter not specified")
+	}
+	if req.ContentLength == -1 {
+		return badRequestf(nil, "Content-Length not specified")
+	}
+	if err := h.addBlobAndEntity(id, req.Body, hash, req.ContentLength); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
+	}
+	return router.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
+		Id: id,
+	})
+	return nil
+}
+
+// addBlobAndEntity streams the contents of the given body
+// to the blob store and adds an entity record for it.
+// The hash and contentLength parameters hold
+// the content hash and the content length respectively.
+func (h *Handler) addBlobAndEntity(id *charm.Reference, body io.Reader, hash string, contentLength int64) (err error) {
 	// Upload the actual blob, and make sure that it is removed
 	// if we fail later.
 	name := bson.NewObjectId().Hex()
-	err = h.store.BlobStore.PutUnchallenged(req.Body, name, req.ContentLength, hash)
+	err = h.store.BlobStore.PutUnchallenged(body, name, contentLength, hash)
 	if err != nil {
 		return errgo.Notef(err, "cannot put archive blob")
 	}
@@ -137,15 +186,19 @@ func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 		}
 	}()
 
-	// Create the entry for the entity in charm store.
-	rev, err := h.nextRevisionForId(id)
-	if err != nil {
-		return errgo.Notef(err, "cannot get next revision for id")
+	// Add the entity entry to the charm store.
+	if err := h.addEntity(id, r, name, hash, contentLength); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 	}
-	id.Revision = rev
+	return nil
+}
+
+// addEntity adds the entity represented by the contents
+// of the given reader, associating it with the given id.
+func (h *Handler) addEntity(id *charm.Reference, r io.ReadSeeker, blobName string, hash string, contentLength int64) error {
 	readerAt := &readerAtSeeker{r}
 	if id.Series == "bundle" {
-		b, err := charm.ReadBundleArchiveFromReader(readerAt, req.ContentLength)
+		b, err := charm.ReadBundleArchiveFromReader(readerAt, contentLength)
 		if err != nil {
 			return errgo.Notef(err, "cannot read bundle archive")
 		}
@@ -158,21 +211,19 @@ func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 			// TODO frankban: use multiError (defined in internal/router).
 			return errgo.Notef(verificationError(err), "bundle verification failed")
 		}
-		if err := h.store.AddBundle(id, b, name, hash, req.ContentLength); err != nil {
+		if err := h.store.AddBundle(id, b, blobName, hash, contentLength); err != nil {
 			return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 		}
-	} else {
-		ch, err := charm.ReadCharmArchiveFromReader(readerAt, req.ContentLength)
-		if err != nil {
-			return errgo.Notef(err, "cannot read charm archive")
-		}
-		if err := h.store.AddCharm(id, ch, name, hash, req.ContentLength); err != nil {
-			return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
-		}
+		return nil
 	}
-	return router.WriteJSON(w, http.StatusOK, &params.ArchivePostResponse{
-		Id: id,
-	})
+	ch, err := charm.ReadCharmArchiveFromReader(readerAt, contentLength)
+	if err != nil {
+		return errgo.Notef(err, "cannot read charm archive")
+	}
+	if err := h.store.AddCharm(id, ch, blobName, hash, contentLength); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
+	}
+	return nil
 }
 
 func (h *Handler) latestRevisionInfo(id *charm.Reference) (*charm.Reference, string, error) {
@@ -248,19 +299,6 @@ func (r *readerAtSeeker) ReadAt(buf []byte, p int64) (int, error) {
 		return 0, errgo.Notef(err, "cannot seek")
 	}
 	return r.r.Read(buf)
-}
-
-func (h *Handler) nextRevisionForId(id *charm.Reference) (int, error) {
-	id1 := *id
-	id1.Revision = -1
-	err := ResolveURL(h.store, &id1)
-	if err == nil {
-		return id1.Revision + 1, nil
-	}
-	if errgo.Cause(err) != params.ErrNotFound {
-		return 0, errgo.Notef(err, "cannot resolve id")
-	}
-	return 0, nil
 }
 
 func (h *Handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {

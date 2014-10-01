@@ -48,7 +48,7 @@ func (s *ArchiveSuite) SetUpTest(c *gc.C) {
 }
 
 func (s *ArchiveSuite) TestGet(c *gc.C) {
-	wordpress := s.assertUploadCharm(c, mustParseReference("cs:precise/wordpress-0"), "wordpress")
+	wordpress := s.assertUploadCharm(c, "POST", mustParseReference("cs:precise/wordpress-0"), "wordpress")
 
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
 	c.Assert(err, gc.IsNil)
@@ -281,11 +281,44 @@ loop:
 
 func (s *ArchiveSuite) TestPostCharm(c *gc.C) {
 	// A charm that did not exist before should get revision 0.
-	s.assertUploadCharm(c, mustParseReference("precise/wordpress-0"), "wordpress")
+	s.assertUploadCharm(c, "POST", mustParseReference("precise/wordpress-0"), "wordpress")
 
 	// Subsequent charm uploads should increment the
 	// revision by 1.
-	s.assertUploadCharm(c, mustParseReference("precise/wordpress-1"), "mysql")
+	s.assertUploadCharm(c, "POST", mustParseReference("precise/wordpress-1"), "mysql")
+}
+
+func (s *ArchiveSuite) TestPutCharm(c *gc.C) {
+	s.assertUploadCharm(c, "PUT", mustParseReference("precise/wordpress-3"), "wordpress")
+
+	s.assertUploadCharm(c, "PUT", mustParseReference("precise/wordpress-1"), "wordpress")
+
+	// Check that we get a duplicate-upload error if we try to
+	// upload to the same revision again.
+	path := testing.Charms.CharmArchivePath(c.MkDir(), "mysql")
+	f, err := os.Open(path)
+	c.Assert(err, gc.IsNil)
+	defer f.Close()
+	hash, size := hashOf(f)
+	_, err = f.Seek(0, 0)
+	c.Assert(err, gc.IsNil)
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:       s.srv,
+		URL:           storeURL("precise/wordpress-3/archive?hash=" + hash),
+		Method:        "PUT",
+		ContentLength: size,
+		Header: http.Header{
+			"Content-Type": {"application/zip"},
+		},
+		Body:         f,
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusInternalServerError,
+		ExpectBody: params.Error{
+			Message: "duplicate upload",
+			Code:    params.ErrDuplicateUpload,
+		},
+	})
 }
 
 func (s *ArchiveSuite) TestPostBundle(c *gc.C) {
@@ -304,17 +337,17 @@ func (s *ArchiveSuite) TestPostBundle(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// A bundle that did not exist before should get revision 0.
-	s.assertUploadBundle(c, mustParseReference("bundle/wordpress-0"), "wordpress")
+	s.assertUploadBundle(c, "POST", mustParseReference("bundle/wordpress-0"), "wordpress")
 
 	// Subsequent bundle uploads should increment the
 	// revision by 1.
-	s.assertUploadBundle(c, mustParseReference("bundle/wordpress-1"), "wordpress-with-logging")
+	s.assertUploadBundle(c, "POST", mustParseReference("bundle/wordpress-1"), "wordpress-with-logging")
 
 	// Uploading the same archive twice should not increment the revision...
-	s.assertUploadBundle(c, mustParseReference("bundle/wordpress-1"), "wordpress-with-logging")
+	s.assertUploadBundle(c, "POST", mustParseReference("bundle/wordpress-1"), "wordpress-with-logging")
 
 	// ... but uploading an archive used by a previous revision should.
-	s.assertUploadBundle(c, mustParseReference("bundle/wordpress-2"), "wordpress")
+	s.assertUploadBundle(c, "POST", mustParseReference("bundle/wordpress-2"), "wordpress")
 }
 
 func (s *ArchiveSuite) TestPostHashMismatch(c *gc.C) {
@@ -372,7 +405,7 @@ func (s *ArchiveSuite) TestPostCounters(c *gc.C) {
 		c.Skip("MongoDB JavaScript not available")
 	}
 
-	s.assertUploadCharm(c, mustParseReference("precise/wordpress-0"), "wordpress")
+	s.assertUploadCharm(c, "POST", mustParseReference("precise/wordpress-0"), "wordpress")
 
 	// Check that the upload count for the entity has been updated.
 	key := []string{params.StatsArchiveUpload, "precise", "wordpress", ""}
@@ -442,9 +475,9 @@ func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSee
 // assertUploadCharm uploads the testing charm with the given name
 // through the API. The URL must hold the expected revision
 // that the charm will be given when uploaded.
-func (s *ArchiveSuite) assertUploadCharm(c *gc.C, url *charm.Reference, charmName string) *charm.CharmArchive {
+func (s *ArchiveSuite) assertUploadCharm(c *gc.C, method string, url *charm.Reference, charmName string) *charm.CharmArchive {
 	ch := testing.Charms.CharmArchive(c.MkDir(), charmName)
-	size := s.assertUpload(c, url, ch.Path)
+	size := s.assertUpload(c, method, url, ch.Path)
 	s.assertEntityInfo(c, url, entityInfo{
 		Id: url,
 		Meta: entityMetaInfo{
@@ -460,11 +493,11 @@ func (s *ArchiveSuite) assertUploadCharm(c *gc.C, url *charm.Reference, charmNam
 // assertUploadBundle uploads the testing bundle with the given name
 // through the API. The URL must hold the expected revision
 // that the bundle will be given when uploaded.
-func (s *ArchiveSuite) assertUploadBundle(c *gc.C, url *charm.Reference, bundleName string) {
+func (s *ArchiveSuite) assertUploadBundle(c *gc.C, method string, url *charm.Reference, bundleName string) {
 	path := testing.Charms.BundleArchivePath(c.MkDir(), bundleName)
 	b, err := charm.ReadBundleArchive(path)
 	c.Assert(err, gc.IsNil)
-	size := s.assertUpload(c, url, path)
+	size := s.assertUpload(c, method, url, path)
 	s.assertEntityInfo(c, url, entityInfo{
 		Id: url,
 		Meta: entityMetaInfo{
@@ -475,7 +508,7 @@ func (s *ArchiveSuite) assertUploadBundle(c *gc.C, url *charm.Reference, bundleN
 	)
 }
 
-func (s *ArchiveSuite) assertUpload(c *gc.C, url *charm.Reference, fileName string) (size int64) {
+func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *charm.Reference, fileName string) (size int64) {
 	f, err := os.Open(fileName)
 	c.Assert(err, gc.IsNil)
 	defer f.Close()
@@ -484,13 +517,15 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, url *charm.Reference, fileName stri
 	c.Assert(err, gc.IsNil)
 
 	uploadURL := *url
-	uploadURL.Revision = -1
+	if method == "POST" {
+		uploadURL.Revision = -1
+	}
 
 	path := fmt.Sprintf("%s/archive?hash=%s", strings.TrimPrefix(uploadURL.String(), "cs:"), hash)
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:       s.srv,
 		URL:           storeURL(path),
-		Method:        "POST",
+		Method:        method,
 		ContentLength: size,
 		Header: http.Header{
 			"Content-Type": {"application/zip"},
@@ -498,7 +533,7 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, url *charm.Reference, fileName stri
 		Body:     f,
 		Username: serverParams.AuthUsername,
 		Password: serverParams.AuthPassword,
-		ExpectBody: params.ArchivePostResponse{
+		ExpectBody: params.ArchiveUploadResponse{
 			Id: url,
 		},
 	})
