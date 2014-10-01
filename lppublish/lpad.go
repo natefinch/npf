@@ -4,7 +4,6 @@
 package lppublish
 
 import (
-	"bufio"
 	"bytes"
 	"crypto/sha512"
 	"encoding/base64"
@@ -22,7 +21,10 @@ import (
 
 	"github.com/juju/errgo"
 	"github.com/juju/loggo"
+	"github.com/juju/utils/fs"
 	"gopkg.in/juju/charm.v4"
+	"gopkg.in/juju/charm.v4/migratebundle"
+	"gopkg.in/yaml.v1"
 	"launchpad.net/lpad"
 
 	"github.com/juju/charmstore/params"
@@ -34,6 +36,8 @@ const BzrDigestKey = "bzr-digest"
 
 var logger = loggo.GetLogger("charmload")
 var failsLogger = loggo.GetLogger("charmload_v4.loadfails")
+
+const officialBundlePromulgator = "charmers"
 
 type PublishBranchError struct {
 	URL string
@@ -197,12 +201,7 @@ func (cl *charmLoader) publisher(results <-chan entityResult, errs chan<- error)
 	for result := range results {
 		logger.Debugf("start publishing URLs for %s", result.charmURL)
 		urls := []*charm.Reference{result.charmURL}
-		urls = appendPromulgatedCharmURLs(
-			result.tip.OfficialSeries,
-			result.charmURL.Schema,
-			result.charmURL.Name,
-			urls,
-		)
+		urls = append(urls, promulgatedURLs(result.charmURL, result.tip.OfficialSeries)...)
 		err := cl.publishBazaarBranch(urls, result.branchURL, result.tip.Revision)
 		if err != nil {
 			failsLogger.Errorf("cannot publish branch %v to charm store: %v", result.branchURL, err)
@@ -213,19 +212,29 @@ func (cl *charmLoader) publisher(results <-chan entityResult, errs chan<- error)
 	logger.Debugf("quitting publisher")
 }
 
-// appendPromulgatedCharmURLs adds urls from officialSeries to
-// the URLs slice for the given schema and name.
-// Promulgated charms have OfficialSeries in launchpad.
-func appendPromulgatedCharmURLs(officialSeries []string, schema, name string, urls []*charm.Reference) []*charm.Reference {
-	for _, series := range officialSeries {
-		nextCharmURL := &charm.Reference{
-			Schema:   schema,
-			Name:     name,
+// promulgatedURLs returns any URLs that the given url should
+// also be published to.
+func promulgatedURLs(url *charm.Reference, officialSeries []string) []*charm.Reference {
+	// The only way we know if bundles are promulgated is if they
+	// are published by the official user.
+	if url.Series == "bundle" && url.User == officialBundlePromulgator {
+		return []*charm.Reference{{
+			Schema:   url.Schema,
+			Name:     url.Name,
+			Revision: -1,
+			Series:   "bundle",
+		}}
+	}
+	// Promulgated charms have OfficialSeries in launchpad.
+	urls := make([]*charm.Reference, len(officialSeries))
+	for i, series := range officialSeries {
+		urls[i] = &charm.Reference{
+			Schema:   url.Schema,
+			Name:     url.Name,
 			Revision: -1,
 			Series:   series,
 		}
-		urls = append(urls, nextCharmURL)
-		logger.Debugf("added URL %v to URLs list for %v", nextCharmURL, urls[0])
+		logger.Debugf("added URL %v to URLs list for %v", urls[i], urls[0])
 	}
 	return urls
 }
@@ -270,33 +279,6 @@ func notSupportedBranchName(u []string) bool {
 
 const bzrDigestKey = "bzr-digest"
 
-// Copies bundles.yaml to bundle.yaml without the first line.
-// TODO (rog, uros) Replace with proper bundle translation.
-func quickAndDirtyBundleFix(branchDir string) error {
-	oldBundleYamlName := fmt.Sprint(branchDir, "/bundles.yaml")
-	newBundleYamlName := fmt.Sprint(branchDir, "/bundle.yaml")
-
-	file, err := os.Open(oldBundleYamlName)
-	if err != nil {
-		return errgo.Notef(err, "could not open bundles.yaml")
-	}
-	defer file.Close()
-	newFile, err := os.Create(newBundleYamlName)
-	if err != nil {
-		return errgo.Notef(err, "could not open bundle.yaml")
-	}
-	defer newFile.Close()
-
-	r := bufio.NewReader(file)
-	if _, _, err := r.ReadLine(); err != nil {
-		return errgo.Newf("no first line")
-	}
-	if _, err := io.Copy(newFile, r); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL string, digest string) error {
 	// Check whether the entity is already present in the charm store.
 	urls = cl.excludeExistingEntities(urls, digest)
@@ -329,25 +311,110 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 		digest = tipDigest
 		logger.Warningf("tipDigest %v != digest %v", digest, tipDigest)
 	}
-	var archiveDir archiverTo
-	if urls[0].Series == "bundles" {
-		// TODO (rog, uros) Replace with proper bundle translation.
-		err := quickAndDirtyBundleFix(branchDir)
-		if err != nil {
-			return errgo.Notef(err, "quick bundle fix failed")
-		}
-
-		archiveDir, err = charm.ReadBundleDir(branchDir)
-		if err != nil {
-			return errgo.Notef(err, "cannot read bundle dir")
-		}
-	} else {
-		// Instantiate the entity from the branch directory.
-		archiveDir, err = charm.ReadCharmDir(branchDir)
+	if urls[0].Series != "bundle" {
+		// Instantiate the charm from the branch directory.
+		ch, err := charm.ReadCharmDir(branchDir)
 		if err != nil {
 			return errgo.Notef(err, "cannot read charm dir")
 		}
+		if err := cl.publish(urls, ch, tempDir, tipDigest); err != nil {
+			return errgo.Notef(err, "cannot publish")
+		}
+		return nil
 	}
+	bundles, err := readBundles(branchDir, tempDir)
+	if err != nil {
+		return errgo.Notef(err, "cannot read bundle %q", urls[0])
+	}
+	// Publish each bundle at a different path. If there was only
+	// one bundle found, it's either a new style bundle or a legacy
+	// basket with only one bundle in. In either of those cases, we
+	// publish to the original URLs. When there's more than one
+	// bundle, we append the bundle name to the URLs prefixed with a
+	// hyphen.
+	for name, bundle := range bundles {
+		var finalURLs []*charm.Reference
+		if len(bundles) == 1 {
+			finalURLs = urls
+		} else {
+			finalURLs = make([]*charm.Reference, len(urls))
+			for i, url := range urls {
+				finalURLs[i] = new(charm.Reference)
+				*finalURLs[i] = *url
+				finalURLs[i].Name += "-" + name
+			}
+		}
+		if err := cl.publish(finalURLs, bundle, tempDir, tipDigest); err != nil {
+			return errgo.Notef(err, "cannot publish %q", name)
+		}
+	}
+	return nil
+}
+
+// readBundles reads the bundle or legacy "basket"
+// within the given directory and returns a map with one
+// entry for each bundle found, keyed by
+// bundle name.
+func readBundles(dir string, tempDir string) (map[string]*charm.BundleDir, error) {
+	// If there's a bundle.yaml file, it's a new-style bundle,
+	// so no need for migration.
+	if _, err := os.Stat(filepath.Join(dir, "bundle.yaml")); err == nil {
+		b, err := charm.ReadBundleDir(dir)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+		return map[string]*charm.BundleDir{"": b}, nil
+	}
+	f, err := os.Open(filepath.Join(dir, "bundles.yaml"))
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	data, err := ioutil.ReadAll(f)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot read bundles.yaml")
+	}
+	bds, err := migratebundle.Migrate(data, func(id *charm.Reference) (*charm.Meta, error) {
+		return nil, errgo.Newf("charm %q not found (not implemented)", id)
+	})
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot migrate")
+	}
+	bundles := make(map[string]*charm.BundleDir)
+	i := 0
+	for name, bd := range bds {
+		destDir := filepath.Join(tempDir, fmt.Sprintf("branch-%d", i))
+		i++
+		// Copy the whole directory so that we don't have
+		// to second-guess the charm package's choice
+		// of README file name (or any other files that may
+		// happen to be around).
+		if err := fs.Copy(dir, destDir); err != nil {
+			return nil, errgo.Notef(err, "cannot copy bundle directory")
+		}
+		if err := os.Rename(filepath.Join(destDir, "bundles.yaml"), filepath.Join(destDir, "bundles.yaml.orig")); err != nil {
+			return nil, errgo.Mask(err)
+		}
+		data, err := yaml.Marshal(bd)
+		if err != nil {
+			return nil, errgo.Notef(err, "cannot marshal bundle %q", name)
+		}
+		if err := ioutil.WriteFile(filepath.Join(destDir, "bundle.yaml"), data, 0666); err != nil {
+			return nil, errgo.Mask(err)
+		}
+		bundle, err := charm.ReadBundleDir(destDir)
+		if err != nil {
+			return nil, errgo.Notef(err, "cannot read bundle %q", name)
+		}
+		bundles[name] = bundle
+	}
+	return bundles, nil
+}
+
+// publish publishes the given charm or bundle held in archiveDir
+// to the charm store with the given URLs, using tempDir
+// for temporary storage. The tipDigest parameter holds
+// the digest of the launchpad tip holding the charm or bundle.
+func (cl *charmLoader) publish(urls []*charm.Reference, archiveDir archiverTo, tempDir string, tipDigest string) error {
 	// Archive the entity in a temporary directory, and calculate its SHA384
 	// hash and archive size.
 	tempFile, hash, archiveSize, err := cl.archiveDir(archiveDir, tempDir)
@@ -379,6 +446,9 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 
 // excludeExistingEntities filters the given URLs slice to only include
 // entities that are not already present in the charm store.
+// Note that this will not work when the final URLs don't match
+// the given URLs. This happens when a multi-bundle legacy
+// "basket" has been published.
 func (cl *charmLoader) excludeExistingEntities(urls []*charm.Reference, digest string) []*charm.Reference {
 	missing := make([]*charm.Reference, 0, len(urls))
 	for _, id := range urls {
