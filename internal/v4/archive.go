@@ -27,11 +27,17 @@ import (
 // GET id/archive
 // http://tinyurl.com/qjrwq53
 //
-// POST id/archive?sha256=hash
+// POST id/archive?hash=sha384hash
 // http://tinyurl.com/lzrzrgb
-
+//
 // DELETE id/archive
 // http://tinyurl.com/ojmlwos
+//
+// PUT id/archive?hash=sha384hash
+// This is like POST except that it puts the archive to a known revision
+// rather than choosing a new one. As this feature is to support legacy
+// ingestion methods, and will be removed in the future, it has no entry
+// in the specification.
 func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
 	default:
