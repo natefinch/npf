@@ -19,9 +19,9 @@ type MetaAnyResponse struct {
 	Meta map[string]interface{} `json:",omitempty"`
 }
 
-// ArchivePostResponse holds the result of
-// a post to /$id/archive. See http://tinyurl.com/lzrzrgb
-type ArchivePostResponse struct {
+// ArchiveUploadResponse holds the result of
+// a post or a put to /$id/archive. See http://tinyurl.com/lzrzrgb
+type ArchiveUploadResponse struct {
 	Id *charm.Reference
 }
 

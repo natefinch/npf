@@ -513,7 +513,7 @@ func (cl *charmLoader) postArchive(r io.Reader, id *charm.Reference, size int64,
 	req.Header.Set("Content-Type", "application/zip")
 	req.ContentLength = size
 
-	var resp params.ArchivePostResponse
+	var resp params.ArchiveUploadResponse
 	err = cl.doCharmStoreRequest(req, &resp)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Is(params.ErrUnauthorized))
