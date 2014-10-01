@@ -326,6 +326,12 @@ func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL st
 	if err != nil {
 		return errgo.Notef(err, "cannot read bundle %q", urls[0])
 	}
+	// Publish each bundle at a different path. If there was only
+	// one bundle found, it's either a new style bundle or a legacy
+	// basket with only one bundle in. In either of those cases, we
+	// publish to the original URLs. When there's more than one
+	// bundle, we append the bundle name to the URLs prefixed with a
+	// hyphen.
 	for name, bundle := range bundles {
 		var finalURLs []*charm.Reference
 		if len(bundles) == 1 {
