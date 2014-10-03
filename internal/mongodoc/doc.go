@@ -1,7 +1,6 @@
 package mongodoc
 
 import (
-	"encoding/json"
 	"time"
 
 	"gopkg.in/juju/charm.v4"
@@ -73,9 +72,4 @@ type Entity struct {
 
 	// TODO Add fields denormalized for search purposes
 	// and search ranking field(s).
-}
-
-func (e Entity) String() string {
-	b, _ := json.MarshalIndent(e, "", "  ")
-	return string(b)
 }

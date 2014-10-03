@@ -425,6 +425,7 @@ func (ses StoreElasticSearch) Put(entity *mongodoc.Entity) error {
 func (store *Store) ExportToElasticSearch() error {
 	var result mongodoc.Entity
 	iter := store.DB.Entities().Find(nil).Iter()
+	defer iter.Close()
 	for iter.Next(&result) {
 		if err := store.ES.Put(&result); err != nil {
 			return errgo.Notef(err, "cannot index %s", result.URL)

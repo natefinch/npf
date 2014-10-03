@@ -46,13 +46,13 @@ const (
 	elasticSearchSigTermErrCode = 143
 )
 
-// ElasticSearchTestPackage starts an elasticsearch server or connects
-// to an existing one and then calls the given function with t as
-// its argument. Its behaviour is dependent on the value of the
-// JUJU_TEST_ELASTICSEARCH environment variable, which
-// can be "none" (do not start or connect to a server), empty
-// (start a new server) or host:port holding the address and
-// port of the server to connect to.
+// ElasticSearchTestPackage starts an elasticsearch server or
+// connect  to an existing one and then calls the given function
+// with t as its argument, or a gocheck.TestingT if t is nil. Its
+// behaviour is dependent on the value of the JUJU_TEST_ELASTICSEARCH
+// environment variable, which can be "none" (do not start
+// or connect to a server), empty (start a new server) or host:port
+// holding the address and port of the server to connect to.
 //
 // For example:
 //     JUJU_TEST_ELASTICSEARCH=localhost:9200 go test
@@ -165,10 +165,13 @@ func (es *ElasticSearchInstance) writeConfig(port int) (string, error) {
 		return "", err
 	}
 	defer file.Close()
-	conf := make(map[string]interface{})
-	conf["Dir"] = es.Dir
-	conf["HTTPPort"] = port
-	config.Execute(file, conf)
+	err = config.Execute(file, map[string]interface{}{
+		"Dir":      es.Dir,
+		"HTTPPort": port,
+	})
+	if err != nil {
+		return "", err
+	}
 	return file.Name(), nil
 }
 
