@@ -7,7 +7,7 @@ copyright = "Nate Finch"
 [Author]
 	name = "Nate Finch"
 
-[permalinks]
+[Permalinks]
 	blog = "/:year/:month/:filename/"
 	code = "/:filename/"
 

@@ -1,5 +1,5 @@
 +++
-date = "2014-09-29T06:31:49-04:00"
+date = "2014-10-01T06:31:49-04:00"
 title = "Deploy Discourse with Juju in 8 minutes"
 type = "post"
 tags = ["juju", "discourse"]
