@@ -83,21 +83,6 @@ func PublishCharmsDistro(p Params) error {
 	return cl.run()
 }
 
-func (cl *charmLoader) moveBundleTipsToEndOfList(tips []lpad.BranchTip) []lpad.BranchTip {
-	// TODO (urosj) improve/add control of memory usage
-	bundleTips := make([]lpad.BranchTip, 0, len(tips))
-	var bundleTipsLast []lpad.BranchTip
-	for _, tip := range tips {
-		if strings.HasSuffix(tip.UniqueName, "/bundle") {
-			bundleTipsLast = append(bundleTipsLast, tip)
-			continue
-		}
-		bundleTips = append(bundleTips, tip)
-	}
-	bundleTips = append(bundleTips, bundleTipsLast...)
-	return bundleTips
-}
-
 // run logs in anonymously to Launchpad using the Juju Consumer name,
 // gets all the branch tips in the charms Distro and publishes each
 // branch tip whose name ends in /trunk.
@@ -116,15 +101,34 @@ func (cl *charmLoader) run() error {
 	if err != nil {
 		return errgo.Notef(err, "cannot get branch tips")
 	}
-	tips = cl.moveBundleTipsToEndOfList(tips)
-	logger.Infof("starting ingestion with %d publisher(s)", cl.NumPublishers)
 
+	// Publish all charms before bundles so that bundles that
+	// rely on the charms can verify correctly when uploaded.
+	charms, bundles := splitBundleTips(tips)
+	for _, tip := range charms {
+		logger.Infof("charm %s", tip.UniqueName)
+	}
+	for _, tip := range bundles {
+		logger.Infof("bundle %s", tip.UniqueName)
+	}
+	if err := cl.publishTips(charms); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrUnauthorized))
+	}
+	logger.Infof("published all charms; now publishing bundles")
+	if err := cl.publishTips(bundles); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrUnauthorized))
+	}
+	return nil
+}
+
+func (cl *charmLoader) publishTips(tips []lpad.BranchTip) error {
 	// Start retrieving branches to be processed.
 	results := make(chan entityResult)
 	go func() {
 		defer close(results)
 		cl.processTips(tips, results)
 	}()
+	logger.Infof("starting ingestion with %d publisher(s)", cl.NumPublishers)
 
 	// Start goroutines to publish charm and bundles.
 	var wg sync.WaitGroup
@@ -150,6 +154,17 @@ func (cl *charmLoader) run() error {
 		logger.Errorf(err.Error())
 	}
 	return nil
+}
+
+func splitBundleTips(tips []lpad.BranchTip) (charms, bundles []lpad.BranchTip) {
+	lastBundle := len(tips)
+	for i := len(tips) - 1; i >= 0; i-- {
+		if strings.HasSuffix(tips[i].UniqueName, "/bundle") {
+			tips[i], tips[lastBundle-1] = tips[lastBundle-1], tips[i]
+			lastBundle--
+		}
+	}
+	return tips[0:lastBundle], tips[lastBundle:]
 }
 
 // entityResult is the result of processing a charm or bundle branch tip.
