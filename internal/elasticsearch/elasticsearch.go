@@ -25,8 +25,7 @@ import (
 )
 
 type Database struct {
-	server string
-	port   int
+	Addr string
 }
 
 // GetDocument retrieves the document with the given index, type_ and id and
@@ -84,6 +83,9 @@ func (db *Database) PutDocument(index, type_, id string, doc interface{}) error 
 		return errgo.Mask(err)
 	}
 	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return errgo.Mask(err)
+	}
 	defer response.Body.Close()
 	body, _ := ioutil.ReadAll(response.Body)
 	if (response.StatusCode != http.StatusCreated) && (response.StatusCode != http.StatusOK) {
@@ -98,7 +100,7 @@ func (db *Database) url(pathParts ...string) string {
 	path := path.Join(pathParts...)
 	url := &url.URL{
 		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%d", db.server, db.port),
+		Host:   db.Addr,
 		Path:   path,
 	}
 	return url.String()

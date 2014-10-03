@@ -27,7 +27,8 @@ development environment. To install them, run the following:
 
 To run the elasticsearch tests you can either make sure elasticsearch is in
 your path and works, or you can run an elasticsearch yourself. Export
-JUJU_TEST_ELASTICSEARCH=1234 where 1234 is the port of your elasticsearch server.
+`JUJU_TEST_ELASTICSEARCH=<host>:<port>` where host and port provide 
+the address of the elasticsearch server.
 
 At this point, from the root of this branch, run the command::
 
