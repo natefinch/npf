@@ -191,7 +191,7 @@ func (cl *charmLoader) processTips(tips []lpad.BranchTip, results chan<- entityR
 			logger.Errorf("skipping branch %v with no revisions", tip.UniqueName)
 			continue
 		}
-		logger.Debugf("#%d: found %v with revision %v", counter, tip.UniqueName, tip.Revision)
+		logger.Debugf("#%d: found %v with revision %v", cl.totalCount, tip.UniqueName, tip.Revision)
 		results <- entityResult{
 			tip:       tip,
 			branchURL: branchURL,
