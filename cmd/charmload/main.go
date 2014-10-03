@@ -30,6 +30,7 @@ var (
 	configPath    = flag.String("config", "", "path to charm store configuration file")
 	limit         = flag.Int("limit", 0, "limit the number of charms/bundles to process")
 	numPublishers = flag.Int("p", 10, "the number of publishers that can be run in parallel")
+	legacyCharms  = flag.Bool("legacy", false, "ingest charms from legacy charm store")
 )
 
 func main() {
@@ -63,6 +64,7 @@ func load() error {
 	if *staging {
 		params.LaunchpadServer = lpad.Staging
 	}
+	params.IngestLegacyCharms = *legacyCharms
 
 	// Validate the command line arguments.
 	if *limit < 0 {
