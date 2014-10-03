@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"sort"
 	"time"
@@ -26,13 +27,13 @@ import (
 )
 
 type StoreSuite struct {
-	storetesting.IsolatedMgoSuite
+	storetesting.IsolatedMgoESSuite
 }
 
 var _ = gc.Suite(&StoreSuite{})
 
 func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
-	store, err := NewStore(s.Session.DB("foo"))
+	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:precise/wordpress-23")
 
@@ -92,7 +93,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 }
 
 func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
-	store, err := NewStore(s.Session.DB("foo"))
+	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:bundle/wordpress-simple-42")
 
@@ -222,7 +223,7 @@ func (s *StoreSuite) testURLFinding(c *gc.C, check func(store *Store, expand *ch
 	wordpress := testing.Charms.CharmDir("wordpress")
 	for i, test := range urlFindingTests {
 		c.Logf("test %d: %q from %q", i, test.expand, test.inStore)
-		store, err := NewStore(s.Session.DB("foo"))
+		store, err := NewStore(s.Session.DB("foo"), nil)
 		c.Assert(err, gc.IsNil)
 		_, err = store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
@@ -332,7 +333,7 @@ var bundleUnitCountTests = []struct {
 }}
 
 func (s *StoreSuite) TestBundleUnitCount(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"))
+	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
 	entities := store.DB.Entities()
 	for i, test := range bundleUnitCountTests {
@@ -655,7 +656,7 @@ var bundleMachineCountTests = []struct {
 }}
 
 func (s *StoreSuite) TestBundleMachineCount(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"))
+	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
 	entities := store.DB.Entities()
 	for i, test := range bundleMachineCountTests {
@@ -725,7 +726,7 @@ func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
 func (s *StoreSuite) TestOpenBlob(c *gc.C) {
 	charmArchive := testing.Charms.CharmArchive(c.MkDir(), "wordpress")
 
-	store, err := NewStore(s.Session.DB("foo"))
+	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:precise/wordpress-23")
 
@@ -749,7 +750,7 @@ func (s *StoreSuite) TestOpenBlob(c *gc.C) {
 func (s *StoreSuite) TestBlobName(c *gc.C) {
 	charmArchive := testing.Charms.CharmArchive(c.MkDir(), "wordpress")
 
-	store, err := NewStore(s.Session.DB("foo"))
+	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:precise/wordpress-23")
 
@@ -770,7 +771,7 @@ func (s *StoreSuite) TestBlobName(c *gc.C) {
 }
 
 func (s *StoreSuite) TestCollections(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"))
+	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
 	colls := store.DB.Collections()
 	names, err := store.DB.CollectionNames()
@@ -868,3 +869,54 @@ var fakeBlobSize, fakeBlobHash = func() (int64, string) {
 	h.Write(b)
 	return int64(len(b)), fmt.Sprintf("%x", h.Sum(nil))
 }()
+
+var exportTestCharms = map[string]string{
+	"wordpress": "cs:precies/wordpress-23",
+	"mysql":     "cs:precise/mysql-42",
+}
+
+func (s *StoreSuite) TestSuccessfulExport(c *gc.C) {
+	// Make sure we don't overwrite someone else's charmstore index
+	indexes, err := s.ES.ListAllIndexes()
+	c.Assert(err, gc.IsNil)
+	for _, index := range indexes {
+		c.Assert(index, gc.Not(gc.Equals), "charmstore")
+	}
+	s.Remove = append(s.Remove, "charmstore")
+	store, err := NewStore(s.Session.DB("mongodoctoelasticsearch"), s.ES)
+	c.Assert(err, gc.IsNil)
+	s.addCharmsToStore(store)
+	err = store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+
+	for _, ref := range exportTestCharms {
+		var expected mongodoc.Entity
+		var actual mongodoc.Entity
+		err = store.DB.Entities().FindId(ref).One(&expected)
+		c.Assert(err, gc.IsNil)
+		err = s.ES.GetDocument("charmstore", "entity", url.QueryEscape(ref), &actual)
+		c.Assert(err, gc.IsNil)
+		// make sure everything agrees on the time zone
+		// TODO(mhilton) separate the functionality for comparing mongodoc.Entitys
+		// if that needs to be performed in other places
+		expected.UploadTime = expected.UploadTime.In(time.UTC)
+		actual.UploadTime = actual.UploadTime.In(time.UTC)
+		c.Assert(actual, jc.DeepEquals, expected)
+	}
+}
+
+func (s *StoreSuite) addCharmsToStore(store *Store) {
+	for name, ref := range exportTestCharms {
+		charmArchive := testing.Charms.CharmDir(name)
+		url := mustParseReference(ref)
+		store.AddCharmWithArchive(url, charmArchive)
+	}
+}
+
+func (s *StoreSuite) TestSESPutIsNoopWithNoESConfigured(c *gc.C) {
+	store, err := NewStore(s.Session.DB("mongodoctoelasticsearch"), nil)
+	c.Assert(err, gc.IsNil)
+	var entity mongodoc.Entity
+	err = store.ES.Put(&entity)
+	c.Assert(err, gc.IsNil)
+}

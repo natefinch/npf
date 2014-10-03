@@ -51,7 +51,7 @@ func (s *APISuite) SetUpTest(c *gc.C) {
 
 func newServer(c *gc.C, session *mgo.Session, config charmstore.ServerParams) (http.Handler, *charmstore.Store) {
 	db := session.DB("charmstore")
-	store, err := charmstore.NewStore(db)
+	store, err := charmstore.NewStore(db, nil)
 	c.Assert(err, gc.IsNil)
 	srv, err := charmstore.NewServer(db, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v4.NewAPIHandler})
 	c.Assert(err, gc.IsNil)

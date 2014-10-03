@@ -1,6 +1,7 @@
 package mongodoc
 
 import (
+	"encoding/json"
 	"time"
 
 	"gopkg.in/juju/charm.v4"
@@ -38,7 +39,7 @@ type Entity struct {
 
 	// ExtraInfo holds arbitrary extra metadata associated with
 	// the entity. The byte slices hold JSON-encoded data.
-	ExtraInfo map[string][]byte `bson:",omitempty"`
+	ExtraInfo map[string][]byte `bson:",omitempty" json:",omitempty"`
 
 	// TODO(rog) verify that all these types marshal to the expected
 	// JSON form.
@@ -72,4 +73,9 @@ type Entity struct {
 
 	// TODO Add fields denormalized for search purposes
 	// and search ranking field(s).
+}
+
+func (e Entity) String() string {
+	b, _ := json.MarshalIndent(e, "", "  ")
+	return string(b)
 }

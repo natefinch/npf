@@ -3,7 +3,7 @@
 
 // This file is a simplified copy of github.com/juju/testing/mgo.go
 
-package elasticsearch
+package storetesting
 
 import (
 	"bufio"
@@ -14,12 +14,12 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"strconv"
 	"strings"
 	"syscall"
 	"testing"
 	"text/template"
 
+	"github.com/juju/charmstore/internal/elasticsearch"
 	"github.com/juju/errgo"
 	"github.com/juju/loggo"
 	jujutesting "github.com/juju/testing"
@@ -28,10 +28,10 @@ import (
 )
 
 type ElasticSearchInstance struct {
-	Dir      string
-	HTTPPort int
-	Server   *exec.Cmd
-	exited   <-chan struct{}
+	Dir    string
+	Addr   string
+	Server *exec.Cmd
+	exited <-chan struct{}
 }
 
 var (
@@ -46,29 +46,34 @@ const (
 	elasticSearchSigTermErrCode = 143
 )
 
-// Tests can be run using already running elasticsearch:
-// $ JUJU_TEST_ELASTICSEARCH=1234 go test -v ./internal/elasticsearch -gocheck.v
-// Tests can be disabled:
-// JUJU_TEST_ELASTICSEARCH=none go test -v ./internal/elasticsearch -gocheck.v
-// Tests can start an elasticsearch instance themselves (this take 6 seconds):
-// JUJU_TEST_ELASTICSEARCH= go test -v ./internal/elasticsearch -gocheck.v
-func ElasticSearchTestPackage(t *testing.T) {
-	if os.Getenv("JUJU_TEST_ELASTICSEARCH") == "none" {
+// ElasticSearchTestPackage starts an elasticsearch server or connects
+// to an existing one and then calls the given function with t as
+// its argument. Its behaviour is dependent on the value of the
+// JUJU_TEST_ELASTICSEARCH environment variable, which
+// can be "none" (do not start or connect to a server), empty
+// (start a new server) or host:port holding the address and
+// port of the server to connect to.
+//
+// For example:
+//     JUJU_TEST_ELASTICSEARCH=localhost:9200 go test
+func ElasticSearchTestPackage(t *testing.T, cb func(t *testing.T)) {
+	esAddr := os.Getenv("JUJU_TEST_ELASTICSEARCH")
+	switch esAddr {
+	case "none":
 		return
-	}
-	if os.Getenv("JUJU_TEST_ELASTICSEARCH") == "" {
+	case "":
 		if err := elasticSearchServer.Start(); err != nil {
 			t.Fatal(err)
 		}
 		defer elasticSearchServer.Destroy()
-	} else {
-		var err error
-		elasticSearchServer.HTTPPort, err = strconv.Atoi(os.Getenv("JUJU_TEST_ELASTICSEARCH"))
-		if err != nil {
-			panic("invalid JUJU_TEST_ELASTICSEARCH value. expect an valid tcp port or none")
-		}
+	default:
+		elasticSearchServer.Addr = esAddr
 	}
-	gc.TestingT(t)
+	if cb != nil {
+		cb(t)
+	} else {
+		gc.TestingT(t)
+	}
 }
 
 func (es *ElasticSearchInstance) kill(sig syscall.Signal) {
@@ -85,11 +90,11 @@ network.host: 127.0.0.1
 http.port: {{.HTTPPort}}
 `))
 
-func (es *ElasticSearchInstance) run() error {
+func (es *ElasticSearchInstance) run(port int) error {
 	if es.Server != nil {
 		panic("elasticsearch is already running")
 	}
-	configFile, err := es.writeConfig()
+	configFile, err := es.writeConfig(port)
 	if err != nil {
 		return err
 	}
@@ -109,11 +114,11 @@ func (es *ElasticSearchInstance) run() error {
 			return
 		}
 		var buf bytes.Buffer
-		prefix := fmt.Sprintf("inet[/127.0.0.1:%v", es.HTTPPort)
+		prefix := fmt.Sprintf("inet[/127.0.0.1:%v", port)
 		if readUntilMatching(prefix, io.TeeReader(out, &buf), regexp.MustCompile("node.*started")) {
 			listening <- nil
 		} else {
-			err := errgo.Newf("elasticsearch failed to listen on port %v using config %v", es.HTTPPort, configFile)
+			err := errgo.Newf("elasticsearch failed to listen on port %v using config %v", port, configFile)
 			if strings.Contains(buf.String(), "Address already in use") {
 				err = addrAlreadyInUseError{err}
 			}
@@ -151,7 +156,7 @@ func (es *ElasticSearchInstance) run() error {
 	return nil
 }
 
-func (es *ElasticSearchInstance) writeConfig() (string, error) {
+func (es *ElasticSearchInstance) writeConfig(port int) (string, error) {
 	if es.Dir == "" {
 		return "", errgo.New("directory not set")
 	}
@@ -160,14 +165,17 @@ func (es *ElasticSearchInstance) writeConfig() (string, error) {
 		return "", err
 	}
 	defer file.Close()
-	config.Execute(file, es)
+	conf := make(map[string]interface{})
+	conf["Dir"] = es.Dir
+	conf["HTTPPort"] = port
+	config.Execute(file, conf)
 	return file.Name(), nil
 }
 
 func (es *ElasticSearchInstance) Destroy() {
 	if es.Server != nil {
 		term := syscall.SIGTERM
-		logger.Debugf("killing elasticsearch pid %d in %s on port %d with %s", es.Server.Process.Pid, es.Dir, es.HTTPPort, term)
+		logger.Debugf("killing elasticsearch pid %d in %s listening on  %s with %s", es.Server.Process.Pid, es.Addr, es.Dir, term)
 		es.kill(term)
 		os.RemoveAll(es.Dir)
 		es.Dir = ""
@@ -183,16 +191,17 @@ func (es *ElasticSearchInstance) Start() error {
 	es.Dir = dir
 	logger.Debugf("starting elasticsearch in ", es.Dir)
 	for i := 0; i < maxStartAttempts; i++ {
-		es.HTTPPort = jujutesting.FindTCPPort()
-		err = es.run()
+		port := jujutesting.FindTCPPort()
+		err = es.run(port)
 		switch err.(type) {
 		case addrAlreadyInUseError:
 			logger.Debugf("failed to start elasticssearch: %v, trying another port", err)
 			continue
 		case nil:
-			logger.Debugf("started elasticsearch pid %d in %s on port %d", es.Server.Process.Pid, es.Dir, es.HTTPPort)
+			logger.Debugf("started elasticsearch pid %d in %s on port %d", es.Server.Process.Pid, es.Dir, port)
+			es.Addr = fmt.Sprintf("127.0.0.1:%d", port)
 		default:
-			es.HTTPPort = 0
+			es.Addr = ""
 			os.RemoveAll(es.Dir)
 			es.Dir = ""
 			logger.Warningf("failed to start elasticsearch %v", err)
@@ -202,37 +211,27 @@ func (es *ElasticSearchInstance) Start() error {
 	return err
 }
 
-func (es *ElasticSearchInstance) dropAll(db *Database) error {
-	//for index in curl 'localhost:9200/_cat/indices?v'
-	// delete index
-	names, err := db.ListAllIndexes()
-	if err != nil {
-		return err
-	}
-	for _, name := range names {
-		db.DeleteIndex(name)
-	}
-	return nil
-}
-
 type ElasticSearchSuite struct {
 	*ElasticSearchInstance
-	db *Database
+	ES     *elasticsearch.Database
+	Remove []string
 }
 
 func (s *ElasticSearchSuite) SetUpSuite(c *gc.C) {
 	s.ElasticSearchInstance = elasticSearchServer
-	s.db = &Database{"127.0.0.1", elasticSearchServer.HTTPPort}
+	s.ES = &elasticsearch.Database{fmt.Sprintf(elasticSearchServer.Addr)}
 }
 
 func (s *ElasticSearchSuite) TearDownSuite(c *gc.C) {
 }
 
 func (s *ElasticSearchSuite) SetUpTest(c *gc.C) {
-	s.dropAll(s.db)
 }
 
 func (s *ElasticSearchSuite) TearDownTest(c *gc.C) {
+	for _, index := range s.Remove {
+		s.ES.DeleteIndex(index)
+	}
 }
 
 func readLastLines(prefix string, r io.Reader, n int) []string {

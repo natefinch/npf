@@ -21,6 +21,7 @@ type Config struct {
 	APIAddr      string `yaml:"api-addr"`
 	AuthUsername string `yaml:"auth-username"`
 	AuthPassword string `yaml:"auth-password"`
+	ESAddr       string `yaml:"elasticsearch-addr"` // elasticsearch is optional
 }
 
 func (c *Config) validate() error {

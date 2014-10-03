@@ -33,7 +33,7 @@ func NewServer(db *mgo.Database, config ServerParams, versions map[string]NewAPI
 	if len(versions) == 0 {
 		return nil, errgo.Newf("charm store server must serve at least one version of the API")
 	}
-	store, err := NewStore(db)
+	store, err := NewStore(db, nil)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot make store")
 	}

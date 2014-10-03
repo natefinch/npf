@@ -6,6 +6,7 @@ package charmstore
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/blobstore"
+	"github.com/juju/charmstore/internal/elasticsearch"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/params"
 )
@@ -23,6 +25,7 @@ import (
 type Store struct {
 	DB        StoreDatabase
 	BlobStore *blobstore.Store
+	ES        StoreElasticSearch
 
 	// Cache for statistics key words (two generations).
 	cacheMu       sync.RWMutex
@@ -33,10 +36,11 @@ type Store struct {
 }
 
 // NewStore returns a Store that uses the given database.
-func NewStore(db *mgo.Database) (*Store, error) {
+func NewStore(db *mgo.Database, es *elasticsearch.Database) (*Store, error) {
 	s := &Store{
 		DB:        StoreDatabase{db},
 		BlobStore: blobstore.New(db, "entitystore"),
+		ES:        StoreElasticSearch{es},
 	}
 	if err := s.ensureIndexes(); err != nil {
 		return nil, errgo.Notef(err, "cannot ensure indexes")
@@ -397,4 +401,37 @@ func (s StoreDatabase) Collections() []*mgo.Collection {
 		cs[i] = f(s)
 	}
 	return cs
+}
+
+// StoreElasticSearch provides strongly typed methods for accessing the
+// elasticsearch database. These methods will not return errors if
+// elasticsearch is not configured, allowing them to be safely called even if
+// it is not enabled in this service.
+type StoreElasticSearch struct {
+	*elasticsearch.Database
+}
+
+// Put inserts the mongodoc.Entity into elasticsearch if elasticsearch
+// is configured.
+func (ses StoreElasticSearch) Put(entity *mongodoc.Entity) error {
+	if ses.Database == nil {
+		return nil
+	}
+	return ses.PutDocument("charmstore", "entity", url.QueryEscape(entity.URL.String()), entity)
+}
+
+// ExportToElasticSearch reads all of the mongodoc Entities and writes
+// them to elasticsearch
+func (store *Store) ExportToElasticSearch() error {
+	var result mongodoc.Entity
+	iter := store.DB.Entities().Find(nil).Iter()
+	for iter.Next(&result) {
+		if err := store.ES.Put(&result); err != nil {
+			return errgo.Notef(err, "cannot index %s", result.URL)
+		}
+	}
+	if err := iter.Close(); err != nil {
+		return err
+	}
+	return nil
 }
