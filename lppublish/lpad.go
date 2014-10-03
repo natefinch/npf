@@ -105,12 +105,6 @@ func (cl *charmLoader) run() error {
 	// Publish all charms before bundles so that bundles that
 	// rely on the charms can verify correctly when uploaded.
 	charms, bundles := splitBundleTips(tips)
-	for _, tip := range charms {
-		logger.Infof("charm %s", tip.UniqueName)
-	}
-	for _, tip := range bundles {
-		logger.Infof("bundle %s", tip.UniqueName)
-	}
 	if err := cl.publishTips(charms); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrUnauthorized))
 	}
