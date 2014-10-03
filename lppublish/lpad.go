@@ -71,6 +71,10 @@ type Params struct {
 	// NumPublishers holds the number of publishers that
 	// can be run in parallel.
 	NumPublishers int
+
+	// totalCount holds the number of charms or bundles
+	// processed so far.
+	totalCount int
 }
 
 type charmLoader Params
@@ -173,7 +177,6 @@ type entityResult struct {
 // It proceeds until all the tips have been processed or the user defined
 // limit is reached.
 func (cl *charmLoader) processTips(tips []lpad.BranchTip, results chan<- entityResult) {
-	counter := 0
 	for _, tip := range tips {
 		if !strings.HasSuffix(tip.UniqueName, "/trunk") && !strings.HasSuffix(tip.UniqueName, "/bundle") {
 			continue
@@ -188,15 +191,14 @@ func (cl *charmLoader) processTips(tips []lpad.BranchTip, results chan<- entityR
 			logger.Errorf("skipping branch %v with no revisions", tip.UniqueName)
 			continue
 		}
-		counter++
-		logger.Infof("#%d: found %v with revision %v", counter, tip.UniqueName, tip.Revision)
+		logger.Debugf("#%d: found %v with revision %v", counter, tip.UniqueName, tip.Revision)
 		results <- entityResult{
 			tip:       tip,
 			branchURL: branchURL,
 			charmURL:  charmURL,
 		}
 		// If cl.Limit is 0, the check below never succeeds.
-		if counter == cl.Limit {
+		if cl.totalCount++; cl.totalCount == cl.Limit {
 			break
 		}
 	}
