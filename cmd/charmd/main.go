@@ -4,6 +4,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -14,26 +15,26 @@ import (
 	"github.com/juju/charmstore"
 	"github.com/juju/charmstore/config"
 	"github.com/juju/charmstore/internal/debug"
+	"github.com/juju/charmstore/internal/elasticsearch"
 )
 
 func main() {
-	err := serve()
-	if err != nil {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "usage: %s <config path>\n", filepath.Base(os.Args[0]))
+		flag.PrintDefaults()
+		os.Exit(2)
+	}
+	flag.Parse()
+	if flag.NArg() != 1 {
+		flag.Usage()
+	}
+	if err := serve(flag.Arg(0)); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 }
 
-func serve() error {
-	var confPath string
-	if len(os.Args) == 2 {
-		if _, err := os.Stat(os.Args[1]); err == nil {
-			confPath = os.Args[1]
-		}
-	}
-	if confPath == "" {
-		return fmt.Errorf("usage: %s <config path>", filepath.Base(os.Args[0]))
-	}
+func serve(confPath string) error {
 	conf, err := config.Read(confPath)
 	if err != nil {
 		return err
@@ -44,11 +45,15 @@ func serve() error {
 	}
 	defer session.Close()
 	db := session.DB("juju")
+	var es *elasticsearch.Database
+	if conf.ESAddr != "" {
+		es = &elasticsearch.Database{conf.ESAddr}
+	}
 	cfg := charmstore.ServerParams{
 		AuthUsername: conf.AuthUsername,
 		AuthPassword: conf.AuthPassword,
 	}
-	server, err := charmstore.NewServer(db, cfg, charmstore.Legacy, charmstore.V4)
+	server, err := charmstore.NewServer(db, es, cfg, charmstore.Legacy, charmstore.V4)
 	if err != nil {
 		return err
 	}

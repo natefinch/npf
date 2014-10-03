@@ -11,6 +11,7 @@ import (
 	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/internal/charmstore"
+	"github.com/juju/charmstore/internal/elasticsearch"
 	"github.com/juju/charmstore/internal/legacy"
 	"github.com/juju/charmstore/internal/v4"
 )
@@ -45,7 +46,7 @@ type ServerParams struct {
 // NewServer returns a new handler that handles charm store requests and stores
 // its data in the given database. The handler will serve the specified
 // versions of the API using the given configuration.
-func NewServer(db *mgo.Database, config ServerParams, serveVersions ...string) (http.Handler, error) {
+func NewServer(db *mgo.Database, es *elasticsearch.Database, config ServerParams, serveVersions ...string) (http.Handler, error) {
 	newAPIs := make(map[string]charmstore.NewAPIHandlerFunc)
 	for _, vers := range serveVersions {
 		newAPI := versions[vers]
@@ -54,5 +55,5 @@ func NewServer(db *mgo.Database, config ServerParams, serveVersions ...string) (
 		}
 		newAPIs[vers] = newAPI
 	}
-	return charmstore.NewServer(db, charmstore.ServerParams(config), newAPIs)
+	return charmstore.NewServer(db, es, charmstore.ServerParams(config), newAPIs)
 }

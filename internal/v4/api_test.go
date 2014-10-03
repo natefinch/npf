@@ -53,7 +53,7 @@ func newServer(c *gc.C, session *mgo.Session, config charmstore.ServerParams) (h
 	db := session.DB("charmstore")
 	store, err := charmstore.NewStore(db, nil)
 	c.Assert(err, gc.IsNil)
-	srv, err := charmstore.NewServer(db, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v4.NewAPIHandler})
+	srv, err := charmstore.NewServer(db, nil, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v4.NewAPIHandler})
 	c.Assert(err, gc.IsNil)
 	return srv, store
 }
