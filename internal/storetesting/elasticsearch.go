@@ -23,7 +23,6 @@ import (
 	"github.com/juju/errgo"
 	"github.com/juju/loggo"
 	jujutesting "github.com/juju/testing"
-
 	gc "gopkg.in/check.v1"
 )
 

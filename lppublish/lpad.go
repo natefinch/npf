@@ -55,7 +55,8 @@ type Params struct {
 	// as lpad.Production or lpad.Staging.
 	LaunchpadServer lpad.APIBase
 
-	// StoreURL holds the base charm store API URL.
+	// StoreURL holds the base charm store API URL, including
+	// the API version and a trailing /.
 	StoreURL string
 
 	// StoreUser holds the user to authenticate as.
@@ -71,6 +72,10 @@ type Params struct {
 	// NumPublishers holds the number of publishers that
 	// can be run in parallel.
 	NumPublishers int
+
+	// IngestLegacyCharms specifies whether charms
+	// are pulled from the legacy charm store.
+	IngestLegacyCharms bool
 
 	// totalCount holds the number of charms or bundles
 	// processed so far.
@@ -96,7 +101,6 @@ func (cl *charmLoader) run() error {
 	if err != nil {
 		return errgo.Notef(err, "cannot log in to launchpad")
 	}
-
 	charmsDistro, err := root.Distro("charms")
 	if err != nil {
 		return errgo.Notef(err, "cannot get charms distro")
@@ -104,6 +108,13 @@ func (cl *charmLoader) run() error {
 	tips, err := charmsDistro.BranchTips(time.Time{})
 	if err != nil {
 		return errgo.Notef(err, "cannot get branch tips")
+	}
+	if cl.IngestLegacyCharms {
+		charm.CacheDir, err = ioutil.TempDir("", "charm-cache-")
+		if err != nil {
+			return errgo.Notef(err, "cannot make cache dir")
+		}
+		defer os.RemoveAll(charm.CacheDir)
 	}
 
 	// Publish all charms before bundles so that bundles that
@@ -181,7 +192,7 @@ func (cl *charmLoader) processTips(tips []lpad.BranchTip, results chan<- entityR
 		if !strings.HasSuffix(tip.UniqueName, "/trunk") && !strings.HasSuffix(tip.UniqueName, "/bundle") {
 			continue
 		}
-		logger.Tracef("getting uniqueNameURLs for %v", tip.UniqueName)
+		logger.Debugf("getting uniqueNameURLs for %v", tip.UniqueName)
 		branchURL, charmURL, err := uniqueNameURLs(tip.UniqueName)
 		if err != nil {
 			logger.Warningf("could not get uniqueNameURLs for %v: %v", tip.UniqueName, err)
@@ -213,7 +224,18 @@ func (cl *charmLoader) publisher(results <-chan entityResult, errs chan<- error)
 		logger.Debugf("start publishing URLs for %s", result.charmURL)
 		urls := []*charm.Reference{result.charmURL}
 		urls = append(urls, promulgatedURLs(result.charmURL, result.tip.OfficialSeries)...)
-		err := cl.publishBazaarBranch(urls, result.branchURL, result.tip.Revision)
+		// Exclude any entities that are already present in the charm store.
+		urls = cl.excludeExistingEntities(urls, result.tip.Revision)
+		if len(urls) == 0 {
+			logger.Infof("nothing to do for %s", result.branchURL)
+			continue
+		}
+		var err error
+		if cl.IngestLegacyCharms {
+			err = cl.publishLegacyCharm(urls)
+		} else {
+			err = cl.publishBazaarBranch(urls, result.branchURL, result.tip.Revision)
+		}
 		if err != nil {
 			failsLogger.Errorf("cannot publish branch %v to charm store: %v", result.branchURL, err)
 			errs <- errgo.NoteMask(err, "cannot publish branch "+result.branchURL, errgo.Is(params.ErrUnauthorized))
@@ -291,13 +313,6 @@ func notSupportedBranchName(u []string) bool {
 const bzrDigestKey = "bzr-digest"
 
 func (cl *charmLoader) publishBazaarBranch(urls []*charm.Reference, branchURL string, digest string) error {
-	// Check whether the entity is already present in the charm store.
-	urls = cl.excludeExistingEntities(urls, digest)
-	if len(urls) == 0 {
-		logger.Debugf("nothing to do for %s", branchURL)
-		return nil
-	}
-
 	// Retrieve the branch with a lightweight checkout, so that it
 	// builds a working tree as cheaply as possible. History
 	// doesn't matter here.
@@ -439,19 +454,24 @@ func (cl *charmLoader) publish(urls []*charm.Reference, archiveDir archiverTo, t
 		if _, err := tempFile.Seek(0, 0); err != nil {
 			return errgo.Notef(err, "cannot seek")
 		}
-		finalId, err := cl.postArchive(tempFile, id, archiveSize, hash)
+		finalId, err := cl.uploadArchive("POST", tempFile, id, archiveSize, hash)
 		if err != nil {
 			return errgo.NoteMask(err, "cannot post archive", errgo.Is(params.ErrUnauthorized))
 		}
-		logger.Infof("posted %s", finalId)
-
-		// Set the Bazaar digest as extra-info for the entity.
-		path := finalId.Path() + "/meta/extra-info/" + BzrDigestKey
-		if err := cl.charmStorePut(path, tipDigest); err != nil {
-			return errgo.Notef(err, "cannot add digest extra info")
+		if err := cl.putDigest(finalId, tipDigest); err != nil {
+			return errgo.Mask(err)
 		}
-		logger.Infof("bzr digest for %s set to %s", finalId, tipDigest)
 	}
+	return nil
+}
+
+func (cl *charmLoader) putDigest(id *charm.Reference, digest string) error {
+	// Set the Bazaar digest as extra-info for the entity.
+	path := id.Path() + "/meta/extra-info/" + BzrDigestKey
+	if err := cl.charmStorePut(path, digest); err != nil {
+		return errgo.Notef(err, "cannot add digest extra info")
+	}
+	logger.Debugf("bzr digest for %s set to %s", id, digest)
 	return nil
 }
 
@@ -489,7 +509,6 @@ func (cl *charmLoader) archiveDir(archiver archiverTo, tempDir string) (archiveF
 	if err != nil {
 		return nil, "", 0, errgo.Notef(err, "cannot create temp file")
 	}
-	logger.Debugf("writing charm to temporary file %s", f.Name())
 	if err != nil {
 		return nil, "", 0, errgo.Notef(err, "cannot make temp file")
 	}
@@ -511,15 +530,14 @@ func (cl *charmLoader) archiveDir(archiver archiverTo, tempDir string) (archiveF
 	return f, hash, fileInfo.Size(), nil
 }
 
-func (cl *charmLoader) postArchive(r io.Reader, id *charm.Reference, size int64, hash string) (*charm.Reference, error) {
+func (cl *charmLoader) uploadArchive(method string, r io.Reader, id *charm.Reference, size int64, hash string) (*charm.Reference, error) {
 	url := cl.StoreURL + id.Path() + "/archive?hash=" + hash
-	logger.Infof("sending POST request to %v", url)
 	// Note that http.Request.Do closes the body if implements
 	// io.Closer. This is unwarranted familiarity and we don't want
 	// it, so wrap the reader to prevent it happening.
-	req, err := http.NewRequest("POST", url, ioutil.NopCloser(r))
+	req, err := http.NewRequest(method, url, ioutil.NopCloser(r))
 	if err != nil {
-		return nil, errgo.Notef(err, "cannot make HTTP POST request")
+		return nil, errgo.Notef(err, "cannot make HTTP %s request", method)
 	}
 	req.Header.Set("Content-Type", "application/zip")
 	req.ContentLength = size
@@ -529,15 +547,16 @@ func (cl *charmLoader) postArchive(r io.Reader, id *charm.Reference, size int64,
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Is(params.ErrUnauthorized))
 	}
+	logger.Infof("uploaded %s", resp.Id)
 	return resp.Id, nil
 }
 
-// charmStorePut makes a GET request to the given URL path in
+// charmStoreGet makes a GET request to the given URL path in
 // the charm store and parses the result as JSON into the given
 // resp value, which should be a pointer to the expected data.
 func (cl *charmLoader) charmStoreGet(path string, resp interface{}) error {
 	url := cl.StoreURL + path
-	logger.Infof("sending GET request to %v", url)
+	logger.Debugf("get %v", url)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return errgo.Notef(err, "cannot make HTTP GET request")
@@ -558,7 +577,6 @@ func (cl *charmLoader) charmStorePut(path string, body interface{}) error {
 	}
 
 	url := cl.StoreURL + path
-	logger.Infof("sending PUT request to %v", url)
 	req, err := http.NewRequest("PUT", url, bytes.NewReader(content))
 	if err != nil {
 		return errgo.Notef(err, "cannot make HTTP PUT request")
@@ -568,6 +586,7 @@ func (cl *charmLoader) charmStorePut(path string, body interface{}) error {
 	if err := cl.doCharmStoreRequest(req, nil); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrUnauthorized))
 	}
+	logger.Debugf("put %s %#v", url, body)
 	return nil
 }
 
