@@ -876,14 +876,11 @@ var exportTestCharms = map[string]string{
 }
 
 func (s *StoreSuite) TestSuccessfulExport(c *gc.C) {
-	// Make sure we don't overwrite someone else's charmstore index
-	indexes, err := s.ES.ListAllIndexes()
-	c.Assert(err, gc.IsNil)
-	for _, index := range indexes {
-		c.Assert(index, gc.Not(gc.Equals), "charmstore")
-	}
-	s.Remove = append(s.Remove, "charmstore")
-	store, err := NewStore(s.Session.DB("mongodoctoelasticsearch"), s.ES)
+	index := s.NewIndex(c)
+	store, err := NewStore(s.Session.DB("foo"), &StoreElasticSearch{
+		Database: s.ES,
+		Index:    index,
+	})
 	c.Assert(err, gc.IsNil)
 	s.addCharmsToStore(store)
 	err = store.ExportToElasticSearch()
@@ -894,7 +891,7 @@ func (s *StoreSuite) TestSuccessfulExport(c *gc.C) {
 		var actual mongodoc.Entity
 		err = store.DB.Entities().FindId(ref).One(&expected)
 		c.Assert(err, gc.IsNil)
-		err = s.ES.GetDocument("charmstore", "entity", url.QueryEscape(ref), &actual)
+		err = s.ES.GetDocument(index, "entity", url.QueryEscape(ref), &actual)
 		c.Assert(err, gc.IsNil)
 		// make sure everything agrees on the time zone
 		// TODO(mhilton) separate the functionality for comparing mongodoc.Entitys

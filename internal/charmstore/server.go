@@ -34,7 +34,7 @@ func NewServer(db *mgo.Database, es *elasticsearch.Database, config ServerParams
 	if len(versions) == 0 {
 		return nil, errgo.Newf("charm store server must serve at least one version of the API")
 	}
-	store, err := NewStore(db, es)
+	store, err := NewStore(db, &StoreElasticSearch{es, "charmstore"})
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot make store")
 	}
