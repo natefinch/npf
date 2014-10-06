@@ -32,6 +32,7 @@ func (s *Suite) TearDownSuite(c *gc.C) {
 func (s *Suite) SetUpTest(c *gc.C) {
 	s.IsolationSuite.SetUpTest(c)
 	s.ElasticSearchSuite.SetUpTest(c)
+	s.NewIndex(c)
 }
 func (s *Suite) TearDownTest(c *gc.C) {
 	s.ElasticSearchSuite.TearDownTest(c)
@@ -56,11 +57,19 @@ func (s *Suite) TestSuccessfulPutNewDocument(c *gc.C) {
 	doc := map[string]string{
 		"a": "b",
 	}
-	err := s.ES.PutDocument(s.Indexes[0], "testtype", "a", doc)
+	// Show that no document with this id exists.
+	exists, err := s.ES.EnsureID(s.Indexes[0], "testtype", "a")
+	c.Assert(err, gc.IsNil)
+	c.Assert(exists, gc.Equals, false)
+	err = s.ES.PutDocument(s.Indexes[0], "testtype", "a", doc)
 	c.Assert(err, gc.IsNil)
 	var result map[string]string
 	err = s.ES.GetDocument(s.Indexes[0], "testtype", "a", &result)
 	c.Assert(result["a"], gc.Equals, "b")
+	exists, err = s.ES.EnsureID(s.Indexes[0], "testtype", "a")
+	c.Assert(err, gc.IsNil)
+	c.Assert(exists, gc.Equals, true)
+
 }
 
 func (s *Suite) TestSuccessfulPutUpdatedDocument(c *gc.C) {

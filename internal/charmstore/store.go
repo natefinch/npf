@@ -128,7 +128,7 @@ func (s *Store) uploadCharmOrBundle(c interface{}) (blobName, blobHash string, s
 // associated with the given URL.
 func (s *Store) AddCharm(url *charm.Reference, c charm.Charm, blobName, blobHash string, blobSize int64) error {
 	// Add charm metadata to the entities collection.
-	err := s.DB.Entities().Insert(&mongodoc.Entity{
+	entity := &mongodoc.Entity{
 		URL:                     url,
 		BaseURL:                 baseURL(url),
 		BlobHash:                blobHash,
@@ -140,11 +140,20 @@ func (s *Store) AddCharm(url *charm.Reference, c charm.Charm, blobName, blobHash
 		CharmActions:            c.Actions(),
 		CharmProvidedInterfaces: interfacesForRelations(c.Meta().Provides),
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
-	})
+	}
+	err := s.DB.Entities().Insert(entity)
 	if mgo.IsDup(err) {
 		return params.ErrDuplicateUpload
 	}
-	return errgo.Mask(err)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+
+	// Add to ElasticSearch.
+	if err := s.ES.Put(entity); err != nil {
+		return errgo.Notef(err, "cannot index %s to ElasticSearch", entity.URL)
+	}
+	return nil
 }
 
 // FindEntities finds all entities in the store matching the given URL.
@@ -239,7 +248,7 @@ func (s *Store) AddBundle(url *charm.Reference, b charm.Bundle, blobName, blobHa
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	err = s.DB.Entities().Insert(&mongodoc.Entity{
+	entity := &mongodoc.Entity{
 		URL:                url,
 		BaseURL:            baseURL(url),
 		BlobHash:           blobHash,
@@ -251,11 +260,19 @@ func (s *Store) AddBundle(url *charm.Reference, b charm.Bundle, blobName, blobHa
 		BundleMachineCount: newInt(bundleMachineCount(bundleData)),
 		BundleReadMe:       b.ReadMe(),
 		BundleCharms:       urls,
-	})
+	}
+	err = s.DB.Entities().Insert(entity)
 	if mgo.IsDup(err) {
 		return params.ErrDuplicateUpload
 	}
-	return errgo.Mask(err)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	// Add to ElasticSearch.
+	if err := s.ES.Put(entity); err != nil {
+		return errgo.Notef(err, "cannot index %s to ElasticSearch", entity.URL)
+	}
+	return nil
 }
 
 // OpenBlob opens a blob given its entity id; it returns the blob's
@@ -415,10 +432,15 @@ type StoreElasticSearch struct {
 // Put inserts the mongodoc.Entity into elasticsearch if elasticsearch
 // is configured.
 func (ses *StoreElasticSearch) Put(entity *mongodoc.Entity) error {
-	if ses == nil {
+	if ses == nil || ses.Database == nil {
 		return nil
 	}
-	return ses.PutDocument(ses.Index, "entity", url.QueryEscape(entity.URL.String()), entity)
+	return ses.PutDocument(ses.Index, "entity", ses.getID(entity), entity)
+}
+
+// getID returns the id to be used for indexing the entity into ElasticSearch.
+func (ses *StoreElasticSearch) getID(entity *mongodoc.Entity) string {
+	return url.QueryEscape(entity.URL.String())
 }
 
 // ExportToElasticSearch reads all of the mongodoc Entities and writes

@@ -28,6 +28,19 @@ type Database struct {
 	Addr string
 }
 
+// EnsureID tests to see a document of the given index, type_, and id exists
+// in ElasticSearch.
+func (db *Database) EnsureID(index, type_, id string) (bool, error) {
+	// TODO (bac) We should limit the fields to the id to avoid retrieving
+	// data we don't use.
+	response, err := http.Get(db.url(index, type_, id, "_source"))
+	if err != nil {
+		return false, errgo.Mask(err)
+	}
+	defer response.Body.Close()
+	return response.StatusCode == http.StatusOK, nil
+}
+
 // GetDocument retrieves the document with the given index, type_ and id and
 // unmarshals the json response into doc.
 func (db *Database) GetDocument(index, type_, id string, doc interface{}) error {
@@ -36,9 +49,13 @@ func (db *Database) GetDocument(index, type_, id string, doc interface{}) error 
 		return errgo.Mask(err)
 	}
 	defer response.Body.Close()
-	dec := json.NewDecoder(response.Body)
-	if err := dec.Decode(doc); err != nil {
-		return errgo.Notef(err, "cannot unmarshal body")
+	body, _ := ioutil.ReadAll(response.Body)
+	if response.StatusCode != http.StatusOK {
+		return errgo.Newf("ElasticSearch GET response status: %d %s, body: %s", response.StatusCode, response.Status, body)
+	}
+	err = json.Unmarshal(body, doc)
+	if err != nil {
+		return errgo.Notef(err, "cannot unmarshal body: %s", body)
 	}
 	return nil
 }
