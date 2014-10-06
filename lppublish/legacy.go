@@ -138,7 +138,7 @@ func legacyCharmStoreGet(url *charm.Reference) (*charm.CharmArchive, error) {
 		// We added the series earlier.
 		panic(fmt.Errorf("cannot happen: %v", err))
 	}
-	ch, err := charm.Store.Get(url1)
+	ch, err := charm.Store.WithTestMode(true).Get(url1)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
