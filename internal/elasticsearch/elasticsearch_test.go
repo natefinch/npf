@@ -44,12 +44,11 @@ func (s *Suite) TestSuccessfulPostDocument(c *gc.C) {
 	doc := map[string]string{
 		"a": "b",
 	}
-	index := s.NewIndex(c)
-	id, err := s.ES.PostDocument(index, "testtype", doc)
+	id, err := s.ES.PostDocument(s.Indexes[0], "testtype", doc)
 	c.Assert(err, gc.IsNil)
 	c.Assert(id, gc.NotNil)
 	var result map[string]string
-	err = s.ES.GetDocument(index, "testtype", id, &result)
+	err = s.ES.GetDocument(s.Indexes[0], "testtype", id, &result)
 	c.Assert(err, gc.IsNil)
 }
 
@@ -57,11 +56,10 @@ func (s *Suite) TestSuccessfulPutNewDocument(c *gc.C) {
 	doc := map[string]string{
 		"a": "b",
 	}
-	index := s.NewIndex(c)
-	err := s.ES.PutDocument(index, "testtype", "a", doc)
+	err := s.ES.PutDocument(s.Indexes[0], "testtype", "a", doc)
 	c.Assert(err, gc.IsNil)
 	var result map[string]string
-	err = s.ES.GetDocument(index, "testtype", "a", &result)
+	err = s.ES.GetDocument(s.Indexes[0], "testtype", "a", &result)
 	c.Assert(result["a"], gc.Equals, "b")
 }
 
@@ -69,14 +67,13 @@ func (s *Suite) TestSuccessfulPutUpdatedDocument(c *gc.C) {
 	doc := map[string]string{
 		"a": "b",
 	}
-	index := s.NewIndex(c)
-	err := s.ES.PutDocument(index, "testtype", "a", doc)
+	err := s.ES.PutDocument(s.Indexes[0], "testtype", "a", doc)
 	c.Assert(err, gc.IsNil)
 	doc["a"] = "c"
-	err = s.ES.PutDocument(index, "testtype", "a", doc)
+	err = s.ES.PutDocument(s.Indexes[0], "testtype", "a", doc)
 	c.Assert(err, gc.IsNil)
 	var result map[string]string
-	err = s.ES.GetDocument(index, "testtype", "a", &result)
+	err = s.ES.GetDocument(s.Indexes[0], "testtype", "a", &result)
 	c.Assert(result["a"], gc.Equals, "c")
 }
 
@@ -84,10 +81,9 @@ func (s *Suite) TestDelete(c *gc.C) {
 	doc := map[string]string{
 		"a": "b",
 	}
-	index := s.NewIndex(c)
-	_, err := s.ES.PostDocument(index, "testtype", doc)
+	_, err := s.ES.PostDocument(s.Indexes[0], "testtype", doc)
 	c.Assert(err, gc.IsNil)
-	err = s.ES.DeleteIndex(index)
+	err = s.ES.DeleteIndex(s.Indexes[0])
 	c.Assert(err, gc.IsNil)
 }
 
@@ -99,15 +95,14 @@ func (s *Suite) TestDeleteErrorOnNonExistingIndex(c *gc.C) {
 
 func (s *Suite) TestIndexesCreatedAutomatically(c *gc.C) {
 	doc := map[string]string{"a": "b"}
-	index := s.NewIndex(c)
-	_, err := s.ES.PostDocument(index, "testtype", doc)
+	_, err := s.ES.PostDocument(s.Indexes[0], "testtype", doc)
 	c.Assert(err, gc.IsNil)
 	indexes, err := s.ES.ListAllIndexes()
 	c.Assert(err, gc.IsNil)
 	c.Assert(indexes, gc.Not(gc.HasLen), 0)
 	found := false
 	for _, index2 := range indexes {
-		if index2 == index {
+		if index2 == s.Indexes[0] {
 			found = true
 		}
 	}

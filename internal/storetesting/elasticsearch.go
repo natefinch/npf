@@ -57,6 +57,7 @@ func (s *ElasticSearchSuite) TearDownSuite(c *gc.C) {
 }
 
 func (s *ElasticSearchSuite) SetUpTest(c *gc.C) {
+	s.NewIndex(c)
 }
 
 func (s *ElasticSearchSuite) TearDownTest(c *gc.C) {
