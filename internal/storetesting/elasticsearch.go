@@ -17,13 +17,13 @@ import (
 
 var serverAddr string
 
-// and then calls the given function with t as its argument, or calls
-// gocheck.TestingT if t is nil. Its behaviour is dependent on the
-// value of the JUJU_TEST_ELASTICSEARCH environment variable, which can
-// be "none" (do not start or connect to a server) or host:port
-// holding the address and port of the server to connect to. If
-// JUJU_TEST_ELASTICSEARCH is not specified then localhost:9200 will be
-// used.
+// ElasticSearchTestPackage determines the address of the test elasticsearch
+// server, and then calls the given function with t as its argument, or calls
+// gocheck.TestingT if t is nil. Its behaviour is dependent on the value of the
+// JUJU_TEST_ELASTICSEARCH environment variable, which can be "none" (do not
+// start or connect to a server) or host:port holding the address and port of
+// the server to connect to. If JUJU_TEST_ELASTICSEARCH is not specified then
+// localhost:9200 will be used.
 //
 // For example:
 //     JUJU_TEST_ELASTICSEARCH=localhost:9200 go test
