@@ -25,9 +25,9 @@ development environment. To install them, run the following:
 
     make sysdeps
 
-To run the elasticsearch tests you can either make sure elasticsearch is in
-your path and works, or you can run an elasticsearch yourself. Export
-`JUJU_TEST_ELASTICSEARCH=<host>:<port>` where host and port provide 
+To run the elasticsearch tests you must run an elasticsearch server. If the
+elasticsearch server is running at an address other than localhost:9200 then
+set `JUJU_TEST_ELASTICSEARCH=<host>:<port>` where host and port provide
 the address of the elasticsearch server.
 
 At this point, from the root of this branch, run the command::

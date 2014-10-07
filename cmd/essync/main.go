@@ -16,6 +16,8 @@ import (
 	"github.com/juju/charmstore/internal/elasticsearch"
 )
 
+var index = flag.String("index", "charmstore", "Name of index to populate.")
+
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: %s <config path>\n", filepath.Base(os.Args[0]))
@@ -27,7 +29,7 @@ func main() {
 		flag.Usage()
 	}
 	if err := populate(flag.Arg(0)); err != nil {
-		fmt.Fprintf(os.Stderr, "cannot populate elastic search: %v", err)
+		fmt.Fprintf(os.Stderr, "cannot populate elasticsearch: %v", err)
 		os.Exit(1)
 	}
 }
@@ -47,7 +49,7 @@ func populate(confPath string) error {
 	}
 	defer session.Close()
 	db := session.DB("juju")
-	store, err := charmstore.NewStore(db, es)
+	store, err := charmstore.NewStore(db, &charmstore.StoreElasticSearch{es, *index})
 	if err != nil {
 		return err
 	}
