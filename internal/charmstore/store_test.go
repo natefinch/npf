@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/url"
 	"os"
 	"sort"
 	"time"
@@ -32,8 +31,15 @@ type StoreSuite struct {
 
 var _ = gc.Suite(&StoreSuite{})
 
-func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
-	store, err := NewStore(s.Session.DB("foo"), nil)
+func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
+	var ses *StoreElasticSearch
+	if addToES {
+		ses = &StoreElasticSearch{
+			Database: s.ES,
+			Index:    s.NewIndex(c),
+		}
+	}
+	store, err := NewStore(s.Session.DB("juju_test"), ses)
 	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:precise/wordpress-23")
 
@@ -47,6 +53,15 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 	err = store.DB.Entities().FindId("cs:precise/wordpress-23").One(&doc)
 	c.Assert(err, gc.IsNil)
 
+	// Ensure the document was indexed in ElasticSearch, if an ES database was provided.
+	if ses != nil {
+		var result mongodoc.Entity
+		err = ses.Database.GetDocument(ses.Index, "entity", ses.getID(&doc), &result)
+		c.Assert(err, gc.IsNil)
+		exists, err := ses.Database.EnsureID(ses.Index, "entity", ses.getID(&doc))
+		c.Assert(err, gc.IsNil)
+		c.Assert(exists, gc.Equals, true)
+	}
 	// The entity doc has been correctly added to the mongo collection.
 	size, hash := mustGetSizeAndHash(ch)
 	sort.Strings(doc.CharmProvidedInterfaces)
@@ -92,8 +107,16 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm) {
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrDuplicateUpload)
 }
 
-func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
-	store, err := NewStore(s.Session.DB("foo"), nil)
+func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) {
+	var ses *StoreElasticSearch
+
+	if addToES {
+		ses = &StoreElasticSearch{
+			Database: s.ES,
+			Index:    s.NewIndex(c),
+		}
+	}
+	store, err := NewStore(s.Session.DB("juju_test"), ses)
 	c.Assert(err, gc.IsNil)
 	url := mustParseReference("cs:bundle/wordpress-simple-42")
 
@@ -107,6 +130,13 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle) {
 	err = store.DB.Entities().FindId("cs:bundle/wordpress-simple-42").One(&doc)
 	c.Assert(err, gc.IsNil)
 	sort.Sort(orderedURLs(doc.BundleCharms))
+
+	// Ensure the document was indexed in ElasticSearch, if an ES database was provided.
+	if ses != nil {
+		var result mongodoc.Entity
+		err = ses.Database.GetDocument(ses.Index, "entity", ses.getID(&doc), &result)
+		c.Assert(err, gc.IsNil)
+	}
 
 	// Check the upload time and then reset it to its zero value
 	// so that we can test the deterministic parts later.
@@ -702,17 +732,17 @@ func mustParseReferences(urlStrs []string) []*charm.Reference {
 
 func (s *StoreSuite) TestAddCharmDir(c *gc.C) {
 	charmDir := testing.Charms.CharmDir("wordpress")
-	s.checkAddCharm(c, charmDir)
+	s.checkAddCharm(c, charmDir, false)
 }
 
 func (s *StoreSuite) TestAddCharmArchive(c *gc.C) {
 	charmArchive := testing.Charms.CharmArchive(c.MkDir(), "wordpress")
-	s.checkAddCharm(c, charmArchive)
+	s.checkAddCharm(c, charmArchive, false)
 }
 
 func (s *StoreSuite) TestAddBundleDir(c *gc.C) {
 	bundleDir := testing.Charms.BundleDir("wordpress")
-	s.checkAddBundle(c, bundleDir)
+	s.checkAddBundle(c, bundleDir, false)
 }
 
 func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
@@ -720,7 +750,7 @@ func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
 		testing.Charms.BundleArchivePath(c.MkDir(), "wordpress"),
 	)
 	c.Assert(err, gc.IsNil)
-	s.checkAddBundle(c, bundleArchive)
+	s.checkAddBundle(c, bundleArchive, false)
 }
 
 func (s *StoreSuite) TestOpenBlob(c *gc.C) {
@@ -871,15 +901,14 @@ var fakeBlobSize, fakeBlobHash = func() (int64, string) {
 }()
 
 var exportTestCharms = map[string]string{
-	"wordpress": "cs:precies/wordpress-23",
+	"wordpress": "cs:precise/wordpress-23",
 	"mysql":     "cs:precise/mysql-42",
 }
 
 func (s *StoreSuite) TestSuccessfulExport(c *gc.C) {
-	index := s.NewIndex(c)
-	store, err := NewStore(s.Session.DB("foo"), &StoreElasticSearch{
+	store, err := NewStore(s.Session.DB("juju_test"), &StoreElasticSearch{
 		Database: s.ES,
-		Index:    index,
+		Index:    s.NewIndex(c),
 	})
 	c.Assert(err, gc.IsNil)
 	s.addCharmsToStore(store)
@@ -891,7 +920,7 @@ func (s *StoreSuite) TestSuccessfulExport(c *gc.C) {
 		var actual mongodoc.Entity
 		err = store.DB.Entities().FindId(ref).One(&expected)
 		c.Assert(err, gc.IsNil)
-		err = s.ES.GetDocument(index, "entity", url.QueryEscape(ref), &actual)
+		err = s.ES.GetDocument(store.ES.Index, "entity", store.ES.getID(&expected), &actual)
 		c.Assert(err, gc.IsNil)
 		// make sure everything agrees on the time zone
 		// TODO(mhilton) separate the functionality for comparing mongodoc.Entitys
@@ -916,4 +945,27 @@ func (s *StoreSuite) TestSESPutIsNoopWithNoESConfigured(c *gc.C) {
 	var entity mongodoc.Entity
 	err = store.ES.Put(&entity)
 	c.Assert(err, gc.IsNil)
+}
+
+func (s *StoreSuite) TestAddCharmDirIndexed(c *gc.C) {
+	charmDir := testing.Charms.CharmDir("wordpress")
+	s.checkAddCharm(c, charmDir, true)
+}
+
+func (s *StoreSuite) TestAddCharmArchiveIndexed(c *gc.C) {
+	charmArchive := testing.Charms.CharmArchive(c.MkDir(), "wordpress")
+	s.checkAddCharm(c, charmArchive, true)
+}
+
+func (s *StoreSuite) TestAddBundleDirIndexed(c *gc.C) {
+	bundleDir := testing.Charms.BundleDir("wordpress")
+	s.checkAddBundle(c, bundleDir, true)
+}
+
+func (s *StoreSuite) TestAddBundleArchiveIndexed(c *gc.C) {
+	bundleArchive, err := charm.ReadBundleArchive(
+		testing.Charms.BundleArchivePath(c.MkDir(), "wordpress"),
+	)
+	c.Assert(err, gc.IsNil)
+	s.checkAddBundle(c, bundleArchive, true)
 }

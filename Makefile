@@ -77,7 +77,7 @@ server: install
 
 # Update the project Go dependencies to the required revision.
 deps: $(GOPATH)/bin/godeps
-	godeps -u dependencies.tsv
+	$(GOPATH)/bin/godeps -u dependencies.tsv
 
 # Generate the dependencies file.
 create-deps: $(GOPATH)/bin/godeps
@@ -98,9 +98,10 @@ endif
 	sudo apt-get update
 	@sudo apt-get --yes install $(strip $(DEPENDENCIES)) \
 	$(shell apt-cache madison juju-mongodb mongodb-server | head -1 | cut -d '|' -f1)
-endif
+else
 	@echo sysdeps runs only on systems with apt-get
-	@echo on MacOSX with homebrew try: brew install bazaar mongodb elasticsearch
+	@echo on OS X with homebrew try: brew install bazaar mongodb elasticsearch
+endif
 
 help:
 	@echo -e 'Charmstore - list of make targets:\n'
