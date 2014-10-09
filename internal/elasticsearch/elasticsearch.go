@@ -11,7 +11,6 @@
 package elasticsearch
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -128,18 +127,27 @@ func (db *Database) delete(path string) (*http.Response, error) {
 // response returning a slice containing the name of each index.
 // http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/_list_all_indexes.html
 func (db *Database) ListAllIndexes() ([]string, error) {
-	resp, err := http.Get(db.url("_cat/indices"))
+	response, err := http.Get(db.url("_aliases"))
 	if err != nil {
-		return nil, err
+		return nil, errgo.Mask(err)
 	}
-	defer resp.Body.Close()
-	scanner := bufio.NewScanner(resp.Body)
+	defer response.Body.Close()
+
+	body, _ := ioutil.ReadAll(response.Body)
+	if response.StatusCode != http.StatusOK {
+		return nil, errgo.Newf("ElasticSearch GET response status: %d %s, body: %s", response.StatusCode, response.Status, body)
+	}
+	var result map[string]interface{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot unmarshal body: %s", body)
+	}
 	var indices []string
-	for scanner.Scan() {
-		line := scanner.Text()
-		fields := strings.Fields(line)
-		if len(fields) > 1 {
-			indices = append(indices, fields[1])
+	for key, _ := range result {
+		// Some ElasticSearch plugins create indices (e.g. ".marvel...") for their
+		// use.  Ignore any that start with a dot.
+		if !strings.HasPrefix(key, ".") {
+			indices = append(indices, key)
 		}
 	}
 	return indices, nil
