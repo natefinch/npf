@@ -12,7 +12,6 @@ package elasticsearch
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -22,7 +21,10 @@ import (
 	"strings"
 
 	"github.com/juju/errgo"
+	"github.com/juju/loggo"
 )
+
+var log = loggo.GetLogger("charmstore.elasticsearch")
 
 type Database struct {
 	Addr string
@@ -44,14 +46,12 @@ func (db *Database) EnsureID(index, type_, id string) (bool, error) {
 // GetDocument retrieves the document with the given index, type_ and id and
 // unmarshals the json response into doc.
 func (db *Database) GetDocument(index, type_, id string, doc interface{}) error {
-	response, err := http.Get(db.url(index, type_, id, "_source"))
+	status, _, body, err := db.request("GET", db.url(index, type_, id, "_source"), "", "")
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	defer response.Body.Close()
-	body, _ := ioutil.ReadAll(response.Body)
-	if response.StatusCode != http.StatusOK {
-		return errgo.Newf("ElasticSearch GET response status: %d %s, body: %s", response.StatusCode, response.Status, body)
+	if status != http.StatusOK {
+		return errgo.Newf("ElasticSearch GET response status: %d, body: %s", status, body)
 	}
 	err = json.Unmarshal(body, doc)
 	if err != nil {
@@ -67,20 +67,16 @@ func (db *Database) PostDocument(index, type_ string, doc interface{}) (string, 
 	if err != nil {
 		return "", errgo.Mask(err)
 	}
-	buf := bytes.NewReader(data)
-	response, err := http.Post(db.url(index, type_), "application/json", buf)
+	// CONSIDER: err := db.post(db.url(index, type_), doc, &respData)
+	status, _, body, err := db.request("POST", db.url(index, type_), "application/json", string(data))
 	if err != nil {
 		return "", errgo.Mask(err)
 	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusCreated {
-		body, _ := ioutil.ReadAll(response.Body)
-		// Error checking within this error handler is not helpful.
-		return "", errgo.Newf("ElasticSearch POST response status: %d %s, body: %s", response.StatusCode, response.Status, body)
+	if status != http.StatusCreated {
+		return "", errgo.Newf("ElasticSearch POST response status: %d, body: %s", status, body)
 	}
 	var respdata map[string]interface{}
-	dec := json.NewDecoder(response.Body)
-	if err := dec.Decode(&respdata); err != nil {
+	if err := json.Unmarshal(body, &respdata); err != nil {
 		return "", errgo.Notef(err, "cannot unmarshal body")
 	}
 	return respdata["_id"].(string), nil
@@ -93,21 +89,16 @@ func (db *Database) PutDocument(index, type_, id string, doc interface{}) error 
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	buf := bytes.NewReader(data)
-	req, err := http.NewRequest("PUT", db.url(index, type_, id), buf)
-	req.Header["Content-Type"] = []string{"application/json"}
+	status, _, body, err := db.request("PUT", db.url(index, type_, id), "application/json", string(data))
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	response, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return errgo.Mask(err)
+	if status != http.StatusCreated && status != http.StatusOK {
+		return errgo.Newf("ElasticSearch PUT response status: %d, body: %s", status, body)
 	}
-	defer response.Body.Close()
-	body, _ := ioutil.ReadAll(response.Body)
-	if (response.StatusCode != http.StatusCreated) && (response.StatusCode != http.StatusOK) {
-		// Error checking within this error handler is not helpful.
-		return errgo.Newf("ElasticSearch PUT response status: %d %s, body: %s", response.StatusCode, response.Status, body)
+	var respdata map[string]interface{}
+	if err := json.Unmarshal(body, &respdata); err != nil {
+		return errgo.Notef(err, "cannot unmarshal body")
 	}
 	return nil
 }
@@ -178,6 +169,79 @@ func (db *Database) DeleteIndex(index string) error {
 		return errgo.Mask(err)
 	}
 	return errgo.Newf("unexpected http response trying to delete index %s: %s(%d) body:%s", index, resp.Status, resp.StatusCode, body)
+}
+
+type SearchResult struct {
+	Hits struct {
+		Total    int     `json:"total"`
+		MaxScore float64 `json:"max_score"`
+		Hits     []struct {
+			Index  string          `json:"_index"`
+			Type   string          `json:"_type"`
+			ID     string          `json:"_id"`
+			Score  float64         `json:"_score"`
+			Source json.RawMessage `json:"_source"`
+		} `json:"hits"`
+	} `json:"hits"`
+	Took     int  `json:"took"`
+	TimedOut bool `json:"timed_out"`
+}
+
+func (db *Database) Search(index, type_, query string) (SearchResult, error) {
+	_, _, result, err := db.request("GET", db.url(index, type_, "_search"), "application/json", query)
+	if err != nil {
+		return SearchResult{}, errgo.Mask(err)
+	}
+	var data SearchResult
+	if err := json.Unmarshal(result, &data); err != nil {
+		return SearchResult{}, errgo.Notef(err, "cannot unmarshal body")
+	}
+	return data, nil
+}
+
+// request performs a request on the elasticsearch server. request will
+// log to debug the details of all performed requests.
+func (db *Database) request(method, url string, contentType, body string) (int, string, []byte, error) {
+	log.Debugf(">>> %s %s", method, url)
+	if len(body) > 0 {
+		log.Debugf(">>> Content-Type: %s", contentType)
+		log.Debugf(">>> %s", body)
+	}
+	req, err := http.NewRequest(method, url, strings.NewReader(body))
+	if err != nil {
+		log.Debugf("*** %s", err)
+		return 0, "", nil, errgo.Notef(err, "cannot create request")
+	}
+	if len(body) > 0 && len(contentType) > 0 {
+		req.Header.Add("Content-Type", contentType)
+	}
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Debugf("*** %s", err)
+		return 0, "", nil, errgo.Mask(err)
+	}
+	defer response.Body.Close()
+	log.Debugf("<<< %s", response.Status)
+	log.Debugf("<<< Content-Type: %s", response.Header.Get("Content-Type"))
+	data, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.Debugf("*** %s", err)
+		return 0, "", nil, errgo.Mask(err)
+	}
+	log.Debugf("<<< %s", data)
+	return response.StatusCode, response.Header.Get("Content-Type"), data, nil
+}
+
+// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/indices-refresh.html
+func (db *Database) RefreshIndex(index string) error {
+	status, _, body, err := db.request("POST", db.url(index, "_refresh"), "", "")
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	if status != http.StatusCreated {
+		return errgo.Newf("ElasticSearch POST response status: %d, body: %s", status, body)
+	}
+	return nil
 }
 
 type ErrNotFound struct {

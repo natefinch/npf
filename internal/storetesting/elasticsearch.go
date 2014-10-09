@@ -45,8 +45,9 @@ func ElasticSearchTestPackage(t *testing.T, cb func(t *testing.T)) {
 }
 
 type ElasticSearchSuite struct {
-	ES      *elasticsearch.Database
-	Indexes []string
+	ES        *elasticsearch.Database
+	indexes   []string
+	TestIndex string
 }
 
 func (s *ElasticSearchSuite) SetUpSuite(c *gc.C) {
@@ -57,13 +58,14 @@ func (s *ElasticSearchSuite) TearDownSuite(c *gc.C) {
 }
 
 func (s *ElasticSearchSuite) SetUpTest(c *gc.C) {
-	s.NewIndex(c)
+	s.TestIndex = s.NewIndex(c)
 }
 
 func (s *ElasticSearchSuite) TearDownTest(c *gc.C) {
-	for _, index := range s.Indexes {
+	for _, index := range s.indexes {
 		s.ES.DeleteIndex(index)
 	}
+	s.indexes = nil
 }
 
 // NewIndex creates a new index name and ensures that it will be cleaned up at
@@ -72,6 +74,6 @@ func (s *ElasticSearchSuite) NewIndex(c *gc.C) string {
 	uuid, err := utils.NewUUID()
 	c.Assert(err, gc.IsNil)
 	id := time.Now().Format("20060102") + uuid.String() + "-"
-	s.Indexes = append(s.Indexes, id)
+	s.indexes = append(s.indexes, id)
 	return id
 }

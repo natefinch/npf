@@ -117,15 +117,15 @@ var metaCharmRelatedTests = []struct {
 	id:     "utopic/wordpress-0",
 	expectBody: params.RelatedResponse{
 		Provides: map[string][]params.MetaAnyResponse{
-			"memcache": []params.MetaAnyResponse{{
+			"memcache": {{
 				Id: mustParseReference("utopic/memcached-42"),
 			}},
-			"mount": []params.MetaAnyResponse{{
+			"mount": {{
 				Id: mustParseReference("precise/nfs-1"),
 			}},
 		},
 		Requires: map[string][]params.MetaAnyResponse{
-			"http": []params.MetaAnyResponse{{
+			"http": {{
 				Id: mustParseReference("precise/haproxy-48"),
 			}, {
 				Id: mustParseReference("trusty/haproxy-47"),
@@ -138,7 +138,7 @@ var metaCharmRelatedTests = []struct {
 	id:     "trusty/haproxy-47",
 	expectBody: params.RelatedResponse{
 		Provides: map[string][]params.MetaAnyResponse{
-			"http": []params.MetaAnyResponse{{
+			"http": {{
 				Id: mustParseReference("utopic/wordpress-0"),
 			}},
 		},
@@ -149,7 +149,7 @@ var metaCharmRelatedTests = []struct {
 	id:     "utopic/memcached-42",
 	expectBody: params.RelatedResponse{
 		Requires: map[string][]params.MetaAnyResponse{
-			"memcache": []params.MetaAnyResponse{{
+			"memcache": {{
 				Id: mustParseReference("utopic/wordpress-0"),
 			}},
 		},
@@ -229,7 +229,7 @@ var metaCharmRelatedTests = []struct {
 	id: "trusty/wordpress-0",
 	expectBody: params.RelatedResponse{
 		Provides: map[string][]params.MetaAnyResponse{
-			"memcache": []params.MetaAnyResponse{{
+			"memcache": {{
 				Id: mustParseReference("utopic/memcached-1"),
 			}, {
 				Id: mustParseReference("utopic/memcached-2"),
@@ -313,14 +313,14 @@ var metaCharmRelatedTests = []struct {
 	id: "trusty/wordpress-0",
 	expectBody: params.RelatedResponse{
 		Provides: map[string][]params.MetaAnyResponse{
-			"memcache": []params.MetaAnyResponse{{
+			"memcache": {{
 				Id: mustParseReference("utopic/memcached-1"),
 			}, {
 				Id: mustParseReference("utopic/memcached-2"),
 			}, {
 				Id: mustParseReference("utopic/redis-90"),
 			}},
-			"mount": []params.MetaAnyResponse{{
+			"mount": {{
 				Id: mustParseReference("precise/nfs-42"),
 			}, {
 				Id: mustParseReference("precise/nfs-47"),
@@ -336,7 +336,7 @@ var metaCharmRelatedTests = []struct {
 	querystring: "?include=archive-size&include=charm-metadata",
 	expectBody: params.RelatedResponse{
 		Requires: map[string][]params.MetaAnyResponse{
-			"mount": []params.MetaAnyResponse{{
+			"mount": {{
 				Id: mustParseReference("utopic/wordpress-0"),
 				Meta: map[string]interface{}{
 					"archive-size": params.ArchiveSizeResponse{Size: fakeBlobSize},
