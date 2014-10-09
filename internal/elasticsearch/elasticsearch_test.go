@@ -6,10 +6,11 @@ package elasticsearch_test
 import (
 	"testing"
 
-	"github.com/juju/charmstore/internal/elasticsearch"
-	"github.com/juju/charmstore/internal/storetesting"
 	jujutesting "github.com/juju/testing"
 	gc "gopkg.in/check.v1"
+
+	"github.com/juju/charmstore/internal/elasticsearch"
+	"github.com/juju/charmstore/internal/storetesting"
 )
 
 func TestPackage(t *testing.T) {

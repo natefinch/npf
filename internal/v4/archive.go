@@ -16,11 +16,11 @@ import (
 	"strings"
 
 	"github.com/juju/errgo"
+	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/mongodoc"
-	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/params"
 )
 
@@ -125,7 +125,7 @@ func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 	if oldHash == hash {
 		// The hash matches the hash of the latest revision, so
 		// no need to upload anything.
-		return router.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
+		return jsonhttp.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
 			Id: oldId,
 		})
 	}
@@ -139,7 +139,7 @@ func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 	if err := h.addBlobAndEntity(id, req.Body, hash, req.ContentLength); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 	}
-	return router.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
+	return jsonhttp.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
 		Id: id,
 	})
 }
@@ -162,7 +162,7 @@ func (h *Handler) servePutArchive(id *charm.Reference, w http.ResponseWriter, re
 	if err := h.addBlobAndEntity(id, req.Body, hash, req.ContentLength); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 	}
-	return router.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
+	return jsonhttp.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
 		Id: id,
 	})
 	return nil

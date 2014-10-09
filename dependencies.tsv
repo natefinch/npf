@@ -10,7 +10,7 @@ github.com/juju/names	git	cfcf5a79106d26fce039a35ffca277def4496f4b
 github.com/juju/schema	git	27a52be50766490a6fd3531865095fda6c0eeb6d	
 github.com/juju/testing	git	cc1a29452f9a9af7a54c3a2af495fbf5cd64c640	
 github.com/juju/txn	git	ee0346875f2ae9a21442f3ff64409f750f37afbc	
-github.com/juju/utils	git	68554773385c32c354bf6357f8b6edd8a4742682	
+github.com/juju/utils	git	e33796665b926ce6ff7766a5884aa9f8ab7e540c	
 gopkg.in/check.v1	git	91ae5f88a67b14891cfd43895b01164f6c120420	
 gopkg.in/juju/charm.v4	git	c2fca34024c7781bc5618af6fda4c180addeb909	
 gopkg.in/mgo.v2	git	dc255bb679efa273b6544a03261c4053505498a4	
