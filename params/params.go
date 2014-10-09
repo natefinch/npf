@@ -88,3 +88,14 @@ type DebugStatus struct {
 	Value  string
 	Passed bool
 }
+
+// SearchResult holds a single result from a search operation
+type SearchResult struct {
+	Id string
+	// Meta holds at most one entry for each meta value
+	// specified in the include flags, holding the
+	// data that would be returned by reading /meta/meta?id=id.
+	// Metadata not relevant to a particular result will not
+	// be included.
+	Meta map[string]interface{} `json:",omitempty"`
+}

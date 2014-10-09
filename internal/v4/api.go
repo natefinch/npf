@@ -41,7 +41,7 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 			"changes/published":  router.HandleJSON(h.serveChangesPublished),
 			"debug":              http.HandlerFunc(h.serveDebug),
 			"debug/status":       router.HandleJSON(h.serveDebugStatus),
-			"search":             http.HandlerFunc(h.serveSearch),
+			"search":             router.HandleJSON(h.serveSearch),
 			"search/interesting": http.HandlerFunc(h.serveSearchInteresting),
 			"stats/":             router.NotFoundHandler(),
 			"stats/counter/":     router.HandleJSON(h.serveStatsCounter),
@@ -214,18 +214,6 @@ func parseBool(value string) (bool, error) {
 }
 
 var errNotImplemented = errgo.Newf("method not implemented")
-
-// GET search[?text=text][&autocomplete=1][&filter=value…][&limit=limit][&include=meta]
-// http://tinyurl.com/qzobc69
-func (h *Handler) serveSearch(w http.ResponseWriter, req *http.Request) {
-	router.WriteError(w, errNotImplemented)
-}
-
-// GET search/interesting[?limit=limit][&include=meta]
-// http://tinyurl.com/ntmdrg8
-func (h *Handler) serveSearchInteresting(w http.ResponseWriter, req *http.Request) {
-	router.WriteError(w, errNotImplemented)
-}
 
 // GET /debug
 // http://tinyurl.com/m63xhz8

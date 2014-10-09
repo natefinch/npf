@@ -30,11 +30,13 @@ func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *charm.Reference,
 	// Build the query to retrieve the related entities.
 	query := bson.M{
 		"$or": []bson.M{
-			bson.M{"charmrequiredinterfaces": bson.M{
-				"$elemMatch": bson.M{"$in": entity.CharmProvidedInterfaces},
+			{"charmrequiredinterfaces": bson.M{
+				"$elemMatch": bson.M{
+					"$in": entity.CharmProvidedInterfaces},
 			}},
-			bson.M{"charmprovidedinterfaces": bson.M{
-				"$elemMatch": bson.M{"$in": entity.CharmRequiredInterfaces},
+			{"charmprovidedinterfaces": bson.M{
+				"$elemMatch": bson.M{
+					"$in": entity.CharmRequiredInterfaces},
 			}},
 		},
 	}
