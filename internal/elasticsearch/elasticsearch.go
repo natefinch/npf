@@ -102,6 +102,46 @@ func (db *Database) PutDocument(index, type_, id string, doc interface{}) error 
 	return nil
 }
 
+// PutIndex creates or updates the index with the given configuration.
+func (db *Database) PutIndex(index string, config interface{}) error {
+	data, err := json.Marshal(config)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	status, _, body, err := db.request("PUT", db.url(index), "application/json", string(data))
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	if status != http.StatusCreated && status != http.StatusOK {
+		return errgo.Newf("ElasticSearch PUT response status: %d, body: %s", status, body)
+	}
+	var respdata map[string]interface{}
+	if err := json.Unmarshal(body, &respdata); err != nil {
+		return errgo.Notef(err, "cannot unmarshal body")
+	}
+	return nil
+}
+
+// PutMapping creates or updates the mapping with the given configuration.
+func (db *Database) PutMapping(index, type_ string, config interface{}) error {
+	data, err := json.Marshal(config)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	status, _, body, err := db.request("PUT", db.url(index, type_, "_mapping"), "application/json", string(data))
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	if status != http.StatusCreated && status != http.StatusOK {
+		return errgo.Newf("ElasticSearch PUT response status: %d, body: %s", status, body)
+	}
+	var respdata map[string]interface{}
+	if err := json.Unmarshal(body, &respdata); err != nil {
+		return errgo.Notef(err, "cannot unmarshal body")
+	}
+	return nil
+}
+
 // url constructs the URL for accessing the database.
 func (db *Database) url(pathParts ...string) string {
 	path := path.Join(pathParts...)
@@ -143,7 +183,7 @@ func (db *Database) ListAllIndexes() ([]string, error) {
 		return nil, errgo.Notef(err, "cannot unmarshal body: %s", body)
 	}
 	var indices []string
-	for key, _ := range result {
+	for key := range result {
 		// Some ElasticSearch plugins create indices (e.g. ".marvel...") for their
 		// use.  Ignore any that start with a dot.
 		if !strings.HasPrefix(key, ".") {

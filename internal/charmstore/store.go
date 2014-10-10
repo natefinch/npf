@@ -510,29 +510,42 @@ func (store *Store) Search(sp SearchParams) ([]string, error) {
 func createSearchDSL(sp SearchParams) string {
 	qdsl := elasticsearch.QueryDSL{
 		Size: sp.Limit,
-		Sort: []elasticsearch.Sort{{
-			Field: "UploadTime",
-			Order: elasticsearch.Order{"desc"}}},
 	}
 	var q elasticsearch.Query
 	if sp.Text == "" {
-		q.MatchAll = &elasticsearch.MatchAllQuery{}
+		q = elasticsearch.MatchAllQuery{}
 	} else if sp.AutoComplete {
-		// NOTE: just a prefix query for now, this will change.
-		q.Prefix = &elasticsearch.PrefixQuery{
-			"CharmMeta.Name": sp.Text,
+		q = elasticsearch.MultiMatchQuery{
+			Query: sp.Text,
+			Fields: []string{
+				elasticsearch.BoostField("CharmMeta.Name.ngrams", 10),
+				elasticsearch.BoostField("CharmMeta.Description", 3),
+			},
 		}
 	} else {
-		q.Match = &elasticsearch.MatchQuery{
-			"CharmMeta.Name": sp.Text,
+		q = elasticsearch.MultiMatchQuery{
+			Query: sp.Text,
+			Fields: []string{
+				elasticsearch.BoostField("CharmMeta.Name", 10),
+				elasticsearch.BoostField("CharmMeta.Description", 3),
+			},
 		}
 	}
 
-	qdsl.Query = elasticsearch.Query{
-		Filtered: &elasticsearch.FilteredQuery{
-			Query:  &q,
-			Filter: createFilters(sp.Filters),
+	q = elasticsearch.FunctionScoreQuery{
+		Query: q,
+		Functions: []elasticsearch.Function{
+			{
+				Function: "linear",
+				Field:    "UploadTime",
+				Scale:    "365d",
+			},
 		},
+	}
+
+	qdsl.Query = elasticsearch.FilteredQuery{
+		Query:  q,
+		Filter: createFilters(sp.Filters),
 	}
 
 	bytes, err := json.Marshal(qdsl)
@@ -542,7 +555,7 @@ func createSearchDSL(sp SearchParams) string {
 	return string(bytes)
 }
 
-func createFilters(filters map[string][]string) *elasticsearch.Filter {
+func createFilters(filters map[string][]string) elasticsearch.Filter {
 	af := elasticsearch.AndFilter{}
 	for k, v := range filters {
 		of := elasticsearch.OrFilter{}
@@ -551,19 +564,14 @@ func createFilters(filters map[string][]string) *elasticsearch.Filter {
 			filterField = k
 		}
 		for _, term := range v {
-			of = append(of, elasticsearch.Filter{
-				Term: &elasticsearch.TermFilter{
-					filterField: term,
-				},
+			of = append(of, elasticsearch.TermFilter{
+				Field: filterField,
+				Value: term,
 			})
 		}
-		af = append(af, elasticsearch.Filter{
-			Or: of,
-		})
+		af = append(af, of)
 	}
-	return &elasticsearch.Filter{
-		And: af,
-	}
+	return af
 }
 
 var filterFields = map[string]string{
