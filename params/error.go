@@ -56,6 +56,9 @@ func (e *Error) ErrorCode() string {
 	return e.Code.Error()
 }
 
+// ErrorInfo returns additional info on the error.
+// TODO(rog) rename this so that it more accurately
+// reflects its role.
 func (e *Error) ErrorInfo() map[string]*Error {
 	return e.Info
 }
