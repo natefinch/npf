@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/juju/errgo"
+	"github.com/juju/utils/jsonhttp"
 	charm "gopkg.in/juju/charm.v4"
 
 	"github.com/juju/charmstore/params"
@@ -237,7 +238,7 @@ func (r *Router) serveMeta(id *charm.Reference, w http.ResponseWriter, req *http
 			// Note: preserve error causes from meta handlers.
 			return errgo.Mask(err, errgo.Any)
 		}
-		WriteJSON(w, http.StatusOK, resp)
+		jsonhttp.WriteJSON(w, http.StatusOK, resp)
 		return nil
 	case "PUT":
 		// Put requests don't return any data unless there's
@@ -375,7 +376,7 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) error {
 		if err != nil {
 			return errgo.Mask(err, errgo.Any)
 		}
-		WriteJSON(w, http.StatusOK, resp)
+		jsonhttp.WriteJSON(w, http.StatusOK, resp)
 		return nil
 	case "PUT":
 		return r.serveBulkMetaPut(req)

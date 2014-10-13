@@ -19,6 +19,7 @@ import (
 	"github.com/juju/errgo"
 	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
+	"github.com/juju/utils/jsonhttp"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 
@@ -1558,7 +1559,7 @@ func (s *RouterSuite) TestWriteJSON(c *gc.C) {
 	type Number struct {
 		N int
 	}
-	err := WriteJSON(rec, http.StatusTeapot, Number{1234})
+	err := jsonhttp.WriteJSON(rec, http.StatusTeapot, Number{1234})
 	c.Assert(err, gc.IsNil)
 	c.Assert(rec.Code, gc.Equals, http.StatusTeapot)
 	c.Assert(rec.Body.String(), gc.Equals, `{"N":1234}`)
@@ -1745,7 +1746,7 @@ type idHandlerTestResp struct {
 }
 
 func testIdHandler(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
-	WriteJSON(w, http.StatusOK, idHandlerTestResp{
+	jsonhttp.WriteJSON(w, http.StatusOK, idHandlerTestResp{
 		CharmURL: charmId.String(),
 		Path:     req.URL.Path,
 		Method:   req.Method,

@@ -6,8 +6,9 @@ package charmstore_test
 import (
 	"testing"
 
-	"github.com/juju/charmstore/internal/storetesting"
 	jujutesting "github.com/juju/testing"
+
+	"github.com/juju/charmstore/internal/storetesting"
 )
 
 func TestPackage(t *testing.T) {

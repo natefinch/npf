@@ -4,55 +4,42 @@
 package router
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 
 	"github.com/juju/errgo"
+	"github.com/juju/utils/jsonhttp"
 
 	"github.com/juju/charmstore/params"
 )
 
-// HandleErrors returns a Handler that calls the given function.
-// If the function reports an error, it sets the HTTP response
-// code and sends the error as a JSON reply by calling
-// WriteError.
-func HandleErrors(handle func(http.ResponseWriter, *http.Request) error) http.Handler {
-	f := func(w http.ResponseWriter, req *http.Request) {
-		if err := handle(w, req); err != nil {
-			WriteError(w, err)
-		}
+var (
+	HandleErrors = jsonhttp.HandleErrors(errToResp)
+	HandleJSON   = jsonhttp.HandleJSON(errToResp)
+	WriteError   = jsonhttp.WriteError(errToResp)
+)
+
+func errToResp(err error) (int, interface{}) {
+	errorBody := errorResponseBody(err)
+	status := http.StatusInternalServerError
+	switch errorBody.Code {
+	case params.ErrNotFound, params.ErrMetadataNotFound:
+		status = http.StatusNotFound
+	case params.ErrBadRequest:
+		status = http.StatusBadRequest
+	case params.ErrForbidden:
+		status = http.StatusForbidden
+	case params.ErrUnauthorized:
+		status = http.StatusUnauthorized
+	case params.ErrMethodNotAllowed:
+		status = http.StatusMethodNotAllowed
 	}
-	return http.HandlerFunc(f)
+	return status, errorBody
 }
 
-// HandleJSON returns a Handler that calls the given function.
-// The result is formatted as JSON.
-// TODO(rog) remove ResponseWriter argument from function argument.
-// It is redundant (and possibly dangerous) if used in combination with the interface{}
-// return.
-func HandleJSON(handle func(http.ResponseWriter, *http.Request) (interface{}, error)) http.Handler {
-	f := func(w http.ResponseWriter, req *http.Request) error {
-		val, err := handle(w, req)
-		if err != nil {
-			return errgo.Mask(err, errgo.Any)
-		}
-		return WriteJSON(w, http.StatusOK, val)
-	}
-	return HandleErrors(f)
-}
-
-type errorInfoer interface {
-	ErrorInfo() map[string]*params.Error
-}
-
-type errorCoder interface {
-	ErrorCode() params.ErrorCode
-}
-
-// ErrorResponse returns an appropriate error
+// errorResponse returns an appropriate error
 // response for the provided error.
-func ErrorResponse(err error) *params.Error {
+func errorResponseBody(err error) *params.Error {
 	errResp := &params.Error{
 		Message: err.Error(),
 	}
@@ -64,6 +51,14 @@ func ErrorResponse(err error) *params.Error {
 		errResp.Info = infoer.ErrorInfo()
 	}
 	return errResp
+}
+
+type errorInfoer interface {
+	ErrorInfo() map[string]*params.Error
+}
+
+type errorCoder interface {
+	ErrorCode() params.ErrorCode
 }
 
 // multiError holds multiple errors.
@@ -80,50 +75,9 @@ func (err multiError) ErrorCode() params.ErrorCode {
 func (err multiError) ErrorInfo() map[string]*params.Error {
 	m := make(map[string]*params.Error)
 	for key, err := range err {
-		m[key] = ErrorResponse(err)
+		m[key] = errorResponseBody(err)
 	}
 	return m
-}
-
-// WriteError writes an JSON error response to the
-// given ResponseWriter and sets an appropriate
-// HTTP status.
-func WriteError(w http.ResponseWriter, err error) {
-	errResp := ErrorResponse(err)
-	status := http.StatusInternalServerError
-	switch errResp.Code {
-	case params.ErrNotFound, params.ErrMetadataNotFound:
-		status = http.StatusNotFound
-	case params.ErrBadRequest:
-		status = http.StatusBadRequest
-	case params.ErrForbidden:
-		status = http.StatusForbidden
-	case params.ErrUnauthorized:
-		status = http.StatusUnauthorized
-	case params.ErrMethodNotAllowed:
-		status = http.StatusMethodNotAllowed
-	}
-	// TODO log writeJSON error if it happens?
-	WriteJSON(w, status, errResp)
-}
-
-// WriteJSON writes the given value to the ResponseWriter
-// and sets the HTTP status to the given code.
-func WriteJSON(w http.ResponseWriter, code int, val interface{}) error {
-	// TODO consider marshalling directly to w using json.NewEncoder.
-	// pro: this will not require a full buffer allocation.
-	// con: if there's an error after the first write, it will be lost.
-	data, err := json.Marshal(val)
-	if err != nil {
-		// TODO(rog) log an error if this fails and lose the
-		// error return, because most callers will need
-		// to do that anyway.
-		return errgo.Mask(err)
-	}
-	w.Header().Set("content-type", "application/json")
-	w.WriteHeader(code)
-	w.Write(data)
-	return nil
 }
 
 // NotFoundHandler is like http.NotFoundHandler except it

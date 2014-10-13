@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/juju/charmstore/internal/elasticsearch"
-
 	"github.com/juju/utils"
 	gc "gopkg.in/check.v1"
+
+	"github.com/juju/charmstore/internal/elasticsearch"
 )
 
 var serverAddr string
