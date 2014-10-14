@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/juju/errgo"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 
 	"github.com/juju/charmstore/internal/charmstore"

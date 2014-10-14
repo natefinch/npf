@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/juju/errgo"
 	"github.com/juju/utils/jsonhttp"
+	"gopkg.in/errgo.v1"
 
 	"github.com/juju/charmstore/params"
 )

@@ -19,9 +19,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/juju/errgo"
 	"github.com/juju/loggo"
 	"github.com/juju/utils/fs"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/juju/charm.v4/migratebundle"
 	"gopkg.in/yaml.v1"

@@ -3,12 +3,11 @@
 
 package v4
 
-import (
-	//	"encoding/json"
+import ( //	"encoding/json"
 	"net/http"
 	"strconv"
 
-	"github.com/juju/errgo"
+	"gopkg.in/errgo.v1"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/router"

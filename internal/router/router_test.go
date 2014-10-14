@@ -16,11 +16,11 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/juju/errgo"
 	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/utils/jsonhttp"
 	gc "gopkg.in/check.v1"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 
 	"github.com/juju/charmstore/internal/storetesting"

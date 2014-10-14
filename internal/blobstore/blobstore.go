@@ -8,8 +8,8 @@ import (
 	"strconv"
 
 	"github.com/juju/blobstore"
-	"github.com/juju/errgo"
 	"github.com/juju/errors"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/mgo.v2"
 )
 

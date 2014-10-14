@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/juju/errgo"
+	"gopkg.in/errgo.v1"
 
 	"github.com/juju/charmstore/params"
 )

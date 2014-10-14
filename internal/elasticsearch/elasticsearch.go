@@ -19,8 +19,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/juju/errgo"
 	"github.com/juju/loggo"
+	"gopkg.in/errgo.v1"
 )
 
 var log = loggo.GetLogger("charmstore.elasticsearch")
