@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/url"
 
-	"github.com/juju/errgo"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 )
 

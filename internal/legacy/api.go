@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/juju/errgo"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"

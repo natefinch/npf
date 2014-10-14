@@ -9,7 +9,7 @@ package charmstore
 import (
 	"net/http"
 
-	"github.com/juju/errgo"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/internal/elasticsearch"

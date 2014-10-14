@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/juju/errgo"
 	"github.com/juju/loggo"
+	"gopkg.in/errgo.v1"
 	"launchpad.net/lpad"
 
 	"github.com/juju/charmstore/config"

@@ -14,8 +14,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/juju/errgo"
 	"github.com/juju/utils/jsonhttp"
+	"gopkg.in/errgo.v1"
 	charm "gopkg.in/juju/charm.v4"
 
 	"github.com/juju/charmstore/params"

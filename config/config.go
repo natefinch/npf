@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/juju/errgo"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/yaml.v1"
 )
 

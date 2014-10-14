@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/juju/errgo"
 	"github.com/juju/utils/jsonhttp"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
