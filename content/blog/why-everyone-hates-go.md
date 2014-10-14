@@ -38,7 +38,7 @@ something that's part of their identity". The subject hits too close to home,
 and their response becomes emotional rather than logical.
 
 Kathy's post says basically "the hate wasn’t so much about the product/brand but
-that other *people were falling for it*". They'd drunk the kool-aid.
+that *other people were falling for it*". They'd drunk the kool-aid.
 
 Go is the only recent language that takes the aforementioned 40 years of
 programming language research and tosses it out the window. Other new languages
