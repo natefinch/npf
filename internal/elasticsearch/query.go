@@ -39,10 +39,16 @@ func (m MatchAllQuery) MarshalJSON() ([]byte, error) {
 type MatchQuery struct {
 	Field string
 	Query string
+	Type  string
 }
 
 func (m MatchQuery) MarshalJSON() ([]byte, error) {
-	return marshalJSON("match", map[string]interface{}{m.Field: m.Query})
+	params := map[string]interface{}{"query": m.Query}
+	if m.Type != "" {
+		params["type"] = m.Type
+	}
+
+	return marshalJSON("match", map[string]interface{}{m.Field: params})
 }
 
 // MultiMatchQuery provides a query that matches on a number of fields.
@@ -101,8 +107,8 @@ func (f Function) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// AndFilter provides a filter that requires all of the internal
-// filters to match.
+// AndFilter provides a filter that matches if all of the internal
+// filters match.
 type AndFilter []Filter
 
 func (a AndFilter) MarshalJSON() ([]byte, error) {
@@ -111,14 +117,45 @@ func (a AndFilter) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// OrFilter provides a filter that requires any of the internal
-// filters to match.
+// OrFilter provides a filter that matches if any of the internal
+// filters match.
 type OrFilter []Filter
 
 func (o OrFilter) MarshalJSON() ([]byte, error) {
 	return marshalJSON("or", map[string]interface{}{
 		"filters": []Filter(o),
 	})
+}
+
+// NotFilter provides a filter that matches the opposite of the
+// wrapped filter.
+type NotFilter struct {
+	Filter Filter
+}
+
+func (n NotFilter) MarshalJSON() ([]byte, error) {
+	return marshalJSON("not", n.Filter)
+}
+
+// QueryFilter provides a filter that matches when a query matches
+// on a result
+type QueryFilter struct {
+	Query Query
+}
+
+func (q QueryFilter) MarshalJSON() ([]byte, error) {
+	return marshalJSON("query", q.Query)
+}
+
+// RegexpFilter provides a filter that matches a field against a
+// regular expression.
+type RegexpFilter struct {
+	Field  string
+	Regexp string
+}
+
+func (r RegexpFilter) MarshalJSON() ([]byte, error) {
+	return marshalJSON("regexp", map[string]string{r.Field: r.Regexp})
 }
 
 // TermFilter provides a filter that requires a field to match.

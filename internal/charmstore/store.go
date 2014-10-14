@@ -4,10 +4,8 @@
 package charmstore
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/url"
 	"sync"
 	"time"
 
@@ -17,7 +15,6 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/blobstore"
-	"github.com/juju/charmstore/internal/elasticsearch"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/params"
 )
@@ -419,161 +416,4 @@ func (s StoreDatabase) Collections() []*mgo.Collection {
 		cs[i] = f(s)
 	}
 	return cs
-}
-
-// StoreElasticSearch provides strongly typed methods for accessing the
-// elasticsearch database. These methods will not return errors if
-// elasticsearch is not configured, allowing them to be safely called even if
-// it is not enabled in this service.
-type StoreElasticSearch struct {
-	*elasticsearch.Database
-	Index string
-}
-
-const typeName = "entity"
-
-// Put inserts the mongodoc.Entity into elasticsearch if elasticsearch
-// is configured.
-func (ses *StoreElasticSearch) put(entity *mongodoc.Entity) error {
-	if ses == nil || ses.Database == nil {
-		return nil
-	}
-	return ses.PutDocument(ses.Index, typeName, ses.getID(entity), entity)
-}
-
-// getID returns the id to be used for indexing the entity into ElasticSearch.
-func (ses *StoreElasticSearch) getID(entity *mongodoc.Entity) string {
-	return url.QueryEscape(entity.URL.String())
-}
-
-// Search searches for entities. The query is a json string which conforms
-// to the elasticsearch querydsl.
-// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl.html
-// Returns a slice containing each Id of the matching documents returned by
-// elasticsearch.
-func (ses *StoreElasticSearch) search(query string) ([]string, error) {
-	if ses == nil {
-		return nil, nil
-	}
-	results, err := ses.Database.Search(ses.Index, typeName, query)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]string, 0, len(results.Hits.Hits))
-	for _, hit := range results.Hits.Hits {
-		ids = append(ids, hit.ID)
-	}
-	return ids, nil
-	// TODO: return more than just ids e.g. total, hits, score, information, serach time
-}
-
-// ExportToElasticSearch reads all of the mongodoc Entities and writes
-// them to elasticsearch
-func (store *Store) ExportToElasticSearch() error {
-	var result mongodoc.Entity
-	iter := store.DB.Entities().Find(nil).Iter()
-	defer iter.Close()
-	for iter.Next(&result) {
-		if err := store.ES.put(&result); err != nil {
-			return errgo.Notef(err, "cannot index %s", result.URL)
-		}
-	}
-	if err := iter.Close(); err != nil {
-		return err
-	}
-	return nil
-}
-
-// SearchParams represents the search parameters used by the store.
-type SearchParams struct {
-	// The test for which to search.
-	Text string
-	// If autocomplete is specified, the search will return only charms and
-	// bundles with a name that has text as a prefix.
-	AutoComplete bool
-	// Limit the search to items with attributes that match the specified filter value.
-	Filters map[string][]string
-	// Limit the number of returned items to the specified count.
-	Limit int
-}
-
-// Search the store for the given SearchParams.
-// Returns a slice containing each Id of the matching documents returned by
-// elasticsearch.
-func (store *Store) Search(sp SearchParams) ([]string, error) {
-	query := createSearchDSL(sp)
-	return store.ES.search(query)
-}
-
-// createSearchDSL builds an elasticsearch query from the query parameters.
-// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl.html
-func createSearchDSL(sp SearchParams) string {
-	qdsl := elasticsearch.QueryDSL{
-		Size: sp.Limit,
-	}
-	var q elasticsearch.Query
-	if sp.Text == "" {
-		q = elasticsearch.MatchAllQuery{}
-	} else if sp.AutoComplete {
-		q = elasticsearch.MultiMatchQuery{
-			Query: sp.Text,
-			Fields: []string{
-				elasticsearch.BoostField("CharmMeta.Name.ngrams", 10),
-				elasticsearch.BoostField("CharmMeta.Description", 3),
-			},
-		}
-	} else {
-		q = elasticsearch.MultiMatchQuery{
-			Query: sp.Text,
-			Fields: []string{
-				elasticsearch.BoostField("CharmMeta.Name", 10),
-				elasticsearch.BoostField("CharmMeta.Description", 3),
-			},
-		}
-	}
-
-	q = elasticsearch.FunctionScoreQuery{
-		Query: q,
-		Functions: []elasticsearch.Function{
-			{
-				Function: "linear",
-				Field:    "UploadTime",
-				Scale:    "365d",
-			},
-		},
-	}
-
-	qdsl.Query = elasticsearch.FilteredQuery{
-		Query:  q,
-		Filter: createFilters(sp.Filters),
-	}
-
-	bytes, err := json.Marshal(qdsl)
-	if err != nil {
-		panic(err)
-	}
-	return string(bytes)
-}
-
-func createFilters(filters map[string][]string) elasticsearch.Filter {
-	af := elasticsearch.AndFilter{}
-	for k, v := range filters {
-		of := elasticsearch.OrFilter{}
-		filterField := filterFields[k]
-		if filterField == "" {
-			filterField = k
-		}
-		for _, term := range v {
-			of = append(of, elasticsearch.TermFilter{
-				Field: filterField,
-				Value: term,
-			})
-		}
-		af = append(af, of)
-	}
-	return af
-}
-
-var filterFields = map[string]string{
-	"name": "CharmMeta.Name",
 }
