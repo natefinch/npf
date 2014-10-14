@@ -15,7 +15,7 @@ the question, I knew what they'd consist of:
 * Go is a language stuck in the 70's.
 * Go ignores 40 years of programming language research.
 * Go is a language for blue collar (mediocre) developers.
-by * Gophers are ok with working in Java 1.0.
+* Gophers are ok with working in Java 1.0.
 
 Unfortunately, the answers to the questions were more concerned with explaining
 why Go is "bad", rather than why this gets under so many people's skin.
