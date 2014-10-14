@@ -15,10 +15,10 @@ the question, I knew what they'd consist of:
 * Go is a language stuck in the 70's.
 * Go ignores 40 years of programming language research.
 * Go is a language for blue collar (mediocre) developers.
-* Gophers are ok with working in Java 1.0.
+by * Gophers are ok with working in Java 1.0.
 
 Unfortunately, the answers to the questions were more concerned with explaining
-why Go is "bad", rather than why this gets so many people's panties in a bunch.
+why Go is "bad", rather than why this gets under so many people's skin.
 
 When reading the answers I had a eureka moment, and I realized why it is. So
 here's my answer to the same question. This is why Go is so heavily criticized,
@@ -86,3 +86,7 @@ died without them. Google is now the koolaid dispenser. The fact that they
 are otherwise generally thought of as a very talented pool of developers means
 that it is simultaneously more outrageous that they are fooling people and more
 insulting that their language flies in the face of ML-derived languages.
+
+**Update:  I removed the "panties in a bunch" comment, since I was (correctly)
+scolded for being sexist, not to mention unprofessional.  My apologies to
+anyone I offended.
