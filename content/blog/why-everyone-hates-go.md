@@ -12,10 +12,10 @@ about why everyone critizes Go so much. (sorry, I don't normally post links to
 Quora, but it was the motivator for this post) Even before I saw the answers to
 the question, I knew what they'd consist of:
 
-> * Go is a language stuck in the 70's.
-> * Go ignores 40 years of programming language research.
-> * Go is a language for blue collar (mediocre) developers.
-> * Gophers are ok with working in Java 1.0.
+* Go is a language stuck in the 70's.
+* Go ignores 40 years of programming language research.
+* Go is a language for blue collar (mediocre) developers.
+* Gophers are ok with working in Java 1.0.
 
 Unfortunately, the answers to the questions were more concerned with explaining
 why Go is "bad", rather than why this gets so many people's panties in a bunch.
@@ -33,12 +33,19 @@ happen to women online with the pedantry of flamewars about programming
 languages, but the Koolaid Point is such a valid metaphor that I wanted to link
 to the article.
 
-Paul's post says, in a nutshell "people can never have a fruitful argument about
-something that's part of their identity". The subject hits too close to home,
+Paul says
+
+>people can never have a fruitful argument about
+something that's part of their identity 
+
+*i.e.* the subject hits too close to home,
 and their response becomes emotional rather than logical.
 
-Kathy's post says basically "the hate wasn’t so much about the product/brand but
-that *other people were falling for it*". They'd drunk the kool-aid.
+Kathy says 
+
+>the hate wasn’t so much about the product/brand but that *other people were falling for it*. 
+
+*i.e.* they'd drunk the kool-aid.
 
 Go is the only recent language that takes the aforementioned 40 years of
 programming language research and tosses it out the window. Other new languages
