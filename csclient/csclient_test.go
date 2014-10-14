@@ -66,6 +66,7 @@ var doTests = []struct {
 	about           string
 	method          string
 	path            string
+	nilResult       bool
 	expectResult    interface{}
 	expectError     string
 	expectErrorCode params.ErrorCode
@@ -76,9 +77,9 @@ var doTests = []struct {
 		Id: "cs:utopic/wordpress-42",
 	}},
 }, {
-	about:        "success with nil result",
-	path:         "/wordpress/expand-id",
-	expectResult: nil,
+	about:     "success with nil result",
+	path:      "/wordpress/expand-id",
+	nilResult: true,
 }, {
 	about:       "non-absolute path",
 	path:        "wordpress",
@@ -114,7 +115,7 @@ func (s *suite) TestDo(c *gc.C) {
 		// Send the request.
 		var result json.RawMessage
 		var resultPtr interface{}
-		if test.expectResult != nil {
+		if !test.nilResult {
 			resultPtr = &result
 		}
 		err = s.client.Do(req, test.path, resultPtr)

@@ -112,8 +112,9 @@ func (c *Client) Do(req *http.Request, path string, result interface{}) error {
 }
 
 func sizeLimit(data []byte) []byte {
-	if len(data) < 1024 {
+	const max = 1024
+	if len(data) < max {
 		return data
 	}
-	return append(data[0:1024], fmt.Sprintf(" ... [%d bytes omitted]", len(data)-1024)...)
+	return append(data[0:max], fmt.Sprintf(" ... [%d bytes omitted]", len(data)-max)...)
 }
