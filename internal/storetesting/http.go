@@ -5,12 +5,10 @@ package storetesting
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 
-	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 )
 
@@ -70,29 +68,21 @@ func AssertJSONCall(c *gc.C, p JSONCallParams) {
 		Username:      p.Username,
 		Password:      p.Password,
 	})
-	c.Assert(rec.Code, gc.Equals, p.ExpectStatus, gc.Commentf("body: %s", rec.Body.Bytes()))
+	AssertResponse(c, rec, p.ExpectStatus, p.ExpectBody)
+}
+
+// AssertResponse asserts that the given response recorder has recorded the
+// given HTTP status and response body.
+func AssertResponse(c *gc.C, rec *httptest.ResponseRecorder, expectStatus int, expectBody interface{}) {
+	c.Assert(rec.Code, gc.Equals, expectStatus, gc.Commentf("body: %s", rec.Body.Bytes()))
 
 	// Ensure the response includes the expected body.
-	if p.ExpectBody == nil {
+	if expectBody == nil {
 		c.Assert(rec.Body.Bytes(), gc.HasLen, 0)
 		return
 	}
 	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "application/json")
-
-	// Rather than unmarshaling into something of the expected
-	// body type, we reform the expected body in JSON and
-	// back to interface{}, so we can check the whole content.
-	// Otherwise we lose information when unmarshaling.
-	expectBodyBytes, err := json.Marshal(p.ExpectBody)
-	c.Assert(err, gc.IsNil)
-	var expectBodyVal interface{}
-	err = json.Unmarshal(expectBodyBytes, &expectBodyVal)
-	c.Assert(err, gc.IsNil)
-
-	var gotBodyVal interface{}
-	err = json.Unmarshal(rec.Body.Bytes(), &gotBodyVal)
-	c.Assert(err, gc.IsNil, gc.Commentf("json body: %q", rec.Body.Bytes()))
-	c.Assert(gotBodyVal, jc.DeepEquals, expectBodyVal)
+	c.Assert(rec.Body.Bytes(), JSONEquals, expectBody)
 }
 
 // DoRequestParams holds parameters for DoRequest.
