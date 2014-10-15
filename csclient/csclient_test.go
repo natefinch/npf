@@ -317,26 +317,25 @@ func (s *suite) TestHyphenate(c *gc.C) {
 
 var metaBadTypeTests = []struct {
 	result      interface{}
-	expectPanic string
+	expectError string
 }{{
 	result:      "",
-	expectPanic: "expected pointer, not string",
+	expectError: "expected pointer, not string",
 }, {
 	result:      new(string),
-	expectPanic: `expected pointer to struct, not \*string`,
+	expectError: `expected pointer to struct, not \*string`,
 }, {
 	result:      new(struct{ Embed }),
-	expectPanic: "anonymous fields not supported",
+	expectError: "anonymous fields not supported",
 }, {
-	expectPanic: "expected valid result pointer, not nil",
+	expectError: "expected valid result pointer, not nil",
 }}
 
 func (s *suite) TestMetaBadType(c *gc.C) {
 	id := mustParseReference("wordpress")
 	for _, test := range metaBadTypeTests {
-		c.Assert(func() {
-			s.client.Meta(id, test.result)
-		}, gc.PanicMatches, test.expectPanic)
+		_, err := s.client.Meta(id, test.result)
+		c.Assert(err, gc.ErrorMatches, test.expectError)
 	}
 }
 

@@ -86,16 +86,16 @@ func New(p Params) *Client {
 //	id, err := client.Meta(id, &result)
 func (c *Client) Meta(id *charm.Reference, result interface{}) (*charm.Reference, error) {
 	if result == nil {
-		panic(fmt.Errorf("expected valid result pointer, not nil"))
+		return nil, fmt.Errorf("expected valid result pointer, not nil")
 	}
 	resultv := reflect.ValueOf(result)
 	resultt := resultv.Type()
 	if resultt.Kind() != reflect.Ptr {
-		panic(fmt.Errorf("expected pointer, not %T", result))
+		return nil, fmt.Errorf("expected pointer, not %T", result)
 	}
 	resultt = resultt.Elem()
 	if resultt.Kind() != reflect.Struct {
-		panic(fmt.Errorf("expected pointer to struct, not %T", result))
+		return nil, fmt.Errorf("expected pointer to struct, not %T", result)
 	}
 	resultv = resultv.Elem()
 
@@ -118,7 +118,7 @@ func (c *Client) Meta(id *charm.Reference, result interface{}) (*charm.Reference
 			// At some point in the future, it might be nice to
 			// support anonymous fields, but for now the
 			// additional complexity doesn't seem worth it.
-			panic(fmt.Errorf("anonymous fields not supported"))
+			return nil, fmt.Errorf("anonymous fields not supported")
 		}
 		apiName := field.Tag.Get("csclient")
 		if apiName == "" {
