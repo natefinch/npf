@@ -142,7 +142,7 @@ var updateEntitySHA256 = func(store *charmstore.Store, url *charm.Reference, sum
 }
 
 func (h *Handler) updateEntitySHA256(curl *charm.Reference) (string, error) {
-	r, _, err := h.store.OpenBlob(curl)
+	r, _, _, err := h.store.OpenBlob(curl)
 	defer r.Close()
 	hash := sha256.New()
 	_, err = io.Copy(hash, r)

@@ -15,6 +15,7 @@ import (
 // We use http.FileServer under the covers because that
 // provides us with all the HTTP Content-Range goodness
 // that we'd like.
+// TODO use http.ServeContent instead of this.
 func serveContent(w http.ResponseWriter, req *http.Request, length int64, content io.ReadSeeker) {
 	fs := &archiveFS{
 		length:     length,

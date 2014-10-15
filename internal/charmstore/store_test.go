@@ -5,7 +5,7 @@ package charmstore
 
 import (
 	"bytes"
-	"crypto/sha256"
+	"crypto/sha512"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -763,21 +763,24 @@ func (s *StoreSuite) TestOpenBlob(c *gc.C) {
 	err = store.AddCharmWithArchive(url, charmArchive)
 	c.Assert(err, gc.IsNil)
 
-	r, size, err := store.OpenBlob(url)
-	c.Assert(err, gc.IsNil)
-	defer r.Close()
-
 	f, err := os.Open(charmArchive.Path)
 	c.Assert(err, gc.IsNil)
 	defer f.Close()
-	c.Assert(hashOfReader(c, r), gc.Equals, hashOfReader(c, f))
+	expectHash := hashOfReader(c, f)
+
+	r, size, hash, err := store.OpenBlob(url)
+	c.Assert(err, gc.IsNil)
+	defer r.Close()
+
+	c.Assert(hashOfReader(c, r), gc.Equals, expectHash)
+	c.Assert(hash, gc.Equals, expectHash)
 
 	info, err := f.Stat()
 	c.Assert(err, gc.IsNil)
 	c.Assert(size, gc.Equals, info.Size())
 }
 
-func (s *StoreSuite) TestBlobName(c *gc.C) {
+func (s *StoreSuite) TestBlobNameAndHash(c *gc.C) {
 	charmArchive := testing.Charms.CharmArchive(c.MkDir(), "wordpress")
 
 	store, err := NewStore(s.Session.DB("foo"), nil)
@@ -787,17 +790,20 @@ func (s *StoreSuite) TestBlobName(c *gc.C) {
 	err = store.AddCharmWithArchive(url, charmArchive)
 	c.Assert(err, gc.IsNil)
 
-	name, err := store.BlobName(url)
+	f, err := os.Open(charmArchive.Path)
+	c.Assert(err, gc.IsNil)
+	defer f.Close()
+	expectHash := hashOfReader(c, f)
+
+	name, hash, err := store.BlobNameAndHash(url)
 	c.Assert(err, gc.IsNil)
 
 	r, _, err := store.BlobStore.Open(name)
 	c.Assert(err, gc.IsNil)
 	defer r.Close()
 
-	f, err := os.Open(charmArchive.Path)
-	c.Assert(err, gc.IsNil)
-	defer f.Close()
-	c.Assert(hashOfReader(c, r), gc.Equals, hashOfReader(c, f))
+	c.Assert(hash, gc.Equals, expectHash)
+	c.Assert(hashOfReader(c, r), gc.Equals, expectHash)
 }
 
 func (s *StoreSuite) TestCollections(c *gc.C) {
@@ -837,7 +843,7 @@ func (s *StoreSuite) TestCollections(c *gc.C) {
 }
 
 func hashOfReader(c *gc.C, r io.Reader) string {
-	hash := sha256.New()
+	hash := sha512.New384()
 	_, err := io.Copy(hash, r)
 	c.Assert(err, gc.IsNil)
 	return fmt.Sprintf("%x", hash.Sum(nil))

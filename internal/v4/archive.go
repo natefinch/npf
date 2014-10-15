@@ -60,11 +60,12 @@ func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 		return h.servePutArchive(id, w, req)
 	case "GET":
 	}
-	r, size, err := h.store.OpenBlob(id)
+	r, size, hash, err := h.store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	defer r.Close()
+	w.Header().Set(params.ContentHashHeader, hash)
 	h.store.IncCounterAsync(entityStatsKey(id, params.StatsArchiveDownload))
 	// TODO(rog) should we set connection=close here?
 	// See https://codereview.appspot.com/5958045
@@ -74,7 +75,7 @@ func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 
 func (h *Handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	// Retrieve the entity blob name from the database.
-	blobName, err := h.store.BlobName(id)
+	blobName, _, err := h.store.BlobNameAndHash(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
@@ -257,7 +258,7 @@ func verifyConstraints(s string) error {
 // GET id/archive/…
 // http://tinyurl.com/lampm24
 func (h *Handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
-	r, size, err := h.store.OpenBlob(id)
+	r, size, _, err := h.store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
