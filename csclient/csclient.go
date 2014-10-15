@@ -71,7 +71,12 @@ func (c *Client) PutExtraInfo(id *charm.Reference, info map[string]interface{}) 
 		return errgo.Notef(err, "cannot marshal extra-info")
 	}
 	req.Body = ioutil.NopCloser(bytes.NewReader(data))
-	return c.Do(req, "/"+id.Path()+"/meta/extra-info", nil)
+	resp, err := c.Do(req, "/"+id.Path()+"/meta/extra-info")
+	if err != nil {
+		return errgo.Mask(err, errgo.Any)
+	}
+	resp.Body.Close()
+	return nil
 }
 
 // Meta fetches metadata on the charm or bundle with the
@@ -209,57 +214,15 @@ func (c *Client) Get(path string, result interface{}) error {
 	if err != nil {
 		return errgo.Notef(err, "cannot make new request")
 	}
-	return c.Do(req, path, result)
-}
-
-// Do makes an arbitrary request to the charm store.
-// It adds appropriate headers to the given HTTP request,
-// sends it to the charm store and parses the result
-// as JSON into the given result value, which should be a pointer to the
-// expected data, but may be nil if no result is expected.
-//
-// The URL field in the request is ignored and overwritten.
-//
-// This is a low level method - more specific Client methods
-// should be used when possible.
-func (c *Client) Do(req *http.Request, path string, result interface{}) error {
-	if c.params.User != "" {
-		userPass := c.params.User + ":" + c.params.Password
-		authBasic := base64.StdEncoding.EncodeToString([]byte(userPass))
-		req.Header.Set("Authorization", "Basic "+authBasic)
-	}
-
-	// Prepare the request.
-	if !strings.HasPrefix(path, "/") {
-		return errgo.Newf("path %q is not absolute", path)
-	}
-	u, err := url.Parse(c.params.URL + "/" + apiVersion + path)
+	resp, err := c.Do(req, path)
 	if err != nil {
-		return errgo.Mask(err)
-	}
-	req.URL = u
-
-	// Send the request.
-	resp, err := c.params.HTTPClient.Do(req)
-	if err != nil {
-		return errgo.Mask(err)
+		return errgo.Mask(err, errgo.Any)
 	}
 	defer resp.Body.Close()
-
 	// Parse the response.
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return errgo.Notef(err, "cannot read response body")
-	}
-	if resp.StatusCode != http.StatusOK {
-		var perr params.Error
-		if err := json.Unmarshal(data, &perr); err != nil {
-			return errgo.Notef(err, "cannot unmarshal error response %q", sizeLimit(data))
-		}
-		if perr.Message == "" {
-			return errgo.Newf("error response with empty message %s", sizeLimit(data))
-		}
-		return &perr
 	}
 	if result == nil {
 		// The caller doesn't care about the response body.
@@ -269,6 +232,58 @@ func (c *Client) Do(req *http.Request, path string, result interface{}) error {
 		return errgo.Notef(err, "cannot unmarshal response %q", sizeLimit(data))
 	}
 	return nil
+}
+
+// Do makes an arbitrary request to the charm store.
+// It adds appropriate headers to the given HTTP request,
+// sends it to the charm store, and returns the resulting
+// response. Do never returns a response with a status
+// that is not http.StatusOK.
+//
+// The URL field in the request is ignored and overwritten.
+//
+// This is a low level method - more specific Client methods
+// should be used when possible.
+func (c *Client) Do(req *http.Request, path string) (*http.Response, error) {
+	if c.params.User != "" {
+		userPass := c.params.User + ":" + c.params.Password
+		authBasic := base64.StdEncoding.EncodeToString([]byte(userPass))
+		req.Header.Set("Authorization", "Basic "+authBasic)
+	}
+
+	// Prepare the request.
+	if !strings.HasPrefix(path, "/") {
+		return nil, errgo.Newf("path %q is not absolute", path)
+	}
+	u, err := url.Parse(c.params.URL + "/" + apiVersion + path)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	req.URL = u
+
+	// Send the request.
+	resp, err := c.params.HTTPClient.Do(req)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	if resp.StatusCode == http.StatusOK {
+		return resp, nil
+	}
+	defer resp.Body.Close()
+
+	// Parse the response error.
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot read response body")
+	}
+	var perr params.Error
+	if err := json.Unmarshal(data, &perr); err != nil {
+		return nil, errgo.Notef(err, "cannot unmarshal error response %q", sizeLimit(data))
+	}
+	if perr.Message == "" {
+		return nil, errgo.Newf("error response with empty message %s", sizeLimit(data))
+	}
+	return nil, &perr
 }
 
 func sizeLimit(data []byte) []byte {
