@@ -60,6 +60,7 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
+	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
 
 	// Check that the HTTP range logic is plugged in OK. If this
 	// is working, we assume that the whole thing is working OK,
@@ -72,6 +73,7 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
 	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
+	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
 }
 
 func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
@@ -954,6 +956,12 @@ func (s *ArchiveSuite) assertEntityInfo(c *gc.C, url *charm.Reference, expect en
 		),
 		ExpectBody: expect,
 	})
+}
+
+func hashOfBytes(data []byte) string {
+	hash := blobstore.NewHash()
+	hash.Write(data)
+	return fmt.Sprintf("%x", hash.Sum(nil))
 }
 
 func hashOf(r io.Reader) (hashSum string, size int64) {

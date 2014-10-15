@@ -274,35 +274,35 @@ func (s *Store) AddBundle(url *charm.Reference, b charm.Bundle, blobName, blobHa
 }
 
 // OpenBlob opens a blob given its entity id; it returns the blob's
-// data source and its size. It returns a params.ErrNotFound
+// data source, its size and its hash. It returns a params.ErrNotFound
 // error if the entity does not exist.
-func (s *Store) OpenBlob(id *charm.Reference) (blobstore.ReadSeekCloser, int64, error) {
-	blobName, err := s.BlobName(id)
+func (s *Store) OpenBlob(id *charm.Reference) (r blobstore.ReadSeekCloser, size int64, hash string, err error) {
+	blobName, hash, err := s.BlobNameAndHash(id)
 	if err != nil {
-		return nil, 0, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+		return nil, 0, "", errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
-	r, size, err := s.BlobStore.Open(blobName)
+	r, size, err = s.BlobStore.Open(blobName)
 	if err != nil {
-		return nil, 0, errgo.Notef(err, "cannot open archive data for %s", id)
+		return nil, 0, "", errgo.Notef(err, "cannot open archive data for %s", id)
 	}
-	return r, size, nil
+	return r, size, hash, nil
 }
 
-// BlobName returns the name that is used to store the blob
-// for the entity with the given id. It returns a params.ErrNotFound
+// BlobNameAndHash returns the name that is used to store the blob
+// for the entity with the given id and its hash. It returns a params.ErrNotFound
 // error if the entity does not exist.
-func (s *Store) BlobName(id *charm.Reference) (string, error) {
+func (s *Store) BlobNameAndHash(id *charm.Reference) (name, hash string, err error) {
 	var entity mongodoc.Entity
 	if err := s.DB.Entities().
 		FindId(id).
-		Select(bson.D{{"blobname", 1}}).
+		Select(bson.D{{"blobname", 1}, {"blobhash", 1}}).
 		One(&entity); err != nil {
 		if err == mgo.ErrNotFound {
-			return "", errgo.WithCausef(nil, params.ErrNotFound, "entity not found")
+			return "", "", errgo.WithCausef(nil, params.ErrNotFound, "entity not found")
 		}
-		return "", errgo.Notef(err, "cannot get %s", id)
+		return "", "", errgo.Notef(err, "cannot get %s", id)
 	}
-	return entity.BlobName, nil
+	return entity.BlobName, entity.BlobHash, nil
 }
 
 func newInt(x int) *int {
