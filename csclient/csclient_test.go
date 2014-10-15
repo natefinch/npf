@@ -9,8 +9,10 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 
+	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
@@ -261,6 +263,193 @@ func (s *suite) TestDoWithBadResponse(c *gc.C) {
 			Method: "GET",
 		}, "/foo", &result)
 		c.Assert(err, gc.ErrorMatches, test.expectError)
+	}
+}
+
+var hyphenateTests = []struct {
+	val    string
+	expect string
+}{{
+	val:    "Hello",
+	expect: "hello",
+}, {
+	val:    "HelloThere",
+	expect: "hello-there",
+}, {
+	val:    "HelloHTTP",
+	expect: "hello-http",
+}, {
+	val:    "helloHTTP",
+	expect: "hello-http",
+}, {
+	val:    "hellothere",
+	expect: "hellothere",
+}, {
+	val:    "Long4Camel32WithDigits45",
+	expect: "long4-camel32-with-digits45",
+}, {
+	// The result here is equally dubious, but Go identifiers
+	// should not contain underscores.
+	val:    "With_Dubious_Underscore",
+	expect: "with_-dubious_-underscore",
+}}
+
+func (s *suite) TestGet(c *gc.C) {
+	ch := charmtesting.Charms.CharmDir("wordpress")
+	url := mustParseReference("utopic/wordpress-42")
+	err := s.store.AddCharmWithArchive(url, ch)
+	c.Assert(err, gc.IsNil)
+
+	var result []params.ExpandedId
+	err = s.client.Get("/utopic/wordpress/expand-id", &result)
+	c.Assert(err, gc.IsNil)
+	c.Assert(result, jc.DeepEquals, []params.ExpandedId{{
+		Id: "cs:utopic/wordpress-42",
+	}})
+}
+
+func (s *suite) TestHyphenate(c *gc.C) {
+	for i, test := range hyphenateTests {
+		c.Logf("test %d. %q", i, test.val)
+		c.Assert(csclient.Hyphenate(test.val), gc.Equals, test.expect)
+	}
+}
+
+var metaBadTypeTests = []struct {
+	result      interface{}
+	expectError string
+}{{
+	result:      "",
+	expectError: "expected pointer, not string",
+}, {
+	result:      new(string),
+	expectError: `expected pointer to struct, not \*string`,
+}, {
+	result:      new(struct{ Embed }),
+	expectError: "anonymous fields not supported",
+}, {
+	expectError: "expected valid result pointer, not nil",
+}}
+
+func (s *suite) TestMetaBadType(c *gc.C) {
+	id := mustParseReference("wordpress")
+	for _, test := range metaBadTypeTests {
+		_, err := s.client.Meta(id, test.result)
+		c.Assert(err, gc.ErrorMatches, test.expectError)
+	}
+}
+
+type Embed struct{}
+type embed struct{}
+
+func (s *suite) TestMeta(c *gc.C) {
+	ch := charmtesting.Charms.CharmDir("wordpress")
+	url := mustParseReference("utopic/wordpress-42")
+	err := s.store.AddCharmWithArchive(url, ch)
+	c.Assert(err, gc.IsNil)
+
+	// Put some extra-info.
+	req, _ := http.NewRequest("PUT", "", nil)
+	req.Header.Set("Content-Type", "application/json")
+	req.Body = ioutil.NopCloser(strings.NewReader(`"value"`))
+	err = s.client.Do(req, "/utopic/wordpress-42/meta/extra-info/attr", nil)
+	c.Assert(err, gc.IsNil)
+
+	tests := []struct {
+		about           string
+		id              string
+		expectResult    interface{}
+		expectError     string
+		expectErrorCode params.ErrorCode
+	}{{
+		about:        "no fields",
+		id:           "utopic/wordpress",
+		expectResult: &struct{}{},
+	}, {
+		about: "single field",
+		id:    "utopic/wordpress",
+		expectResult: &struct {
+			CharmMetadata *charm.Meta
+		}{
+			CharmMetadata: ch.Meta(),
+		},
+	}, {
+		about: "three fields",
+		id:    "wordpress",
+		expectResult: &struct {
+			CharmMetadata *charm.Meta
+			CharmConfig   *charm.Config
+			ExtraInfo     map[string]string
+		}{
+			CharmMetadata: ch.Meta(),
+			CharmConfig:   ch.Config(),
+			ExtraInfo:     map[string]string{"attr": "value"},
+		},
+	}, {
+		about: "tagged field",
+		id:    "wordpress",
+		expectResult: &struct {
+			Foo  *charm.Meta `csclient:"charm-metadata"`
+			Attr string      `csclient:"extra-info/attr"`
+		}{
+			Foo:  ch.Meta(),
+			Attr: "value",
+		},
+	}, {
+		about:           "id not found",
+		id:              "bogus",
+		expectResult:    &struct{}{},
+		expectError:     `cannot get "/bogus/meta/any": no matching charm or bundle for "cs:bogus"`,
+		expectErrorCode: params.ErrNotFound,
+	}, {
+		about: "unmarshal into invalid type",
+		id:    "wordpress",
+		expectResult: new(struct {
+			CharmMetadata []string
+		}),
+		expectError: `cannot unmarshal charm-metadata: json: cannot unmarshal object into Go value of type \[]string`,
+	}, {
+		about: "unmarshal into struct with unexported fields",
+		id:    "wordpress",
+		expectResult: &struct {
+			unexported    int
+			CharmMetadata *charm.Meta
+			// Embedded anonymous fields don't get tagged as unexported
+			// due to https://code.google.com/p/go/issues/detail?id=7247
+			// TODO fix in go 1.5.
+			// embed
+		}{
+			CharmMetadata: ch.Meta(),
+		},
+	}, {
+		about: "metadata not appropriate for charm",
+		id:    "wordpress",
+		expectResult: &struct {
+			CharmMetadata  *charm.Meta
+			BundleMetadata *charm.BundleData
+		}{
+			CharmMetadata: ch.Meta(),
+		},
+	}}
+	for i, test := range tests {
+		c.Logf("test %d: %s", i, test.about)
+		// Make a result value of the same type as the expected result,
+		// but empty.
+		result := reflect.New(reflect.TypeOf(test.expectResult).Elem()).Interface()
+		id, err := s.client.Meta(mustParseReference(test.id), result)
+		if test.expectError != "" {
+			c.Assert(err, gc.ErrorMatches, test.expectError)
+			if code, ok := errgo.Cause(err).(params.ErrorCode); ok {
+				c.Assert(code, gc.Equals, test.expectErrorCode)
+			} else {
+				c.Assert(test.expectErrorCode, gc.Equals, params.ErrorCode(""))
+			}
+			c.Assert(id, gc.IsNil)
+			continue
+		}
+		c.Assert(err, gc.IsNil)
+		c.Assert(id, jc.DeepEquals, url)
+		c.Assert(result, jc.DeepEquals, test.expectResult)
 	}
 }
 
