@@ -190,9 +190,10 @@ func hyphenate(s string) string {
 // a pointer to the expected data, but may be nil if no result is
 // desired.
 func (c *Client) Get(path string, result interface{}) error {
-	// The only reason NewRequest can fail is if the URL
-	// parsing fails, which it can't here, because it's blank.
-	req, _ := http.NewRequest("GET", "", nil)
+	req, err := http.NewRequest("GET", "", nil)
+	if err != nil {
+		return errgo.Notef(err, "cannot make new request")
+	}
 	return c.Do(req, path, result)
 }
 
