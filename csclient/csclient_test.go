@@ -349,10 +349,9 @@ func (s *suite) TestMeta(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Put some extra-info.
-	req, _ := http.NewRequest("PUT", "", nil)
-	req.Header.Set("Content-Type", "application/json")
-	req.Body = ioutil.NopCloser(strings.NewReader(`"value"`))
-	err = s.client.Do(req, "/utopic/wordpress-42/meta/extra-info/attr", nil)
+	err = s.client.PutExtraInfo(url, map[string]interface{}{
+		"attr": "value",
+	})
 	c.Assert(err, gc.IsNil)
 
 	tests := []struct {
@@ -451,6 +450,47 @@ func (s *suite) TestMeta(c *gc.C) {
 		c.Assert(id, jc.DeepEquals, url)
 		c.Assert(result, jc.DeepEquals, test.expectResult)
 	}
+}
+
+func (s *suite) TestPutExtraInfo(c *gc.C) {
+	ch := charmtesting.Charms.CharmDir("wordpress")
+	url := mustParseReference("utopic/wordpress-42")
+	err := s.store.AddCharmWithArchive(url, ch)
+	c.Assert(err, gc.IsNil)
+
+	// Put some info in.
+	info := map[string]interface{}{
+		"attr1": "value1",
+		"attr2": []interface{}{"one", "two"},
+	}
+	err = s.client.PutExtraInfo(url, info)
+	c.Assert(err, gc.IsNil)
+
+	// Verify that we get it back OK.
+	var val struct {
+		ExtraInfo map[string]interface{}
+	}
+	_, err = s.client.Meta(url, &val)
+	c.Assert(err, gc.IsNil)
+	c.Assert(val.ExtraInfo, jc.DeepEquals, info)
+
+	// Put some more in.
+	err = s.client.PutExtraInfo(url, map[string]interface{}{
+		"attr3": "three",
+	})
+	c.Assert(err, gc.IsNil)
+
+	// Verify that we get all the previous results and the new value.
+	info["attr3"] = "three"
+	_, err = s.client.Meta(url, &val)
+	c.Assert(err, gc.IsNil)
+	c.Assert(val.ExtraInfo, jc.DeepEquals, info)
+}
+
+func (s *suite) TestPutExtraInfoWithError(c *gc.C) {
+	err := s.client.PutExtraInfo(mustParseReference("wordpress"), map[string]interface{}{"attr": "val"})
+	c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for "cs:wordpress"`)
+	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
 
 type errorReader struct {
