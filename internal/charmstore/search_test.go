@@ -47,7 +47,12 @@ func (s *StoreSearchSuite) loadESConfig() error {
 
 var exportTestCharms = map[string]string{
 	"wordpress": "cs:precise/wordpress-23",
-	"mysql":     "cs:precise/mysql-42",
+	"mysql":     "cs:trusty/mysql-7",
+	"varnish":   "cs:~foo/trusty/varnish-1",
+}
+
+var exportTestBundles = map[string]string{
+	"wordpress": "cs:bundle/wordpress",
 }
 
 func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
@@ -74,7 +79,14 @@ func (s *StoreSearchSuite) addCharmsToStore(store *Store) {
 	for name, ref := range exportTestCharms {
 		charmArchive := testing.Charms.CharmDir(name)
 		url := mustParseReference(ref)
+		charmArchive.Meta().Categories = []string{name}
 		store.AddCharmWithArchive(url, charmArchive)
+	}
+	for name, ref := range exportTestBundles {
+		bundleArchive := testing.Charms.BundleDir(name)
+		url := mustParseReference(ref)
+		bundleArchive.Data().Tags = []string{name}
+		store.AddBundleWithArchive(url, bundleArchive)
 	}
 }
 
@@ -102,6 +114,8 @@ func (s *StoreSearchSuite) TestBlankTextSearch(c *gc.C) {
 	c.Assert(ids, jc.SameContents, []string{
 		url.QueryEscape(exportTestCharms["wordpress"]),
 		url.QueryEscape(exportTestCharms["mysql"]),
+		url.QueryEscape(exportTestCharms["varnish"]),
+		url.QueryEscape(exportTestBundles["wordpress"]),
 	})
 }
 
@@ -158,10 +172,233 @@ func (s *StoreSearchSuite) TestFilteredSearchWithUnAliasedField(c *gc.C) {
 	sp := SearchParams{
 		Text: "",
 		Filters: map[string][]string{
-			"CharmMeta.Name": {"mysql"},
+			"name": {"mysql"},
 		},
 	}
 	ids, err := s.store.Search(sp)
 	c.Assert(err, gc.IsNil)
 	c.Assert(ids, jc.DeepEquals, []string{url.QueryEscape(exportTestCharms["mysql"])})
+}
+
+func (s *StoreSearchSuite) TestSearchWithDescriptionFilter(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Text: "",
+		Filters: map[string][]string{
+			"description": {"blog"},
+		},
+	}
+	ids, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(ids, jc.DeepEquals, []string{url.QueryEscape(exportTestCharms["wordpress"])})
+}
+
+func (s *StoreSearchSuite) TestSearchWithNameFilter(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Text: "",
+		Filters: map[string][]string{
+			"name": {"mysql"},
+		},
+	}
+	ids, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(ids, jc.DeepEquals, []string{url.QueryEscape(exportTestCharms["mysql"])})
+}
+
+func (s *StoreSearchSuite) TestSearchWithOwnerFilter(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Text: "",
+		Filters: map[string][]string{
+			"owner": {"foo"},
+		},
+	}
+	ids, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(ids, jc.DeepEquals, []string{url.QueryEscape(exportTestCharms["varnish"])})
+}
+
+func (s *StoreSearchSuite) TestSearchWithProvidesFilter(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Text: "",
+		Filters: map[string][]string{
+			"provides": {"mysql"},
+		},
+	}
+	ids, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(ids, jc.DeepEquals, []string{url.QueryEscape(exportTestCharms["mysql"])})
+}
+
+func (s *StoreSearchSuite) TestSearchWithRequiresFilter(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Text: "",
+		Filters: map[string][]string{
+			"requires": {"mysql"},
+		},
+	}
+	ids, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(ids, jc.DeepEquals, []string{url.QueryEscape(exportTestCharms["wordpress"])})
+}
+
+func (s *StoreSearchSuite) TestSearchWithSeriesFilter(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Text: "",
+		Filters: map[string][]string{
+			"series": {"trusty"},
+		},
+	}
+	ids, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(ids, jc.SameContents, []string{
+		url.QueryEscape(exportTestCharms["mysql"]),
+		url.QueryEscape(exportTestCharms["varnish"]),
+	})
+}
+
+func (s *StoreSearchSuite) TestSearchWithSummaryFilter(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Text: "",
+		Filters: map[string][]string{
+			"summary": {"Database engine"},
+		},
+	}
+	ids, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(ids, jc.SameContents, []string{
+		url.QueryEscape(exportTestCharms["mysql"]),
+		url.QueryEscape(exportTestCharms["varnish"]),
+	})
+}
+
+func (s *StoreSearchSuite) TestSearchWithTagsFilter(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Text: "",
+		Filters: map[string][]string{
+			"tags": {"wordpress"},
+		},
+	}
+	ids, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(ids, jc.SameContents, []string{
+		url.QueryEscape(exportTestCharms["wordpress"]),
+		url.QueryEscape(exportTestBundles["wordpress"]),
+	})
+}
+
+func (s *StoreSearchSuite) TestSearchWithBundleType(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Text: "",
+		Filters: map[string][]string{
+			"type": {"bundle"},
+		},
+	}
+	ids, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(ids, jc.DeepEquals, []string{url.QueryEscape(exportTestBundles["wordpress"])})
+}
+
+func (s *StoreSearchSuite) TestSearchWithCharmType(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Text: "",
+		Filters: map[string][]string{
+			"type": {"charm"},
+		},
+	}
+	ids, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(ids, jc.SameContents, []string{
+		url.QueryEscape(exportTestCharms["wordpress"]),
+		url.QueryEscape(exportTestCharms["mysql"]),
+		url.QueryEscape(exportTestCharms["varnish"]),
+	})
+}
+
+func (s *StoreSearchSuite) TestSearchWithCharmAndBundleTypes(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Text: "",
+		Filters: map[string][]string{
+			"type": {"charm", "bundle"},
+		},
+	}
+	ids, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(ids, jc.SameContents, []string{
+		url.QueryEscape(exportTestCharms["wordpress"]),
+		url.QueryEscape(exportTestCharms["mysql"]),
+		url.QueryEscape(exportTestCharms["varnish"]),
+		url.QueryEscape(exportTestBundles["wordpress"]),
+	})
+}
+
+func (s *StoreSearchSuite) TestSearchWithInvalidFilter(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Text: "",
+		Filters: map[string][]string{
+			"no such filter": {"foo"},
+		},
+	}
+	ids, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(ids, jc.SameContents, []string{
+		url.QueryEscape(exportTestCharms["wordpress"]),
+		url.QueryEscape(exportTestCharms["mysql"]),
+		url.QueryEscape(exportTestCharms["varnish"]),
+		url.QueryEscape(exportTestBundles["wordpress"]),
+	})
+}
+
+func (s *StoreSearchSuite) TestSearchWithValidAndInvalidFilters(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Text: "",
+		Filters: map[string][]string{
+			"type":           {"charm"},
+			"no such filter": {"foo"},
+		},
+	}
+	ids, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(ids, jc.SameContents, []string{
+		url.QueryEscape(exportTestCharms["wordpress"]),
+		url.QueryEscape(exportTestCharms["mysql"]),
+		url.QueryEscape(exportTestCharms["varnish"]),
+	})
 }

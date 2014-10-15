@@ -48,7 +48,7 @@ type searchParams struct {
 
 // parseSearchParms extracts the search paramaters from the request
 func parseSearchParams(req *http.Request) (searchParams, error) {
-	var sp searchParams
+	sp := searchParams{SearchParams: charmstore.SearchParams{Filters: map[string][]string{}}}
 	var err error
 	for k, v := range req.Form {
 		switch k {
@@ -69,11 +69,10 @@ func parseSearchParams(req *http.Request) (searchParams, error) {
 			}
 		case "include":
 			sp.Include = v
-		default:
-			if sp.Filters == nil {
-				sp.Filters = map[string][]string{}
-			}
+		case "description", "name", "owner", "provides", "requires", "series", "summary", "tags", "type":
 			sp.Filters[k] = v
+		default:
+			return searchParams{}, badRequestf(err, "invalid parameter: %s", k)
 		}
 	}
 

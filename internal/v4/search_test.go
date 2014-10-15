@@ -37,13 +37,13 @@ func (s *SearchSuite) TestParseSearchParamsAutocompete(c *gc.C) {
 func (s *SearchSuite) TestParseSearchParamsFilters(c *gc.C) {
 	var req http.Request
 	req.Form = map[string][]string{
-		"f1": {"f11", "f12"},
-		"f2": {"f21"},
+		"tags": {"f11", "f12"},
+		"name": {"f21"},
 	}
 	sp, err := parseSearchParams(&req)
 	c.Assert(err, gc.IsNil)
-	c.Assert(sp.Filters["f1"], jc.DeepEquals, []string{"f11", "f12"})
-	c.Assert(sp.Filters["f2"], jc.DeepEquals, []string{"f21"})
+	c.Assert(sp.Filters["tags"], jc.DeepEquals, []string{"f11", "f12"})
+	c.Assert(sp.Filters["name"], jc.DeepEquals, []string{"f21"})
 }
 
 func (s *SearchSuite) TestParseSearchParamsLimit(c *gc.C) {

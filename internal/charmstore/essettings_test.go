@@ -251,6 +251,12 @@ var esMappingText = []byte(`
               }
             }
           },
+          "Tags": {
+            "type": "string",
+            "index": "not_analyzed",
+            "omit_norms": true,
+            "index_options": "docs"
+          },
           "Series": {
             "type": "string"
           },
