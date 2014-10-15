@@ -64,7 +64,7 @@ func (s *suite) TearDownTest(c *gc.C) {
 	s.IsolatedMgoSuite.TearDownTest(c)
 }
 
-var doTests = []struct {
+var getTests = []struct {
 	about           string
 	method          string
 	path            string
@@ -97,22 +97,14 @@ var doTests = []struct {
 	expectErrorCode: params.ErrNotFound,
 }}
 
-func (s *suite) TestDo(c *gc.C) {
+func (s *suite) TestGet(c *gc.C) {
 	ch := charmtesting.Charms.CharmDir("wordpress")
 	url := mustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
 
-	for i, test := range doTests {
+	for i, test := range getTests {
 		c.Logf("test %d: %s", i, test.about)
-
-		if test.method == "" {
-			test.method = "GET"
-		}
-
-		// Set up the request.
-		req, err := http.NewRequest(test.method, "", nil)
-		c.Assert(err, gc.IsNil)
 
 		// Send the request.
 		var result json.RawMessage
@@ -120,7 +112,7 @@ func (s *suite) TestDo(c *gc.C) {
 		if !test.nilResult {
 			resultPtr = &result
 		}
-		err = s.client.Do(req, test.path, resultPtr)
+		err = s.client.Get(test.path, resultPtr)
 
 		// Check the response.
 		if test.expectError != "" {
@@ -157,13 +149,12 @@ func (s *suite) TestDoAuthorization(c *gc.C) {
 	})
 	req, err := http.NewRequest("DELETE", "", nil)
 	c.Assert(err, gc.IsNil)
-	err = client.Do(req, "/utopic/wordpress-42/archive", nil)
+	_, err = client.Do(req, "/utopic/wordpress-42/archive")
 	c.Assert(err, gc.ErrorMatches, "invalid user name or password")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrUnauthorized)
 
 	// Check that it's still there.
-	req, err = http.NewRequest("GET", "", nil)
-	err = client.Do(req, "/utopic/wordpress-42/expand-id", nil)
+	err = client.Get("/utopic/wordpress-42/expand-id", nil)
 	c.Assert(err, gc.IsNil)
 
 	// Then check that when we use the correct authorization,
@@ -175,23 +166,23 @@ func (s *suite) TestDoAuthorization(c *gc.C) {
 	})
 	req, err = http.NewRequest("DELETE", "", nil)
 	c.Assert(err, gc.IsNil)
-	err = client.Do(req, "/utopic/wordpress-42/archive", nil)
+	resp, err := client.Do(req, "/utopic/wordpress-42/archive")
 	c.Assert(err, gc.IsNil)
+	resp.Body.Close()
 
 	// Check that it's now really gone.
-	req, err = http.NewRequest("GET", "", nil)
-	err = client.Do(req, "/utopic/wordpress-42/expand-id", nil)
+	err = client.Get("/utopic/wordpress-42/expand-id", nil)
 	c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for "cs:wordpress"`)
 }
 
-var doWithBadResponseTests = []struct {
+var getWithBadResponseTests = []struct {
 	about       string
 	error       error
 	response    *http.Response
 	responseErr error
 	expectError string
 }{{
-	about:       "http client Do failure",
+	about:       "http client Get failure",
 	error:       errgo.New("round trip failure"),
 	expectError: "Get .*: round trip failure",
 }, {
@@ -246,8 +237,8 @@ var doWithBadResponseTests = []struct {
 	expectError: "error response with empty message .*",
 }}
 
-func (s *suite) TestDoWithBadResponse(c *gc.C) {
-	for i, test := range doWithBadResponseTests {
+func (s *suite) TestGetWithBadResponse(c *gc.C) {
+	for i, test := range getWithBadResponseTests {
 		c.Logf("test %d: %s", i, test.about)
 		cl := csclient.New(csclient.Params{
 			URL: "http://0.1.2.3",
@@ -259,9 +250,7 @@ func (s *suite) TestDoWithBadResponse(c *gc.C) {
 			},
 		})
 		var result interface{}
-		err := cl.Do(&http.Request{
-			Method: "GET",
-		}, "/foo", &result)
+		err := cl.Get("/foo", &result)
 		c.Assert(err, gc.ErrorMatches, test.expectError)
 	}
 }
@@ -294,18 +283,25 @@ var hyphenateTests = []struct {
 	expect: "with_-dubious_-underscore",
 }}
 
-func (s *suite) TestGet(c *gc.C) {
+func (s *suite) TestDo(c *gc.C) {
+	// Do is tested fairly comprehensively (but indirectly)
+	// in TestGet, so just a trivial smoke test here.
 	ch := charmtesting.Charms.CharmDir("wordpress")
 	url := mustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
-
-	var result []params.ExpandedId
-	err = s.client.Get("/utopic/wordpress/expand-id", &result)
+	err = s.client.PutExtraInfo(url, map[string]interface{}{
+		"foo": "bar",
+	})
 	c.Assert(err, gc.IsNil)
-	c.Assert(result, jc.DeepEquals, []params.ExpandedId{{
-		Id: "cs:utopic/wordpress-42",
-	}})
+
+	req, _ := http.NewRequest("GET", "", nil)
+	resp, err := s.client.Do(req, "/wordpress/meta/extra-info/foo")
+	c.Assert(err, gc.IsNil)
+	defer resp.Body.Close()
+	data, err := ioutil.ReadAll(resp.Body)
+	c.Assert(err, gc.IsNil)
+	c.Assert(string(data), gc.Equals, `"bar"`)
 }
 
 func (s *suite) TestHyphenate(c *gc.C) {
