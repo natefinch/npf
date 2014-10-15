@@ -6,9 +6,9 @@ tags = ["golang", "go", "programming"]
 +++
 
 Obviously, not *everyone* hates Go.  But there was a [quora
-question](https://www.quora.com/Why-does-Go-seem-to-be-the- most-heavily-
+question](https://www.quora.com/Why-does-Go-seem-to-be-the-most-heavily-
 criticised-among-the-newer-programming-languages?srid=uCiY&share=1) recently
-about why everyone critizes Go so much. (sorry, I don't normally post links to
+about why everyone criticizes Go so much. (sorry, I don't normally post links to
 Quora, but it was the motivator for this post) Even before I saw the answers to
 the question, I knew what they'd consist of:
 
@@ -65,7 +65,7 @@ language. And this is where the scorn turns into derision and attacks on the
 character of the people using it.
 
 The most vocal Go detractors are those developers who write in ML-derived
-languages (Haskel, Rust, Scala, *et al*) who have tied their preferred
+languages (Haskell, Rust, Scala, *et al*) who have tied their preferred
 programming language into their identity. The mere existence of Go says
 "your views on what makes a good programming language are wrong". And the more
 people that use and like Go, the more strongly they feel that they're being told
