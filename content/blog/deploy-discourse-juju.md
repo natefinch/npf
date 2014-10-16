@@ -21,8 +21,7 @@ deploy Discourse for Steve.  This involved writing a Juju *charm* which is sort
 of like an install script, but with hooks for updating configuration and hooks
 for interacting with other services. I'll talk about the process of writing the
 charm in a later post, but for now, all you need to know is that it follows the
-official [install guide](https://github.com/discourse/discourse/blob/master/docs
-/INSTALL-digital- ocean.md) for installing Discourse.
+official [install guide](https://github.com/discourse/discourse/blob/master/docs/INSTALL-digital-ocean.md) for installing Discourse.
 
 The install guide says that you can install Discourse in 30 minutes.  Following
 it took me a **lot** longer than that, due to some confusion about what the

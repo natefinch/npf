@@ -26,9 +26,9 @@ No, it's not.  This is actually three topics, so I'll break it up for you:
 This is just bullshit.  There are a 100 ways to version your code, just by
 encoding the version in your package's import path.  It's trivial to move your
 foo package to v2 by creating a new repo called github.com/yourname/foo.v2.  Bam
-done.  If you want to get fancy, you can use [gopkg.in](http://gopkg.in) to redirect to
-different branches of the same repo (you can self-host this if you want to use
-your own URL and/or not depend on an external service).
+done.  If you want to get fancy, you can use [gopkg.in](http://gopkg.in) to
+redirect to different branches of the same repo (you can self-host this if you
+want to use your own URL and/or not depend on an external service).
 
 > 2.) You can't make reproducible builds!
 
@@ -112,4 +112,4 @@ Ok fuckwad, now you're just trolling.  But I'll feed the troll, this one time.
 First off, the programmers of the 70's actually knew quite a lot.  They designed
 things like C, and Unix.  Later they designed things like UTF-8 and Go.
 
-So, yes, Go may seem like it's a throwback to the 70's, since it dismissed common 
+So, yes, Go may seem like it's a throwback to the 70's, since it does not include many of complex programming ideas that 
