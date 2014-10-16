@@ -9,13 +9,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/juju/loggo"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/config"
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/elasticsearch"
-	"github.com/juju/loggo"
 )
 
 var logger = loggo.GetLogger("essync")
