@@ -1,6 +1,68 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the LGPLv3, see LICENCE file for details.
 
+// The legacy package implements the legacy API, as follows:
+//  
+// /charm-info
+// 
+// A GET call to `/charm-info` returns info about one or more charms, including
+// its canonical URL, revision, SHA256 checksum and VCS revision digest.
+// The returned info is in JSON format.
+// For instance a request to `/charm-info?charms=cs:trusty/juju-gui` returns the
+// following response:
+// 
+//     {"cs:trusty/juju-gui": {
+//         "canonical-url": "cs:trusty/juju-gui",
+//         "revision": 3,
+//         "sha256": "a15c77f3f92a0fb7b61e9...",
+//         "digest": jeff.pihach@canonical.com-20140612210347-6cc9su1jqjkhbi84"
+//     }}
+// 
+// /charm-event:
+// 
+// A GET call to `/charm-event` returns info about an event occurred in the life
+// of the specified charm(s). Currently two types of events are logged:
+// "published" (a charm has been published and it's available in the store) and
+// "publish-error" (an error occurred while importing the charm).
+// E.g. a call to `/charm-event?charms=cs:trusty/juju-gui` generates the following
+// JSON response:
+// 
+//     {"cs:trusty/juju-gui": {
+//         "kind": "published",
+//         "revision": 3,
+//         "digest": "jeff.pihach@canonicalcom-20140612210347-6cc9su1jqjkhbi84",
+//         "time": "2014-06-16T14:41:19Z"
+//     }}
+// 
+// /charm/
+// 
+// The `charm` API provides the ability to download a charm as a Zip archive,
+// given the charm identifier. For instance, it is possible to download the Juju
+// GUI charm by performing a GET call to `/charm/trusty/juju-gui-42`. Both the
+// revision and OS series can be omitted, e.g. `/charm/juju-gui` will download the
+// last revision of the Juju GUI charm with support to the more recent Ubuntu LTS
+// series.
+// 
+// /stats/counter/
+// 
+// Stats can be retrieved by calling `/stats/counter/{key}` where key is a query
+// that specifies the counter stats to calculate and return.
+// 
+// For instance, a call to `/stats/counter/charm-bundle:*` returns the number of
+// times a charm has been downloaded from the store. To get the same value for
+// a specific charm, it is possible to filter the results by passing the charm
+// series and name, e.g. `/stats/counter/charm-bundle:trusty:juju-gui`.
+// 
+// The results can be grouped by specifying the `by` query (possible values are
+// `day` and `week`), and time delimited using the `start` and `stop` queries.
+// 
+// It is also possible to list the results by passing `list=1`. For example, a GET
+// call to `/stats/counter/charm-bundle:trusty:*?by=day&list=1` returns an
+// aggregated count of trusty charms downloads, grouped by charm and day, similar
+// to the following:
+// 
+//     charm-bundle:trusty:juju-gui  2014-06-17  5
+//     charm-bundle:trusty:mysql     2014-06-17  1
 package legacy
 
 import (
