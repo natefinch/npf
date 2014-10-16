@@ -103,3 +103,6 @@ type SearchResult struct {
 	// be included.
 	Meta map[string]interface{} `json:",omitempty"`
 }
+
+// BzrDigestKey is the extra-info key used to store the Bazaar digest
+const BzrDigestKey = "bzr-digest"
