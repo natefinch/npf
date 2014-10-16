@@ -9,13 +9,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"gopkg.in/errgo.v1"
 	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/config"
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/elasticsearch"
 	"github.com/juju/loggo"
-	"gopkg.in/errgo.v1"
 )
 
 var logger = loggo.GetLogger("essync")
@@ -37,7 +37,8 @@ func main() {
 	}
 	if *loggingConfig != "" {
 		if err := loggo.ConfigureLoggers(*loggingConfig); err != nil {
-			return errgo.Notef(err, "cannot configure loggers")
+			fmt.Fprintf(os.Stderr, "cannot configure loggers: %v", err)
+			os.Exit(1)
 		}
 	}
 	if err := populate(flag.Arg(0)); err != nil {
@@ -47,6 +48,7 @@ func main() {
 }
 
 func populate(confPath string) error {
+	logger.Debugf("reading config file %q", confPath)
 	conf, err := config.Read(confPath)
 	if err != nil {
 		return errgo.Notef(err, "cannot read config file %q", confPath)
@@ -55,9 +57,6 @@ func populate(confPath string) error {
 		return errgo.Newf("no elasticsearch-addr specified in config file %q", confPath)
 	}
 	es := &elasticsearch.Database{conf.ESAddr}
-
-	logger.Infof("config: %#v", conf)
-
 	session, err := mgo.Dial(conf.MongoURL)
 	if err != nil {
 		return errgo.Notef(err, "cannot dial mongo at %q", conf.MongoURL)
