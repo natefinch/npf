@@ -25,7 +25,6 @@ import (
 	"github.com/juju/charmstore/internal/legacy"
 	"github.com/juju/charmstore/internal/storetesting"
 	"github.com/juju/charmstore/internal/storetesting/stats"
-	"github.com/juju/charmstore/lppublish"
 	"github.com/juju/charmstore/params"
 )
 
@@ -148,7 +147,7 @@ func (s *APISuite) TestServerCharmInfo(c *gc.C) {
 		about: "full charm URL with digest extra info",
 		url:   wordpressURL.String(),
 		extrainfo: map[string][]byte{
-			lppublish.BzrDigestKey: digest,
+			params.BzrDigestKey: digest,
 		},
 		canonical: "cs:precise/wordpress-1",
 		sha:       hashSum,
@@ -164,7 +163,7 @@ func (s *APISuite) TestServerCharmInfo(c *gc.C) {
 		about: "partial charm URL with digest extra info",
 		url:   "cs:wordpress",
 		extrainfo: map[string][]byte{
-			lppublish.BzrDigestKey: digest,
+			params.BzrDigestKey: digest,
 		},
 		canonical: "cs:precise/wordpress-1",
 		sha:       hashSum,
@@ -180,7 +179,7 @@ func (s *APISuite) TestServerCharmInfo(c *gc.C) {
 		about: "invalid digest extra info",
 		url:   "cs:wordpress",
 		extrainfo: map[string][]byte{
-			lppublish.BzrDigestKey: []byte("[]"),
+			params.BzrDigestKey: []byte("[]"),
 		},
 		canonical: "cs:precise/wordpress-1",
 		sha:       hashSum,

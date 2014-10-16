@@ -37,9 +37,7 @@ At this point, from the root of this branch, run the command::
 The command above builds and installs the charm store binaries, and places them
 in `$GOPATH/bin`. This is the list of the installed commands:
 
-- charmload: populate the database with charms from Launchpad;
 - charmd: start the charm store server;
-- charm-admin: manage published charms.
 
 A description of each command can be found below.
 
@@ -47,28 +45,6 @@ A description of each command can be found below.
 
 Run `make check` to test the application.
 Run `make help` to display help about all the available make targets.
-
-## Populate the charms database
-
-The charm store creates a MongoDB database named "juju" and stores info about
-charms in the MongoDB "juju.charms" collection. Also charm files are stored in
-a GridFS named "juju.charmfs".
-
-To populate the database with the charms published in Launchpad, run the
-following command:
-
-    charmload -config cmd/charmd/config.yaml
-
-Note: the operation takes a large amount of time and disk space to complete:
-at the time of this writing it takes ~2:30h and ~4GB to store ~1050 charms,
-but this can vary significantly based on your machine/connection speed.
-The process can be stopped by typing ^C.
-To check the imported charm count, you can run the following:
-
-    mongo --eval "db.getSiblingDB('juju').charms.count()"
-
-The charmload process logs errors to a charmload.err file in the current
-directory of the charmload process.
 
 ## Charmstore server
 
