@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/juju/loggo"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/config"
@@ -16,7 +18,12 @@ import (
 	"github.com/juju/charmstore/internal/elasticsearch"
 )
 
-var index = flag.String("index", "charmstore", "Name of index to populate.")
+var logger = loggo.GetLogger("essync")
+
+var (
+	index         = flag.String("index", "charmstore", "Name of index to populate.")
+	loggingConfig = flag.String("logging-config", "", "specify log levels for modules e.g. <root>=TRACE")
+)
 
 func main() {
 	flag.Usage = func() {
@@ -28,30 +35,38 @@ func main() {
 	if flag.NArg() != 1 {
 		flag.Usage()
 	}
+	if *loggingConfig != "" {
+		if err := loggo.ConfigureLoggers(*loggingConfig); err != nil {
+			fmt.Fprintf(os.Stderr, "cannot configure loggers: %v", err)
+			os.Exit(1)
+		}
+	}
 	if err := populate(flag.Arg(0)); err != nil {
-		fmt.Fprintf(os.Stderr, "cannot populate elasticsearch: %v", err)
+		logger.Errorf("cannot populate elasticsearch: %v", err)
 		os.Exit(1)
 	}
 }
 
 func populate(confPath string) error {
+	logger.Debugf("reading config file %q", confPath)
 	conf, err := config.Read(confPath)
 	if err != nil {
-		return err
+		return errgo.Notef(err, "cannot read config file %q", confPath)
 	}
 	if conf.ESAddr == "" {
-		return fmt.Errorf("no elasticsearch-addr specified in %s", confPath)
+		return errgo.Newf("no elasticsearch-addr specified in config file %q", confPath)
 	}
 	es := &elasticsearch.Database{conf.ESAddr}
 	session, err := mgo.Dial(conf.MongoURL)
 	if err != nil {
-		return err
+		return errgo.Notef(err, "cannot dial mongo at %q", conf.MongoURL)
 	}
 	defer session.Close()
 	db := session.DB("juju")
 	store, err := charmstore.NewStore(db, &charmstore.StoreElasticSearch{es, *index})
 	if err != nil {
-		return err
+		return errgo.Notef(err, "unable to create store for ESSync")
 	}
+	logger.Debugf("starting export to Elastic Search")
 	return store.ExportToElasticSearch()
 }
