@@ -14,12 +14,11 @@ import (
 	"github.com/juju/charmstore/config"
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/elasticsearch"
-	"github.com/juju/errgo"
 	"github.com/juju/loggo"
+	"gopkg.in/errgo.v1"
 )
 
 var logger = loggo.GetLogger("essync")
-var failsLogger = loggo.GetLogger("charmload_v4.loadfails")
 
 var (
 	index         = flag.String("index", "charmstore", "Name of index to populate.")
@@ -36,6 +35,11 @@ func main() {
 	if flag.NArg() != 1 {
 		flag.Usage()
 	}
+	if *loggingConfig != "" {
+		if err := loggo.ConfigureLoggers(*loggingConfig); err != nil {
+			return errgo.Notef(err, "cannot configure loggers")
+		}
+	}
 	if err := populate(flag.Arg(0)); err != nil {
 		logger.Errorf("cannot populate elasticsearch: %v", err)
 		os.Exit(1)
@@ -43,28 +47,20 @@ func main() {
 }
 
 func populate(confPath string) error {
-	if *loggingConfig != "" {
-		if err := loggo.ConfigureLoggers(*loggingConfig); err != nil {
-			return errgo.Notef(err, "cannot configure loggers")
-		}
-	}
 	conf, err := config.Read(confPath)
 	if err != nil {
-		return errgo.Notef(err, "cannot read config: %s", confPath)
+		return errgo.Notef(err, "cannot read config file %q", confPath)
 	}
 	if conf.ESAddr == "" {
-		return errgo.Newf("no elasticsearch-addr specified in %s", confPath)
+		return errgo.Newf("no elasticsearch-addr specified in config file %q", confPath)
 	}
 	es := &elasticsearch.Database{conf.ESAddr}
 
-	if conf.MongoURL == "" {
-		return errgo.Newf("no mongodb-addr specified in %s", confPath)
-	}
 	logger.Infof("config: %#v", conf)
 
 	session, err := mgo.Dial(conf.MongoURL)
 	if err != nil {
-		return errgo.Notef(err, "cannot dial mongo at: %s", conf.MongoURL)
+		return errgo.Notef(err, "cannot dial mongo at %q", conf.MongoURL)
 	}
 	defer session.Close()
 	db := session.DB("juju")
@@ -72,6 +68,6 @@ func populate(confPath string) error {
 	if err != nil {
 		return errgo.Notef(err, "unable to create store for ESSync")
 	}
-	logger.Infof("start export to Elastic Search")
+	logger.Debugf("starting export to Elastic Search")
 	return store.ExportToElasticSearch()
 }
