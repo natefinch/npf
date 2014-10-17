@@ -356,10 +356,10 @@ var routerGetTests = []struct {
 	expectBody: fieldSelectHandleGetInfo{
 		HandlerId: "handler1",
 		Doc: fieldSelectQueryInfo{
-			Id:       mustParseReference("cs:precise/wordpress-42"),
+			Id:       charm.MustParseReference("cs:precise/wordpress-42"),
 			Selector: map[string]int{"field1": 1, "field2": 1},
 		},
-		Id: mustParseReference("cs:precise/wordpress-42"),
+		Id: charm.MustParseReference("cs:precise/wordpress-42"),
 	},
 }, {
 	about:  "meta handler returning error with code",
@@ -379,7 +379,7 @@ var routerGetTests = []struct {
 	urlStr:       "/precise/wordpress-42/meta/any",
 	expectStatus: http.StatusOK,
 	expectBody: params.MetaAnyResponse{
-		Id: mustParseReference("cs:precise/wordpress-42"),
+		Id: charm.MustParseReference("cs:precise/wordpress-42"),
 	},
 }, {
 	about:  "meta/any, some includes all using same key",
@@ -394,31 +394,31 @@ var routerGetTests = []struct {
 	expectQueryCount: 1,
 	expectStatus:     http.StatusOK,
 	expectBody: params.MetaAnyResponse{
-		Id: mustParseReference("cs:precise/wordpress-42"),
+		Id: charm.MustParseReference("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
 			"field1-1": fieldSelectHandleGetInfo{
 				HandlerId: "handler1",
 				Doc: fieldSelectQueryInfo{
-					Id:       mustParseReference("cs:precise/wordpress-42"),
+					Id:       charm.MustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1},
 				},
-				Id: mustParseReference("cs:precise/wordpress-42"),
+				Id: charm.MustParseReference("cs:precise/wordpress-42"),
 			},
 			"field2": fieldSelectHandleGetInfo{
 				HandlerId: "handler2",
 				Doc: fieldSelectQueryInfo{
-					Id:       mustParseReference("cs:precise/wordpress-42"),
+					Id:       charm.MustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1},
 				},
-				Id: mustParseReference("cs:precise/wordpress-42"),
+				Id: charm.MustParseReference("cs:precise/wordpress-42"),
 			},
 			"field1-2": fieldSelectHandleGetInfo{
 				HandlerId: "handler3",
 				Doc: fieldSelectQueryInfo{
-					Id:       mustParseReference("cs:precise/wordpress-42"),
+					Id:       charm.MustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1},
 				},
-				Id: mustParseReference("cs:precise/wordpress-42"),
+				Id: charm.MustParseReference("cs:precise/wordpress-42"),
 			},
 		},
 	},
@@ -435,33 +435,33 @@ var routerGetTests = []struct {
 	expectQueryCount: 1,
 	expectStatus:     http.StatusOK,
 	expectBody: params.MetaAnyResponse{
-		Id: mustParseReference("cs:precise/wordpress-42"),
+		Id: charm.MustParseReference("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
 			"item1/foo": fieldSelectHandleGetInfo{
 				HandlerId: "handler1",
 				Doc: fieldSelectQueryInfo{
-					Id:       mustParseReference("cs:precise/wordpress-42"),
+					Id:       charm.MustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
 				},
-				Id:   mustParseReference("cs:precise/wordpress-42"),
+				Id:   charm.MustParseReference("cs:precise/wordpress-42"),
 				Path: "/foo",
 			},
 			"item2/bar": fieldSelectHandleGetInfo{
 				HandlerId: "handler2",
 				Doc: fieldSelectQueryInfo{
-					Id:       mustParseReference("cs:precise/wordpress-42"),
+					Id:       charm.MustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
 				},
-				Id:   mustParseReference("cs:precise/wordpress-42"),
+				Id:   charm.MustParseReference("cs:precise/wordpress-42"),
 				Path: "/bar",
 			},
 			"item1": fieldSelectHandleGetInfo{
 				HandlerId: "handler3",
 				Doc: fieldSelectQueryInfo{
-					Id:       mustParseReference("cs:precise/wordpress-42"),
+					Id:       charm.MustParseReference("cs:precise/wordpress-42"),
 					Selector: map[string]int{"field1": 1, "field2": 1, "field3": 1},
 				},
-				Id: mustParseReference("cs:precise/wordpress-42"),
+				Id: charm.MustParseReference("cs:precise/wordpress-42"),
 			},
 		},
 	},
@@ -477,7 +477,7 @@ var routerGetTests = []struct {
 	},
 	expectStatus: http.StatusOK,
 	expectBody: params.MetaAnyResponse{
-		Id: mustParseReference("cs:precise/wordpress-42"),
+		Id: charm.MustParseReference("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
 			"ok": metaHandlerTestResp{
 				CharmURL: "cs:precise/wordpress-42",
@@ -540,7 +540,7 @@ var routerGetTests = []struct {
 	expectStatus: http.StatusOK,
 	expectBody: map[string]params.MetaAnyResponse{
 		"precise/wordpress-42": {
-			Id: mustParseReference("cs:precise/wordpress-42"),
+			Id: charm.MustParseReference("cs:precise/wordpress-42"),
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
 					CharmURL: "cs:precise/wordpress-42",
@@ -552,7 +552,7 @@ var routerGetTests = []struct {
 			},
 		},
 		"quantal/foo-32": {
-			Id: mustParseReference("cs:quantal/foo-32"),
+			Id: charm.MustParseReference("cs:quantal/foo-32"),
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
 					CharmURL: "cs:quantal/foo-32",
@@ -1388,18 +1388,18 @@ var getMetadataTests = []struct {
 		"item1": fieldSelectHandleGetInfo{
 			HandlerId: "handler1",
 			Doc: fieldSelectQueryInfo{
-				Id:       mustParseReference("cs:~rog/precise/wordpress-2"),
+				Id:       charm.MustParseReference("cs:~rog/precise/wordpress-2"),
 				Selector: map[string]int{"item1": 1, "item2": 1},
 			},
-			Id: mustParseReference("cs:~rog/precise/wordpress-2"),
+			Id: charm.MustParseReference("cs:~rog/precise/wordpress-2"),
 		},
 		"item2": fieldSelectHandleGetInfo{
 			HandlerId: "handler2",
 			Doc: fieldSelectQueryInfo{
-				Id:       mustParseReference("cs:~rog/precise/wordpress-2"),
+				Id:       charm.MustParseReference("cs:~rog/precise/wordpress-2"),
 				Selector: map[string]int{"item1": 1, "item2": 1},
 			},
-			Id: mustParseReference("cs:~rog/precise/wordpress-2"),
+			Id: charm.MustParseReference("cs:~rog/precise/wordpress-2"),
 		},
 		"test": &metaHandlerTestResp{
 			CharmURL: "cs:~rog/precise/wordpress-2",
@@ -1421,7 +1421,7 @@ func (s *RouterSuite) TestGetMetadata(c *gc.C) {
 				"test":  testMetaHandler(0),
 			},
 		}, noResolveURL)
-		id := mustParseReference(test.id)
+		id := charm.MustParseReference(test.id)
 		result, err := router.GetMetadata(id, test.includes)
 		if test.expectError != "" {
 			c.Assert(err, gc.ErrorMatches, test.expectError)
@@ -2021,14 +2021,6 @@ func selectiveIdHandler(m map[string]interface{}) BulkIncludeHandler {
 	return SingleIncludeHandler(func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 		return m[id.String()], nil
 	})
-}
-
-func mustParseReference(url string) *charm.Reference {
-	ref, err := charm.ParseReference(url)
-	if err != nil {
-		panic(err)
-	}
-	return ref
 }
 
 type swapper interface {

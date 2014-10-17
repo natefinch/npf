@@ -118,17 +118,17 @@ var metaCharmRelatedTests = []struct {
 	expectBody: params.RelatedResponse{
 		Provides: map[string][]params.MetaAnyResponse{
 			"memcache": {{
-				Id: mustParseReference("utopic/memcached-42"),
+				Id: charm.MustParseReference("utopic/memcached-42"),
 			}},
 			"mount": {{
-				Id: mustParseReference("precise/nfs-1"),
+				Id: charm.MustParseReference("precise/nfs-1"),
 			}},
 		},
 		Requires: map[string][]params.MetaAnyResponse{
 			"http": {{
-				Id: mustParseReference("precise/haproxy-48"),
+				Id: charm.MustParseReference("precise/haproxy-48"),
 			}, {
-				Id: mustParseReference("trusty/haproxy-47"),
+				Id: charm.MustParseReference("trusty/haproxy-47"),
 			}},
 		},
 	},
@@ -139,7 +139,7 @@ var metaCharmRelatedTests = []struct {
 	expectBody: params.RelatedResponse{
 		Provides: map[string][]params.MetaAnyResponse{
 			"http": {{
-				Id: mustParseReference("utopic/wordpress-0"),
+				Id: charm.MustParseReference("utopic/wordpress-0"),
 			}},
 		},
 	},
@@ -150,7 +150,7 @@ var metaCharmRelatedTests = []struct {
 	expectBody: params.RelatedResponse{
 		Requires: map[string][]params.MetaAnyResponse{
 			"memcache": {{
-				Id: mustParseReference("utopic/wordpress-0"),
+				Id: charm.MustParseReference("utopic/wordpress-0"),
 			}},
 		},
 	},
@@ -230,11 +230,11 @@ var metaCharmRelatedTests = []struct {
 	expectBody: params.RelatedResponse{
 		Provides: map[string][]params.MetaAnyResponse{
 			"memcache": {{
-				Id: mustParseReference("utopic/memcached-1"),
+				Id: charm.MustParseReference("utopic/memcached-1"),
 			}, {
-				Id: mustParseReference("utopic/memcached-2"),
+				Id: charm.MustParseReference("utopic/memcached-2"),
 			}, {
-				Id: mustParseReference("utopic/memcached-3"),
+				Id: charm.MustParseReference("utopic/memcached-3"),
 			}},
 		},
 	},
@@ -314,18 +314,18 @@ var metaCharmRelatedTests = []struct {
 	expectBody: params.RelatedResponse{
 		Provides: map[string][]params.MetaAnyResponse{
 			"memcache": {{
-				Id: mustParseReference("utopic/memcached-1"),
+				Id: charm.MustParseReference("utopic/memcached-1"),
 			}, {
-				Id: mustParseReference("utopic/memcached-2"),
+				Id: charm.MustParseReference("utopic/memcached-2"),
 			}, {
-				Id: mustParseReference("utopic/redis-90"),
+				Id: charm.MustParseReference("utopic/redis-90"),
 			}},
 			"mount": {{
-				Id: mustParseReference("precise/nfs-42"),
+				Id: charm.MustParseReference("precise/nfs-42"),
 			}, {
-				Id: mustParseReference("precise/nfs-47"),
+				Id: charm.MustParseReference("precise/nfs-47"),
 			}, {
-				Id: mustParseReference("trusty/nfs-47"),
+				Id: charm.MustParseReference("trusty/nfs-47"),
 			}},
 		},
 	},
@@ -337,7 +337,7 @@ var metaCharmRelatedTests = []struct {
 	expectBody: params.RelatedResponse{
 		Requires: map[string][]params.MetaAnyResponse{
 			"mount": {{
-				Id: mustParseReference("utopic/wordpress-0"),
+				Id: charm.MustParseReference("utopic/wordpress-0"),
 				Meta: map[string]interface{}{
 					"archive-size": params.ArchiveSizeResponse{Size: fakeBlobSize},
 					"charm-metadata": &charm.Meta{
@@ -369,7 +369,7 @@ var metaCharmRelatedTests = []struct {
 
 func (s *RelationsSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
 	for id, ch := range charms {
-		url := mustParseReference(id)
+		url := charm.MustParseReference(id)
 		// The blob related info are not used in these tests.
 		// The related charms are retrieved from the entities collection,
 		// without accessing the blob store.
@@ -500,18 +500,18 @@ var metaBundlesContainingTests = []struct {
 	id:           "utopic/wordpress-42",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/useless-0"),
+		Id: charm.MustParseReference("bundle/useless-0"),
 	}, {
-		Id: mustParseReference("bundle/wordpress-complex-1"),
+		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 	}, {
-		Id: mustParseReference("bundle/wordpress-simple-0"),
+		Id: charm.MustParseReference("bundle/wordpress-simple-0"),
 	}},
 }, {
 	about:        "specific charm present in one bundle",
 	id:           "trusty/memcached-2",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/wordpress-complex-1"),
+		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 	}},
 }, {
 	about:        "specific charm not present in any bundle",
@@ -524,7 +524,7 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?include=archive-size&include=bundle-metadata",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/wordpress-complex-1"),
+		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
 			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-complex-1"].Data(),
@@ -535,7 +535,7 @@ var metaBundlesContainingTests = []struct {
 	id:           "mysql", // The test will add cs:utopic/mysql-0.
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/wordpress-simple-0"),
+		Id: charm.MustParseReference("bundle/wordpress-simple-0"),
 	}},
 }, {
 	about:        "any series set to true",
@@ -543,9 +543,9 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?any-series=1",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/wordpress-complex-1"),
+		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 	}, {
-		Id: mustParseReference("bundle/wordpress-simple-0"),
+		Id: charm.MustParseReference("bundle/wordpress-simple-0"),
 	}},
 }, {
 	about:        "invalid any series",
@@ -562,9 +562,9 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?any-revision=1",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/django-generic-42"),
+		Id: charm.MustParseReference("bundle/django-generic-42"),
 	}, {
-		Id: mustParseReference("bundle/wordpress-complex-1"),
+		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 	}},
 }, {
 	about:        "invalid any revision",
@@ -581,15 +581,15 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?any-series=1&any-revision=1",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/django-generic-42"),
+		Id: charm.MustParseReference("bundle/django-generic-42"),
 	}, {
-		Id: mustParseReference("bundle/mediawiki-47"),
+		Id: charm.MustParseReference("bundle/mediawiki-47"),
 	}, {
-		Id: mustParseReference("bundle/wordpress-complex-1"),
+		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 	}, {
-		Id: mustParseReference("bundle/wordpress-simple-0"),
+		Id: charm.MustParseReference("bundle/wordpress-simple-0"),
 	}, {
-		Id: mustParseReference("bundle/wordpress-simple-1"),
+		Id: charm.MustParseReference("bundle/wordpress-simple-1"),
 	}},
 }, {
 	about:        "any series and revision with includes",
@@ -597,25 +597,25 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?any-series=1&any-revision=1&include=archive-size&include=bundle-metadata",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: mustParseReference("bundle/useless-0"),
+		Id: charm.MustParseReference("bundle/useless-0"),
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
 			"bundle-metadata": metaBundlesContainingBundles["bundle/useless-0"].Data(),
 		},
 	}, {
-		Id: mustParseReference("bundle/wordpress-complex-1"),
+		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
 			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-complex-1"].Data(),
 		},
 	}, {
-		Id: mustParseReference("bundle/wordpress-simple-0"),
+		Id: charm.MustParseReference("bundle/wordpress-simple-0"),
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
 			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-simple-0"].Data(),
 		},
 	}, {
-		Id: mustParseReference("bundle/wordpress-simple-1"),
+		Id: charm.MustParseReference("bundle/wordpress-simple-1"),
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
 			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-simple-1"].Data(),
@@ -634,7 +634,7 @@ var metaBundlesContainingTests = []struct {
 func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 	// Add the bundles used for testing to the database.
 	for id, b := range metaBundlesContainingBundles {
-		url := mustParseReference(id)
+		url := charm.MustParseReference(id)
 		// The blob related info are not used in these tests.
 		// The charm-bundle relations are retrieved from the entities
 		// collection, without accessing the blob store.
@@ -647,7 +647,7 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 
 		// Expand the URL if required before adding the charm to the database,
 		// so that at least one matching charm can be resolved.
-		url := mustParseReference(test.id)
+		url := charm.MustParseReference(test.id)
 		if url.Series == "" {
 			url.Series = "utopic"
 		}

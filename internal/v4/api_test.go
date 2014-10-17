@@ -199,7 +199,7 @@ var metaEndpoints = []metaEndpoint{{
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data, gc.DeepEquals, params.RevisionInfoResponse{
 			[]*charm.Reference{
-				mustParseReference("cs:precise/wordpress-99"),
+				charm.MustParseReference("cs:precise/wordpress-99"),
 			}})
 	},
 }, {
@@ -274,7 +274,7 @@ func (s *APISuite) TestEndpointGet(c *gc.C) {
 	s.addTestEntities(c)
 	for i, ep := range metaEndpoints {
 		c.Logf("test %d: %s\n", i, ep.name)
-		data, err := ep.get(s.store, mustParseReference(ep.checkURL))
+		data, err := ep.get(s.store, charm.MustParseReference(ep.checkURL))
 		c.Assert(err, gc.IsNil)
 		ep.assertCheckData(c, data)
 	}
@@ -292,7 +292,7 @@ var testEntities = []string{
 func (s *APISuite) addTestEntities(c *gc.C) []*charm.Reference {
 	urls := make([]*charm.Reference, len(testEntities))
 	for i, e := range testEntities {
-		url := mustParseReference(e)
+		url := charm.MustParseReference(e)
 		if url.Series == "bundle" {
 			s.addBundle(c, url.Name, e)
 		} else {
@@ -653,7 +653,7 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 
 	for i, test := range resolveURLTests {
 		c.Logf("test %d: %s", i, test.url)
-		url := mustParseReference(test.url)
+		url := charm.MustParseReference(test.url)
 		err := v4.ResolveURL(s.store, url)
 		if test.notFound {
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
@@ -755,20 +755,20 @@ var serveMetaRevisionInfoTests = []struct {
 	url:   "trusty/wordpress-42",
 	expect: params.RevisionInfoResponse{
 		[]*charm.Reference{
-			mustParseReference("cs:trusty/wordpress-43"),
-			mustParseReference("cs:trusty/wordpress-42"),
-			mustParseReference("cs:trusty/wordpress-41"),
-			mustParseReference("cs:trusty/wordpress-9"),
+			charm.MustParseReference("cs:trusty/wordpress-43"),
+			charm.MustParseReference("cs:trusty/wordpress-42"),
+			charm.MustParseReference("cs:trusty/wordpress-41"),
+			charm.MustParseReference("cs:trusty/wordpress-9"),
 		}},
 }, {
 	about: "partial url uses a default series",
 	url:   "wordpress",
 	expect: params.RevisionInfoResponse{
 		[]*charm.Reference{
-			mustParseReference("cs:trusty/wordpress-43"),
-			mustParseReference("cs:trusty/wordpress-42"),
-			mustParseReference("cs:trusty/wordpress-41"),
-			mustParseReference("cs:trusty/wordpress-9"),
+			charm.MustParseReference("cs:trusty/wordpress-43"),
+			charm.MustParseReference("cs:trusty/wordpress-42"),
+			charm.MustParseReference("cs:trusty/wordpress-41"),
+			charm.MustParseReference("cs:trusty/wordpress-9"),
 		}},
 }, {
 	about: "no entities found",
@@ -860,7 +860,7 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 		}
 
 		// Wait until the counters are updated.
-		url := mustParseReference(test.url)
+		url := charm.MustParseReference(test.url)
 		key := []string{params.StatsArchiveDownload, url.Series, url.Name, url.User, strconv.Itoa(url.Revision)}
 		stats.CheckCounterSum(c, s.store, key, false, test.downloads)
 
@@ -877,7 +877,7 @@ type publishSpec struct {
 }
 
 func (p publishSpec) published() params.Published {
-	id := mustParseReference(p.id)
+	id := charm.MustParseReference(p.id)
 	t, err := time.Parse("2006-01-02 15:04", p.time)
 	if err != nil {
 		panic(err)
@@ -1160,7 +1160,7 @@ func entitySizeChecker(c *gc.C, data interface{}) {
 }
 
 func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, charm.Charm) {
-	url := mustParseReference(curl)
+	url := charm.MustParseReference(curl)
 	wordpress := charmtesting.Charms.CharmDir(charmName)
 	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
@@ -1168,7 +1168,7 @@ func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, 
 }
 
 func (s *APISuite) addBundle(c *gc.C, bundleName string, curl string) (*charm.Reference, charm.Bundle) {
-	url := mustParseReference(curl)
+	url := charm.MustParseReference(curl)
 	bundle := charmtesting.Charms.BundleDir(bundleName)
 	err := s.store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
@@ -1205,12 +1205,4 @@ func mustMarshalJSON(val interface{}) string {
 		panic(fmt.Errorf("cannot marshal %#v: %v", val, err))
 	}
 	return string(data)
-}
-
-func mustParseReference(url string) *charm.Reference {
-	ref, err := charm.ParseReference(url)
-	if err != nil {
-		panic(err)
-	}
-	return ref
 }
