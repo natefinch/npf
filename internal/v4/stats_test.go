@@ -27,7 +27,7 @@ var _ = gc.Suite(&StatsSuite{})
 
 func (s *StatsSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
-	s.srv, s.store = newServer(c, s.Session, serverParams)
+	s.srv, s.store = newServer(c, s.Session, nil, serverParams)
 }
 
 func (s *StatsSuite) TestServerStatsStatus(c *gc.C) {

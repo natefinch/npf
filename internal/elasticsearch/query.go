@@ -31,7 +31,7 @@ type MatchAllQuery struct {
 }
 
 func (m MatchAllQuery) MarshalJSON() ([]byte, error) {
-	return marshalJSON("match_all", struct{}{})
+	return marshalNamedObject("match_all", struct{}{})
 }
 
 // MatchQuery provides a query that matches against
@@ -48,7 +48,7 @@ func (m MatchQuery) MarshalJSON() ([]byte, error) {
 		params["type"] = m.Type
 	}
 
-	return marshalJSON("match", map[string]interface{}{m.Field: params})
+	return marshalNamedObject("match", map[string]interface{}{m.Field: params})
 }
 
 // MultiMatchQuery provides a query that matches on a number of fields.
@@ -58,7 +58,7 @@ type MultiMatchQuery struct {
 }
 
 func (m MultiMatchQuery) MarshalJSON() ([]byte, error) {
-	return marshalJSON("multi_match", map[string]interface{}{
+	return marshalNamedObject("multi_match", map[string]interface{}{
 		"query":  m.Query,
 		"fields": m.Fields,
 	})
@@ -71,7 +71,7 @@ type FilteredQuery struct {
 }
 
 func (f FilteredQuery) MarshalJSON() ([]byte, error) {
-	return marshalJSON("filtered", map[string]interface{}{
+	return marshalNamedObject("filtered", map[string]interface{}{
 		"query":  f.Query,
 		"filter": f.Filter,
 	})
@@ -84,11 +84,22 @@ type FunctionScoreQuery struct {
 	Functions []Function
 }
 
-// FunctionScoreQuery provides a query that includes.
 func (f FunctionScoreQuery) MarshalJSON() ([]byte, error) {
-	return marshalJSON("function_score", map[string]interface{}{
+	return marshalNamedObject("function_score", map[string]interface{}{
 		"query":     f.Query,
 		"functions": f.Functions,
+	})
+}
+
+// TermQuery provides a query that matches a term in a field.
+type TermQuery struct {
+	Field string
+	Value string
+}
+
+func (t TermQuery) MarshalJSON() ([]byte, error) {
+	return marshalNamedObject("term", map[string]interface{}{
+		t.Field: t.Value,
 	})
 }
 
@@ -100,7 +111,7 @@ type Function struct {
 }
 
 func (f Function) MarshalJSON() ([]byte, error) {
-	return marshalJSON(f.Function, map[string]interface{}{
+	return marshalNamedObject(f.Function, map[string]interface{}{
 		f.Field: map[string]interface{}{
 			"scale": f.Scale,
 		},
@@ -112,7 +123,7 @@ func (f Function) MarshalJSON() ([]byte, error) {
 type AndFilter []Filter
 
 func (a AndFilter) MarshalJSON() ([]byte, error) {
-	return marshalJSON("and", map[string]interface{}{
+	return marshalNamedObject("and", map[string]interface{}{
 		"filters": []Filter(a),
 	})
 }
@@ -122,7 +133,7 @@ func (a AndFilter) MarshalJSON() ([]byte, error) {
 type OrFilter []Filter
 
 func (o OrFilter) MarshalJSON() ([]byte, error) {
-	return marshalJSON("or", map[string]interface{}{
+	return marshalNamedObject("or", map[string]interface{}{
 		"filters": []Filter(o),
 	})
 }
@@ -134,7 +145,7 @@ type NotFilter struct {
 }
 
 func (n NotFilter) MarshalJSON() ([]byte, error) {
-	return marshalJSON("not", n.Filter)
+	return marshalNamedObject("not", n.Filter)
 }
 
 // QueryFilter provides a filter that matches when a query matches
@@ -144,7 +155,7 @@ type QueryFilter struct {
 }
 
 func (q QueryFilter) MarshalJSON() ([]byte, error) {
-	return marshalJSON("query", q.Query)
+	return marshalNamedObject("query", q.Query)
 }
 
 // RegexpFilter provides a filter that matches a field against a
@@ -155,7 +166,7 @@ type RegexpFilter struct {
 }
 
 func (r RegexpFilter) MarshalJSON() ([]byte, error) {
-	return marshalJSON("regexp", map[string]string{r.Field: r.Regexp})
+	return marshalNamedObject("regexp", map[string]string{r.Field: r.Regexp})
 }
 
 // TermFilter provides a filter that requires a field to match.
@@ -165,15 +176,16 @@ type TermFilter struct {
 }
 
 func (t TermFilter) MarshalJSON() ([]byte, error) {
-	return marshalJSON("term", map[string]string{t.Field: t.Value})
+	return marshalNamedObject("term", map[string]string{t.Field: t.Value})
 }
 
 // QueryDSL provides a structure to put together a query using the
 // elasticsearch DSL.
 type QueryDSL struct {
-	Size  int    `json:"size,omitempty"`
-	Query Query  `json:"query,omitempty"`
-	Sort  []Sort `json:"sort,omitempty"`
+	Fields []string `json:"fields"`
+	Size   int      `json:"size,omitempty"`
+	Query  Query    `json:"query,omitempty"`
+	Sort   []Sort   `json:"sort,omitempty"`
 }
 
 type Sort struct {
@@ -191,12 +203,12 @@ func (s Sort) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// marshalJSON provides a helper that creates json objects in a form
+// marshalNamedObject provides a helper that creates json objects in a form
 // often required by the elasticsearch query DSL. The objects created
 // take the following form:
 //	{
 //		name: obj
 //	}
-func marshalJSON(name string, obj interface{}) ([]byte, error) {
+func marshalNamedObject(name string, obj interface{}) ([]byte, error) {
 	return json.Marshal(map[string]interface{}{name: obj})
 }

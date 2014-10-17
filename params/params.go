@@ -101,13 +101,20 @@ type DebugStatus struct {
 
 // SearchResult holds a single result from a search operation
 type SearchResult struct {
-	Id string
+	Id *charm.Reference
 	// Meta holds at most one entry for each meta value
 	// specified in the include flags, holding the
 	// data that would be returned by reading /meta/meta?id=id.
 	// Metadata not relevant to a particular result will not
 	// be included.
 	Meta map[string]interface{} `json:",omitempty"`
+}
+
+// SearchResponse holds the response from a search operation.
+type SearchResponse struct {
+	SearchTime time.Duration
+	Total      int
+	Results    []SearchResult
 }
 
 // BzrDigestKey is the extra-info key used to store the Bazaar digest

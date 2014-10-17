@@ -44,7 +44,7 @@ var _ = gc.Suite(&ArchiveSuite{})
 
 func (s *ArchiveSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
-	s.srv, s.store = newServer(c, s.Session, serverParams)
+	s.srv, s.store = newServer(c, s.Session, nil, serverParams)
 }
 
 func (s *ArchiveSuite) TestGet(c *gc.C) {

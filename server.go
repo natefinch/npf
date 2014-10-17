@@ -46,7 +46,7 @@ type ServerParams struct {
 // NewServer returns a new handler that handles charm store requests and stores
 // its data in the given database. The handler will serve the specified
 // versions of the API using the given configuration.
-func NewServer(db *mgo.Database, es *elasticsearch.Database, config ServerParams, serveVersions ...string) (http.Handler, error) {
+func NewServer(db *mgo.Database, es *elasticsearch.Index, config ServerParams, serveVersions ...string) (http.Handler, error) {
 	newAPIs := make(map[string]charmstore.NewAPIHandlerFunc)
 	for _, vers := range serveVersions {
 		newAPI := versions[vers]

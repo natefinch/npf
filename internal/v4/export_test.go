@@ -13,4 +13,5 @@ func BundleCharms(h http.Handler) func([]string) (map[string]charm.Charm, error)
 	return h.(*Handler).bundleCharms
 }
 
+var ParseSearchParams = parseSearchParams
 var StartTime = &startTime

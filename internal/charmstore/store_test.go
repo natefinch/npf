@@ -35,8 +35,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
 	var ses *StoreElasticSearch
 	if addToES {
 		ses = &StoreElasticSearch{
-			Database: s.ES,
-			Index:    s.NewIndex(c),
+			s.ES.Index(s.TestIndex),
 		}
 	}
 	store, err := NewStore(s.Session.DB("juju_test"), ses)
@@ -56,9 +55,9 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
 	// Ensure the document was indexed in ElasticSearch, if an ES database was provided.
 	if ses != nil {
 		var result mongodoc.Entity
-		err = ses.Database.GetDocument(ses.Index, typeName, ses.getID(&doc), &result)
+		err = ses.GetDocument(typeName, ses.getID(&doc), &result)
 		c.Assert(err, gc.IsNil)
-		exists, err := ses.Database.EnsureID(ses.Index, typeName, ses.getID(&doc))
+		exists, err := ses.Database.EnsureID(ses.Index.Index, typeName, ses.getID(&doc))
 		c.Assert(err, gc.IsNil)
 		c.Assert(exists, gc.Equals, true)
 	}
@@ -112,8 +111,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 
 	if addToES {
 		ses = &StoreElasticSearch{
-			Database: s.ES,
-			Index:    s.NewIndex(c),
+			s.ES.Index(s.TestIndex),
 		}
 	}
 	store, err := NewStore(s.Session.DB("juju_test"), ses)
@@ -134,7 +132,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 	// Ensure the document was indexed in ElasticSearch, if an ES database was provided.
 	if ses != nil {
 		var result mongodoc.Entity
-		err = ses.Database.GetDocument(ses.Index, typeName, ses.getID(&doc), &result)
+		err = ses.GetDocument(typeName, ses.getID(&doc), &result)
 		c.Assert(err, gc.IsNil)
 	}
 
