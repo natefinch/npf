@@ -41,7 +41,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
 	}
 	store, err := NewStore(s.Session.DB("juju_test"), ses)
 	c.Assert(err, gc.IsNil)
-	url := mustParseReference("cs:precise/wordpress-23")
+	url := charm.MustParseReference("cs:precise/wordpress-23")
 
 	// Add the charm to the store.
 	beforeAdding := time.Now()
@@ -78,7 +78,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
 	doc.BlobName = ""
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
 		URL:                     url,
-		BaseURL:                 mustParseReference("cs:wordpress"),
+		BaseURL:                 charm.MustParseReference("cs:wordpress"),
 		BlobHash:                hash,
 		Size:                    size,
 		CharmMeta:               ch.Meta(),
@@ -118,7 +118,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 	}
 	store, err := NewStore(s.Session.DB("juju_test"), ses)
 	c.Assert(err, gc.IsNil)
-	url := mustParseReference("cs:bundle/wordpress-simple-42")
+	url := charm.MustParseReference("cs:bundle/wordpress-simple-42")
 
 	// Add the bundle to the store.
 	beforeAdding := time.Now()
@@ -153,14 +153,14 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 	size, hash := mustGetSizeAndHash(bundle)
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
 		URL:          url,
-		BaseURL:      mustParseReference("cs:wordpress-simple"),
+		BaseURL:      charm.MustParseReference("cs:wordpress-simple"),
 		BlobHash:     hash,
 		Size:         size,
 		BundleData:   bundle.Data(),
 		BundleReadMe: bundle.ReadMe(),
 		BundleCharms: []*charm.Reference{
-			mustParseReference("mysql"),
-			mustParseReference("wordpress"),
+			charm.MustParseReference("mysql"),
+			charm.MustParseReference("wordpress"),
 		},
 		BundleMachineCount: newInt(2),
 		BundleUnitCount:    newInt(2),
@@ -264,9 +264,9 @@ func (s *StoreSuite) testURLFinding(c *gc.C, check func(store *Store, expand *ch
 		}
 		expectURLs := make([]*charm.Reference, len(test.expect))
 		for i, expect := range test.expect {
-			expectURLs[i] = mustParseReference(expect)
+			expectURLs[i] = charm.MustParseReference(expect)
 		}
-		check(store, mustParseReference(test.expand), expectURLs)
+		check(store, charm.MustParseReference(test.expand), expectURLs)
 	}
 }
 
@@ -725,7 +725,7 @@ func urlStrings(urls []*charm.Reference) []string {
 func mustParseReferences(urlStrs []string) []*charm.Reference {
 	urls := make([]*charm.Reference, len(urlStrs))
 	for i, u := range urlStrs {
-		urls[i] = mustParseReference(u)
+		urls[i] = charm.MustParseReference(u)
 	}
 	return urls
 }
@@ -758,7 +758,7 @@ func (s *StoreSuite) TestOpenBlob(c *gc.C) {
 
 	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
-	url := mustParseReference("cs:precise/wordpress-23")
+	url := charm.MustParseReference("cs:precise/wordpress-23")
 
 	err = store.AddCharmWithArchive(url, charmArchive)
 	c.Assert(err, gc.IsNil)
@@ -785,7 +785,7 @@ func (s *StoreSuite) TestBlobNameAndHash(c *gc.C) {
 
 	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
-	url := mustParseReference("cs:precise/wordpress-23")
+	url := charm.MustParseReference("cs:precise/wordpress-23")
 
 	err = store.AddCharmWithArchive(url, charmArchive)
 	c.Assert(err, gc.IsNil)
@@ -872,14 +872,6 @@ func mustGetSizeAndHash(c interface{}) (int64, string) {
 		panic(err)
 	}
 	return size, fmt.Sprintf("%x", hash.Sum(nil))
-}
-
-func mustParseReference(url string) *charm.Reference {
-	ref, err := charm.ParseReference(url)
-	if err != nil {
-		panic(err)
-	}
-	return ref
 }
 
 // testingBundle implements charm.Bundle, allowing tests

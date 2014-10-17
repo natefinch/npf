@@ -9,6 +9,7 @@ import (
 
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
+	"gopkg.in/juju/charm.v4"
 	"gopkg.in/juju/charm.v4/testing"
 
 	"github.com/juju/charmstore/internal/mongodoc"
@@ -78,13 +79,13 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 func (s *StoreSearchSuite) addCharmsToStore(store *Store) {
 	for name, ref := range exportTestCharms {
 		charmArchive := testing.Charms.CharmDir(name)
-		url := mustParseReference(ref)
+		url := charm.MustParseReference(ref)
 		charmArchive.Meta().Categories = []string{name}
 		store.AddCharmWithArchive(url, charmArchive)
 	}
 	for name, ref := range exportTestBundles {
 		bundleArchive := testing.Charms.BundleDir(name)
-		url := mustParseReference(ref)
+		url := charm.MustParseReference(ref)
 		bundleArchive.Data().Tags = []string{name}
 		store.AddBundleWithArchive(url, bundleArchive)
 	}
@@ -121,7 +122,7 @@ func (s *StoreSearchSuite) TestBlankTextSearch(c *gc.C) {
 
 func (s *StoreSearchSuite) TestLimitTestSearch(c *gc.C) {
 	charmArchive := testing.Charms.CharmDir("wordpress")
-	ref := mustParseReference(exportTestCharms["wordpress"])
+	ref := charm.MustParseReference(exportTestCharms["wordpress"])
 	ref.Revision += 1
 	s.store.AddCharmWithArchive(ref, charmArchive)
 

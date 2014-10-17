@@ -307,7 +307,7 @@ func (s *APISuite) TestCharmPackageCharmInfo(c *gc.C) {
 	wordpressSHA256 := fileSHA256(c, wordpress.Path)
 	mysqlURL, mySQL := s.addCharm(c, "wordpress", "cs:precise/mysql-2")
 	mysqlSHA256 := fileSHA256(c, mySQL.Path)
-	notFoundURL := mustParseReference("cs:oneiric/not-found-3")
+	notFoundURL := charm.MustParseReference("cs:oneiric/not-found-3")
 
 	srv := httptest.NewServer(s.srv)
 	defer srv.Close()
@@ -405,17 +405,9 @@ func (s *APISuite) TestServerStatus(c *gc.C) {
 }
 
 func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, *charm.CharmArchive) {
-	url := mustParseReference(curl)
+	url := charm.MustParseReference(curl)
 	wordpress := charmtesting.Charms.CharmArchive(c.MkDir(), charmName)
 	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 	return url, wordpress
-}
-
-func mustParseReference(url string) *charm.Reference {
-	ref, err := charm.ParseReference(url)
-	if err != nil {
-		panic(err)
-	}
-	return ref
 }

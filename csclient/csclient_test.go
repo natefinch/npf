@@ -99,7 +99,7 @@ var getTests = []struct {
 
 func (s *suite) TestGet(c *gc.C) {
 	ch := charmtesting.Charms.CharmDir("wordpress")
-	url := mustParseReference("utopic/wordpress-42")
+	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
 
@@ -136,7 +136,7 @@ func (s *suite) TestGet(c *gc.C) {
 func (s *suite) TestDoAuthorization(c *gc.C) {
 	// Add a charm to be deleted.
 	ch := charmtesting.Charms.CharmDir("wordpress")
-	url := mustParseReference("utopic/wordpress-42")
+	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
 
@@ -287,7 +287,7 @@ func (s *suite) TestDo(c *gc.C) {
 	// Do is tested fairly comprehensively (but indirectly)
 	// in TestGet, so just a trivial smoke test here.
 	ch := charmtesting.Charms.CharmDir("wordpress")
-	url := mustParseReference("utopic/wordpress-42")
+	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
 	err = s.client.PutExtraInfo(url, map[string]interface{}{
@@ -328,7 +328,7 @@ var metaBadTypeTests = []struct {
 }}
 
 func (s *suite) TestMetaBadType(c *gc.C) {
-	id := mustParseReference("wordpress")
+	id := charm.MustParseReference("wordpress")
 	for _, test := range metaBadTypeTests {
 		_, err := s.client.Meta(id, test.result)
 		c.Assert(err, gc.ErrorMatches, test.expectError)
@@ -340,7 +340,7 @@ type embed struct{}
 
 func (s *suite) TestMeta(c *gc.C) {
 	ch := charmtesting.Charms.CharmDir("wordpress")
-	url := mustParseReference("utopic/wordpress-42")
+	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
 
@@ -431,7 +431,7 @@ func (s *suite) TestMeta(c *gc.C) {
 		// Make a result value of the same type as the expected result,
 		// but empty.
 		result := reflect.New(reflect.TypeOf(test.expectResult).Elem()).Interface()
-		id, err := s.client.Meta(mustParseReference(test.id), result)
+		id, err := s.client.Meta(charm.MustParseReference(test.id), result)
 		if test.expectError != "" {
 			c.Assert(err, gc.ErrorMatches, test.expectError)
 			if code, ok := errgo.Cause(err).(params.ErrorCode); ok {
@@ -450,7 +450,7 @@ func (s *suite) TestMeta(c *gc.C) {
 
 func (s *suite) TestPutExtraInfo(c *gc.C) {
 	ch := charmtesting.Charms.CharmDir("wordpress")
-	url := mustParseReference("utopic/wordpress-42")
+	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
 
@@ -484,7 +484,7 @@ func (s *suite) TestPutExtraInfo(c *gc.C) {
 }
 
 func (s *suite) TestPutExtraInfoWithError(c *gc.C) {
-	err := s.client.PutExtraInfo(mustParseReference("wordpress"), map[string]interface{}{"attr": "val"})
+	err := s.client.PutExtraInfo(charm.MustParseReference("wordpress"), map[string]interface{}{"attr": "val"})
 	c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for "cs:wordpress"`)
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
@@ -504,15 +504,6 @@ type cannedRoundTripper struct {
 
 func (r *cannedRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return r.resp, r.error
-}
-
-func mustParseReference(url string) *charm.Reference {
-	// TODO implement MustParseReference in charm.
-	ref, err := charm.ParseReference(url)
-	if err != nil {
-		panic(err)
-	}
-	return ref
 }
 
 func mustMarshalJSON(x interface{}) []byte {
