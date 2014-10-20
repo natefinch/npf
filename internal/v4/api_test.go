@@ -24,6 +24,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/charmstore"
+	"github.com/juju/charmstore/internal/elasticsearch"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
 	"github.com/juju/charmstore/internal/storetesting/stats"
@@ -46,14 +47,14 @@ var _ = gc.Suite(&APISuite{})
 
 func (s *APISuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
-	s.srv, s.store = newServer(c, s.Session, serverParams)
+	s.srv, s.store = newServer(c, s.Session, nil, serverParams)
 }
 
-func newServer(c *gc.C, session *mgo.Session, config charmstore.ServerParams) (http.Handler, *charmstore.Store) {
+func newServer(c *gc.C, session *mgo.Session, es *elasticsearch.Index, config charmstore.ServerParams) (http.Handler, *charmstore.Store) {
 	db := session.DB("charmstore")
-	store, err := charmstore.NewStore(db, nil)
+	store, err := charmstore.NewStore(db, &charmstore.StoreElasticSearch{es})
 	c.Assert(err, gc.IsNil)
-	srv, err := charmstore.NewServer(db, nil, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v4.NewAPIHandler})
+	srv, err := charmstore.NewServer(db, es, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v4.NewAPIHandler})
 	c.Assert(err, gc.IsNil)
 	return srv, store
 }

@@ -51,6 +51,9 @@ type ElasticSearchSuite struct {
 }
 
 func (s *ElasticSearchSuite) SetUpSuite(c *gc.C) {
+	if serverAddr == "" {
+		c.Skip("elasticsearch disabled")
+	}
 	s.ES = &elasticsearch.Database{fmt.Sprintf(serverAddr)}
 }
 
@@ -76,4 +79,15 @@ func (s *ElasticSearchSuite) NewIndex(c *gc.C) string {
 	id := time.Now().Format("20060102") + uuid.String() + "-"
 	s.indexes = append(s.indexes, id)
 	return id
+}
+
+// LoadESConfig loads a canned test configuration to the specified index
+func (s *ElasticSearchSuite) LoadESConfig(index string) error {
+	if err := s.ES.PutIndex(index, esIndex); err != nil {
+		return err
+	}
+	if err := s.ES.PutMapping(index, "entity", esMapping); err != nil {
+		return err
+	}
+	return nil
 }

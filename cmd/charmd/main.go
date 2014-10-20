@@ -45,9 +45,9 @@ func serve(confPath string) error {
 	}
 	defer session.Close()
 	db := session.DB("juju")
-	var es *elasticsearch.Database
+	var es *elasticsearch.Index
 	if conf.ESAddr != "" {
-		es = &elasticsearch.Database{conf.ESAddr}
+		es = (&elasticsearch.Database{conf.ESAddr}).Index("charmstore")
 	}
 	cfg := charmstore.ServerParams{
 		AuthUsername: conf.AuthUsername,

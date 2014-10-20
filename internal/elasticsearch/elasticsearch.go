@@ -11,8 +11,10 @@
 package elasticsearch
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -25,125 +27,212 @@ import (
 
 var log = loggo.GetLogger("charmstore.elasticsearch")
 
+type ElasticSearchError struct {
+	Err    string `json:"error"`
+	Status int    `json:"status"`
+}
+
+func (e ElasticSearchError) Error() string {
+	return e.Err
+}
+
 type Database struct {
 	Addr string
+}
+
+// DeleteIndex deletes the index with the given name from the database.
+// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/indices-delete-index.html
+// If the index does not exist or if the database cannot be
+// reached, then an error is returned.
+func (db *Database) DeleteIndex(index string) error {
+	if err := db.delete(db.url(index), nil, nil); err != nil {
+		return errgo.Mask(err)
+	}
+	return nil
 }
 
 // EnsureID tests to see a document of the given index, type_, and id exists
 // in ElasticSearch.
 func (db *Database) EnsureID(index, type_, id string) (bool, error) {
-	// TODO (bac) We should limit the fields to the id to avoid retrieving
-	// data we don't use.
-	response, err := http.Get(db.url(index, type_, id, "_source"))
-	if err != nil {
-		return false, errgo.Mask(err)
+	if err := db.get(db.url(index, type_, id)+"?_source=false", nil, nil); err != nil {
+		if ese, ok := err.(ElasticSearchError); ok && ese.Status == http.StatusNotFound {
+			return false, nil
+		}
+		return false, err
 	}
-	defer response.Body.Close()
-	return response.StatusCode == http.StatusOK, nil
+	return true, nil
 }
 
 // GetDocument retrieves the document with the given index, type_ and id and
-// unmarshals the json response into doc.
-func (db *Database) GetDocument(index, type_, id string, doc interface{}) error {
-	status, _, body, err := db.request("GET", db.url(index, type_, id, "_source"), "", "")
-	if err != nil {
+// unmarshals the json response into v.
+func (db *Database) GetDocument(index, type_, id string, v interface{}) error {
+	if err := db.get(db.url(index, type_, id, "_source"), nil, v); err != nil {
 		return errgo.Mask(err)
 	}
-	if status != http.StatusOK {
-		return errgo.Newf("ElasticSearch GET response status: %d, body: %s", status, body)
-	}
-	err = json.Unmarshal(body, doc)
-	if err != nil {
-		return errgo.Notef(err, "cannot unmarshal body: %s", body)
-	}
 	return nil
+}
+
+// ListAllIndexes retreieves the list of all user indexes in the elasticsearch database.
+// indexes that are generated to to support plugins are filtered out of the list that
+// is returned.
+func (db *Database) ListAllIndexes() ([]string, error) {
+	var result map[string]interface{}
+	if err := db.get(db.url("_aliases"), nil, &result); err != nil {
+		return nil, errgo.Mask(err)
+	}
+	var indexes []string
+	for key := range result {
+		// Some ElasticSearch plugins create indexes (e.g. ".marvel...") for their
+		// use.  Ignore any that start with a dot.
+		if !strings.HasPrefix(key, ".") {
+			indexes = append(indexes, key)
+		}
+	}
+	return indexes, nil
 }
 
 // PostDocument creates a new auto id document with the given index and _type
 // and returns the generated id of the document.
 func (db *Database) PostDocument(index, type_ string, doc interface{}) (string, error) {
-	data, err := json.Marshal(doc)
-	if err != nil {
+	var resp struct {
+		ID string `json:"_id"`
+	}
+	if err := db.post(db.url(index, type_), doc, &resp); err != nil {
 		return "", errgo.Mask(err)
 	}
-	// CONSIDER: err := db.post(db.url(index, type_), doc, &respData)
-	status, _, body, err := db.request("POST", db.url(index, type_), "application/json", string(data))
-	if err != nil {
-		return "", errgo.Mask(err)
-	}
-	if status != http.StatusCreated {
-		return "", errgo.Newf("ElasticSearch POST response status: %d, body: %s", status, body)
-	}
-	var respdata map[string]interface{}
-	if err := json.Unmarshal(body, &respdata); err != nil {
-		return "", errgo.Notef(err, "cannot unmarshal body")
-	}
-	return respdata["_id"].(string), nil
+	return resp.ID, nil
 }
 
 // PutDocument creates or updates the document with the given index, type_ and
 // id.
 func (db *Database) PutDocument(index, type_, id string, doc interface{}) error {
-	data, err := json.Marshal(doc)
-	if err != nil {
+	if err := db.put(db.url(index, type_, id), doc, nil); err != nil {
 		return errgo.Mask(err)
-	}
-	status, _, body, err := db.request("PUT", db.url(index, type_, id), "application/json", string(data))
-	if err != nil {
-		return errgo.Mask(err)
-	}
-	if status != http.StatusCreated && status != http.StatusOK {
-		return errgo.Newf("ElasticSearch PUT response status: %d, body: %s", status, body)
-	}
-	var respdata map[string]interface{}
-	if err := json.Unmarshal(body, &respdata); err != nil {
-		return errgo.Notef(err, "cannot unmarshal body")
 	}
 	return nil
 }
 
-// PutIndex creates or updates the index with the given configuration.
+// PutIndex creates the index with the given configuration.
 func (db *Database) PutIndex(index string, config interface{}) error {
-	data, err := json.Marshal(config)
-	if err != nil {
+	if err := db.put(db.url(index), config, nil); err != nil {
 		return errgo.Mask(err)
-	}
-	status, _, body, err := db.request("PUT", db.url(index), "application/json", string(data))
-	if err != nil {
-		return errgo.Mask(err)
-	}
-	if status != http.StatusCreated && status != http.StatusOK {
-		return errgo.Newf("ElasticSearch PUT response status: %d, body: %s", status, body)
-	}
-	var respdata map[string]interface{}
-	if err := json.Unmarshal(body, &respdata); err != nil {
-		return errgo.Notef(err, "cannot unmarshal body")
 	}
 	return nil
 }
 
 // PutMapping creates or updates the mapping with the given configuration.
 func (db *Database) PutMapping(index, type_ string, config interface{}) error {
-	data, err := json.Marshal(config)
-	if err != nil {
+	if err := db.put(db.url(index, "_mapping", type_), config, nil); err != nil {
 		return errgo.Mask(err)
-	}
-	status, _, body, err := db.request("PUT", db.url(index, type_, "_mapping"), "application/json", string(data))
-	if err != nil {
-		return errgo.Mask(err)
-	}
-	if status != http.StatusCreated && status != http.StatusOK {
-		return errgo.Newf("ElasticSearch PUT response status: %d, body: %s", status, body)
-	}
-	var respdata map[string]interface{}
-	if err := json.Unmarshal(body, &respdata); err != nil {
-		return errgo.Notef(err, "cannot unmarshal body")
 	}
 	return nil
 }
 
+// RefreshIndex posts a _refresh to the index in the database.
+// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/indices-refresh.html
+func (db *Database) RefreshIndex(index string) error {
+	if err := db.post(db.url(index, "_refresh"), nil, nil); err != nil {
+		return errgo.Mask(err)
+	}
+	return nil
+}
+
+// Search performs the query specified in q on the values in index/type_ and returns a
+// SearchResult.
+func (db *Database) Search(index, type_ string, q QueryDSL) (SearchResult, error) {
+	var sr SearchResult
+	if err := db.get(db.url(index, type_, "_search"), q, &sr); err != nil {
+		return SearchResult{}, errgo.Notef(err, "search failed")
+	}
+	return sr, nil
+}
+
+// do performs a request on the elasticsearch server. If body is not nil it will be
+// marsheled as a json object and sent with the request. If v is non nil the response
+// body will be unmarshalled into the value it points to.
+func (db *Database) do(method, url string, body, v interface{}) error {
+	log.Debugf(">>> %s %s", method, url)
+	var r io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			return errgo.Notef(err, "can not marshaling body")
+		}
+		log.Debugf(">>> %s", b)
+		r = bytes.NewReader(b)
+	}
+	req, err := http.NewRequest(method, url, r)
+	if err != nil {
+		log.Debugf("*** %s", err)
+		return errgo.Notef(err, "cannot create request")
+	}
+	if body != nil {
+		req.Header.Add("Content-Type", "application/json")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Debugf("*** %s", err)
+		return errgo.Mask(err)
+	}
+	defer resp.Body.Close()
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Debugf("*** %s", err)
+		return errgo.Notef(err, "cannot read response")
+	}
+	log.Debugf("<<< %s", resp.Status)
+	log.Debugf("<<< %s", b)
+	if resp.StatusCode >= http.StatusBadRequest {
+		var eserr ElasticSearchError
+		if err = json.Unmarshal(b, &eserr); err != nil {
+			log.Debugf("*** %s", err)
+			eserr.Err = fmt.Sprintf(`elasticsearch status "%s"`, resp.Status)
+			eserr.Status = resp.StatusCode
+		}
+		return eserr
+	}
+	if v != nil {
+		if err = json.Unmarshal(b, v); err != nil {
+			log.Debugf("*** %s", err)
+			return errgo.Notef(err, "cannot unmarshal response")
+		}
+	}
+	return nil
+}
+
+// delete makes a DELETE request to the database url. A non-nil body will be
+// sent with the request and if v is not nill then the response will be unmarshaled
+// into tha value it points to.
+func (db *Database) delete(url string, body, v interface{}) error {
+	return db.do("DELETE", url, body, v)
+}
+
+// get makes a GET request to the database url. A non-nil body will be
+// sent with the request and if v is not nill then the response will be unmarshaled
+// into tha value it points to.
+func (db *Database) get(url string, body, v interface{}) error {
+	return db.do("GET", url, body, v)
+}
+
+// post makes a POST request to the database url. A non-nil body will be
+// sent with the request and if v is not nill then the response will be unmarshaled
+// into tha value it points to.
+func (db *Database) post(url string, body, v interface{}) error {
+	return db.do("POST", url, body, v)
+}
+
+// put makes a PUT request to the database url. A non-nil body will be
+// sent with the request and if v is not nill then the response will be unmarshaled
+// into tha value it points to.
+func (db *Database) put(url string, body, v interface{}) error {
+	return db.do("PUT", url, body, v)
+}
+
 // url constructs the URL for accessing the database.
 func (db *Database) url(pathParts ...string) string {
+	for i, part := range pathParts {
+		pathParts[i] = url.QueryEscape(part)
+	}
 	path := path.Join(pathParts...)
 	url := &url.URL{
 		Scheme: "http",
@@ -154,144 +243,100 @@ func (db *Database) url(pathParts ...string) string {
 
 }
 
-// Delete makes a DELETE request to the database using the path parameter.
-func (db *Database) delete(path string) (*http.Response, error) {
-	req, err := http.NewRequest("DELETE", db.url(path), nil)
-	if err != nil {
-		return nil, err
-	}
-	return http.DefaultClient.Do(req)
+// Index creates a reference to an index in the elasticsearch database.
+func (db *Database) Index(name string) *Index {
+	return &Index{Database: db, Index: name}
 }
 
-// ListAllIndexes does a GET request to the Database and parses the string
-// response returning a slice containing the name of each index.
-// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/_list_all_indexes.html
-func (db *Database) ListAllIndexes() ([]string, error) {
-	response, err := http.Get(db.url("_aliases"))
-	if err != nil {
-		return nil, errgo.Mask(err)
-	}
-	defer response.Body.Close()
-
-	body, _ := ioutil.ReadAll(response.Body)
-	if response.StatusCode != http.StatusOK {
-		return nil, errgo.Newf("ElasticSearch GET response status: %d %s, body: %s", response.StatusCode, response.Status, body)
-	}
-	var result map[string]interface{}
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		return nil, errgo.Notef(err, "cannot unmarshal body: %s", body)
-	}
-	var indices []string
-	for key := range result {
-		// Some ElasticSearch plugins create indices (e.g. ".marvel...") for their
-		// use.  Ignore any that start with a dot.
-		if !strings.HasPrefix(key, ".") {
-			indices = append(indices, key)
-		}
-	}
-	return indices, nil
+// Index represents an index in the elasticsearch database.
+type Index struct {
+	Database *Database
+	Index    string
 }
 
-// DeleteIndex deletes the index with the given name from the database.
-// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/indices-delete-index.html
-// If the index does not exist or if the database cannot be
-// reached, then an error is returned.
-func (db *Database) DeleteIndex(index string) error {
-	resp, err := db.delete(index)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusOK {
-		return nil
-	}
-	if resp.StatusCode == http.StatusNotFound {
-		notFound := &ErrNotFound{}
-		notFound.Message_ = fmt.Sprintf("index %s not found", index)
-		notFound.SetLocation(0)
-		return notFound
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return errgo.Mask(err)
-	}
-	return errgo.Newf("unexpected http response trying to delete index %s: %s(%d) body:%s", index, resp.Status, resp.StatusCode, body)
+func (i *Index) PutDocument(type_, id string, doc interface{}) error {
+	return i.Database.PutDocument(i.Index, type_, id, doc)
 }
 
+func (i *Index) GetDocument(type_, id string, doc interface{}) error {
+	return i.Database.GetDocument(i.Index, type_, id, doc)
+}
+
+func (i *Index) Search(type_ string, q QueryDSL) (SearchResult, error) {
+	return i.Database.Search(i.Index, type_, q)
+}
+
+func (i *Index) Delete() error {
+	return i.Database.DeleteIndex(i.Index)
+}
+
+// SearchResult is the result returned after performing a search in elasticsearch
 type SearchResult struct {
 	Hits struct {
 		Total    int     `json:"total"`
 		MaxScore float64 `json:"max_score"`
-		Hits     []struct {
-			Index  string          `json:"_index"`
-			Type   string          `json:"_type"`
-			ID     string          `json:"_id"`
-			Score  float64         `json:"_score"`
-			Source json.RawMessage `json:"_source"`
-		} `json:"hits"`
+		Hits     []Hit   `json:"hits"`
 	} `json:"hits"`
 	Took     int  `json:"took"`
 	TimedOut bool `json:"timed_out"`
 }
 
-func (db *Database) Search(index, type_, query string) (SearchResult, error) {
-	_, _, result, err := db.request("GET", db.url(index, type_, "_search"), "application/json", query)
-	if err != nil {
-		return SearchResult{}, errgo.Mask(err)
-	}
-	var data SearchResult
-	if err := json.Unmarshal(result, &data); err != nil {
-		return SearchResult{}, errgo.Notef(err, "cannot unmarshal body")
-	}
-	return data, nil
+// Hit represents an individual search hit returned from elasticsearch
+type Hit struct {
+	Index  string          `json:"_index"`
+	Type   string          `json:"_type"`
+	ID     string          `json:"_id"`
+	Score  float64         `json:"_score"`
+	Source json.RawMessage `json:"_source"`
+	Fields Fields          `json:"fields"`
 }
 
-// request performs a request on the elasticsearch server. request will
-// log to debug the details of all performed requests.
-func (db *Database) request(method, url string, contentType, body string) (int, string, []byte, error) {
-	log.Debugf(">>> %s %s", method, url)
-	if len(body) > 0 {
-		log.Debugf(">>> Content-Type: %s", contentType)
-		log.Debugf(">>> %s", body)
+type Fields map[string][]interface{}
+
+// Get retrieves the first value of key in the fields map. If no such value
+// exists then it will return nil.
+func (f Fields) Get(key string) interface{} {
+	if len(f[key]) < 1 {
+		return nil
 	}
-	req, err := http.NewRequest(method, url, strings.NewReader(body))
-	if err != nil {
-		log.Debugf("*** %s", err)
-		return 0, "", nil, errgo.Notef(err, "cannot create request")
-	}
-	if len(body) > 0 && len(contentType) > 0 {
-		req.Header.Add("Content-Type", contentType)
-	}
-	response, err := http.DefaultClient.Do(req)
-	if err != nil {
-		log.Debugf("*** %s", err)
-		return 0, "", nil, errgo.Mask(err)
-	}
-	defer response.Body.Close()
-	log.Debugf("<<< %s", response.Status)
-	log.Debugf("<<< Content-Type: %s", response.Header.Get("Content-Type"))
-	data, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		log.Debugf("*** %s", err)
-		return 0, "", nil, errgo.Mask(err)
-	}
-	log.Debugf("<<< %s", data)
-	return response.StatusCode, response.Header.Get("Content-Type"), data, nil
+	return f[key][0]
 }
 
-// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/indices-refresh.html
-func (db *Database) RefreshIndex(index string) error {
-	status, _, body, err := db.request("POST", db.url(index, "_refresh"), "", "")
-	if err != nil {
-		return errgo.Mask(err)
+// Get retrieves the first value of key in the fields map, and coerces it into a
+// string. If no such value exists or the value is not a string, then "" will be returned.
+func (f Fields) GetString(key string) string {
+	s, ok := f.Get(key).(string)
+	if !ok {
+		return ""
 	}
-	if status != http.StatusCreated {
-		return errgo.Newf("ElasticSearch POST response status: %d, body: %s", status, body)
-	}
-	return nil
+	return s
 }
 
-type ErrNotFound struct {
-	errgo.Err
+// EscapeRegexp returns the supplied string with any special characters escaped.
+// A regular expression match on the returned string will match exactly the characters
+// in the supplied string.
+func EscapeRegexp(s string) string {
+	return regexpReplacer.Replace(s)
 }
+
+var regexpReplacer = strings.NewReplacer(
+	`.`, `\.`,
+	`?`, `\?`,
+	`+`, `\+`,
+	`*`, `\*`,
+	`|`, `\|`,
+	`{`, `\{`,
+	`}`, `\}`,
+	`[`, `\[`,
+	`]`, `\]`,
+	`(`, `\(`,
+	`)`, `\)`,
+	`"`, `\"`,
+	`\`, `\\`,
+	`#`, `\#`,
+	`@`, `\@`,
+	`&`, `\&`,
+	`<`, `\<`,
+	`>`, `\>`,
+	`~`, `\~`,
+)

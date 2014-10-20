@@ -3,7 +3,7 @@
 
 package v4
 
-import ( //	"encoding/json"
+import (
 	"net/http"
 	"strconv"
 
@@ -22,17 +22,27 @@ func (h *Handler) serveSearch(w http.ResponseWriter, req *http.Request) (interfa
 		return "", err
 	}
 	// perform query
-	ids, err := h.store.Search(sp.SearchParams)
+	results, err := h.store.Search(sp)
 	if err != nil {
 		router.WriteError(w, errgo.Notef(err, "error performing search"))
 	}
-	results := []params.SearchResult{}
-	for _, id := range ids {
-		sr := params.SearchResult{Id: id}
-		// TODO (mhilton) get metadata
-		results = append(results, sr)
+	response := params.SearchResponse{
+		SearchTime: results.SearchTime,
+		Total:      results.Total,
+		Results:    make([]params.SearchResult, 0, len(results.Results)),
 	}
-	return results, nil
+	//TODO(mhilton) collect the metadata concurrently.
+	for _, ref := range results.Results {
+		meta, err := h.Router.GetMetadata(ref, sp.Include)
+		if err != nil {
+			router.WriteError(w, errgo.Notef(err, "error retrieving metadata"))
+		}
+		response.Results = append(response.Results, params.SearchResult{
+			Id:   ref,
+			Meta: meta,
+		})
+	}
+	return response, nil
 }
 
 // GET search/interesting[?limit=limit][&include=meta]
@@ -41,14 +51,9 @@ func (h *Handler) serveSearchInteresting(w http.ResponseWriter, req *http.Reques
 	router.WriteError(w, errNotImplemented)
 }
 
-type searchParams struct {
-	charmstore.SearchParams
-	Include []string
-}
-
 // parseSearchParms extracts the search paramaters from the request
-func parseSearchParams(req *http.Request) (searchParams, error) {
-	sp := searchParams{SearchParams: charmstore.SearchParams{Filters: map[string][]string{}}}
+func parseSearchParams(req *http.Request) (charmstore.SearchParams, error) {
+	sp := charmstore.SearchParams{Filters: map[string][]string{}}
 	var err error
 	for k, v := range req.Form {
 		switch k {
@@ -57,22 +62,26 @@ func parseSearchParams(req *http.Request) (searchParams, error) {
 		case "autocomplete":
 			sp.AutoComplete, err = parseBool(v[0])
 			if err != nil {
-				return searchParams{}, badRequestf(err, "invalid autocomplete parameter")
+				return charmstore.SearchParams{}, badRequestf(err, "invalid autocomplete parameter")
 			}
 		case "limit":
 			sp.Limit, err = strconv.Atoi(v[0])
 			if err != nil {
-				return searchParams{}, badRequestf(err, "invalid limit parameter: could not parse integer")
+				return charmstore.SearchParams{}, badRequestf(err, "invalid limit parameter: could not parse integer")
 			}
 			if sp.Limit < 1 {
-				return searchParams{}, badRequestf(err, "invalid limit parameter: expected integer greater than zero")
+				return charmstore.SearchParams{}, badRequestf(err, "invalid limit parameter: expected integer greater than zero")
 			}
 		case "include":
-			sp.Include = v
+			for _, s := range v {
+				if s != "" {
+					sp.Include = append(sp.Include, s)
+				}
+			}
 		case "description", "name", "owner", "provides", "requires", "series", "summary", "tags", "type":
 			sp.Filters[k] = v
 		default:
-			return searchParams{}, badRequestf(err, "invalid parameter: %s", k)
+			return charmstore.SearchParams{}, badRequestf(err, "invalid parameter: %s", k)
 		}
 	}
 

@@ -1,141 +1,74 @@
 {
-    "entity" : {
+  "entity" : {
+    "dynamic" : "false",
+    "properties" : {
+      "URL" : {
+        "type" : "string",
+        "index" : "not_analyzed",
+        "index_options" : "docs"
+      },
+      "BaseURL" : {
+        "type" : "string",
+        "index": "not_analyzed",
+        "index_options" : "docs"
+      },
+      "BlobHash" : {
+        "type" : "string",
+        "index" : "not_analyzed",
+        "omit_norms" : true,
+        "index_options" : "docs"
+      },
+      "UploadTime" : {
+        "type" : "date",
+        "format" : "dateOptionalTime"
+      },
+      "CharmMeta" : {
         "dynamic" : "false",
         "properties" : {
-          "id" : {
-            "type" : "string",
-            "index" : "not_analyzed",
-            "omit_norms" : true,
-            "index_options" : "docs"
+          "Name" : {
+            "type" : "multi_field",
+            "fields" : {
+              "Name" : {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
+              },
+              "ngrams" : {
+                "type" : "string",
+                "analyzer" : "n3_20grams",
+                "include_in_all" : false
+              }
+            }
           },
-          "baseurl" : {
-            "type" : "string",
-            "omit_norms" : true,
-            "index_options" : "docs"
+          "Summary" : {
+            "type" : "string"
           },
-          "blobhash" : {
-            "type" : "string",
-            "index" : "not_analyzed",
-            "omit_norms" : true,
-            "index_options" : "docs"
+          "Description" : {
+            "type" : "string"
           },
-          "uploadtime" : {
-            "type" : "date",
-            "format" : "dateOptionalTime"
-          },
-          "charmmeta" : {
+          "Provides" : {
             "dynamic" : "false",
             "properties" : {
-              "name" : {
-                "type" : "multi_field",
-                "fields" : {
-                  "name" : {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  },
-                  "ngrams" : {
-                    "type" : "string",
-                    "analyser" : "n3_20grams",
-                    "include_in_all" : false
-                  }
-                }
+              "Name" : {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
               },
-              "summary" : {
-                "type" : "string"
+              "Role" : {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
               },
-              "description" : {
-                "type" : "string"
+              "Interface" : {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
               },
-              "provides" : {
-                "dynamic" : "false",
-                "properties" : {
-                  "name" : {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  },
-                  "role" : {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  },
-                  "interface" : {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  },
-                  "scope" : {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  }
-                }
-              },
-              "requires" : {
-                "dynamic" : "false",
-                "properties" : {
-                  "name" : {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  },
-                  "role" : {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  },
-                  "interface" : {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  },
-                  "scope" : {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  }
-                }
-              },
-              "peers" : {
-                "dynamic" : "false",
-                "properties" : {
-                  "name" : {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  },
-                  "role" : {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  },
-                  "interface" : {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  },
-                  "scope" : {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  }
-                }
-              },
-              "categories" : {
+              "Scope" : {
                 "type" : "string",
                 "index" : "not_analyzed",
                 "omit_norms" : true,
@@ -143,29 +76,28 @@
               }
             }
           },
-          "charmconfig" : {
+          "Requires" : {
             "dynamic" : "false",
             "properties" : {
-              "options" : {
-                "dynamic" : "false",
-                "properties" : {
-                  "description" : {
-                    "type" : "string"
-                  },
-                  "default" : {
-                    "type" : "string"
-                  }
-                }
-              }
-            }
-          },
-          "charmactions" : {
-            "dynamic" : "false",
-            "properties" : {
-              "description" : {
-                "type" : "string"
+              "Name" : {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
               },
-              "action_name" : {
+              "Role" : {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
+              },
+              "Interface" : {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
+              },
+              "Scope" : {
                 "type" : "string",
                 "index" : "not_analyzed",
                 "omit_norms" : true,
@@ -173,69 +105,138 @@
               }
             }
           },
-          "charmprovidedinterfaces" : {
-            "type" : "string",
-            "index" : "not_analyzed",
-            "omit_norms" : true,
-            "index_options" : "docs"
-          },
-          "charmrequiredinterfaces" : {
-            "type" : "string",
-            "index" : "not_analyzed",
-            "omit_norms" : true,
-            "index_options" : "docs"
-          },
-
-
-          "bundledata" : {
-            "type": "object",
-            "dynamic": "false",
+          "Peers" : {
+            "dynamic" : "false",
             "properties" : {
-              "services" : {
-                "type": "object",
-                "dynamic": "false",
-                "properties": {
-                  "charm": {
-                    "type" : "string",
-                    "index" : "not_analyzed",
-                    "omit_norms" : true,
-                    "index_options" : "docs"
-                  },
-                  "numunits": {
-                    "type" : "integer",
-                    "index": "not_analyzed"
-                  }
-                }
+              "Name" : {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
               },
-              "series" : {
-                "type" : "string"
+              "Role" : {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
               },
-              "relations" : {
-                    "type" : "string",
-                    "index": "not_analyzed"
-                  }
-                }
+              "Interface" : {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
+              },
+              "Scope" : {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
               }
             }
           },
-          "bundlereadme" : {
-            "type": "string",
-            "index": "not_analyzed",
+          "Categories" : {
+            "type" : "string",
+            "index" : "not_analyzed",
             "omit_norms" : true,
             "index_options" : "docs"
-          },
-          "bundlecharms": {
-            "type": "string",
-            "index": "not_analyzed",
-            "omit_norms" : true,
-            "index_options" : "docs"
-          },
-          "bundlemachinecount": {
-            "type": "integer"
-          },
-          "bundleunitcount": {
-            "type": "integer"
           }
         }
+      },
+      "CharmConfig" : {
+        "dynamic" : "false",
+        "properties" : {
+          "Options" : {
+            "dynamic" : "false",
+            "properties" : {
+              "Description" : {
+                "type" : "string"
+              },
+              "Default" : {
+                "type" : "string"
+              }
+            }
+          }
+        }
+      },
+      "charmactions" : {
+        "dynamic" : "false",
+        "properties" : {
+          "description" : {
+            "type" : "string"
+          },
+          "action_name" : {
+            "type" : "string",
+            "index" : "not_analyzed",
+            "omit_norms" : true,
+            "index_options" : "docs"
+          }
+        }
+      },
+      "CharmProvidedInterfaces" : {
+        "type" : "string",
+        "index" : "not_analyzed",
+        "omit_norms" : true,
+        "index_options" : "docs"
+      },
+      "CharmRequiredInterfaces" : {
+        "type" : "string",
+        "index" : "not_analyzed",
+        "omit_norms" : true,
+        "index_options" : "docs"
+      },
+
+
+      "BundleData" : {
+        "type": "object",
+        "dynamic": "false",
+        "properties" : {
+          "Services" : {
+            "type": "object",
+            "dynamic": "false",
+            "properties": {
+              "Charm": {
+                "type" : "string",
+                "index" : "not_analyzed",
+                "omit_norms" : true,
+                "index_options" : "docs"
+              },
+              "NumUnits": {
+                "type" : "integer",
+                "index": "not_analyzed"
+              }
+            }
+          },
+          "Series" : {
+            "type" : "string"
+          },
+          "Relations" : {
+            "type" : "string",
+            "index": "not_analyzed"
+          },
+         "Tags" : {
+            "type" : "string",
+            "index": "not_analyzed"
+          }
+        }
+      },
+      "BundleReadMe" : {
+        "type": "string",
+        "index": "not_analyzed",
+        "omit_norms" : true,
+        "index_options" : "docs"
+      },
+      "BundleCharms": {
+        "type": "string",
+        "index": "not_analyzed",
+        "omit_norms" : true,
+        "index_options" : "docs"
+      },
+      "BundleMachineCount": {
+        "type": "integer"
+      },
+      "BundleUnitCount": {
+        "type": "integer"
       }
+    }
+  }
 }
