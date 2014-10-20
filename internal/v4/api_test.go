@@ -280,6 +280,33 @@ func (s *APISuite) TestEndpointGet(c *gc.C) {
 	}
 }
 
+func (s *APISuite) TestAllMetaEndpointsTested(c *gc.C) {
+	// Make sure that we're testing all the metadata
+	// endpoints that we need to.
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("precise/wordpress-23/meta"),
+	})
+	var list []string
+	err := json.Unmarshal(rec.Body.Bytes(), &list)
+	c.Assert(err, gc.IsNil)
+
+	listNames := make(map[string]bool)
+	for _, name := range list {
+		c.Assert(listNames[name], gc.Equals, false, gc.Commentf("name %s", name))
+		listNames[name] = true
+	}
+
+	testNames := make(map[string]bool)
+	for _, test := range metaEndpoints {
+		if strings.Contains(test.name, "/") {
+			continue
+		}
+		testNames[test.name] = true
+	}
+	c.Assert(testNames, jc.DeepEquals, listNames)
+}
+
 var testEntities = []string{
 	// A stock charm.
 	"cs:precise/wordpress-23",

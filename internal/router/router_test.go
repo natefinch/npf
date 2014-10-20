@@ -263,11 +263,14 @@ var routerGetTests = []struct {
 		Meta: map[string]BulkIncludeHandler{
 			"foo": testMetaHandler(0),
 			"bar": testMetaHandler(1),
+			"bar/": testMetaHandler(2),
+			"foo/": testMetaHandler(3),
+			"baz": testMetaHandler(4),
 		},
 	},
 	urlStr:       "/precise/wordpress-42/meta",
 	expectStatus: http.StatusOK,
-	expectBody:   []string{"bar", "foo"},
+	expectBody:   []string{"bar", "baz", "foo"},
 }, {
 	about: "meta handler",
 	handlers: Handlers{

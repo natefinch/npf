@@ -78,8 +78,8 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 				"extrainfo",
 			),
 
-			// endpoints not yet implemented - use SingleIncludeHandler for the time being.
-			"color": router.SingleIncludeHandler(h.metaColor),
+			// endpoints not yet implemented:
+			// "color": router.SingleIncludeHandler(h.metaColor),
 		},
 	}, h.resolveURL)
 	return h
