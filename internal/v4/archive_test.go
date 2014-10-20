@@ -61,6 +61,7 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
 	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
+	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:precise/wordpress-0")
 
 	// Check that the HTTP range logic is plugged in OK. If this
 	// is working, we assume that the whole thing is working OK,
@@ -74,6 +75,22 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
 	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
+	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:precise/wordpress-0")
+}
+
+func (s *ArchiveSuite) TestGetWithPartialId(c *gc.C) {
+	id := "cs:utopic/wordpress-42"
+	err := s.store.AddCharmWithArchive(
+		charm.MustParseReference(id),
+		charmtesting.Charms.CharmArchive(c.MkDir(), "wordpress"))
+	c.Assert(err, gc.IsNil)
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("wordpress/archive"),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	// The complete entity id can be retrieved from the response header.
+	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, id)
 }
 
 func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
