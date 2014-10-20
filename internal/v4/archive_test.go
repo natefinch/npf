@@ -975,6 +975,20 @@ func (s *ArchiveSuite) assertEntityInfo(c *gc.C, url *charm.Reference, expect en
 	})
 }
 
+func (s *ArchiveSuite) TestArchiveFileGetHasCORSHeaders(c *gc.C) {
+	id := "precise/wordpress-0"
+	s.assertUploadCharm(c, "POST", charm.MustParseReference(id), "wordpress")
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL(fmt.Sprintf("%s/archive/metadata.yaml", id)),
+	})
+	headers := rec.Header()
+	c.Assert(len(headers["Access-Control-Allow-Origin"]), gc.Equals, 1)
+	c.Assert(len(headers["Access-Control-Allow-Headers"]), gc.Equals, 1)
+	c.Assert(headers["Access-Control-Allow-Origin"][0], gc.Equals, "*")
+	c.Assert(headers["Access-Control-Allow-Headers"][0], gc.Equals, "X-Requested-With")
+}
+
 func hashOfBytes(data []byte) string {
 	hash := blobstore.NewHash()
 	hash.Write(data)
