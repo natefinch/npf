@@ -65,7 +65,9 @@ func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	defer r.Close()
-	w.Header().Set(params.ContentHashHeader, hash)
+	header := w.Header()
+	header.Set(params.ContentHashHeader, hash)
+	header.Set(params.EntityIdHeader, id.String())
 	h.store.IncCounterAsync(entityStatsKey(id, params.StatsArchiveDownload))
 	// TODO(rog) should we set connection=close here?
 	// See https://codereview.appspot.com/5958045

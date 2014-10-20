@@ -12,9 +12,15 @@ import (
 	"gopkg.in/juju/charm.v4"
 )
 
-// ContentHashHeader specifies the header attribute
-// that will hold the content hash for archive GET responses.
-const ContentHashHeader = "Content-Sha384"
+const (
+	// ContentHashHeader specifies the header attribute
+	// that will hold the content hash for archive GET responses.
+	ContentHashHeader = "Content-Sha384"
+
+	// EntityIdHeader specifies the header attribute that will hold the
+	// id of the entity for archive GET responses.
+	EntityIdHeader = "Entity-Id"
+)
 
 // MetaAnyResponse holds the result of a meta/any
 // request. See http://tinyurl.com/q5vcjpk
