@@ -68,6 +68,10 @@ func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 	header := w.Header()
 	header.Set(params.ContentHashHeader, hash)
 	header.Set(params.EntityIdHeader, id.String())
+	// Storefront is linking to icon.svg directly, so we need CORS support.
+	// http://www.w3.org/TR/cors/
+	header.Set("Access-Control-Allow-Origin", "*")
+	header.Set("Access-Control-Allow-Headers", "X-Requested-With")
 	h.store.IncCounterAsync(entityStatsKey(id, params.StatsArchiveDownload))
 	// TODO(rog) should we set connection=close here?
 	// See https://codereview.appspot.com/5958045
@@ -292,6 +296,10 @@ func (h *Handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, r
 			w.Header().Set("Content-Type", ctype)
 		}
 		w.Header().Set("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
+		// Storefront is linking to icon.svg directly, so we need CORS support.
+		// http://www.w3.org/TR/cors/
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Headers", "X-Requested-With")
 		w.WriteHeader(http.StatusOK)
 		io.Copy(w, content)
 		return nil
