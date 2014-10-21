@@ -14,7 +14,7 @@ import (
 )
 
 func TestPackage(t *testing.T) {
-	storetesting.ElasticSearchTestPackage(t, nil)
+	gc.TestingT(t)
 }
 
 type Suite struct {
