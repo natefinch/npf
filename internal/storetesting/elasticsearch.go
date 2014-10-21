@@ -4,9 +4,7 @@
 package storetesting
 
 import (
-	"fmt"
 	"os"
-	"testing"
 	"time"
 
 	"github.com/juju/utils"
@@ -15,46 +13,30 @@ import (
 	"github.com/juju/charmstore/internal/elasticsearch"
 )
 
-var serverAddr string
-
-// ElasticSearchTestPackage determines the address of the test elasticsearch
-// server, and then calls the given function with t as its argument, or calls
-// gocheck.TestingT if t is nil. Its behaviour is dependent on the value of the
-// JUJU_TEST_ELASTICSEARCH environment variable, which can be "none" (do not
-// start or connect to a server) or host:port holding the address and port of
-// the server to connect to. If JUJU_TEST_ELASTICSEARCH is not specified then
-// localhost:9200 will be used.
-//
-// For example:
-//     JUJU_TEST_ELASTICSEARCH=localhost:9200 go test
-func ElasticSearchTestPackage(t *testing.T, cb func(t *testing.T)) {
-	esAddr := os.Getenv("JUJU_TEST_ELASTICSEARCH")
-	switch esAddr {
-	case "none":
-		return
-	case "":
-		serverAddr = ":9200"
-	default:
-		serverAddr = esAddr
-	}
-	if cb != nil {
-		cb(t)
-	} else {
-		gc.TestingT(t)
-	}
-}
-
+// ElasticSearchSuite defines a test suite that connects to an
+// elastic-search server. The address of the server depends on the value
+// of the JUJU_TEST_ELASTICSEARCH environment variable, which can be
+// "none" (do not start or connect to a server) or host:port holding the
+// address and port of the server to connect to. If
+// JUJU_TEST_ELASTICSEARCH is not specified then localhost:9200 will be
+// used.
 type ElasticSearchSuite struct {
 	ES        *elasticsearch.Database
 	indexes   []string
 	TestIndex string
 }
 
+var jujuTestElasticSearch = os.Getenv("JUJU_TEST_ELASTICSEARCH")
+
 func (s *ElasticSearchSuite) SetUpSuite(c *gc.C) {
-	if serverAddr == "" {
+	serverAddr := jujuTestElasticSearch
+	switch serverAddr {
+	case "none":
 		c.Skip("elasticsearch disabled")
+	case "":
+		serverAddr = ":9200"
 	}
-	s.ES = &elasticsearch.Database{fmt.Sprintf(serverAddr)}
+	s.ES = &elasticsearch.Database{serverAddr}
 }
 
 func (s *ElasticSearchSuite) TearDownSuite(c *gc.C) {
