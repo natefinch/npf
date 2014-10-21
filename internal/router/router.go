@@ -378,6 +378,12 @@ func (r *Router) metaNames() []string {
 func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
 	case "GET", "HEAD":
+		// A bare meta returns all endpoints.
+		// See http://tinyurl.com/q2qd9nn
+		if req.URL.Path == "/" || req.URL.Path == "" {
+			jsonhttp.WriteJSON(w, http.StatusOK, r.metaNames())
+			return nil
+		}
 		resp, err := r.serveBulkMetaGet(req)
 		if err != nil {
 			return errgo.Mask(err, errgo.Any)

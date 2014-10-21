@@ -261,14 +261,42 @@ var routerGetTests = []struct {
 	about: "meta list",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": testMetaHandler(0),
-			"bar": testMetaHandler(1),
+			"foo":  testMetaHandler(0),
+			"bar":  testMetaHandler(1),
 			"bar/": testMetaHandler(2),
 			"foo/": testMetaHandler(3),
-			"baz": testMetaHandler(4),
+			"baz":  testMetaHandler(4),
 		},
 	},
 	urlStr:       "/precise/wordpress-42/meta",
+	expectStatus: http.StatusOK,
+	expectBody:   []string{"bar", "baz", "foo"},
+}, {
+	about: "meta list at root",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo":  testMetaHandler(0),
+			"bar":  testMetaHandler(1),
+			"bar/": testMetaHandler(2),
+			"foo/": testMetaHandler(3),
+			"baz":  testMetaHandler(4),
+		},
+	},
+	urlStr:       "/meta",
+	expectStatus: http.StatusOK,
+	expectBody:   []string{"bar", "baz", "foo"},
+}, {
+	about: "meta list at root with trailing /",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo":  testMetaHandler(0),
+			"bar":  testMetaHandler(1),
+			"bar/": testMetaHandler(2),
+			"foo/": testMetaHandler(3),
+			"baz":  testMetaHandler(4),
+		},
+	},
+	urlStr:       "/meta/",
 	expectStatus: http.StatusOK,
 	expectBody:   []string{"bar", "baz", "foo"},
 }, {
