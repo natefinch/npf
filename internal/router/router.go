@@ -362,7 +362,13 @@ func isNull(val interface{}) bool {
 func (r *Router) metaNames() []string {
 	names := make([]string, 0, len(r.handlers.Meta))
 	for name := range r.handlers.Meta {
-		names = append(names, strings.TrimSuffix(name, "/"))
+		// Ensure that we don't generate duplicate entries
+		// when there's an entry for both "x" and "x/".
+		trimmed := strings.TrimSuffix(name, "/")
+		if trimmed != name && r.handlers.Meta[trimmed] != nil {
+			continue
+		}
+		names = append(names, trimmed)
 	}
 	sort.Strings(names)
 	return names
