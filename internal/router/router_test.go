@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"testing"
 
 	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
@@ -26,10 +25,6 @@ import (
 	"github.com/juju/charmstore/internal/storetesting"
 	"github.com/juju/charmstore/params"
 )
-
-func TestPackage(t *testing.T) {
-	gc.TestingT(t)
-}
 
 type RouterSuite struct {
 	jujutesting.IsolationSuite
