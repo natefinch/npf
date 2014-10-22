@@ -20,6 +20,9 @@ type Filter interface {
 	json.Marshaler
 }
 
+// Function is a function definition for use with a FunctionScoreQuery.
+type Function interface{}
+
 // BoostField creates a string which represents a field name with a boost value.
 func BoostField(field string, boost float64) string {
 	return fmt.Sprintf("%s^%f", field, boost)
@@ -103,19 +106,28 @@ func (t TermQuery) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// Function is a function definition for use with a FunctionScoreQuery.
-type Function struct {
+// DecayFunction provides a function that boosts depending on
+// the difference in values of a certain field. See
+// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl-function-score-query.html#_decay_functions
+// for details.
+type DecayFunction struct {
 	Function string
 	Field    string
 	Scale    string
 }
 
-func (f Function) MarshalJSON() ([]byte, error) {
+func (f DecayFunction) MarshalJSON() ([]byte, error) {
 	return marshalNamedObject(f.Function, map[string]interface{}{
 		f.Field: map[string]interface{}{
 			"scale": f.Scale,
 		},
 	})
+}
+
+// BoostFactorFunction provides a function that boosts results by the specified amount.
+type BoostFactorFunction struct {
+	Filter      Filter  `json:"filter,omitempty"`
+	BoostFactor float64 `json:"boost_factor"`
 }
 
 // AndFilter provides a filter that matches if all of the internal
