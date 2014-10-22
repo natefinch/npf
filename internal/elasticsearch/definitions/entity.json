@@ -4,7 +4,7 @@
     "properties" : {
       "URL" : {
         "type" : "string",
-        "index" : "not_analyzed",
+        "analyzer" : "n3_20grams",
         "index_options" : "docs"
       },
       "BaseURL" : {
