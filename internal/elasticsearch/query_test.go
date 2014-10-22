@@ -49,11 +49,13 @@ func (s *QuerySuite) TestJSONEncodings(c *gc.C) {
 		about: "function score query",
 		query: FunctionScoreQuery{
 			Query: TermQuery{Field: "foo", Value: "bar"},
-			Functions: []Function{{
-				Function: "baz",
-				Field:    "foo",
-				Scale:    "quz",
-			}},
+			Functions: []Function{
+				DecayFunction{
+					Function: "baz",
+					Field:    "foo",
+					Scale:    "quz",
+				},
+			},
 		},
 		json: `{"function_score": {"query": {"term": {"foo": "bar"}}, "functions": [{"baz": {"foo":{"scale": "quz"}}}]}}`,
 	}, {
@@ -95,6 +97,30 @@ func (s *QuerySuite) TestJSONEncodings(c *gc.C) {
 			Sort:   []Sort{{Field: "foo", Order: Order{"desc"}}},
 		},
 		json: `{"fields": ["foo", "bar"], "size": 10, "query": {"term": {"baz": "quz"}}, "sort": [{"foo": { "order": "desc"}}]}`,
+	}, {
+		about: "decay function",
+		query: DecayFunction{
+			Function: "baz",
+			Field:    "foo",
+			Scale:    "quz",
+		},
+		json: `{"baz": {"foo":{"scale": "quz"}}}`,
+	}, {
+		about: "boost_factor function",
+		query: BoostFactorFunction{
+			BoostFactor: 1.5,
+		},
+		json: `{"boost_factor": 1.5}`,
+	}, {
+		about: "boost_factor function with filter",
+		query: BoostFactorFunction{
+			BoostFactor: 1.5,
+			Filter: TermFilter{
+				Field: "foo",
+				Value: "bar",
+			},
+		},
+		json: `{"filter": {"term": {"foo": "bar"}}, "boost_factor": 1.5}`,
 	}}
 	for i, test := range tests {
 		c.Logf("%d: %s", i, test.about)

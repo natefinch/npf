@@ -164,14 +164,17 @@ func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 		}
 	}
 
-	// Attenuation function
 	q = elasticsearch.FunctionScoreQuery{
 		Query: q,
 		Functions: []elasticsearch.Function{
-			{
+			elasticsearch.DecayFunction{
 				Function: "linear",
 				Field:    "UploadTime",
 				Scale:    "365d",
+			},
+			elasticsearch.BoostFactorFunction{
+				Filter:      ownerFilter(""),
+				BoostFactor: 1.25,
 			},
 		},
 	}

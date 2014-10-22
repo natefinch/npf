@@ -293,6 +293,24 @@ func (s *StoreSearchSuite) TestLimitTestSearch(c *gc.C) {
 	c.Assert(res.Results, gc.HasLen, 1)
 }
 
+func (s *StoreSearchSuite) TestPromulgatedRank(c *gc.C) {
+	charmArchive := testing.Charms.CharmDir("varnish")
+	url := charm.MustParseReference("cs:trusty/varnish-1")
+	s.store.AddCharmWithArchive(url, charmArchive)
+	err := s.store.ExportToElasticSearch()
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	sp := SearchParams{
+		Filters: map[string][]string{
+			"name": {"varnish"},
+		},
+	}
+	res, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(res.Results, gc.HasLen, 2)
+	c.Assert(res.Results[0].String(), gc.Equals, "cs:trusty/varnish-1")
+	c.Assert(res.Results[1].String(), gc.Equals, exportTestCharms["varnish"])
+}
+
 // assertSearchResults checks that the results obtained from a search are the same
 // as those in the expected set, but in any order.
 func assertSearchResults(c *gc.C, obtained SearchResult, expected []string) {
