@@ -797,7 +797,12 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 		},
 	}
 
-	err := s.store.AddBundle(charm.MustParseReference("cs:bundle/wordpressbundle-42"), bundle, "blobName", fakeBlobHash, fakeBlobSize)
+	err := s.store.AddBundle(bundle, charmstore.AddParams{
+		URL:      charm.MustParseReference("cs:bundle/wordpressbundle-42"),
+		BlobName: "blobName",
+		BlobHash: fakeBlobHash,
+		BlobSize: fakeBlobSize,
+	})
 	c.Assert(err, gc.IsNil)
 
 	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
