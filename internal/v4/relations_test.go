@@ -444,44 +444,34 @@ func (ch *relationTestingCharm) Revision() int {
 // metaBundlesContainingBundles defines a bunch of bundles to be used in
 // the bundles-containing tests.
 var metaBundlesContainingBundles = map[string]charm.Bundle{
-	"bundle/wordpress-simple-0": &relationTestingBundle{
-		urls: []string{
-			"cs:utopic/wordpress-42",
-			"cs:utopic/mysql-0",
-		},
-	},
-	"bundle/wordpress-simple-1": &relationTestingBundle{
-		urls: []string{
-			"cs:utopic/wordpress-47",
-			"cs:utopic/mysql-1",
-		},
-	},
-	"bundle/wordpress-complex-1": &relationTestingBundle{
-		urls: []string{
-			"cs:utopic/wordpress-42",
-			"cs:utopic/wordpress-47",
-			"cs:trusty/mysql-0",
-			"cs:trusty/mysql-1",
-			"cs:trusty/memcached-2",
-		},
-	},
-	"bundle/django-generic-42": &relationTestingBundle{
-		urls: []string{
-			"django",
-			"django",
-			"mysql-1",
-			"trusty/memcached",
-		},
-	},
-	"bundle/useless-0": &relationTestingBundle{
-		urls: []string{"cs:utopic/wordpress-42"},
-	},
-	"bundle/mediawiki-47": &relationTestingBundle{
-		urls: []string{
-			"precise/mediawiki-0",
-			"mysql",
-		},
-	},
+	"bundle/wordpress-simple-0": relationTestingBundle([]string{
+		"cs:utopic/wordpress-42",
+		"cs:utopic/mysql-0",
+	}),
+	"bundle/wordpress-simple-1": relationTestingBundle([]string{
+		"cs:utopic/wordpress-47",
+		"cs:utopic/mysql-1",
+	}),
+	"bundle/wordpress-complex-1": relationTestingBundle([]string{
+		"cs:utopic/wordpress-42",
+		"cs:utopic/wordpress-47",
+		"cs:trusty/mysql-0",
+		"cs:trusty/mysql-1",
+		"cs:trusty/memcached-2",
+	}),
+	"bundle/django-generic-42": relationTestingBundle([]string{
+		"django",
+		"django",
+		"mysql-1",
+		"trusty/memcached",
+	}),
+	"bundle/useless-0": relationTestingBundle([]string{
+		"cs:utopic/wordpress-42",
+	}),
+	"bundle/mediawiki-47": relationTestingBundle([]string{
+		"precise/mediawiki-0",
+		"mysql",
+	}),
 }
 
 var metaBundlesContainingTests = []struct {
@@ -674,29 +664,37 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 	}
 }
 
-// relationTestingBundle implements charm.Bundle, and it is used for testing
-// charm to bundle relations (for instance for the bundles-containing call).
-type relationTestingBundle struct {
-	// urls is a list of charm references to be included in the bundle.
-	// For each URL, a corresponding service is automatically created.
-	urls []string
-}
-
-func (b *relationTestingBundle) Data() *charm.BundleData {
-	services := make(map[string]*charm.ServiceSpec, len(b.urls))
-	for i, url := range b.urls {
+// relationTestingBundle returns a bundle for use in relation
+// testing. The urls parameter holds a list of charm references
+// to be included in the bundle.
+// For each URL, a corresponding service is automatically created.
+func relationTestingBundle(urls []string) charm.Bundle {
+	services := make(map[string]*charm.ServiceSpec, len(urls))
+	for i, url := range urls {
 		service := &charm.ServiceSpec{
 			Charm:    url,
 			NumUnits: 1,
 		}
 		services[fmt.Sprintf("service-%d", i)] = service
 	}
-	return &charm.BundleData{
-		Services: services,
+	return &testingBundle{
+		data: &charm.BundleData{
+			Services: services,
+		},
 	}
 }
 
-func (b *relationTestingBundle) ReadMe() string {
+// testingBundle is a bundle implementation that
+// returns bundle metadata held in the data field.
+type testingBundle struct {
+	data *charm.BundleData
+}
+
+func (b *testingBundle) Data() *charm.BundleData {
+	return b.data
+}
+
+func (b *testingBundle) ReadMe() string {
 	// For the purposes of this implementation, the charm readme is not
 	// relevant.
 	return ""

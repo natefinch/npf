@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/juju/jujusvg"
 	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
@@ -48,10 +49,11 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 			"stats/counter/":     router.HandleJSON(h.serveStatsCounter),
 		},
 		Id: map[string]router.IdHandler{
-			"archive":   h.serveArchive,
-			"archive/":  h.serveArchiveFile,
-			"expand-id": h.serveExpandId,
-			"resources": h.serveResources,
+			"archive":     h.serveArchive,
+			"archive/":    h.serveArchiveFile,
+			"diagram.svg": h.serveDiagram,
+			"expand-id":   h.serveExpandId,
+			"resources":   h.serveResources,
 		},
 		Meta: map[string]router.BulkIncludeHandler{
 			"archive-size":         h.entityHandler(h.metaArchiveSize, "size"),
@@ -93,6 +95,11 @@ func NewAPIHandler(store *charmstore.Store, config charmstore.ServerParams) http
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// When requests in this handler use router.RelativeURL, we want
+	// the "absolute path" there to be interpreted relative to the
+	// root of this handler, not the absolute root of the web server,
+	// which may be abitrarily many levels up.
+	req.RequestURI = req.URL.Path
 	h.Router.ServeHTTP(w, req)
 }
 
@@ -232,6 +239,46 @@ func (h *Handler) serveDebug(w http.ResponseWriter, req *http.Request) {
 // http://tinyurl.com/k8l8kdg
 func (h *Handler) serveResources(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	return errNotImplemented
+}
+
+// GET id/diagram.svg
+// http://tinyurl.com/nqjvxov
+func (h *Handler) serveDiagram(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+	if id.Series != "bundle" {
+		return errgo.WithCausef(nil, params.ErrNotFound, "diagrams not supported for charms")
+	}
+	entities, err := h.store.FindEntities(id, "bundledata")
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	if len(entities) == 0 {
+		return params.ErrNotFound
+	}
+	// The URL is guaranteed to be fully qualified so we'll always
+	// get exactly one result.
+	entity := entities[0]
+
+	var urlErr error
+	// TODO consider what happens when a charm's SVG does not exist.
+	canvas, err := jujusvg.NewFromBundle(entity.BundleData, func(id *charm.Reference) string {
+		// TODO change jujusvg so that the iconURL function can
+		// return an error.
+		absPath := "/" + id.Path() + "/archive/icon.svg"
+		p, err := router.RelativeURLPath(req.RequestURI, absPath)
+		if err != nil {
+			urlErr = errgo.Notef(err, "cannot make relative URL from %q and %q", req.RequestURI, absPath)
+		}
+		return p
+	})
+	if err != nil {
+		return errgo.Notef(err, "cannot create canvas")
+	}
+	if urlErr != nil {
+		return urlErr
+	}
+	w.Header().Set("Content-Type", "image/svg+xml")
+	canvas.Marshal(w)
+	return nil
 }
 
 // GET id/expand-id
