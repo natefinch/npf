@@ -126,10 +126,9 @@ func (store *Store) Search(sp SearchParams) (SearchResult, error) {
 // elasticsearch query.
 func queryFields(sp SearchParams) map[string]float64 {
 	fields := map[string]float64{
-		"URL": 8,
-		"CharmMeta.Categories": 5,
-		// todo (mhilton) tests fail if BundleData.Tags are enabled
-		//"BundleData.Tags":         5,
+		"URL.ngrams":              8,
+		"CharmMeta.Categories":    5,
+		"BundleData.Tags":         5,
 		"CharmProvidedInterfaces": 3,
 		"CharmRequiredInterfaces": 3,
 		"CharmMeta.Description":   1,
@@ -251,7 +250,7 @@ func nameFilter(value string) elasticsearch.Filter {
 	// TODO(mhilton) implement wildcards as in http://tinyurl.com/k46xexe
 	return elasticsearch.RegexpFilter{
 		Field:  "URL",
-		Regexp: `cs:(\~[^/]*/)?[^/]*/` + elasticsearch.EscapeRegexp(value) + "-[1-9][0-9]*",
+		Regexp: `cs:(\~[^/]*/)?[^/]*/` + elasticsearch.EscapeRegexp(value) + "-[0-9]+",
 	}
 }
 
@@ -275,7 +274,7 @@ func ownerFilter(value string) elasticsearch.Filter {
 func seriesFilter(value string) elasticsearch.Filter {
 	return elasticsearch.RegexpFilter{
 		Field:  "URL",
-		Regexp: `cs:(\~[^/]*/)?` + elasticsearch.EscapeRegexp(value) + "/.*-[1-9][0-9]*",
+		Regexp: `cs:(\~[^/]*/)?` + elasticsearch.EscapeRegexp(value) + "/.*-[0-9]+",
 	}
 }
 

@@ -86,6 +86,7 @@ var searchTests = []struct {
 		},
 		results: []string{
 			exportTestCharms["wordpress"],
+			exportTestBundles["wordpress"],
 		},
 	}, {
 		about: "blank text search",
@@ -106,6 +107,7 @@ var searchTests = []struct {
 		},
 		results: []string{
 			exportTestCharms["wordpress"],
+			exportTestBundles["wordpress"],
 		},
 	}, {
 		about: "description filter search",
