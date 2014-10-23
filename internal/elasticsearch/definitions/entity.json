@@ -3,9 +3,20 @@
     "dynamic" : "false",
     "properties" : {
       "URL" : {
-        "type" : "string",
-        "analyzer" : "n3_20grams",
-        "index_options" : "docs"
+        "type" : "multi_field",
+        "fields" : {
+          "URL" : {
+            "type" : "string",
+            "index" : "not_analyzed",
+            "omit_norms" : true,
+            "index_options" : "docs"
+          },
+          "ngrams" : {
+            "type" : "string",
+            "analyzer" : "n3_20grams",
+            "include_in_all" : false
+          }
+        }
       },
       "BaseURL" : {
         "type" : "string",

@@ -130,12 +130,14 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 		query: "text=wordpress",
 		results: []string{
 			exportTestCharms["wordpress"],
+			exportTestBundles["wordpress"],
 		},
 	}, {
 		about: "autocomplete search",
 		query: "text=word&autocomplete=1",
 		results: []string{
 			exportTestCharms["wordpress"],
+			exportTestBundles["wordpress"],
 		},
 	}, {
 		about: "blank text search",
