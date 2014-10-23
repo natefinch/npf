@@ -126,7 +126,14 @@ func (store *Store) Search(sp SearchParams) (SearchResult, error) {
 // elasticsearch query.
 func queryFields(sp SearchParams) map[string]float64 {
 	fields := map[string]float64{
-		"CharmMeta.Description": 3,
+		"URL": 8,
+		"CharmMeta.Categories": 5,
+		// todo (mhilton) tests fail if BundleData.Tags are enabled
+		//"BundleData.Tags":         5,
+		"CharmProvidedInterfaces": 3,
+		"CharmRequiredInterfaces": 3,
+		"CharmMeta.Description":   1,
+		"BundleReadMe":            1,
 	}
 	if sp.AutoComplete {
 		fields["CharmMeta.Name.ngrams"] = 10
