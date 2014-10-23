@@ -59,6 +59,23 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 	}
 }
 
+func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
+	charmArchive := testing.Charms.CharmDir("wordpress")
+	url := charm.MustParseReference("cs:precise/wordpress-22")
+	s.store.AddCharmWithArchive(url, charmArchive)
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	var expected, old *mongodoc.Entity
+	var actual json.RawMessage
+	err = s.store.DB.Entities().FindId("cs:precise/wordpress-22").One(&old)
+	c.Assert(err, gc.IsNil)
+	err = s.store.DB.Entities().FindId("cs:precise/wordpress-23").One(&expected)
+	c.Assert(err, gc.IsNil)
+	err = s.store.ES.GetDocument(typeName, s.store.ES.getID(old), &actual)
+	c.Assert(err, gc.IsNil)
+	c.Assert([]byte(actual), storetesting.JSONEquals, expected)
+}
+
 func (s *StoreSearchSuite) addCharmsToStore(store *Store) {
 	for name, ref := range exportTestCharms {
 		charmArchive := testing.Charms.CharmDir(name)

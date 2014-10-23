@@ -32,14 +32,17 @@ func (ses *StoreElasticSearch) put(entity *mongodoc.Entity) error {
 	if ses == nil || ses.Index == nil {
 		return nil
 	}
-	return ses.PutDocument(typeName, ses.getID(entity), entity)
+	_, err := ses.PutDocumentVersion(typeName, ses.getID(entity), int64(entity.URL.Revision), entity)
+	return err
 }
 
 // getID returns an ID for the elasticsearch document based on the contents of the
 // mongoDB document. This is to allow elasticsearch documents to be replaced with
 // updated versions when charm data is changed.
 func (ses *StoreElasticSearch) getID(entity *mongodoc.Entity) string {
-	b := sha1.Sum([]byte(entity.URL.String()))
+	ref := *entity.URL
+	ref.Revision = -1
+	b := sha1.Sum([]byte(ref.String()))
 	s := base64.URLEncoding.EncodeToString(b[:])
 	// Cut off any trailing = as there is no need for them and they will get URL escaped.
 	return strings.TrimRight(s, "=")

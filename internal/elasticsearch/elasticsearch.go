@@ -92,7 +92,9 @@ func (db *Database) ListAllIndexes() ([]string, error) {
 }
 
 // PostDocument creates a new auto id document with the given index and _type
-// and returns the generated id of the document.
+// and returns the generated id of the document. The type_ parameter controls how
+// the document will be mapped in the index. See http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/docs-index_.html
+// for more details.
 func (db *Database) PostDocument(index, type_ string, doc interface{}) (string, error) {
 	var resp struct {
 		ID string `json:"_id"`
@@ -104,12 +106,36 @@ func (db *Database) PostDocument(index, type_ string, doc interface{}) (string, 
 }
 
 // PutDocument creates or updates the document with the given index, type_ and
-// id.
+// id. The type_ parameter controls how the document will be mapped in the index.
+// See http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/docs-index_.html
+// for more details.
 func (db *Database) PutDocument(index, type_, id string, doc interface{}) error {
 	if err := db.put(db.url(index, type_, id), doc, nil); err != nil {
 		return errgo.Mask(err)
 	}
 	return nil
+}
+
+// PutDocumentVersion creates or updates the document with the given index
+// if the version is equal or newer than the currently stored version. The type_ parameter
+// controls how the document will be indexed. PutDocumentVersion returns a
+// bool indicating if the data was stored and an error. If the data was not stored
+// due to a version conflict the returned value will be false, nil.
+// See http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/docs-index_.html#index-versioning
+// for more information.
+func (db *Database) PutDocumentVersion(index, type_, id string, version int64, doc interface{}) (bool, error) {
+	// "external_gte" informs elasticsearch to check the versions and update the
+	// document if the new version is the same or newer than the existing version.
+	// See http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/docs-index_.html#_version_types
+	// for more information.
+	url := fmt.Sprintf("%s?version=%d&version_type=external_gte", db.url(index, type_, id), version)
+	if err := db.put(url, doc, nil); err != nil {
+		if eserr, ok := err.(ElasticSearchError); ok && eserr.Status == http.StatusConflict {
+			return false, nil
+		}
+		return false, errgo.Mask(err)
+	}
+	return true, nil
 }
 
 // PutIndex creates the index with the given configuration.
@@ -254,18 +280,32 @@ type Index struct {
 	Index    string
 }
 
+// PutDocument creates or updates the document with the given type_ and id
+// in the index. This is a wrapper around Database.PutDocument.
 func (i *Index) PutDocument(type_, id string, doc interface{}) error {
 	return i.Database.PutDocument(i.Index, type_, id, doc)
 }
 
+// PutDocumentVersion creates or updates the document with the given type_ and id
+// in the index if the version is the same or newer than the currently store version.
+// This is a wrapper around Database.PutDocumentVersion.
+func (i *Index) PutDocumentVersion(type_, id string, version int64, doc interface{}) (bool, error) {
+	return i.Database.PutDocumentVersion(i.Index, type_, id, version, doc)
+}
+
+// GetDocument retrieves the document with the given type_ and id
+// in the index. This is a wrapper around Database.GetDocument.
 func (i *Index) GetDocument(type_, id string, doc interface{}) error {
 	return i.Database.GetDocument(i.Index, type_, id, doc)
 }
 
+// Search searches the index on the given type_ with the given QueryDSL.
+// This is a wrapper around Database.Search
 func (i *Index) Search(type_ string, q QueryDSL) (SearchResult, error) {
 	return i.Database.Search(i.Index, type_, q)
 }
 
+// Delete deletes the index. This is a wrapper around Database.DeleteIndex.
 func (i *Index) Delete() error {
 	return i.Database.DeleteIndex(i.Index)
 }
