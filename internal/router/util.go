@@ -6,6 +6,7 @@ package router
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
@@ -109,4 +110,45 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	h.ServeHTTP(w, req)
+}
+
+// RelativeURLPath returns a relative URL path that is lexically equivalent to
+// targpath when interpreted by url.URL.ResolveReference.
+// On succes, the returned path will always be relative to basePath, even if basePath
+// and targPath share no elements. An error is returned if targPath can't
+// be made relative to basePath (for example when either basePath
+// or targetPath are non-absolute).
+func RelativeURLPath(basePath, targPath string) (string, error) {
+	if !strings.HasPrefix(basePath, "/") {
+		return "", errgo.Newf("non-absolute base URL")
+	}
+	if !strings.HasPrefix(targPath, "/") {
+		return "", errgo.Newf("non-absolute target URL")
+	}
+	baseParts := strings.Split(basePath, "/")
+	targParts := strings.Split(targPath, "/")
+
+	// For the purposes of dotdot, the last element of
+	// the paths are irrelevant. We save the last part
+	// of the target path for later.
+	lastElem := targParts[len(targParts)-1]
+	baseParts = baseParts[0 : len(baseParts)-1]
+	targParts = targParts[0 : len(targParts)-1]
+
+	// Find the common prefix between the two paths:
+	var i int
+	for ; i < len(baseParts); i++ {
+		if i >= len(targParts) || baseParts[i] != targParts[i] {
+			break
+		}
+	}
+	dotdotCount := len(baseParts) - i
+	targOnly := targParts[i:]
+	result := make([]string, 0, dotdotCount+len(targOnly)+1)
+	for i := 0; i < dotdotCount; i++ {
+		result = append(result, "..")
+	}
+	result = append(result, targOnly...)
+	result = append(result, lastElem)
+	return strings.Join(result, "/"), nil
 }
