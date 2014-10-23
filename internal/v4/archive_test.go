@@ -839,7 +839,13 @@ func (s *ArchiveSuite) TestDeleteError(c *gc.C) {
 	// Add a charm to the database (not including the archive).
 	id := "utopic/mysql-42"
 	url := charm.MustParseReference(id)
-	err := s.store.AddCharm(url, charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"), "no-such-name", fakeBlobHash, fakeBlobSize)
+	err := s.store.AddCharm(charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"),
+		charmstore.AddParams{
+			URL:      url,
+			BlobName: "no-such-name",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
+		})
 	c.Assert(err, gc.IsNil)
 
 	// Try to delete the charm using the API.

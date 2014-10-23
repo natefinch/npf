@@ -373,7 +373,12 @@ func (s *RelationsSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
 		// The blob related info are not used in these tests.
 		// The related charms are retrieved from the entities collection,
 		// without accessing the blob store.
-		err := s.store.AddCharm(url, ch, "blobName", fakeBlobHash, fakeBlobSize)
+		err := s.store.AddCharm(ch, charmstore.AddParams{
+			URL:      url,
+			BlobName: "blobName",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
+		})
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -628,7 +633,12 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 		// The blob related info are not used in these tests.
 		// The charm-bundle relations are retrieved from the entities
 		// collection, without accessing the blob store.
-		err := s.store.AddBundle(url, b, "blobName", fakeBlobHash, fakeBlobSize)
+		err := s.store.AddBundle(b, charmstore.AddParams{
+			URL:      url,
+			BlobName: "blobName",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
+		})
 		c.Assert(err, gc.IsNil)
 	}
 
@@ -646,7 +656,12 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 		}
 
 		// Add the charm we need bundle info on to the database.
-		err := s.store.AddCharm(url, &relationTestingCharm{}, "blobName", fakeBlobHash, fakeBlobSize)
+		err := s.store.AddCharm(&relationTestingCharm{}, charmstore.AddParams{
+			URL:      url,
+			BlobName: "blobName",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
+		})
 		c.Assert(err, gc.IsNil)
 
 		// Perform the request and ensure the response is what we expect.

@@ -20,6 +20,7 @@ import (
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2/bson"
 
+	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/params"
 )
@@ -224,7 +225,12 @@ func (h *Handler) addEntity(id *charm.Reference, r io.ReadSeeker, blobName strin
 			// TODO frankban: use multiError (defined in internal/router).
 			return errgo.Notef(verificationError(err), "bundle verification failed")
 		}
-		if err := h.store.AddBundle(id, b, blobName, hash, contentLength); err != nil {
+		if err := h.store.AddBundle(b, charmstore.AddParams{
+			URL:      id,
+			BlobName: blobName,
+			BlobHash: hash,
+			BlobSize: contentLength,
+		}); err != nil {
 			return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 		}
 		return nil
@@ -233,7 +239,12 @@ func (h *Handler) addEntity(id *charm.Reference, r io.ReadSeeker, blobName strin
 	if err != nil {
 		return errgo.Notef(err, "cannot read charm archive")
 	}
-	if err := h.store.AddCharm(id, ch, blobName, hash, contentLength); err != nil {
+	if err := h.store.AddCharm(ch, charmstore.AddParams{
+		URL:      id,
+		BlobName: blobName,
+		BlobHash: hash,
+		BlobSize: contentLength,
+	}); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 	}
 	return nil

@@ -374,9 +374,14 @@ func (s *StoreSuite) TestBundleUnitCount(c *gc.C) {
 		}
 
 		// Add the bundle used for this test.
-		err := store.AddBundle(url, &testingBundle{
+		err := store.AddBundle(&testingBundle{
 			data: test.data,
-		}, "blobName", fakeBlobHash, fakeBlobSize)
+		}, AddParams{
+			URL:      url,
+			BlobName: "blobName",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
+		})
 		c.Assert(err, gc.IsNil)
 
 		// Retrieve the bundle from the database.
@@ -698,10 +703,14 @@ func (s *StoreSuite) TestBundleMachineCount(c *gc.C) {
 		err := test.data.Verify(func(string) error { return nil })
 		c.Assert(err, gc.IsNil)
 		// Add the bundle used for this test.
-		err = store.AddBundle(url, &testingBundle{
+		err = store.AddBundle(&testingBundle{
 			data: test.data,
-		}, "blobName", fakeBlobHash, fakeBlobSize)
-		c.Assert(err, gc.IsNil)
+		}, AddParams{
+			URL:      url,
+			BlobName: "blobName",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
+		})
 
 		// Retrieve the bundle from the database.
 		var doc mongodoc.Entity

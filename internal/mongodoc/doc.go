@@ -72,4 +72,30 @@ type Entity struct {
 
 	// TODO Add fields denormalized for search purposes
 	// and search ranking field(s).
+
+	// Contents holds entries for frequently accessed
+	// entries in the file's blob. Storing this avoids
+	// the need to linearly read the zip file's manifest
+	// every time we access one of these files.
+	Contents map[FileId]ZipFile `json:",omitempty" bson:",omitempty"`
+}
+
+type FileId string
+
+const (
+	FileReadme FileId = "readme"
+	FileIcon   FileId = "icon"
+)
+
+// ZipFile refers to a specific file in the uploaded archive blob.
+type ZipFile struct {
+	// Compressed specifies whether the file is compressed or not.
+	Compressed bool
+
+	// Offset holds the offset into the zip archive of the start of
+	// the file's data.
+	Offset int64
+
+	// Size holds the size of the file before decompression.
+	Size int64
 }

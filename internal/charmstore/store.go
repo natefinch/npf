@@ -94,11 +94,16 @@ func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (blobName, blobHash
 // This method is provided principally so that
 // tests can easily create content in the store.
 func (s *Store) AddCharmWithArchive(url *charm.Reference, ch charm.Charm) error {
-	blobName, blobHash, size, err := s.uploadCharmOrBundle(ch)
+	blobName, blobHash, blobSize, err := s.uploadCharmOrBundle(ch)
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	return s.AddCharm(url, ch, blobName, blobHash, size)
+	return s.AddCharm(ch, AddParams{
+		URL:      url,
+		BlobName: blobName,
+		BlobHash: blobHash,
+		BlobSize: blobSize,
+	})
 }
 
 // AddBundleWithArchive is like AddBundle but
@@ -110,7 +115,12 @@ func (s *Store) AddBundleWithArchive(url *charm.Reference, b charm.Bundle) error
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	return s.AddBundle(url, b, blobName, blobHash, size)
+	return s.AddBundle(b, AddParams{
+		URL:      url,
+		BlobName: blobName,
+		BlobHash: blobHash,
+		BlobSize: size,
+	})
 }
 
 func (s *Store) uploadCharmOrBundle(c interface{}) (blobName, blobHash string, size int64, err error) {
@@ -122,22 +132,42 @@ func (s *Store) uploadCharmOrBundle(c interface{}) (blobName, blobHash string, s
 	return s.putArchive(archive)
 }
 
-// AddCharm adds a charm to the blob store and to the entities collection
-// associated with the given URL.
-func (s *Store) AddCharm(url *charm.Reference, c charm.Charm, blobName, blobHash string, blobSize int64) error {
-	// Add charm metadata to the entities collection.
+// AddParams holds parameters held in common between the
+// Store.AddCharm and Store.AddBundle methods.
+type AddParams struct {
+	// URL holds the id to be associated with the stored entity.
+	URL *charm.Reference
+
+	// BlobName holds the name of the entity's archive blob.
+	BlobName string
+
+	// BlobHash holds the hash of the entity's archive blob.
+	BlobHash string
+
+	// BlobHash holds the size of the entity's archive blob.
+	BlobSize int64
+
+	// Contents holds references to files inside the
+	// entity's archive blob.
+	Contents map[mongodoc.FileId]mongodoc.ZipFile
+}
+
+// AddCharm adds a charm entities collection with the given
+// parameters.
+func (s *Store) AddCharm(c charm.Charm, p AddParams) error {
 	entity := &mongodoc.Entity{
-		URL:                     url,
-		BaseURL:                 baseURL(url),
-		BlobHash:                blobHash,
-		BlobName:                blobName,
-		Size:                    blobSize,
+		URL:                     p.URL,
+		BaseURL:                 baseURL(p.URL),
+		BlobHash:                p.BlobHash,
+		BlobName:                p.BlobName,
+		Size:                    p.BlobSize,
 		UploadTime:              time.Now(),
 		CharmMeta:               c.Meta(),
 		CharmConfig:             c.Config(),
 		CharmActions:            c.Actions(),
 		CharmProvidedInterfaces: interfacesForRelations(c.Meta().Provides),
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
+		Contents:                p.Contents,
 	}
 	err := s.DB.Entities().Insert(entity)
 	if mgo.IsDup(err) {
@@ -238,26 +268,27 @@ func baseURL(url *charm.Reference) *charm.Reference {
 
 var errNotImplemented = errgo.Newf("not implemented")
 
-// AddBundle adds a bundle to the blob store and to the entities collection
-// associated with the given URL.
-func (s *Store) AddBundle(url *charm.Reference, b charm.Bundle, blobName, blobHash string, blobSize int64) error {
+// AddBundle adds a bundle to the entities collection with the given
+// parameters.
+func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 	bundleData := b.Data()
 	urls, err := bundleCharms(bundleData)
 	if err != nil {
 		return errgo.Mask(err)
 	}
 	entity := &mongodoc.Entity{
-		URL:                url,
-		BaseURL:            baseURL(url),
-		BlobHash:           blobHash,
-		BlobName:           blobName,
-		Size:               blobSize,
+		URL:                p.URL,
+		BaseURL:            baseURL(p.URL),
+		BlobHash:           p.BlobHash,
+		BlobName:           p.BlobName,
+		Size:               p.BlobSize,
 		UploadTime:         time.Now(),
 		BundleData:         bundleData,
 		BundleUnitCount:    newInt(bundleUnitCount(bundleData)),
 		BundleMachineCount: newInt(bundleMachineCount(bundleData)),
 		BundleReadMe:       b.ReadMe(),
 		BundleCharms:       urls,
+		Contents:           p.Contents,
 	}
 	err = s.DB.Entities().Insert(entity)
 	if mgo.IsDup(err) {
