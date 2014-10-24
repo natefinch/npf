@@ -87,6 +87,12 @@ type BundleCount struct {
 	Count int
 }
 
+// TagsResponse holds the result of an
+// id/meta/tags GET request. See http://tinyurl.com/njyqwj2
+type TagsResponse struct {
+	Tags []string
+}
+
 type Published struct {
 	Id          *charm.Reference
 	PublishTime time.Time
