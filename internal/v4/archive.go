@@ -210,7 +210,7 @@ func (h *Handler) addBlobAndEntity(id *charm.Reference, body io.Reader, hash str
 // addEntity adds the entity represented by the contents
 // of the given reader, associating it with the given id.
 func (h *Handler) addEntity(id *charm.Reference, r io.ReadSeeker, blobName string, hash string, contentLength int64) error {
-	readerAt := &readerAtSeeker{r}
+	readerAt := charmstore.ReaderAtSeeker(r)
 	if id.Series == "bundle" {
 		b, err := charm.ReadBundleArchiveFromReader(readerAt, contentLength)
 		if err != nil {
@@ -280,7 +280,7 @@ func (h *Handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, r
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	defer r.Close()
-	zipReader, err := zip.NewReader(&readerAtSeeker{r}, size)
+	zipReader, err := zip.NewReader(charmstore.ReaderAtSeeker(r), size)
 	if err != nil {
 		return errgo.Notef(err, "cannot read archive data for %s", id)
 	}
@@ -316,17 +316,6 @@ func (h *Handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, r
 		return nil
 	}
 	return errgo.WithCausef(nil, params.ErrNotFound, "file %q not found in the archive", filePath)
-}
-
-type readerAtSeeker struct {
-	r io.ReadSeeker
-}
-
-func (r *readerAtSeeker) ReadAt(buf []byte, p int64) (int, error) {
-	if _, err := r.r.Seek(p, 0); err != nil {
-		return 0, errgo.Notef(err, "cannot seek")
-	}
-	return r.r.Read(buf)
 }
 
 func (h *Handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {

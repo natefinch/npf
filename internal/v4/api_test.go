@@ -895,7 +895,7 @@ var serveDiagramErrorsTests = []struct {
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
-		Message: "not found",
+		Message: "entity not found",
 	},
 }, {
 	about:        "diagram for a charm",

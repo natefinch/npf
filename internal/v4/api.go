@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/juju/jujusvg"
 	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
@@ -241,46 +240,6 @@ func (h *Handler) serveResources(charmId *charm.Reference, w http.ResponseWriter
 	return errNotImplemented
 }
 
-// GET id/diagram.svg
-// http://tinyurl.com/nqjvxov
-func (h *Handler) serveDiagram(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
-	if id.Series != "bundle" {
-		return errgo.WithCausef(nil, params.ErrNotFound, "diagrams not supported for charms")
-	}
-	entities, err := h.store.FindEntities(id, "bundledata")
-	if err != nil {
-		return errgo.Mask(err)
-	}
-	if len(entities) == 0 {
-		return params.ErrNotFound
-	}
-	// The URL is guaranteed to be fully qualified so we'll always
-	// get exactly one result.
-	entity := entities[0]
-
-	var urlErr error
-	// TODO consider what happens when a charm's SVG does not exist.
-	canvas, err := jujusvg.NewFromBundle(entity.BundleData, func(id *charm.Reference) string {
-		// TODO change jujusvg so that the iconURL function can
-		// return an error.
-		absPath := "/" + id.Path() + "/archive/icon.svg"
-		p, err := router.RelativeURLPath(req.RequestURI, absPath)
-		if err != nil {
-			urlErr = errgo.Notef(err, "cannot make relative URL from %q and %q", req.RequestURI, absPath)
-		}
-		return p
-	})
-	if err != nil {
-		return errgo.Notef(err, "cannot create canvas")
-	}
-	if urlErr != nil {
-		return urlErr
-	}
-	w.Header().Set("Content-Type", "image/svg+xml")
-	canvas.Marshal(w)
-	return nil
-}
-
 // GET id/expand-id
 // https://docs.google.com/a/canonical.com/document/d/1TgRA7jW_mmXoKH3JiwBbtPvQu7WiM6XMrz1wSrhTMXw/edit#bookmark=id.4xdnvxphb2si
 func (h *Handler) serveExpandId(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
@@ -358,7 +317,7 @@ func (h *Handler) metaManifest(entity *mongodoc.Entity, id *charm.Reference, pat
 		return nil, errgo.Notef(err, "cannot open archive data for %s", id)
 	}
 	defer r.Close()
-	zipReader, err := zip.NewReader(&readerAtSeeker{r}, size)
+	zipReader, err := zip.NewReader(charmstore.ReaderAtSeeker(r), size)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot read archive data for %s", id)
 	}
