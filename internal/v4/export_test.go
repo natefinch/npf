@@ -3,15 +3,9 @@
 
 package v4
 
-import (
-	"net/http"
-
-	"gopkg.in/juju/charm.v4"
+var (
+	BundleCharms      = (*Handler).bundleCharms
+	ParseSearchParams = parseSearchParams
+	StartTime         = &startTime
+	DefaultIcon       = defaultIcon
 )
-
-func BundleCharms(h http.Handler) func([]string) (map[string]charm.Charm, error) {
-	return h.(*Handler).bundleCharms
-}
-
-var ParseSearchParams = parseSearchParams
-var StartTime = &startTime

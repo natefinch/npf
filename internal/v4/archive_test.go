@@ -681,7 +681,6 @@ func (s *ArchiveSuite) TestBundleCharms(c *gc.C) {
 
 	// Retrieve the bundleCharms method.
 	handler := v4.New(s.store, serverParams)
-	bundleCharms := v4.BundleCharms(handler)
 
 	tests := []struct {
 		about  string
@@ -739,7 +738,7 @@ func (s *ArchiveSuite) TestBundleCharms(c *gc.C) {
 	// Run the tests.
 	for i, test := range tests {
 		c.Logf("test %d: %s", i, test.about)
-		charms, err := bundleCharms(test.ids)
+		charms, err := v4.BundleCharms(handler, test.ids)
 		c.Assert(err, gc.IsNil)
 		// Ensure the charms returned are what we expect.
 		c.Assert(charms, gc.HasLen, len(test.charms))
