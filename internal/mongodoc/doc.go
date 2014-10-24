@@ -99,3 +99,11 @@ type ZipFile struct {
 	// Size holds the size of the file before decompression.
 	Size int64
 }
+
+// Valid reports whether f is a valid (non-zero) reference to
+// a zip file.
+func (f ZipFile) IsValid() bool {
+	// Note that no valid zip files can start at offset zero,
+	// because that's where the zip header lives.
+	return f != ZipFile{}
+}

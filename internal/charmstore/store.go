@@ -4,6 +4,7 @@
 package charmstore
 
 import (
+	"archive/zip"
 	"fmt"
 	"io"
 	"sync"
@@ -184,6 +185,25 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) error {
 	return nil
 }
 
+// FindEntity finds the entity in the store with the given URL,
+// which must be fully qualified. If any fields are specified,
+// only those fields will be populated in the returned entities.
+func (s *Store) FindEntity(url *charm.Reference, fields ...string) (*mongodoc.Entity, error) {
+	if url.Series == "" || url.Revision == -1 {
+		return nil, errgo.Newf("entity id %q is not fully qualified", url)
+	}
+	entities, err := s.FindEntities(url, fields...)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	if len(entities) == 0 {
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "entity not found")
+	}
+	// The URL is guaranteed to be fully qualified so we'll always
+	// get exactly one result.
+	return entities[0], nil
+}
+
 // FindEntities finds all entities in the store matching the given URL.
 // If any fields are specified, only those fields will be
 // populated in the returned entities.
@@ -336,6 +356,93 @@ func (s *Store) BlobNameAndHash(id *charm.Reference) (name, hash string, err err
 	return entity.BlobName, entity.BlobHash, nil
 }
 
+// OpenCachedBlobFile opens a file from the given entity's archive blob.
+// The file is identified by the provided fileId. If the file has not
+// previously been opened on this entity, the isFile function will be
+// used to determine which file in the zip file to use. The result will
+// be cached for the next time.
+//
+// When retrieving the entity, at least the BlobName and
+// Contents fields must be populated.
+func (s *Store) OpenCachedBlobFile(
+	entity *mongodoc.Entity,
+	fileId mongodoc.FileId,
+	isFile func(f *zip.File) bool,
+) (_ io.ReadCloser, err error) {
+	if entity.BlobName == "" {
+		// We'd like to check that the Contents field was populated
+		// here but we can't because it doesn't necessarily
+		// exist in the entity.
+		return nil, errgo.New("provided entity does not have required fields")
+	}
+	zipf, ok := entity.Contents[fileId]
+	if ok && !zipf.IsValid() {
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "")
+	}
+	blob, size, err := s.BlobStore.Open(entity.BlobName)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot open archive blob")
+	}
+	defer func() {
+		// When there's an error, we want to close
+		// the blob, otherwise we need to keep the blob
+		// open because it's used by the returned Reader.
+		if err != nil {
+			blob.Close()
+		}
+	}()
+	if !ok {
+		// We haven't already searched the archive for the icon,
+		// so find its archive now.
+		zipf, err = s.findZipFile(blob, size, isFile)
+		if err != nil && errgo.Cause(err) != params.ErrNotFound {
+			return nil, errgo.Mask(err)
+		}
+	}
+	// We update the content entry regardless of whether we've
+	// found a file, so that the next time that serveIcon is called
+	// it can know that we've already looked.
+	err = s.DB.Entities().UpdateId(
+		entity.URL,
+		bson.D{{"$set",
+			bson.D{{"contents." + string(fileId), zipf}},
+		}},
+	)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot update %q", entity.URL)
+	}
+	if !zipf.IsValid() {
+		// We searched for the file and didn't find it.
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "")
+	}
+
+	// We know where the icon is stored. Now serve it up.
+	r, err := ZipFileReader(blob, zipf)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot make zip file reader")
+	}
+	// We return a ReadCloser that reads from the newly created
+	// zip file reader, but when closed, will close the originally
+	// opened blob.
+	return struct {
+		io.Reader
+		io.Closer
+	}{r, blob}, nil
+}
+
+func (s *Store) findZipFile(blob io.ReadSeeker, size int64, isFile func(f *zip.File) bool) (mongodoc.ZipFile, error) {
+	zipReader, err := zip.NewReader(&readerAtSeeker{blob}, size)
+	if err != nil {
+		return mongodoc.ZipFile{}, errgo.Notef(err, "cannot read archive data")
+	}
+	for _, f := range zipReader.File {
+		if isFile(f) {
+			return NewZipFile(f)
+		}
+	}
+	return mongodoc.ZipFile{}, params.ErrNotFound
+}
+
 func newInt(x int) *int {
 	return &x
 }
@@ -447,4 +554,22 @@ func (s StoreDatabase) Collections() []*mgo.Collection {
 		cs[i] = f(s)
 	}
 	return cs
+}
+
+type readerAtSeeker struct {
+	r io.ReadSeeker
+}
+
+func (r *readerAtSeeker) ReadAt(buf []byte, p int64) (int, error) {
+	if _, err := r.r.Seek(p, 0); err != nil {
+		return 0, errgo.Notef(err, "cannot seek")
+	}
+	return r.r.Read(buf)
+}
+
+// ReaderAtSeeker adapts r so that it can be used as
+// a ReaderAt. Note that, unlike some implementations
+// of ReaderAt, it is not OK to use concurrently.
+func ReaderAtSeeker(r io.ReadSeeker) io.ReaderAt {
+	return &readerAtSeeker{r}
 }

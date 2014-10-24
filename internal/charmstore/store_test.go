@@ -4,12 +4,15 @@
 package charmstore
 
 import (
+	"archive/zip"
 	"bytes"
 	"crypto/sha512"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -235,6 +238,10 @@ var urlFindingTests = []struct {
 	inStore: []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-24", "cs:foo/bar-434"},
 	expand:  "arble",
 	expect:  []string{},
+}, {
+	inStore: []string{},
+	expand:  "precise/wordpress-23",
+	expect:  []string{},
 }}
 
 func (s *StoreSuite) TestExpandURL(c *gc.C) {
@@ -292,6 +299,30 @@ func (s *StoreSuite) TestFindEntities(c *gc.C) {
 			c.Assert(err, gc.IsNil)
 			c.Assert(gotEntities[i], jc.DeepEquals, &entity)
 		}
+	})
+}
+
+func (s *StoreSuite) TestFindEntity(c *gc.C) {
+	s.testURLFinding(c, func(store *Store, expand *charm.Reference, expect []*charm.Reference) {
+		entity, err := store.FindEntity(expand, "_id")
+		if expand.Series == "" || expand.Revision == -1 {
+			c.Assert(err, gc.ErrorMatches, `entity id ".*" is not fully qualified`)
+			return
+		}
+		if len(expect) == 0 {
+			c.Assert(err, gc.ErrorMatches, "entity not found")
+			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
+			return
+		}
+		c.Assert(err, gc.IsNil)
+		c.Assert(len(expect), gc.Equals, 1)
+		c.Assert(entity.BlobName, gc.Equals, "")
+		c.Assert(entity.URL, gc.DeepEquals, expect[0])
+
+		// Check that it works when returning other fields too.
+		entity, err = store.FindEntity(expand, "blobname")
+		c.Assert(err, gc.IsNil)
+		c.Assert(entity.BlobName, gc.Not(gc.Equals), "")
 	})
 }
 
@@ -847,6 +878,107 @@ func (s *StoreSuite) TestCollections(c *gc.C) {
 			c.Errorf("extra collection %q found", name)
 		}
 	}
+}
+
+func (s *StoreSuite) TestOpenCachedBlobFileWithInvalidEntity(c *gc.C) {
+	store, err := NewStore(s.Session.DB("foo"), nil)
+	c.Assert(err, gc.IsNil)
+
+	wordpress := testing.Charms.CharmDir("wordpress")
+	url := charm.MustParseReference("cs:precise/wordpress-23")
+	err = store.AddCharmWithArchive(url, wordpress)
+	c.Assert(err, gc.IsNil)
+
+	entity, err := store.FindEntity(url, "charmmeta")
+	c.Assert(err, gc.IsNil)
+	r, err := store.OpenCachedBlobFile(entity, "", nil)
+	c.Assert(err, gc.ErrorMatches, "provided entity does not have required fields")
+	c.Assert(r, gc.Equals, nil)
+}
+
+func (s *StoreSuite) TestOpenCachedBlobFileWithFoundContent(c *gc.C) {
+	store, err := NewStore(s.Session.DB("foo"), nil)
+	c.Assert(err, gc.IsNil)
+
+	wordpress := testing.Charms.CharmDir("wordpress")
+	url := charm.MustParseReference("cs:precise/wordpress-23")
+	err = store.AddCharmWithArchive(url, wordpress)
+	c.Assert(err, gc.IsNil)
+
+	// Get our expected content.
+	data, err := ioutil.ReadFile(filepath.Join(wordpress.Path, "metadata.yaml"))
+	c.Assert(err, gc.IsNil)
+	expectContent := string(data)
+
+	entity, err := store.FindEntity(url, "blobname", "contents")
+	c.Assert(err, gc.IsNil)
+
+	// Check that, when we open the file for the first time,
+	// we see the expected content.
+	r, err := store.OpenCachedBlobFile(entity, mongodoc.FileIcon, func(f *zip.File) bool {
+		return path.Clean(f.Name) == "metadata.yaml"
+	})
+	c.Assert(err, gc.IsNil)
+	data, err = ioutil.ReadAll(r)
+	c.Assert(err, gc.IsNil)
+	c.Assert(string(data), gc.Equals, expectContent)
+
+	// When retrieving the entity again, check that the Contents
+	// map has been set appropriately...
+	entity, err = store.FindEntity(url, "blobname", "contents")
+	c.Assert(err, gc.IsNil)
+	c.Assert(entity.Contents, gc.HasLen, 1)
+	c.Assert(entity.Contents[mongodoc.FileIcon].IsValid(), gc.Equals, true)
+
+	// ... and that OpenCachedBlobFile still returns a reader with the
+	// same data, without making use of the isFile callback.
+	r, err = store.OpenCachedBlobFile(entity, mongodoc.FileIcon, func(f *zip.File) bool {
+		c.Errorf("isFile called unexpectedly")
+		return false
+	})
+	data, err = ioutil.ReadAll(r)
+	c.Assert(err, gc.IsNil)
+	c.Assert(string(data), gc.Equals, expectContent)
+}
+
+func (s *StoreSuite) TestOpenCachedBlobFileWithNotFoundContent(c *gc.C) {
+	store, err := NewStore(s.Session.DB("foo"), nil)
+	c.Assert(err, gc.IsNil)
+
+	wordpress := testing.Charms.CharmDir("wordpress")
+	url := charm.MustParseReference("cs:precise/wordpress-23")
+	err = store.AddCharmWithArchive(url, wordpress)
+	c.Assert(err, gc.IsNil)
+
+	entity, err := store.FindEntity(url, "blobname", "contents")
+	c.Assert(err, gc.IsNil)
+
+	// Check that, when we open the file for the first time,
+	// we get a NotFound error.
+	r, err := store.OpenCachedBlobFile(entity, mongodoc.FileIcon, func(f *zip.File) bool {
+		return false
+	})
+	c.Assert(err, gc.ErrorMatches, "not found")
+	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
+	c.Assert(r, gc.Equals, nil)
+
+	// When retrieving the entity again, check that the Contents
+	// map has been set appropriately...
+	entity, err = store.FindEntity(url, "blobname", "contents")
+	c.Assert(err, gc.IsNil)
+	c.Assert(entity.Contents, gc.DeepEquals, map[mongodoc.FileId]mongodoc.ZipFile{
+		mongodoc.FileIcon: {},
+	})
+
+	// ... and that OpenCachedBlobFile still returns a NotFound
+	// error, without making use of the isFile callback.
+	r, err = store.OpenCachedBlobFile(entity, mongodoc.FileIcon, func(f *zip.File) bool {
+		c.Errorf("isFile called unexpectedly")
+		return false
+	})
+	c.Assert(err, gc.ErrorMatches, "not found")
+	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
+	c.Assert(r, gc.Equals, nil)
 }
 
 func hashOfReader(c *gc.C, r io.Reader) string {
