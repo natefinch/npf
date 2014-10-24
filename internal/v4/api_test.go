@@ -775,74 +775,6 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 	}
 }
 
-func (s *APISuite) TestServeDiagram(c *gc.C) {
-	bundle := &testingBundle{
-		data: &charm.BundleData{
-			Services: map[string]*charm.ServiceSpec{
-				"wordpress": {
-					Charm: "wordpress",
-					Annotations: map[string]string{
-						"gui-x": "100",
-						"gui-y": "200",
-					},
-				},
-				"mysql": {
-					Charm: "raring/mysql-23",
-					Annotations: map[string]string{
-						"gui-x": "200",
-						"gui-y": "200",
-					},
-				},
-			},
-		},
-	}
-
-	err := s.store.AddBundle(bundle, charmstore.AddParams{
-		URL:      charm.MustParseReference("cs:bundle/wordpressbundle-42"),
-		BlobName: "blobName",
-		BlobHash: fakeBlobHash,
-		BlobSize: fakeBlobSize,
-	})
-	c.Assert(err, gc.IsNil)
-
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL("bundle/wordpressbundle/diagram.svg"),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %q", rec.Body.Bytes()))
-	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
-
-	// Check that the output contains valid XML with an SVG tag,
-	// but don't check the details of the output so that this test doesn't
-	// break every time the jujusvg presentation changes.
-	// Also check that we get an image for each service containing the charm
-	// icon link.
-	assertXMLContains(c, rec.Body.Bytes(), map[string]func(xml.Token) bool{
-		"svg element":    isStartElementWithName("svg"),
-		"wordpress icon": isStartElementWithAttr("image", "href", "../../wordpress/archive/icon.svg"),
-		"mysql icon":     isStartElementWithAttr("image", "href", "../../raring/mysql-23/archive/icon.svg"),
-	})
-
-	// Do the same check again, but with the short form of the id;
-	// the relative links should change accordingly.
-	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL("wordpressbundle/diagram.svg"),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %q", rec.Body.Bytes()))
-
-	// Check that the output contains valid XML with an SVG tag,
-	// but don't check the details of the output so that this test doesn't
-	// break every time the jujusvg presentation changes.
-	// Also check that we get an image for each service containing the charm
-	// icon link.
-	assertXMLContains(c, rec.Body.Bytes(), map[string]func(xml.Token) bool{
-		"svg element":    isStartElementWithName("svg"),
-		"wordpress icon": isStartElementWithAttr("image", "href", "../wordpress/archive/icon.svg"),
-		"mysql icon":     isStartElementWithAttr("image", "href", "../raring/mysql-23/archive/icon.svg"),
-	})
-}
-
 // assertXMLContains asserts that the XML in body is well formed, and
 // contains at least one token that satisfies each of the functions in need.
 func assertXMLContains(c *gc.C, body []byte, need map[string]func(xml.Token) bool) {
@@ -881,50 +813,6 @@ func isStartElementWithAttr(name, attr, val string) func(xml.Token) bool {
 			}
 		}
 		return false
-	}
-}
-
-var serveDiagramErrorsTests = []struct {
-	about        string
-	url          string
-	expectStatus int
-	expectBody   interface{}
-}{{
-	about:        "entity not found",
-	url:          "bundle/foo-23/diagram.svg",
-	expectStatus: http.StatusNotFound,
-	expectBody: params.Error{
-		Code:    params.ErrNotFound,
-		Message: "entity not found",
-	},
-}, {
-	about:        "diagram for a charm",
-	url:          "wordpress/diagram.svg",
-	expectStatus: http.StatusNotFound,
-	expectBody: params.Error{
-		Code:    params.ErrNotFound,
-		Message: "diagrams not supported for charms",
-	},
-}, {
-	about:        "bundle with no position info",
-	url:          "nopositionbundle/diagram.svg",
-	expectStatus: http.StatusInternalServerError,
-	expectBody: params.Error{
-		Message: `cannot create canvas: service "mysql" does not have a valid position`,
-	},
-}}
-
-func (s *APISuite) TestServeDiagramErrors(c *gc.C) {
-	s.addCharm(c, "wordpress", "cs:trusty/wordpress-42")
-	s.addBundle(c, "wordpress", "cs:bundle/nopositionbundle-42")
-	for i, test := range serveDiagramErrorsTests {
-		c.Logf("test %d: %s", i, test.about)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-			Handler:      s.srv,
-			URL:          storeURL(test.url),
-			ExpectStatus: test.expectStatus,
-			ExpectBody:   test.expectBody,
-		})
 	}
 }
 

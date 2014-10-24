@@ -83,7 +83,7 @@ type Entity struct {
 type FileId string
 
 const (
-	FileReadme FileId = "readme"
+	FileReadMe FileId = "readme"
 	FileIcon   FileId = "icon"
 )
 

@@ -52,6 +52,8 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 			"archive/":    h.serveArchiveFile,
 			"diagram.svg": h.serveDiagram,
 			"expand-id":   h.serveExpandId,
+			"icon.svg":    h.serveIcon,
+			"readme":      h.serveReadMe,
 			"resources":   h.serveResources,
 		},
 		Meta: map[string]router.BulkIncludeHandler{
