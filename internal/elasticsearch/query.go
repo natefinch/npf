@@ -195,6 +195,7 @@ func (t TermFilter) MarshalJSON() ([]byte, error) {
 // elasticsearch DSL.
 type QueryDSL struct {
 	Fields []string `json:"fields"`
+	From   int      `json:"from,omitempty"`
 	Size   int      `json:"size,omitempty"`
 	Query  Query    `json:"query,omitempty"`
 	Sort   []Sort   `json:"sort,omitempty"`

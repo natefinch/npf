@@ -53,7 +53,7 @@ func (h *Handler) serveSearchInteresting(w http.ResponseWriter, req *http.Reques
 
 // parseSearchParms extracts the search paramaters from the request
 func parseSearchParams(req *http.Request) (charmstore.SearchParams, error) {
-	sp := charmstore.SearchParams{Filters: map[string][]string{}}
+	sp := charmstore.SearchParams{}
 	var err error
 	for k, v := range req.Form {
 		switch k {
@@ -70,7 +70,7 @@ func parseSearchParams(req *http.Request) (charmstore.SearchParams, error) {
 				return charmstore.SearchParams{}, badRequestf(err, "invalid limit parameter: could not parse integer")
 			}
 			if sp.Limit < 1 {
-				return charmstore.SearchParams{}, badRequestf(err, "invalid limit parameter: expected integer greater than zero")
+				return charmstore.SearchParams{}, badRequestf(nil, "invalid limit parameter: expected integer greater than zero")
 			}
 		case "include":
 			for _, s := range v {
@@ -79,9 +79,20 @@ func parseSearchParams(req *http.Request) (charmstore.SearchParams, error) {
 				}
 			}
 		case "description", "name", "owner", "provides", "requires", "series", "summary", "tags", "type":
+			if sp.Filters == nil {
+				sp.Filters = make(map[string][]string)
+			}
 			sp.Filters[k] = v
+		case "skip":
+			sp.Skip, err = strconv.Atoi(v[0])
+			if err != nil {
+				return charmstore.SearchParams{}, badRequestf(err, "invalid skip parameter: could not parse integer")
+			}
+			if sp.Skip < 0 {
+				return charmstore.SearchParams{}, badRequestf(nil, "invalid skip parameter: expected non-negative integer")
+			}
 		default:
-			return charmstore.SearchParams{}, badRequestf(err, "invalid parameter: %s", k)
+			return charmstore.SearchParams{}, badRequestf(nil, "invalid parameter: %s", k)
 		}
 	}
 

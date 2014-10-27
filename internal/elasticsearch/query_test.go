@@ -121,6 +121,16 @@ func (s *QuerySuite) TestJSONEncodings(c *gc.C) {
 			},
 		},
 		json: `{"filter": {"term": {"foo": "bar"}}, "boost_factor": 1.5}`,
+	}, {
+		about: "paginated query",
+		query: QueryDSL{
+			Fields: []string{"foo", "bar"},
+			Size:   10,
+			Query:  TermQuery{Field: "baz", Value: "quz"},
+			Sort:   []Sort{{Field: "foo", Order: Order{"desc"}}},
+			From:   10,
+		},
+		json: `{"fields": ["foo", "bar"], "size": 10, "query": {"term": {"baz": "quz"}}, "sort": [{"foo": { "order": "desc"}}], "from": 10}`,
 	}}
 	for i, test := range tests {
 		c.Logf("%d: %s", i, test.about)

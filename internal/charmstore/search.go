@@ -106,6 +106,8 @@ type SearchParams struct {
 	Limit int
 	// Include the following metadata items in the search results
 	Include []string
+	// Start the the returned items at a specific offset
+	Skip int
 }
 
 // SearchResult represents the result of performing a search.
@@ -159,6 +161,7 @@ func encodeFields(fields map[string]float64) []string {
 // http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl.html
 func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 	qdsl := elasticsearch.QueryDSL{
+		From: sp.Skip,
 		Size: sp.Limit,
 	}
 
