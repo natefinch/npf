@@ -6,6 +6,7 @@ package v4_test
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
@@ -67,48 +68,170 @@ func getBundle(name string) *charm.BundleDir {
 	return ba
 }
 
-func (s *SearchSuite) TestParseSearchParamsText(c *gc.C) {
-	var req http.Request
-	req.Form = map[string][]string{"text": {"test text"}}
-	sp, err := ParseSearchParams(&req)
-	c.Assert(err, gc.IsNil)
-	c.Assert(sp.Text, gc.Equals, "test text")
-}
-
-func (s *SearchSuite) TestParseSearchParamsAutocompete(c *gc.C) {
-	var req http.Request
-	req.Form = map[string][]string{"autocomplete": {"1"}}
-	sp, err := ParseSearchParams(&req)
-	c.Assert(err, gc.IsNil)
-	c.Assert(sp.AutoComplete, gc.Equals, true)
-}
-
-func (s *SearchSuite) TestParseSearchParamsFilters(c *gc.C) {
-	var req http.Request
-	req.Form = map[string][]string{
-		"tags": {"f11", "f12"},
-		"name": {"f21"},
+func (s *SearchSuite) TestParseSerchParams(c *gc.C) {
+	tests := []struct {
+		about        string
+		query        string
+		expectParams charmstore.SearchParams
+		expectError  string
+	}{{
+		about: "bare search",
+		query: "",
+	}, {
+		about: "text search",
+		query: "text=test",
+		expectParams: charmstore.SearchParams{
+			Text: "test",
+		},
+	}, {
+		about: "autocomple",
+		query: "autocomplete=1",
+		expectParams: charmstore.SearchParams{
+			AutoComplete: true,
+		},
+	}, {
+		about:       "invalid autocomple",
+		query:       "autocomplete=true",
+		expectError: `invalid autocomplete parameter: unexpected bool value "true" (must be "0" or "1")`,
+	}, {
+		about: "limit",
+		query: "limit=20",
+		expectParams: charmstore.SearchParams{
+			Limit: 20,
+		},
+	}, {
+		about:       "invalid limit",
+		query:       "limit=twenty",
+		expectError: `invalid limit parameter: could not parse integer: strconv.ParseInt: parsing "twenty": invalid syntax`,
+	}, {
+		about:       "limit too low",
+		query:       "limit=-1",
+		expectError: "invalid limit parameter: expected integer greater than zero",
+	}, {
+		about: "include",
+		query: "include=archive-size",
+		expectParams: charmstore.SearchParams{
+			Include: []string{"archive-size"},
+		},
+	}, {
+		about: "include many",
+		query: "include=archive-size&include=bundle-data",
+		expectParams: charmstore.SearchParams{
+			Include: []string{"archive-size", "bundle-data"},
+		},
+	}, {
+		about: "include many with blanks",
+		query: "include=archive-size&include=&include=bundle-data",
+		expectParams: charmstore.SearchParams{
+			Include: []string{"archive-size", "bundle-data"},
+		},
+	}, {
+		about: "description filter",
+		query: "description=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"description": {"text"},
+			},
+		},
+	}, {
+		about: "name filter",
+		query: "name=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"name": {"text"},
+			},
+		},
+	}, {
+		about: "owner filter",
+		query: "owner=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"owner": {"text"},
+			},
+		},
+	}, {
+		about: "provides filter",
+		query: "provides=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"provides": {"text"},
+			},
+		},
+	}, {
+		about: "requires filter",
+		query: "requires=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"requires": {"text"},
+			},
+		},
+	}, {
+		about: "series filter",
+		query: "series=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"series": {"text"},
+			},
+		},
+	}, {
+		about: "tags filter",
+		query: "tags=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"tags": {"text"},
+			},
+		},
+	}, {
+		about: "type filter",
+		query: "type=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"type": {"text"},
+			},
+		},
+	}, {
+		about: "many filters",
+		query: "name=name&owner=owner&series=series1&series=series2",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"name":   {"name"},
+				"owner":  {"owner"},
+				"series": {"series1", "series2"},
+			},
+		},
+	}, {
+		about:       "bad parameter",
+		query:       "a=b",
+		expectError: "invalid parameter: a",
+	}, {
+		about: "skip",
+		query: "skip=20",
+		expectParams: charmstore.SearchParams{
+			Skip: 20,
+		},
+	}, {
+		about:       "invalid skip",
+		query:       "skip=twenty",
+		expectError: `invalid skip parameter: could not parse integer: strconv.ParseInt: parsing "twenty": invalid syntax`,
+	}, {
+		about:       "skip too low",
+		query:       "skip=-1",
+		expectError: "invalid skip parameter: expected non-negative integer",
+	}}
+	for i, test := range tests {
+		c.Logf("test %d. %s", i, test.about)
+		var req http.Request
+		var err error
+		req.Form, err = url.ParseQuery(test.query)
+		c.Assert(err, gc.IsNil)
+		sp, err := ParseSearchParams(&req)
+		if test.expectError != "" {
+			c.Assert(err.Error(), gc.Equals, test.expectError)
+		} else {
+			c.Assert(err, gc.IsNil)
+		}
+		c.Assert(sp, jc.DeepEquals, test.expectParams)
 	}
-	sp, err := ParseSearchParams(&req)
-	c.Assert(err, gc.IsNil)
-	c.Assert(sp.Filters["tags"], jc.DeepEquals, []string{"f11", "f12"})
-	c.Assert(sp.Filters["name"], jc.DeepEquals, []string{"f21"})
-}
-
-func (s *SearchSuite) TestParseSearchParamsLimit(c *gc.C) {
-	var req http.Request
-	req.Form = map[string][]string{"limit": {"20"}}
-	sp, err := ParseSearchParams(&req)
-	c.Assert(err, gc.IsNil)
-	c.Assert(sp.Limit, gc.Equals, 20)
-}
-
-func (s *SearchSuite) TestParseSearchParamsInclude(c *gc.C) {
-	var req http.Request
-	req.Form = map[string][]string{"include": {"meta1", "meta2"}}
-	sp, err := ParseSearchParams(&req)
-	c.Assert(err, gc.IsNil)
-	c.Assert(sp.Include, jc.DeepEquals, []string{"meta1", "meta2"})
 }
 
 func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
@@ -241,6 +364,10 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 			exportTestCharms["mysql"],
 			exportTestBundles["wordpress"],
 		},
+	}, {
+		about:   "paginated search",
+		query:   "name=mysql&skip=1",
+		results: []string{},
 	}}
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.about)
@@ -263,6 +390,18 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 			c.Errorf("%s:Unexpected result received %q", test.about, res.Id.String())
 		}
 	}
+}
+
+func (s *SearchSuite) TestPaginatedSearch(c *gc.C) {
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("search?text=wordpress&skip=1"),
+	})
+	var sr params.SearchResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &sr)
+	c.Assert(err, gc.IsNil)
+	c.Assert(sr.Results, gc.HasLen, 1)
+	c.Assert(sr.Total, gc.Equals, 2)
 }
 
 func (s *SearchSuite) TestMetadataFields(c *gc.C) {

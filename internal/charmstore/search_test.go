@@ -284,6 +284,15 @@ var searchTests = []struct {
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 		},
+	}, {
+		about: "paginated search",
+		sp: SearchParams{
+			Filters: map[string][]string{
+				"name": {"mysql"},
+			},
+			Skip: 1,
+		},
+		results: []string{},
 	},
 }
 
@@ -297,6 +306,20 @@ func (s *StoreSearchSuite) TestSearches(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		assertSearchResults(c, res, test.results)
 	}
+}
+
+func (s *StoreSearchSuite) TestPaginatedSearch(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	c.Assert(err, gc.IsNil)
+	sp := SearchParams{
+		Text: "wordpress",
+		Skip: 1,
+	}
+	res, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(res.Results, gc.HasLen, 1)
+	c.Assert(res.Total, gc.Equals, 2)
 }
 
 func (s *StoreSearchSuite) TestLimitTestSearch(c *gc.C) {
