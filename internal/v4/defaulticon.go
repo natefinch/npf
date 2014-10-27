@@ -1,7 +1,9 @@
+// Copyright 2014 Canonical Ltd.
+// Licensed under the LGPLv3, see LICENCE file for details.
+
 package v4
 
-var defaultIcon = `
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+var defaultIcon = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg

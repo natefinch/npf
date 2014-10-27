@@ -108,8 +108,8 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 	// icon link.
 	assertXMLContains(c, rec.Body.Bytes(), map[string]func(xml.Token) bool{
 		"svg element":    isStartElementWithName("svg"),
-		"wordpress icon": isStartElementWithAttr("image", "href", "../../wordpress/archive/icon.svg"),
-		"mysql icon":     isStartElementWithAttr("image", "href", "../../raring/mysql-23/archive/icon.svg"),
+		"wordpress icon": isStartElementWithAttr("image", "href", "../../wordpress/icon.svg"),
+		"mysql icon":     isStartElementWithAttr("image", "href", "../../raring/mysql-23/icon.svg"),
 	})
 
 	// Do the same check again, but with the short form of the id;
@@ -127,8 +127,8 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 	// icon link.
 	assertXMLContains(c, rec.Body.Bytes(), map[string]func(xml.Token) bool{
 		"svg element":    isStartElementWithName("svg"),
-		"wordpress icon": isStartElementWithAttr("image", "href", "../wordpress/archive/icon.svg"),
-		"mysql icon":     isStartElementWithAttr("image", "href", "../raring/mysql-23/archive/icon.svg"),
+		"wordpress icon": isStartElementWithAttr("image", "href", "../wordpress/icon.svg"),
+		"mysql icon":     isStartElementWithAttr("image", "href", "../raring/mysql-23/icon.svg"),
 	})
 }
 
