@@ -35,7 +35,7 @@ func (h *Handler) serveDiagram(id *charm.Reference, w http.ResponseWriter, req *
 	canvas, err := jujusvg.NewFromBundle(entity.BundleData, func(id *charm.Reference) string {
 		// TODO change jujusvg so that the iconURL function can
 		// return an error.
-		absPath := "/" + id.Path() + "/archive/icon.svg"
+		absPath := "/" + id.Path() + "/icon.svg"
 		p, err := router.RelativeURLPath(req.RequestURI, absPath)
 		if err != nil {
 			urlErr = errgo.Notef(err, "cannot make relative URL from %q and %q", req.RequestURI, absPath)
@@ -64,6 +64,7 @@ var allowedReadMe = map[string]bool{
 	"readme.txt":      true,
 }
 
+// GET id/readme
 func (h *Handler) serveReadMe(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	entity, err := h.store.FindEntity(id, "_id", "contents", "blobname")
 	if err != nil {
@@ -84,6 +85,7 @@ func (h *Handler) serveReadMe(id *charm.Reference, w http.ResponseWriter, req *h
 	return nil
 }
 
+// GET id/icon.svg
 func (h *Handler) serveIcon(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	if id.Series == "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "icons not supported for bundles")
