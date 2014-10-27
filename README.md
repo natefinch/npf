@@ -52,7 +52,7 @@ Once the charms database is fully populated, it is possible to interact with
 charm data using the charm store server. It can be started with the following
 command:
 
-    charmd cmd/charmd/config.yaml
+    charmd -logging-config INFO cmd/charmd/config.yaml
 
 The same result can be achieved more easily by running `make server`.
 

@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/juju/loggo"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore"
@@ -18,15 +20,26 @@ import (
 	"github.com/juju/charmstore/internal/elasticsearch"
 )
 
+var (
+	logger        = loggo.GetLogger("charmd")
+	loggingConfig = flag.String("logging-config", "", "specify log levels for modules e.g. <root>=TRACE")
+)
+
 func main() {
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "usage: %s <config path>\n", filepath.Base(os.Args[0]))
+		fmt.Fprintf(os.Stderr, "usage: %s [options] <config path>\n", filepath.Base(os.Args[0]))
 		flag.PrintDefaults()
 		os.Exit(2)
 	}
 	flag.Parse()
 	if flag.NArg() != 1 {
 		flag.Usage()
+	}
+	if *loggingConfig != "" {
+		if err := loggo.ConfigureLoggers(*loggingConfig); err != nil {
+			fmt.Fprintf(os.Stderr, "cannot configure loggers: %v", err)
+			os.Exit(1)
+		}
 	}
 	if err := serve(flag.Arg(0)); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -35,27 +48,35 @@ func main() {
 }
 
 func serve(confPath string) error {
+	logger.Infof("reading configuration")
 	conf, err := config.Read(confPath)
 	if err != nil {
-		return err
+		return errgo.Notef(err, "cannot read config file %q", confPath)
 	}
+
+	logger.Infof("connecting to mongo")
 	session, err := mgo.Dial(conf.MongoURL)
 	if err != nil {
-		return err
+		return errgo.Notef(err, "cannot dial mongo at %q", conf.MongoURL)
 	}
 	defer session.Close()
 	db := session.DB("juju")
+
 	var es *elasticsearch.Index
 	if conf.ESAddr != "" {
 		es = (&elasticsearch.Database{conf.ESAddr}).Index("charmstore")
 	}
+
+	logger.Infof("setting up the API server")
 	cfg := charmstore.ServerParams{
 		AuthUsername: conf.AuthUsername,
 		AuthPassword: conf.AuthPassword,
 	}
 	server, err := charmstore.NewServer(db, es, cfg, charmstore.Legacy, charmstore.V4)
 	if err != nil {
-		return err
+		return errgo.Notef(err, "cannot create new server at %q", conf.APIAddr)
 	}
+
+	logger.Infof("starting the API server")
 	return http.ListenAndServe(conf.APIAddr, debug.Handler("", server))
 }
