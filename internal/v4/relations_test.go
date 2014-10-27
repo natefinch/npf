@@ -434,6 +434,10 @@ func (ch *relationTestingCharm) Config() *charm.Config {
 	return nil
 }
 
+func (e *relationTestingCharm) Metrics() *charm.Metrics {
+	return nil
+}
+
 func (ch *relationTestingCharm) Actions() *charm.Actions {
 	// For the purposes of this implementation, the charm actions are not
 	// relevant.

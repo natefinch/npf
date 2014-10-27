@@ -59,17 +59,14 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 		Meta: map[string]router.BulkIncludeHandler{
 			"archive-size":         h.entityHandler(h.metaArchiveSize, "size"),
 			"archive-upload-time":  h.entityHandler(h.metaArchiveUploadTime, "uploadtime"),
-			"bundle-metadata":      h.entityHandler(h.metaBundleMetadata, "bundledata"),
-			"bundle-unit-count":    h.entityHandler(h.metaBundleUnitCount, "bundleunitcount"),
 			"bundle-machine-count": h.entityHandler(h.metaBundleMachineCount, "bundlemachinecount"),
+			"bundle-metadata":      h.entityHandler(h.metaBundleMetadata, "bundledata"),
 			"bundles-containing":   h.entityHandler(h.metaBundlesContaining),
+			"bundle-unit-count":    h.entityHandler(h.metaBundleUnitCount, "bundleunitcount"),
 			"charm-actions":        h.entityHandler(h.metaCharmActions, "charmactions"),
 			"charm-config":         h.entityHandler(h.metaCharmConfig, "charmconfig"),
 			"charm-metadata":       h.entityHandler(h.metaCharmMetadata, "charmmeta"),
 			"charm-related":        h.entityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces"),
-			"manifest":             h.entityHandler(h.metaManifest, "blobname"),
-			"revision-info":        router.SingleIncludeHandler(h.metaRevisionInfo),
-			"stats":                h.entityHandler(h.metaStats),
 			"extra-info": h.puttableEntityHandler(
 				h.metaExtraInfo,
 				h.putMetaExtraInfo,
@@ -80,6 +77,10 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 				h.putMetaExtraInfoWithKey,
 				"extrainfo",
 			),
+			"manifest":      h.entityHandler(h.metaManifest, "blobname"),
+			"revision-info": router.SingleIncludeHandler(h.metaRevisionInfo),
+			"stats":         h.entityHandler(h.metaStats),
+			"tags":          h.entityHandler(h.metaTags, "charmmeta", "bundledata"),
 
 			// endpoints not yet implemented:
 			// "color": router.SingleIncludeHandler(h.metaColor),
@@ -361,6 +362,24 @@ func (h *Handler) metaColor(id *charm.Reference, path string, flags url.Values) 
 func (h *Handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return &params.ArchiveSizeResponse{
 		Size: entity.Size,
+	}, nil
+}
+
+// GET id/meta/tags
+// http://tinyurl.com/njyqwj2
+func (h *Handler) metaTags(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	var tags []string
+	switch {
+	case id.Series == "bundle":
+		tags = entity.BundleData.Tags
+	case len(entity.CharmMeta.Tags) > 0:
+		// TODO only return whitelisted tags.
+		tags = entity.CharmMeta.Tags
+	default:
+		tags = entity.CharmMeta.Categories
+	}
+	return params.TagsResponse{
+		Tags: tags,
 	}, nil
 }
 

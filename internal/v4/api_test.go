@@ -269,6 +269,23 @@ var metaEndpoints = []metaEndpoint{{
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data, gc.Equals, "value cs:precise/wordpress-23")
 	},
+}, {
+	name: "tags",
+	get: entityGetter(func(entity *mongodoc.Entity) interface{} {
+		if entity.URL.Series == "bundle" {
+			return params.TagsResponse{entity.BundleData.Tags}
+		}
+		if len(entity.CharmMeta.Tags) > 0 {
+			return params.TagsResponse{entity.CharmMeta.Tags}
+		}
+		return params.TagsResponse{entity.CharmMeta.Categories}
+	}),
+	checkURL: "cs:quantal/category-2",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, jc.DeepEquals, params.TagsResponse{
+			Tags: []string{"openstack", "storage"},
+		})
+	},
 }}
 
 // TestEndpointGet tries to ensure that the endpoint
@@ -317,6 +334,8 @@ var testEntities = []string{
 	"cs:bundle/wordpress-42",
 	// A charm with some actions.
 	"cs:precise/dummy-10",
+	// A charm with some tags
+	"cs:quantal/category-2",
 }
 
 func (s *APISuite) addTestEntities(c *gc.C) []*charm.Reference {
@@ -603,6 +622,83 @@ func (s *APISuite) TestBulkMetaAny(c *gc.C) {
 			},
 		},
 	)
+}
+
+var metaCharmTagsTests = []struct {
+	about      string
+	tags       []string
+	categories []string
+	expectTags []string
+}{{
+	about:      "tags only",
+	tags:       []string{"foo", "bar"},
+	expectTags: []string{"foo", "bar"},
+}, {
+	about:      "categories only",
+	categories: []string{"foo", "bar"},
+	expectTags: []string{"foo", "bar"},
+}, {
+	about:      "tags and categories",
+	categories: []string{"foo", "bar"},
+	tags:       []string{"tag1", "tag2"},
+	expectTags: []string{"tag1", "tag2"},
+}, {
+	about: "no tags or categories",
+}}
+
+func (s *APISuite) TestMetaCharmTags(c *gc.C) {
+	url := charm.MustParseReference("precise/wordpress-0")
+	for i, test := range metaCharmTagsTests {
+		c.Logf("%d: %s", i, test.about)
+		wordpress := charmtesting.Charms.CharmDir("wordpress")
+		meta := wordpress.Meta()
+		meta.Tags, meta.Categories = test.tags, test.categories
+		url.Revision = i
+		err := s.store.AddCharm(&testMetaCharm{
+			meta:  meta,
+			Charm: wordpress,
+		}, charmstore.AddParams{
+			URL:      url,
+			BlobName: "no-such-name",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
+		})
+		c.Assert(err, gc.IsNil)
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:      s.srv,
+			URL:          storeURL(url.Path() + "/meta/tags"),
+			ExpectStatus: http.StatusOK,
+			ExpectBody:   params.TagsResponse{test.expectTags},
+		})
+	}
+}
+
+func (s *APISuite) TestBundleTags(c *gc.C) {
+	b := charmtesting.Charms.BundleDir("wordpress")
+	data := b.Data()
+	data.Tags = []string{"foo", "bar"}
+	err := s.store.AddBundle(&testingBundle{data}, charmstore.AddParams{
+		URL:      charm.MustParseReference("bundle/wordpress-2"),
+		BlobName: "no-such-name",
+		BlobHash: fakeBlobHash,
+		BlobSize: fakeBlobSize,
+	})
+	c.Assert(err, gc.IsNil)
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("bundle/wordpress-2/meta/tags"),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   params.TagsResponse{[]string{"foo", "bar"}},
+	})
+}
+
+type testMetaCharm struct {
+	meta *charm.Meta
+	charm.Charm
+}
+
+func (c *testMetaCharm) Meta() *charm.Meta {
+	return c.meta
 }
 
 func (s *APISuite) TestIdsAreResolved(c *gc.C) {

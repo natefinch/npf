@@ -369,6 +369,10 @@ func (e *entityCharm) Meta() *charm.Meta {
 	return e.CharmMeta
 }
 
+func (e *entityCharm) Metrics() *charm.Metrics {
+	return nil
+}
+
 func (e *entityCharm) Config() *charm.Config {
 	return e.CharmConfig
 }
