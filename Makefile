@@ -73,7 +73,7 @@ simplify:
 
 # Run the charmd server.
 server: install
-	charmd cmd/charmd/config.yaml
+	charmd -logging-config INFO cmd/charmd/config.yaml
 
 # Update the project Go dependencies to the required revision.
 deps: $(GOPATH)/bin/godeps
