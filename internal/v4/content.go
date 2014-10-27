@@ -65,6 +65,7 @@ var allowedReadMe = map[string]bool{
 }
 
 // GET id/readme
+// http://tinyurl.com/kygyvot
 func (h *Handler) serveReadMe(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	entity, err := h.store.FindEntity(id, "_id", "contents", "blobname")
 	if err != nil {
@@ -86,6 +87,7 @@ func (h *Handler) serveReadMe(id *charm.Reference, w http.ResponseWriter, req *h
 }
 
 // GET id/icon.svg
+// http://tinyurl.com/lhodocb
 func (h *Handler) serveIcon(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	if id.Series == "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "icons not supported for bundles")
