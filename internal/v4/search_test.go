@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/juju/loggo"
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/juju/charm.v4/testing"
 
 	"github.com/juju/charmstore/internal/charmstore"
+	"github.com/juju/charmstore/internal/elasticsearch"
 	"github.com/juju/charmstore/internal/storetesting"
 	. "github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
@@ -68,7 +70,7 @@ func getBundle(name string) *charm.BundleDir {
 	return ba
 }
 
-func (s *SearchSuite) TestParseSerchParams(c *gc.C) {
+func (s *SearchSuite) TestParseSearchParams(c *gc.C) {
 	tests := []struct {
 		about        string
 		query        string
@@ -491,6 +493,7 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 			Handler: s.srv,
 			URL:     storeURL("search?" + test.query),
 		})
+		c.Assert(rec.Code, gc.Equals, http.StatusOK)
 		var sr struct {
 			Results []struct {
 				Meta json.RawMessage
@@ -501,4 +504,62 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 		c.Assert(sr.Results, gc.HasLen, 1)
 		c.Assert([]byte(sr.Results[0].Meta), storetesting.JSONEquals, test.meta)
 	}
+}
+
+func (s *SearchSuite) TestSearchError(c *gc.C) {
+	badES := &elasticsearch.Database{"0.1.2.3:1234"}
+	srv, _ := newServer(c, s.Session, badES.Index("bad-index"), serverParams)
+
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: srv,
+		URL:     storeURL("search?name=wordpress"),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusInternalServerError)
+	var resp params.Error
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(resp.Code, gc.Equals, params.ErrorCode(""))
+	c.Assert(resp.Message, gc.Matches, "error performing search: search failed: .*")
+}
+
+func (s *SearchSuite) TestSearchIncludeError(c *gc.C) {
+	// Perform a search for all charms, including the
+	// manifest, which will try to retrieve all charm
+	// blobs.
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("search?type=charm&include=manifest"),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	var resp params.SearchResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	c.Assert(resp.Results, gc.HasLen, len(exportTestCharms))
+
+	// Now remove one of the blobs. The search should still
+	// work, but only return a single result.
+	blobName, _, err := s.store.BlobNameAndHash(charm.MustParseReference(exportTestCharms["wordpress"]))
+	c.Assert(err, gc.IsNil)
+	err = s.store.BlobStore.Remove(blobName)
+	c.Assert(err, gc.IsNil)
+
+	// Now search again - we should get one result less
+	// (and the error will be logged).
+
+	// Register a logger that so that we can check the logging output.
+	// It will be automatically removed later because IsolatedMgoESSuite
+	// uses LoggingSuite.
+	var tw loggo.TestWriter
+	err = loggo.RegisterWriter("test-log", &tw, loggo.DEBUG)
+	c.Assert(err, gc.IsNil)
+
+	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("search?type=charm&include=manifest"),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	resp = params.SearchResponse{}
+	err = json.Unmarshal(rec.Body.Bytes(), &resp)
+	c.Assert(resp.Results, gc.HasLen, len(exportTestCharms)-1)
+
+	c.Assert(tw.Log(), jc.LogMatches, []string{"cannot retrieve metadata for cs:precise/wordpress-23: cannot open archive data for cs:precise/wordpress-23: .*"})
 }

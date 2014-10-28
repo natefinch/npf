@@ -65,7 +65,7 @@ func parseDateRange(form url.Values) (start, stop time.Time, err error) {
 
 // GET stats/counter/key[:key]...?[by=unit]&start=date][&stop=date][&list=1]
 // http://tinyurl.com/nkdovcf
-func (s *Handler) serveStatsCounter(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+func (h *Handler) serveStatsCounter(_ http.Header, r *http.Request) (interface{}, error) {
 	base := strings.TrimPrefix(r.URL.Path, "/")
 	if strings.Index(base, "/") > 0 {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "invalid key")
@@ -101,7 +101,7 @@ func (s *Handler) serveStatsCounter(w http.ResponseWriter, r *http.Request) (int
 			return nil, errgo.WithCausef(nil, params.ErrForbidden, "unknown key")
 		}
 	}
-	entries, err := s.store.Counters(&req)
+	entries, err := h.store.Counters(&req)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot query counters")
 	}

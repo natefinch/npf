@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/juju/loggo"
 	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
@@ -24,6 +25,8 @@ import (
 	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/params"
 )
+
+var logger = loggo.GetLogger("charmstore.internal.v4")
 
 type Handler struct {
 	*router.Router
@@ -518,7 +521,7 @@ type PublishedResponse struct {
 
 // GET changes/published[?limit=$count][&from=$fromdate][&to=$todate]
 // http://tinyurl.com/qx5zdee
-func (h *Handler) serveChangesPublished(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+func (h *Handler) serveChangesPublished(_ http.Header, r *http.Request) (interface{}, error) {
 	start, stop, err := parseDateRange(r.Form)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Is(params.ErrBadRequest))
