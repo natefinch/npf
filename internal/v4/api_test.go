@@ -774,8 +774,8 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 	s.addCharm(c, "wordpress", "cs:utopic/wordpress-10")
 	s.addCharm(c, "wordpress", "cs:saucy/bigdata-99")
 	s.addCharm(c, "wordpress", "cs:utopic/bigdata-10")
-	s.addCharm(c, "wordpress", "cs:bundle/bundlelovin-10")
-	s.addCharm(c, "wordpress", "cs:bundle/wordpress-10")
+	s.addBundle(c, "wordpress-simple", "cs:bundle/bundlelovin-10")
+	s.addBundle(c, "wordpress-simple", "cs:bundle/wordpress-simple-10")
 
 	for i, test := range resolveURLTests {
 		c.Logf("test %d: %s", i, test.url)
@@ -802,7 +802,6 @@ var serveExpandIdTests = []struct {
 	expect: []params.ExpandedId{
 		{Id: "cs:utopic/wordpress-42"},
 		{Id: "cs:trusty/wordpress-47"},
-		{Id: "cs:bundle/wordpress-0"},
 	},
 }, {
 	about: "fully qualified URL that does not exist",
@@ -810,7 +809,6 @@ var serveExpandIdTests = []struct {
 	expect: []params.ExpandedId{
 		{Id: "cs:utopic/wordpress-42"},
 		{Id: "cs:trusty/wordpress-47"},
-		{Id: "cs:bundle/wordpress-0"},
 	},
 }, {
 	about: "partial URL",
@@ -844,8 +842,8 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 	s.addCharm(c, "wordpress", "cs:trusty/wordpress-47")
 	s.addCharm(c, "wordpress", "cs:precise/haproxy-1")
 	s.addCharm(c, "wordpress", "cs:trusty/haproxy-1")
-	s.addCharm(c, "wordpress", "cs:bundle/mongo-0")
-	s.addCharm(c, "wordpress", "cs:bundle/wordpress-0")
+	s.addBundle(c, "wordpress-simple", "cs:bundle/mongo-0")
+	s.addBundle(c, "wordpress-simple", "cs:bundle/wordpress-simple-0")
 
 	for i, test := range serveExpandIdTests {
 		c.Logf("test %d: %s", i, test.about)
