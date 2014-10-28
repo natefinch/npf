@@ -153,22 +153,6 @@
           }
         }
       },
-      "CharmConfig" : {
-        "dynamic" : "false",
-        "properties" : {
-          "Options" : {
-            "dynamic" : "false",
-            "properties" : {
-              "Description" : {
-                "type" : "string"
-              },
-              "Default" : {
-                "type" : "string"
-              }
-            }
-          }
-        }
-      },
       "charmactions" : {
         "dynamic" : "false",
         "properties" : {
