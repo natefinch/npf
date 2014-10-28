@@ -399,7 +399,7 @@ func (s *StoreSuite) TestBundleUnitCount(c *gc.C) {
 		c.Logf("test %d: %s", i, test.about)
 		url := &charm.Reference{
 			Schema:   "cs",
-			Series:   "utopic",
+			Series:   "bundle",
 			Name:     "django",
 			Revision: i,
 		}
@@ -727,7 +727,7 @@ func (s *StoreSuite) TestBundleMachineCount(c *gc.C) {
 		c.Logf("test %d: %s", i, test.about)
 		url := &charm.Reference{
 			Schema:   "cs",
-			Series:   "utopic",
+			Series:   "bundle",
 			Name:     "django",
 			Revision: i,
 		}
@@ -742,6 +742,7 @@ func (s *StoreSuite) TestBundleMachineCount(c *gc.C) {
 			BlobHash: fakeBlobHash,
 			BlobSize: fakeBlobSize,
 		})
+		c.Assert(err, gc.IsNil)
 
 		// Retrieve the bundle from the database.
 		var doc mongodoc.Entity
@@ -789,6 +790,51 @@ func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
 	)
 	c.Assert(err, gc.IsNil)
 	s.checkAddBundle(c, bundleArchive, false)
+}
+
+func (s *StoreSuite) TestAddCharmWithBundleSeries(c *gc.C) {
+	store, err := NewStore(s.Session.DB("foo"), nil)
+	c.Assert(err, gc.IsNil)
+	ch := testing.Charms.CharmArchive(c.MkDir(), "wordpress")
+	err = store.AddCharm(ch, AddParams{
+		URL: charm.MustParseReference("bundle/wordpress-2"),
+	})
+	c.Assert(err, gc.ErrorMatches, `charm added with invalid id cs:bundle/wordpress-2`)
+}
+
+func (s *StoreSuite) TestAddBundleWithCharmSeries(c *gc.C) {
+	store, err := NewStore(s.Session.DB("foo"), nil)
+	c.Assert(err, gc.IsNil)
+	b := testing.Charms.BundleDir("wordpress-simple")
+	err = store.AddBundle(b, AddParams{
+		URL: charm.MustParseReference("precise/wordpress-simple-2"),
+	})
+	c.Assert(err, gc.ErrorMatches, `bundle added with invalid id cs:precise/wordpress-simple-2`)
+}
+
+func (s *StoreSuite) TestAddBundleDuplicatingCharm(c *gc.C) {
+	store, err := NewStore(s.Session.DB("foo"), nil)
+	c.Assert(err, gc.IsNil)
+	ch := testing.Charms.CharmDir("wordpress")
+	err = store.AddCharmWithArchive(charm.MustParseReference("precise/wordpress-2"), ch)
+	c.Assert(err, gc.IsNil)
+
+	b := testing.Charms.BundleDir("wordpress-simple")
+	err = store.AddBundleWithArchive(charm.MustParseReference("bundle/wordpress-5"), b)
+	c.Assert(err, gc.ErrorMatches, "bundle name duplicates charm name cs:precise/wordpress-2")
+}
+
+func (s *StoreSuite) TestAddCharmDuplicatingBundle(c *gc.C) {
+	store, err := NewStore(s.Session.DB("foo"), nil)
+	c.Assert(err, gc.IsNil)
+
+	b := testing.Charms.BundleDir("wordpress-simple")
+	err = store.AddBundleWithArchive(charm.MustParseReference("bundle/wordpress-2"), b)
+	c.Assert(err, gc.IsNil)
+
+	ch := testing.Charms.CharmDir("wordpress")
+	err = store.AddCharmWithArchive(charm.MustParseReference("precise/wordpress-5"), ch)
+	c.Assert(err, gc.ErrorMatches, "charm name duplicates bundle name cs:bundle/wordpress-2")
 }
 
 func (s *StoreSuite) TestOpenBlob(c *gc.C) {

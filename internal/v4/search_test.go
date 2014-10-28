@@ -37,7 +37,7 @@ var exportTestCharms = map[string]string{
 }
 
 var exportTestBundles = map[string]string{
-	"wordpress-simple": "cs:bundle/wordpress-4",
+	"wordpress-simple": "cs:bundle/wordpress-simple-4",
 }
 
 func (s *SearchSuite) SetUpTest(c *gc.C) {
@@ -422,19 +422,19 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 		},
 	}, {
 		about: "bundle-metadata",
-		query: "name=wordpress&type=bundle&include=bundle-metadata",
+		query: "name=wordpress-simple&type=bundle&include=bundle-metadata",
 		meta: map[string]interface{}{
 			"bundle-metadata": getBundle("wordpress-simple").Data(),
 		},
 	}, {
 		about: "bundle-machine-count",
-		query: "name=wordpress&type=bundle&include=bundle-machine-count",
+		query: "name=wordpress-simple&type=bundle&include=bundle-machine-count",
 		meta: map[string]interface{}{
 			"bundle-machine-count": params.BundleCount{2},
 		},
 	}, {
 		about: "bundle-unit-count",
-		query: "name=wordpress&type=bundle&include=bundle-unit-count",
+		query: "name=wordpress-simple&type=bundle&include=bundle-unit-count",
 		meta: map[string]interface{}{
 			"bundle-unit-count": params.BundleCount{2},
 		},
