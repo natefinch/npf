@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/juju/loggo"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2"
@@ -19,6 +20,8 @@ import (
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/params"
 )
+
+var logger = loggo.GetLogger("charmstore.internal.charmstore")
 
 // Store represents the underlying charm and blob data stores.
 type Store struct {
@@ -155,7 +158,7 @@ type AddParams struct {
 
 // AddCharm adds a charm entities collection with the given
 // parameters.
-func (s *Store) AddCharm(c charm.Charm, p AddParams) error {
+func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	if p.URL.Series == "bundle" {
 		return errgo.Newf("charm added with invalid id %v", p.URL)
 	}
@@ -185,7 +188,13 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) error {
 			return errgo.Newf("charm name duplicates bundle name %v", entity.URL)
 		}
 	}
+	if err := s.insertEntity(entity); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
+	}
+	return nil
+}
 
+func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 	err = s.DB.Entities().Insert(entity)
 	if mgo.IsDup(err) {
 		return params.ErrDuplicateUpload
@@ -193,8 +202,18 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) error {
 	if err != nil {
 		return errgo.Mask(err)
 	}
+	// Ensure that if anything fails after this, that we delete
+	// the entity, otherwise we will be left in an internally
+	// inconsistent state.
+	defer func() {
+		if err != nil {
+			if err := s.DB.Entities().RemoveId(entity.URL); err != nil {
+				logger.Errorf("cannot remove entity after elastic search failure: %v", err)
+			}
+		}
+	}()
 
-	// Add to ElasticSearch.
+	// Add entity to ElasticSearch.
 	if err := s.ES.put(entity); err != nil {
 		return errgo.Notef(err, "cannot index %s to ElasticSearch", entity.URL)
 	}
@@ -341,16 +360,8 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 			return errgo.Newf("bundle name duplicates charm name %s", entity.URL)
 		}
 	}
-	err = s.DB.Entities().Insert(entity)
-	if mgo.IsDup(err) {
-		return params.ErrDuplicateUpload
-	}
-	if err != nil {
-		return errgo.Mask(err)
-	}
-	// Add to ElasticSearch.
-	if err := s.ES.put(entity); err != nil {
-		return errgo.Notef(err, "cannot index %s to ElasticSearch", entity.URL)
+	if err := s.insertEntity(entity); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 	}
 	return nil
 }
