@@ -156,6 +156,9 @@ type AddParams struct {
 // AddCharm adds a charm entities collection with the given
 // parameters.
 func (s *Store) AddCharm(c charm.Charm, p AddParams) error {
+	if p.URL.Series == "bundle" {
+		return errgo.Newf("charm added with invalid id %v", p.URL)
+	}
 	entity := &mongodoc.Entity{
 		URL:                     p.URL,
 		BaseURL:                 baseURL(p.URL),
@@ -170,7 +173,20 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) error {
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
 		Contents:                p.Contents,
 	}
-	err := s.DB.Entities().Insert(entity)
+
+	// Check that we're not going to create a charm that duplicates
+	// the name of a bundle. This is racy, but it's the best we can do.
+	entities, err := s.FindEntities(baseURL(p.URL))
+	if err != nil {
+		return errgo.Notef(err, "cannot check for existing entities")
+	}
+	for _, entity := range entities {
+		if entity.URL.Series == "bundle" {
+			return errgo.Newf("charm name duplicates bundle name %v", entity.URL)
+		}
+	}
+
+	err = s.DB.Entities().Insert(entity)
 	if mgo.IsDup(err) {
 		return params.ErrDuplicateUpload
 	}
@@ -291,6 +307,9 @@ var errNotImplemented = errgo.Newf("not implemented")
 // AddBundle adds a bundle to the entities collection with the given
 // parameters.
 func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
+	if p.URL.Series != "bundle" {
+		return errgo.Newf("bundle added with invalid id %v", p.URL)
+	}
 	bundleData := b.Data()
 	urls, err := bundleCharms(bundleData)
 	if err != nil {
@@ -309,6 +328,18 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 		BundleReadMe:       b.ReadMe(),
 		BundleCharms:       urls,
 		Contents:           p.Contents,
+	}
+
+	// Check that we're not going to create a bundle that duplicates
+	// the name of a charm. This is racy, but it's the best we can do.
+	entities, err := s.FindEntities(baseURL(p.URL))
+	if err != nil {
+		return errgo.Notef(err, "cannot check for existing entities")
+	}
+	for _, entity := range entities {
+		if entity.URL.Series != "bundle" {
+			return errgo.Newf("bundle name duplicates charm name %s", entity.URL)
+		}
 	}
 	err = s.DB.Entities().Insert(entity)
 	if mgo.IsDup(err) {

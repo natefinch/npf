@@ -16,7 +16,7 @@ import (
 
 // GET search[?text=text][&autocomplete=1][&filter=value…][&limit=limit][&include=meta]
 // http://tinyurl.com/qzobc69
-func (h *Handler) serveSearch(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, error) {
 	sp, err := parseSearchParams(req)
 	if err != nil {
 		return "", err
@@ -24,18 +24,22 @@ func (h *Handler) serveSearch(w http.ResponseWriter, req *http.Request) (interfa
 	// perform query
 	results, err := h.store.Search(sp)
 	if err != nil {
-		router.WriteError(w, errgo.Notef(err, "error performing search"))
+		return nil, errgo.Notef(err, "error performing search")
 	}
 	response := params.SearchResponse{
 		SearchTime: results.SearchTime,
 		Total:      results.Total,
 		Results:    make([]params.SearchResult, 0, len(results.Results)),
 	}
-	//TODO(mhilton) collect the metadata concurrently.
+	// TODO(mhilton) collect the metadata concurrently.
 	for _, ref := range results.Results {
 		meta, err := h.Router.GetMetadata(ref, sp.Include)
 		if err != nil {
-			router.WriteError(w, errgo.Notef(err, "error retrieving metadata"))
+			// Unfortunately it is possible to get errors here due to
+			// internal inconsistency, so rather than throwing away
+			// all the search results, we just log the error and move on.
+			logger.Errorf("cannot retrieve metadata for %v: %v", ref, err)
+			continue
 		}
 		response.Results = append(response.Results, params.SearchResult{
 			Id:   ref,

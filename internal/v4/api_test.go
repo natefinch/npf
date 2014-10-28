@@ -112,7 +112,7 @@ var metaEndpoints = []metaEndpoint{{
 	name:      "bundle-metadata",
 	exclusive: bundleOnly,
 	get:       entityFieldGetter("BundleData"),
-	checkURL:  "cs:bundle/wordpress-42",
+	checkURL:  "cs:bundle/wordpress-simple-42",
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data.(*charm.BundleData).Services["wordpress"].Charm, gc.Equals, "wordpress")
 	},
@@ -125,7 +125,7 @@ var metaEndpoints = []metaEndpoint{{
 		}
 		return params.BundleCount{*entity.BundleUnitCount}
 	}),
-	checkURL: "cs:bundle/wordpress-42",
+	checkURL: "cs:bundle/wordpress-simple-42",
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data.(params.BundleCount).Count, gc.Equals, 2)
 	},
@@ -138,7 +138,7 @@ var metaEndpoints = []metaEndpoint{{
 		}
 		return params.BundleCount{*entity.BundleMachineCount}
 	}),
-	checkURL: "cs:bundle/wordpress-42",
+	checkURL: "cs:bundle/wordpress-simple-42",
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data.(params.BundleCount).Count, gc.Equals, 2)
 	},
@@ -174,7 +174,7 @@ var metaEndpoints = []metaEndpoint{{
 		}
 		return manifest
 	}),
-	checkURL: "cs:bundle/wordpress-42",
+	checkURL: "cs:bundle/wordpress-simple-42",
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data.([]params.ManifestFile), gc.Not(gc.HasLen), 0)
 	},
@@ -331,7 +331,7 @@ var testEntities = []string{
 	// A stock charm.
 	"cs:precise/wordpress-23",
 	// A stock bundle.
-	"cs:bundle/wordpress-42",
+	"cs:bundle/wordpress-simple-42",
 	// A charm with some actions.
 	"cs:precise/dummy-10",
 	// A charm with some tags
@@ -674,7 +674,7 @@ func (s *APISuite) TestMetaCharmTags(c *gc.C) {
 }
 
 func (s *APISuite) TestBundleTags(c *gc.C) {
-	b := charmtesting.Charms.BundleDir("wordpress")
+	b := charmtesting.Charms.BundleDir("wordpress-simple")
 	data := b.Data()
 	data.Tags = []string{"foo", "bar"}
 	err := s.store.AddBundle(&testingBundle{data}, charmstore.AddParams{
@@ -774,8 +774,8 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 	s.addCharm(c, "wordpress", "cs:utopic/wordpress-10")
 	s.addCharm(c, "wordpress", "cs:saucy/bigdata-99")
 	s.addCharm(c, "wordpress", "cs:utopic/bigdata-10")
-	s.addCharm(c, "wordpress", "cs:bundle/bundlelovin-10")
-	s.addCharm(c, "wordpress", "cs:bundle/wordpress-10")
+	s.addBundle(c, "wordpress-simple", "cs:bundle/bundlelovin-10")
+	s.addBundle(c, "wordpress-simple", "cs:bundle/wordpress-simple-10")
 
 	for i, test := range resolveURLTests {
 		c.Logf("test %d: %s", i, test.url)
@@ -802,7 +802,6 @@ var serveExpandIdTests = []struct {
 	expect: []params.ExpandedId{
 		{Id: "cs:utopic/wordpress-42"},
 		{Id: "cs:trusty/wordpress-47"},
-		{Id: "cs:bundle/wordpress-0"},
 	},
 }, {
 	about: "fully qualified URL that does not exist",
@@ -810,7 +809,6 @@ var serveExpandIdTests = []struct {
 	expect: []params.ExpandedId{
 		{Id: "cs:utopic/wordpress-42"},
 		{Id: "cs:trusty/wordpress-47"},
-		{Id: "cs:bundle/wordpress-0"},
 	},
 }, {
 	about: "partial URL",
@@ -844,8 +842,8 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 	s.addCharm(c, "wordpress", "cs:trusty/wordpress-47")
 	s.addCharm(c, "wordpress", "cs:precise/haproxy-1")
 	s.addCharm(c, "wordpress", "cs:trusty/haproxy-1")
-	s.addCharm(c, "wordpress", "cs:bundle/mongo-0")
-	s.addCharm(c, "wordpress", "cs:bundle/wordpress-0")
+	s.addBundle(c, "wordpress-simple", "cs:bundle/mongo-0")
+	s.addBundle(c, "wordpress-simple", "cs:bundle/wordpress-simple-0")
 
 	for i, test := range serveExpandIdTests {
 		c.Logf("test %d: %s", i, test.about)
@@ -1011,7 +1009,7 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 	s.addCharm(c, "wordpress", "cs:utopic/django-42")
 	s.addCharm(c, "wordpress", "cs:utopic/django-47")
 	s.addCharm(c, "wordpress", "cs:~who/utopic/django-42")
-	s.addBundle(c, "wordpress", "cs:bundle/wordpress-simple-42")
+	s.addBundle(c, "wordpress-simple", "cs:bundle/wordpress-simple-42")
 
 	for i, test := range metaStatsTests {
 		c.Logf("test %d: %s", i, test.about)
@@ -1183,7 +1181,7 @@ func (s *APISuite) TestStatus(c *gc.C) {
 		"cs:~bar/bundle/oflaughs-4",
 	} {
 		if strings.Contains(id, "bundle") {
-			s.addBundle(c, "wordpress", id)
+			s.addBundle(c, "wordpress-simple", id)
 		} else {
 			s.addCharm(c, "wordpress", id)
 		}

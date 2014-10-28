@@ -52,7 +52,7 @@ var serveDiagramErrorsTests = []struct {
 
 func (s *APISuite) TestServeDiagramErrors(c *gc.C) {
 	s.addCharm(c, "wordpress", "cs:trusty/wordpress-42")
-	s.addBundle(c, "wordpress", "cs:bundle/nopositionbundle-42")
+	s.addBundle(c, "wordpress-simple", "cs:bundle/nopositionbundle-42")
 	for i, test := range serveDiagramErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{

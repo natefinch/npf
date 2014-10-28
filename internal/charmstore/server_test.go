@@ -39,7 +39,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	serveVersion := func(vers string) NewAPIHandlerFunc {
 		return func(store *Store, config ServerParams) http.Handler {
 			c.Assert(store.DB.Database, gc.Equals, db)
-			return router.HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+			return router.HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
 				return versionResponse{
 					Version: vers,
 					Path:    req.URL.Path,
@@ -86,7 +86,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 
 func (s *ServerSuite) TestNewServerWithConfig(c *gc.C) {
 	serveConfig := func(store *Store, config ServerParams) http.Handler {
-		return router.HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+		return router.HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
 			return config, nil
 		})
 	}
@@ -103,7 +103,7 @@ func (s *ServerSuite) TestNewServerWithConfig(c *gc.C) {
 
 func (s *ServerSuite) TestNewServerWithElasticSearch(c *gc.C) {
 	serveConfig := func(store *Store, config ServerParams) http.Handler {
-		return router.HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+		return router.HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
 			return config, nil
 		})
 	}

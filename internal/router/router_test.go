@@ -44,7 +44,7 @@ var routerGetTests = []struct {
 	about: "global handler",
 	handlers: Handlers{
 		Global: map[string]http.Handler{
-			"foo": HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+			"foo": HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
 				return ReqInfo{
 					Method: req.Method,
 					Path:   req.URL.Path,
@@ -63,7 +63,7 @@ var routerGetTests = []struct {
 	about: "global handler with sub-path and flags",
 	handlers: Handlers{
 		Global: map[string]http.Handler{
-			"foo/bar/": HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+			"foo/bar/": HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
 				return ReqInfo{
 					Method: req.Method,
 					Path:   req.URL.Path,
@@ -751,7 +751,7 @@ var routerPutTests = []struct {
 	about: "global handler",
 	handlers: Handlers{
 		Global: map[string]http.Handler{
-			"foo": HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+			"foo": HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
 				return ReqInfo{
 					Method: req.Method,
 					Path:   req.URL.Path,
@@ -1616,7 +1616,7 @@ func (s *RouterSuite) TestWriteError(c *gc.C) {
 
 func (s *RouterSuite) TestServeMux(c *gc.C) {
 	mux := NewServeMux()
-	mux.Handle("/data", HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+	mux.Handle("/data", HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
 		return Foo{"hello"}, nil
 	}))
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
@@ -1715,14 +1715,14 @@ var handlerTests = []struct {
 	},
 }, {
 	about: "handleJSON, normal case",
-	handler: HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+	handler: HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
 		return Foo{"hello"}, nil
 	}),
 	expectStatus: http.StatusOK,
 	expectBody:   Foo{"hello"},
 }, {
 	about: "handleJSON, error case",
-	handler: HandleJSON(func(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+	handler: HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
 		return nil, errgo.Newf("an error")
 	}),
 	expectStatus: http.StatusInternalServerError,
