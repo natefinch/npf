@@ -27,7 +27,7 @@ To all gophers out there: don't use bare returns.  Ever.
 
 	a := new(MyStruct)
 
-New means "Create a zero value of the given type and return a pointer to it".  It's sorta like the C `new`, which is probably why it exists.  The problem is that it's nearly useless.  It's mostly redundant with simply returning the address of a value thusly:
+New means "Create a zero value of the given type and return a pointer to it".  It's sorta like the C++ `new`, which is probably why it exists.  The problem is that it's nearly useless.  It's mostly redundant with simply returning the address of a value thusly:
 
 	a := &MyStruct{}
 
