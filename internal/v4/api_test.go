@@ -280,7 +280,7 @@ var metaEndpoints = []metaEndpoint{{
 		}
 		return params.TagsResponse{entity.CharmMeta.Categories}
 	}),
-	checkURL: "cs:quantal/category-2",
+	checkURL: "cs:utopic/category-2",
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data, jc.DeepEquals, params.TagsResponse{
 			Tags: []string{"openstack", "storage"},
@@ -335,7 +335,7 @@ var testEntities = []string{
 	// A charm with some actions.
 	"cs:precise/dummy-10",
 	// A charm with some tags
-	"cs:quantal/category-2",
+	"cs:utopic/category-2",
 }
 
 func (s *APISuite) addTestEntities(c *gc.C) []*charm.Reference {
@@ -1178,7 +1178,7 @@ func (s *APISuite) TestStatus(c *gc.C) {
 		"cs:precise/wordpress-2",
 		"cs:precise/wordpress-3",
 		"cs:~foo/precise/arble-9",
-		"cs:~bar/quantal/arble-10",
+		"cs:~bar/utopic/arble-10",
 		"cs:bundle/oflaughs-3",
 		"cs:~bar/bundle/oflaughs-4",
 	} {

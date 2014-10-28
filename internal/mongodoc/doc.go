@@ -10,7 +10,7 @@ import (
 // document in the charms collection.
 type Entity struct {
 	// URL holds the fully specified URL of the charm or bundle.
-	// e.g. cs:precise/wordpress-34, cs:~user/quantal/foo-2
+	// e.g. cs:precise/wordpress-34, cs:~user/trusty/foo-2
 	URL *charm.Reference `bson:"_id"`
 
 	// BaseURL holds the reference URL of the charm or bundle
