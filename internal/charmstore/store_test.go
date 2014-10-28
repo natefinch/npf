@@ -23,6 +23,7 @@ import (
 	"gopkg.in/juju/charm.v4/testing"
 
 	"github.com/juju/charmstore/internal/blobstore"
+	"github.com/juju/charmstore/internal/elasticsearch"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
 	"github.com/juju/charmstore/params"
@@ -181,7 +182,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 	// Try inserting the bundle again - it should fail because the bundle is
 	// already there.
 	err = store.AddBundleWithArchive(url, bundle)
-	c.Assert(err, gc.Equals, params.ErrDuplicateUpload)
+	c.Assert(errgo.Cause(err), gc.Equals, params.ErrDuplicateUpload)
 }
 
 type orderedURLs []*charm.Reference
@@ -324,6 +325,28 @@ func (s *StoreSuite) TestFindEntity(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		c.Assert(entity.BlobName, gc.Not(gc.Equals), "")
 	})
+}
+
+func (s *StoreSuite) TestAddCharmWithFailedESInsert(c *gc.C) {
+	// Make an elastic search with a non-existent address,
+	// so that will try to add the charm there, but fail.
+	esdb := &elasticsearch.Database{
+		Addr: "0.1.2.3:0123",
+	}
+	es := &StoreElasticSearch{
+		Index: esdb.Index("an-index"),
+	}
+
+	store, err := NewStore(s.Session.DB("juju_test"), es)
+	c.Assert(err, gc.IsNil)
+
+	url := charm.MustParseReference("precise/wordpress-12")
+	err = store.AddCharmWithArchive(url, testing.Charms.CharmDir("wordpress"))
+	c.Assert(err, gc.ErrorMatches, "cannot index cs:precise/wordpress-12 to ElasticSearch: .*")
+
+	// Check that the entity has been correctly removed.
+	_, err = store.FindEntity(url)
+	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
 
 type entitiesByURL []*mongodoc.Entity
