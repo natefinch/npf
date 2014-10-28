@@ -539,7 +539,7 @@ var routerGetTests = []struct {
 	},
 }, {
 	about:  "bulk meta handler, several ids",
-	urlStr: "/meta/foo?id=precise/wordpress-42&id=quantal/foo-32",
+	urlStr: "/meta/foo?id=precise/wordpress-42&id=utopic/foo-32",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
 			"foo": testMetaHandler(0),
@@ -550,13 +550,13 @@ var routerGetTests = []struct {
 		"precise/wordpress-42": {
 			CharmURL: "cs:precise/wordpress-42",
 		},
-		"quantal/foo-32": {
-			CharmURL: "cs:quantal/foo-32",
+		"utopic/foo-32": {
+			CharmURL: "cs:utopic/foo-32",
 		},
 	},
 }, {
 	about:  "bulk meta/any handler, several ids",
-	urlStr: "/meta/any?id=precise/wordpress-42&id=quantal/foo-32&include=foo&include=bar/something",
+	urlStr: "/meta/any?id=precise/wordpress-42&id=utopic/foo-32&include=foo&include=bar/something",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
 			"foo":  testMetaHandler(0),
@@ -577,14 +577,14 @@ var routerGetTests = []struct {
 				},
 			},
 		},
-		"quantal/foo-32": {
-			Id: charm.MustParseReference("cs:quantal/foo-32"),
+		"utopic/foo-32": {
+			Id: charm.MustParseReference("cs:utopic/foo-32"),
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
-					CharmURL: "cs:quantal/foo-32",
+					CharmURL: "cs:utopic/foo-32",
 				},
 				"bar/something": metaHandlerTestResp{
-					CharmURL: "cs:quantal/foo-32",
+					CharmURL: "cs:utopic/foo-32",
 					Path:     "/something",
 				},
 			},

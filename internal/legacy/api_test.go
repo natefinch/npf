@@ -187,7 +187,7 @@ func (s *APISuite) TestServerCharmInfo(c *gc.C) {
 		err:       `cannot unmarshal digest: json: cannot unmarshal array into Go value of type string`,
 	}, {
 		about: "charm not found",
-		url:   "cs:oneiric/non-existent",
+		url:   "cs:precise/non-existent",
 		err:   "entry not found",
 	}, {
 		about: "invalid charm URL",
@@ -307,7 +307,7 @@ func (s *APISuite) TestCharmPackageCharmInfo(c *gc.C) {
 	wordpressSHA256 := fileSHA256(c, wordpress.Path)
 	mysqlURL, mySQL := s.addCharm(c, "wordpress", "cs:precise/mysql-2")
 	mysqlSHA256 := fileSHA256(c, mySQL.Path)
-	notFoundURL := charm.MustParseReference("cs:oneiric/not-found-3")
+	notFoundURL := charm.MustParseReference("cs:precise/not-found-3")
 
 	srv := httptest.NewServer(s.srv)
 	defer srv.Close()
