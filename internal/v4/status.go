@@ -38,7 +38,7 @@ var statusChecks = map[string]struct {
 
 // GET /debug/status
 // http://tinyurl.com/qdm5yg7
-func (h *Handler) serveDebugStatus(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+func (h *Handler) serveDebugStatus(_ http.Header, req *http.Request) (interface{}, error) {
 	status := make(map[string]params.DebugStatus)
 	for key, check := range statusChecks {
 		value, ok := check.check(h)

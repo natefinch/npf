@@ -146,7 +146,7 @@ func charmStatsKey(url *charm.Reference, kind string) []string {
 
 var errNotFound = fmt.Errorf("entry not found")
 
-func (h *Handler) serveCharmInfo(w http.ResponseWriter, req *http.Request) (interface{}, error) {
+func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{}, error) {
 	response := make(map[string]*charm.InfoResponse)
 	for _, url := range req.Form["charms"] {
 		c := &charm.InfoResponse{}
