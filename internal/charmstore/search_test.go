@@ -6,6 +6,7 @@ package charmstore
 import (
 	"encoding/json"
 	"sort"
+	"strings"
 
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
@@ -31,7 +32,7 @@ func (s *StoreSearchSuite) SetUpTest(c *gc.C) {
 	err = s.LoadESConfig(s.TestIndex)
 	c.Assert(err, gc.IsNil)
 	s.store = store
-	s.addCharmsToStore(store)
+	s.addCharmsToStore(c, store)
 }
 
 var exportTestCharms = map[string]string{
@@ -41,7 +42,7 @@ var exportTestCharms = map[string]string{
 }
 
 var exportTestBundles = map[string]string{
-	"wordpress": "cs:bundle/wordpress-4",
+	"wordpress-simple": "cs:bundle/wordpress-simple-4",
 }
 
 func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
@@ -76,18 +77,20 @@ func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	c.Assert([]byte(actual), storetesting.JSONEquals, expected)
 }
 
-func (s *StoreSearchSuite) addCharmsToStore(store *Store) {
+func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 	for name, ref := range exportTestCharms {
 		charmArchive := testing.Charms.CharmDir(name)
 		url := charm.MustParseReference(ref)
-		charmArchive.Meta().Categories = []string{name}
-		store.AddCharmWithArchive(url, charmArchive)
+		charmArchive.Meta().Categories = strings.Split(name, "-")
+		err := store.AddCharmWithArchive(url, charmArchive)
+		c.Assert(err, gc.IsNil)
 	}
 	for name, ref := range exportTestBundles {
 		bundleArchive := testing.Charms.BundleDir(name)
 		url := charm.MustParseReference(ref)
-		bundleArchive.Data().Tags = []string{name}
-		store.AddBundleWithArchive(url, bundleArchive)
+		bundleArchive.Data().Tags = strings.Split(name, "-")
+		err := store.AddBundleWithArchive(url, bundleArchive)
+		c.Assert(err, gc.IsNil)
 	}
 }
 
@@ -103,7 +106,7 @@ var searchTests = []struct {
 		},
 		results: []string{
 			exportTestCharms["wordpress"],
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "blank text search",
@@ -114,7 +117,7 @@ var searchTests = []struct {
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "autocomplete search",
@@ -124,7 +127,7 @@ var searchTests = []struct {
 		},
 		results: []string{
 			exportTestCharms["wordpress"],
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "description filter search",
@@ -147,7 +150,6 @@ var searchTests = []struct {
 		},
 		results: []string{
 			exportTestCharms["wordpress"],
-			exportTestBundles["wordpress"],
 		},
 	}, {
 		about: "owner filter search",
@@ -216,7 +218,7 @@ var searchTests = []struct {
 		},
 		results: []string{
 			exportTestCharms["wordpress"],
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "bundle type filter search",
@@ -227,7 +229,7 @@ var searchTests = []struct {
 			},
 		},
 		results: []string{
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "charm type filter search",
@@ -254,7 +256,7 @@ var searchTests = []struct {
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "invalid filter search",
@@ -268,7 +270,7 @@ var searchTests = []struct {
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "valid & invalid filter search",

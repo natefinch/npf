@@ -356,17 +356,17 @@ func (s *ArchiveSuite) TestPostBundle(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// A bundle that did not exist before should get revision 0.
-	s.assertUploadBundle(c, "POST", charm.MustParseReference("bundle/wordpress-0"), "wordpress")
+	s.assertUploadBundle(c, "POST", charm.MustParseReference("bundle/wordpress-simple-0"), "wordpress-simple")
 
 	// Subsequent bundle uploads should increment the
 	// revision by 1.
-	s.assertUploadBundle(c, "POST", charm.MustParseReference("bundle/wordpress-1"), "wordpress-with-logging")
+	s.assertUploadBundle(c, "POST", charm.MustParseReference("bundle/wordpress-simple-1"), "wordpress-with-logging")
 
 	// Uploading the same archive twice should not increment the revision...
-	s.assertUploadBundle(c, "POST", charm.MustParseReference("bundle/wordpress-1"), "wordpress-with-logging")
+	s.assertUploadBundle(c, "POST", charm.MustParseReference("bundle/wordpress-simple-1"), "wordpress-with-logging")
 
 	// ... but uploading an archive used by a previous revision should.
-	s.assertUploadBundle(c, "POST", charm.MustParseReference("bundle/wordpress-2"), "wordpress")
+	s.assertUploadBundle(c, "POST", charm.MustParseReference("bundle/wordpress-simple-2"), "wordpress-simple")
 }
 
 func (s *ArchiveSuite) TestPostHashMismatch(c *gc.C) {

@@ -779,13 +779,13 @@ func (s *StoreSuite) TestAddCharmArchive(c *gc.C) {
 }
 
 func (s *StoreSuite) TestAddBundleDir(c *gc.C) {
-	bundleDir := testing.Charms.BundleDir("wordpress")
+	bundleDir := testing.Charms.BundleDir("wordpress-simple")
 	s.checkAddBundle(c, bundleDir, false)
 }
 
 func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
 	bundleArchive, err := charm.ReadBundleArchive(
-		testing.Charms.BundleArchivePath(c.MkDir(), "wordpress"),
+		testing.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
 	s.checkAddBundle(c, bundleArchive, false)
@@ -1056,13 +1056,13 @@ func (s *StoreSuite) TestAddCharmArchiveIndexed(c *gc.C) {
 }
 
 func (s *StoreSuite) TestAddBundleDirIndexed(c *gc.C) {
-	bundleDir := testing.Charms.BundleDir("wordpress")
+	bundleDir := testing.Charms.BundleDir("wordpress-simple")
 	s.checkAddBundle(c, bundleDir, true)
 }
 
 func (s *StoreSuite) TestAddBundleArchiveIndexed(c *gc.C) {
 	bundleArchive, err := charm.ReadBundleArchive(
-		testing.Charms.BundleArchivePath(c.MkDir(), "wordpress"),
+		testing.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
 	s.checkAddBundle(c, bundleArchive, true)

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/juju/loggo"
 	jc "github.com/juju/testing/checkers"
@@ -36,7 +37,7 @@ var exportTestCharms = map[string]string{
 }
 
 var exportTestBundles = map[string]string{
-	"wordpress": "cs:bundle/wordpress-4",
+	"wordpress-simple": "cs:bundle/wordpress-4",
 }
 
 func (s *SearchSuite) SetUpTest(c *gc.C) {
@@ -44,29 +45,31 @@ func (s *SearchSuite) SetUpTest(c *gc.C) {
 	s.srv, s.store = newServer(c, s.Session, s.ES.Index(s.TestIndex), serverParams)
 	err := s.LoadESConfig(s.TestIndex)
 	c.Assert(err, gc.IsNil)
-	s.addCharmsToStore(s.store)
+	s.addCharmsToStore(c, s.store)
 	err = s.ES.RefreshIndex(s.TestIndex)
 	c.Assert(err, gc.IsNil)
 }
 
-func (s *SearchSuite) addCharmsToStore(store *charmstore.Store) {
+func (s *SearchSuite) addCharmsToStore(c *gc.C, store *charmstore.Store) {
 	for name, ref := range exportTestCharms {
-		store.AddCharmWithArchive(charm.MustParseReference(ref), getCharm(name))
+		err := store.AddCharmWithArchive(charm.MustParseReference(ref), getCharm(name))
+		c.Assert(err, gc.IsNil)
 	}
 	for name, ref := range exportTestBundles {
-		store.AddBundleWithArchive(charm.MustParseReference(ref), getBundle(name))
+		err := store.AddBundleWithArchive(charm.MustParseReference(ref), getBundle(name))
+		c.Assert(err, gc.IsNil)
 	}
 }
 
 func getCharm(name string) *charm.CharmDir {
 	ca := testing.Charms.CharmDir(name)
-	ca.Meta().Categories = []string{name, "bar"}
+	ca.Meta().Categories = append(strings.Split(name, "-"), "bar")
 	return ca
 }
 
 func getBundle(name string) *charm.BundleDir {
 	ba := testing.Charms.BundleDir(name)
-	ba.Data().Tags = []string{name, "baz"}
+	ba.Data().Tags = append(strings.Split(name, "-"), "baz")
 	return ba
 }
 
@@ -248,21 +251,21 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "text search",
 		query: "text=wordpress",
 		results: []string{
 			exportTestCharms["wordpress"],
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "autocomplete search",
 		query: "text=word&autocomplete=1",
 		results: []string{
 			exportTestCharms["wordpress"],
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "blank text search",
@@ -271,7 +274,7 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "description filter search",
@@ -323,13 +326,13 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 		query: "tags=wordpress",
 		results: []string{
 			exportTestCharms["wordpress"],
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "type filter search",
 		query: "type=bundle",
 		results: []string{
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "multiple type filter search",
@@ -338,7 +341,7 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "provides multiple interfaces filter search",
@@ -364,7 +367,7 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 		results: []string{
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
-			exportTestBundles["wordpress"],
+			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about:   "paginated search",
@@ -421,7 +424,7 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 		about: "bundle-metadata",
 		query: "name=wordpress&type=bundle&include=bundle-metadata",
 		meta: map[string]interface{}{
-			"bundle-metadata": getBundle("wordpress").Data(),
+			"bundle-metadata": getBundle("wordpress-simple").Data(),
 		},
 	}, {
 		about: "bundle-machine-count",
