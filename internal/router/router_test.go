@@ -738,6 +738,35 @@ func (s *RouterSuite) TestRouterGet(c *gc.C) {
 	}
 }
 
+func (s *RouterSuite) TestCORSHeaders(c *gc.C) {
+	h := New(&Handlers{
+		Global: map[string]http.Handler{
+			"foo": http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {}),
+		},
+	}, noResolveURL)
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: h,
+		URL:     "/foo",
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	c.Assert(rec.Header().Get("Access-Control-Allow-Origin"), gc.Equals, "*")
+	c.Assert(rec.Header().Get("Access-Control-Allow-Headers"), gc.Equals, "X-Requested-With")
+}
+
+func (s *RouterSuite) TestOptionsHTTPMethod(c *gc.C) {
+	h := New(&Handlers{}, noResolveURL)
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: h,
+		Method:  "OPTIONS",
+		URL:     "/foo",
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	header := rec.Header()
+	c.Assert(header.Get("Access-Control-Allow-Origin"), gc.Equals, "*")
+	c.Assert(header.Get("Access-Control-Allow-Headers"), gc.Equals, "X-Requested-With")
+	c.Assert(header.Get("Allow"), gc.Equals, "DELETE,GET,HEAD,PUT,POST")
+}
+
 var routerPutTests = []struct {
 	about               string
 	handlers            Handlers
