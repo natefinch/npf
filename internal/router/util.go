@@ -33,6 +33,10 @@ func errToResp(err error) (int, interface{}) {
 	case params.ErrUnauthorized:
 		status = http.StatusUnauthorized
 	case params.ErrMethodNotAllowed:
+		// TODO(rog) from RFC 2616, section 4.7: An Allow header
+		// field MUST be present in a 405 (Method Not Allowed)
+		// response.
+		// Perhaps we should not ever return StatusMethodNotAllowed.
 		status = http.StatusMethodNotAllowed
 	}
 	return status, errorBody

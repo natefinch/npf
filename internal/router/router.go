@@ -152,6 +152,27 @@ func New(handlers *Handlers, resolveURL func(url *charm.Reference) error) *Route
 
 // ServeHTTP implements http.Handler.ServeHTTP.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// Allow cross-domain access from anywhere, including AJAX
+	// requests. An AJAX request will add an X-Requested-With:
+	// XMLHttpRequest header, which is a non-standard header, and
+	// hence will require a pre-flight request, so we need to
+	// specify that that header is allowed, and we also need to
+	// implement the OPTIONS method so that the pre-flight request
+	// can work.
+	// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS
+	header := w.Header()
+	header.Set("Access-Control-Allow-Origin", "*")
+	header.Set("Access-Control-Allow-Headers", "X-Requested-With")
+
+	if req.Method == "OPTIONS" {
+		// We cheat here and say that all methods are allowed,
+		// even though any individual endpoint will allow
+		// only a subset of these. This means we can avoid
+		// putting OPTIONS handling in every endpoint,
+		// and it shouldn't actually matter in practice.
+		header.Set("Allow", "DELETE,GET,HEAD,PUT,POST")
+		return
+	}
 	if err := req.ParseForm(); err != nil {
 		WriteError(w, errgo.Notef(err, "cannot parse form"))
 		return
