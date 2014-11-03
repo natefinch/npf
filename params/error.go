@@ -21,6 +21,7 @@ const (
 	ErrMetadataNotFound ErrorCode = "metadata not found"
 	ErrForbidden        ErrorCode = "forbidden"
 	ErrBadRequest       ErrorCode = "bad request"
+	// TODO change to ErrAlreadyExists
 	ErrDuplicateUpload  ErrorCode = "duplicate upload"
 	ErrMultipleErrors   ErrorCode = "multiple errors"
 	ErrUnauthorized     ErrorCode = "unauthorized"

@@ -96,7 +96,7 @@ endif
 	[ "x$(apt-key export D88E42B4 2>&1 1>/dev/null)" = "x" ] || { curl -s http://packages.elasticsearch.org/GPG-KEY-elasticsearch | sudo apt-key add -;}
 	repo="http://packages.elasticsearch.org/elasticsearch/1.3/debian" file=/etc/apt/sources.list.d/packages_elasticsearch_org_elasticsearch_1_3_debian.list ; grep "$$repo" $$file || echo "deb $$repo stable main" | sudo tee $$file > /dev/null
 	sudo apt-get update
-	@sudo apt-get --yes install $(strip $(DEPENDENCIES)) \
+	@sudo apt-get --force-yes install $(strip $(DEPENDENCIES)) \
 	$(shell apt-cache madison juju-mongodb mongodb-server | head -1 | cut -d '|' -f1)
 else
 	@echo sysdeps runs only on systems with apt-get
