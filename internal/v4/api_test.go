@@ -21,7 +21,6 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
-	charmtesting "gopkg.in/juju/charm.v4/testing"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -650,7 +649,7 @@ func (s *APISuite) TestMetaCharmTags(c *gc.C) {
 	url := charm.MustParseReference("precise/wordpress-0")
 	for i, test := range metaCharmTagsTests {
 		c.Logf("%d: %s", i, test.about)
-		wordpress := charmtesting.Charms.CharmDir("wordpress")
+		wordpress := storetesting.Charms.CharmDir("wordpress")
 		meta := wordpress.Meta()
 		meta.Tags, meta.Categories = test.tags, test.categories
 		url.Revision = i
@@ -674,7 +673,7 @@ func (s *APISuite) TestMetaCharmTags(c *gc.C) {
 }
 
 func (s *APISuite) TestBundleTags(c *gc.C) {
-	b := charmtesting.Charms.BundleDir("wordpress-simple")
+	b := storetesting.Charms.BundleDir("wordpress-simple")
 	data := b.Data()
 	data.Tags = []string{"foo", "bar"}
 	err := s.store.AddBundle(&testingBundle{data}, charmstore.AddParams{
@@ -1326,7 +1325,7 @@ func entitySizeChecker(c *gc.C, data interface{}) {
 
 func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, charm.Charm) {
 	url := charm.MustParseReference(curl)
-	wordpress := charmtesting.Charms.CharmDir(charmName)
+	wordpress := storetesting.Charms.CharmDir(charmName)
 	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 	return url, wordpress
@@ -1334,7 +1333,7 @@ func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, 
 
 func (s *APISuite) addBundle(c *gc.C, bundleName string, curl string) (*charm.Reference, charm.Bundle) {
 	url := charm.MustParseReference(curl)
-	bundle := charmtesting.Charms.BundleDir(bundleName)
+	bundle := storetesting.Charms.BundleDir(bundleName)
 	err := s.store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
 	return url, bundle

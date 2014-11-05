@@ -10,7 +10,6 @@ import (
 
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
-	"gopkg.in/juju/charm.v4/testing"
 
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
@@ -61,7 +60,7 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 }
 
 func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
-	charmArchive := testing.Charms.CharmDir("wordpress")
+	charmArchive := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("cs:precise/wordpress-22")
 	s.store.AddCharmWithArchive(url, charmArchive)
 	err := s.store.ExportToElasticSearch()
@@ -79,14 +78,14 @@ func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 
 func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 	for name, ref := range exportTestCharms {
-		charmArchive := testing.Charms.CharmDir(name)
+		charmArchive := storetesting.Charms.CharmDir(name)
 		url := charm.MustParseReference(ref)
 		charmArchive.Meta().Categories = strings.Split(name, "-")
 		err := store.AddCharmWithArchive(url, charmArchive)
 		c.Assert(err, gc.IsNil)
 	}
 	for name, ref := range exportTestBundles {
-		bundleArchive := testing.Charms.BundleDir(name)
+		bundleArchive := storetesting.Charms.BundleDir(name)
 		url := charm.MustParseReference(ref)
 		bundleArchive.Data().Tags = strings.Split(name, "-")
 		err := store.AddBundleWithArchive(url, bundleArchive)
@@ -338,7 +337,7 @@ func (s *StoreSearchSuite) TestLimitTestSearch(c *gc.C) {
 }
 
 func (s *StoreSearchSuite) TestPromulgatedRank(c *gc.C) {
-	charmArchive := testing.Charms.CharmDir("varnish")
+	charmArchive := storetesting.Charms.CharmDir("varnish")
 	url := charm.MustParseReference("cs:trusty/varnish-1")
 	s.store.AddCharmWithArchive(url, charmArchive)
 	err := s.store.ExportToElasticSearch()

@@ -20,7 +20,6 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
-	"gopkg.in/juju/charm.v4/testing"
 
 	"github.com/juju/charmstore/internal/blobstore"
 	"github.com/juju/charmstore/internal/elasticsearch"
@@ -256,7 +255,7 @@ func (s *StoreSuite) TestExpandURL(c *gc.C) {
 }
 
 func (s *StoreSuite) testURLFinding(c *gc.C, check func(store *Store, expand *charm.Reference, expect []*charm.Reference)) {
-	wordpress := testing.Charms.CharmDir("wordpress")
+	wordpress := storetesting.Charms.CharmDir("wordpress")
 	for i, test := range urlFindingTests {
 		c.Logf("test %d: %q from %q", i, test.expand, test.inStore)
 		store, err := NewStore(s.Session.DB("foo"), nil)
@@ -341,7 +340,7 @@ func (s *StoreSuite) TestAddCharmWithFailedESInsert(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	url := charm.MustParseReference("precise/wordpress-12")
-	err = store.AddCharmWithArchive(url, testing.Charms.CharmDir("wordpress"))
+	err = store.AddCharmWithArchive(url, storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.ErrorMatches, "cannot index cs:precise/wordpress-12 to ElasticSearch: .*")
 
 	// Check that the entity has been correctly removed.
@@ -793,23 +792,23 @@ func mustParseReferences(urlStrs []string) []*charm.Reference {
 }
 
 func (s *StoreSuite) TestAddCharmDir(c *gc.C) {
-	charmDir := testing.Charms.CharmDir("wordpress")
+	charmDir := storetesting.Charms.CharmDir("wordpress")
 	s.checkAddCharm(c, charmDir, false)
 }
 
 func (s *StoreSuite) TestAddCharmArchive(c *gc.C) {
-	charmArchive := testing.Charms.CharmArchive(c.MkDir(), "wordpress")
+	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	s.checkAddCharm(c, charmArchive, false)
 }
 
 func (s *StoreSuite) TestAddBundleDir(c *gc.C) {
-	bundleDir := testing.Charms.BundleDir("wordpress-simple")
+	bundleDir := storetesting.Charms.BundleDir("wordpress-simple")
 	s.checkAddBundle(c, bundleDir, false)
 }
 
 func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
 	bundleArchive, err := charm.ReadBundleArchive(
-		testing.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
+		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
 	s.checkAddBundle(c, bundleArchive, false)
@@ -818,7 +817,7 @@ func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
 func (s *StoreSuite) TestAddCharmWithBundleSeries(c *gc.C) {
 	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
-	ch := testing.Charms.CharmArchive(c.MkDir(), "wordpress")
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	err = store.AddCharm(ch, AddParams{
 		URL: charm.MustParseReference("bundle/wordpress-2"),
 	})
@@ -828,7 +827,7 @@ func (s *StoreSuite) TestAddCharmWithBundleSeries(c *gc.C) {
 func (s *StoreSuite) TestAddBundleWithCharmSeries(c *gc.C) {
 	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
-	b := testing.Charms.BundleDir("wordpress-simple")
+	b := storetesting.Charms.BundleDir("wordpress-simple")
 	err = store.AddBundle(b, AddParams{
 		URL: charm.MustParseReference("precise/wordpress-simple-2"),
 	})
@@ -838,11 +837,11 @@ func (s *StoreSuite) TestAddBundleWithCharmSeries(c *gc.C) {
 func (s *StoreSuite) TestAddBundleDuplicatingCharm(c *gc.C) {
 	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
-	ch := testing.Charms.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	err = store.AddCharmWithArchive(charm.MustParseReference("precise/wordpress-2"), ch)
 	c.Assert(err, gc.IsNil)
 
-	b := testing.Charms.BundleDir("wordpress-simple")
+	b := storetesting.Charms.BundleDir("wordpress-simple")
 	err = store.AddBundleWithArchive(charm.MustParseReference("bundle/wordpress-5"), b)
 	c.Assert(err, gc.ErrorMatches, "bundle name duplicates charm name cs:precise/wordpress-2")
 }
@@ -851,17 +850,17 @@ func (s *StoreSuite) TestAddCharmDuplicatingBundle(c *gc.C) {
 	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
 
-	b := testing.Charms.BundleDir("wordpress-simple")
+	b := storetesting.Charms.BundleDir("wordpress-simple")
 	err = store.AddBundleWithArchive(charm.MustParseReference("bundle/wordpress-2"), b)
 	c.Assert(err, gc.IsNil)
 
-	ch := testing.Charms.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	err = store.AddCharmWithArchive(charm.MustParseReference("precise/wordpress-5"), ch)
 	c.Assert(err, gc.ErrorMatches, "charm name duplicates bundle name cs:bundle/wordpress-2")
 }
 
 func (s *StoreSuite) TestOpenBlob(c *gc.C) {
-	charmArchive := testing.Charms.CharmArchive(c.MkDir(), "wordpress")
+	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 
 	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
@@ -888,7 +887,7 @@ func (s *StoreSuite) TestOpenBlob(c *gc.C) {
 }
 
 func (s *StoreSuite) TestBlobNameAndHash(c *gc.C) {
-	charmArchive := testing.Charms.CharmArchive(c.MkDir(), "wordpress")
+	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 
 	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
@@ -953,7 +952,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithInvalidEntity(c *gc.C) {
 	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
 
-	wordpress := testing.Charms.CharmDir("wordpress")
+	wordpress := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("cs:precise/wordpress-23")
 	err = store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
@@ -969,7 +968,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithFoundContent(c *gc.C) {
 	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
 
-	wordpress := testing.Charms.CharmDir("wordpress")
+	wordpress := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("cs:precise/wordpress-23")
 	err = store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
@@ -1014,7 +1013,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithNotFoundContent(c *gc.C) {
 	store, err := NewStore(s.Session.DB("foo"), nil)
 	c.Assert(err, gc.IsNil)
 
-	wordpress := testing.Charms.CharmDir("wordpress")
+	wordpress := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("cs:precise/wordpress-23")
 	err = store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
@@ -1115,23 +1114,23 @@ func (s *StoreSuite) TestSESPutDoesNotErrorWithNoESConfigured(c *gc.C) {
 }
 
 func (s *StoreSuite) TestAddCharmDirIndexed(c *gc.C) {
-	charmDir := testing.Charms.CharmDir("wordpress")
+	charmDir := storetesting.Charms.CharmDir("wordpress")
 	s.checkAddCharm(c, charmDir, true)
 }
 
 func (s *StoreSuite) TestAddCharmArchiveIndexed(c *gc.C) {
-	charmArchive := testing.Charms.CharmArchive(c.MkDir(), "wordpress")
+	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	s.checkAddCharm(c, charmArchive, true)
 }
 
 func (s *StoreSuite) TestAddBundleDirIndexed(c *gc.C) {
-	bundleDir := testing.Charms.BundleDir("wordpress-simple")
+	bundleDir := storetesting.Charms.BundleDir("wordpress-simple")
 	s.checkAddBundle(c, bundleDir, true)
 }
 
 func (s *StoreSuite) TestAddBundleArchiveIndexed(c *gc.C) {
 	bundleArchive, err := charm.ReadBundleArchive(
-		testing.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
+		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
 	s.checkAddBundle(c, bundleArchive, true)

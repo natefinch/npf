@@ -17,7 +17,6 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
-	charmtesting "gopkg.in/juju/charm.v4/testing"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -406,7 +405,7 @@ func (s *APISuite) TestServerStatus(c *gc.C) {
 
 func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, *charm.CharmArchive) {
 	url := charm.MustParseReference(curl)
-	wordpress := charmtesting.Charms.CharmArchive(c.MkDir(), charmName)
+	wordpress := storetesting.Charms.CharmArchive(c.MkDir(), charmName)
 	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 	return url, wordpress

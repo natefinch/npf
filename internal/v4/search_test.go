@@ -13,7 +13,6 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
-	"gopkg.in/juju/charm.v4/testing"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/elasticsearch"
@@ -62,13 +61,13 @@ func (s *SearchSuite) addCharmsToStore(c *gc.C, store *charmstore.Store) {
 }
 
 func getCharm(name string) *charm.CharmDir {
-	ca := testing.Charms.CharmDir(name)
+	ca := storetesting.Charms.CharmDir(name)
 	ca.Meta().Categories = append(strings.Split(name, "-"), "bar")
 	return ca
 }
 
 func getBundle(name string) *charm.BundleDir {
-	ba := testing.Charms.BundleDir(name)
+	ba := storetesting.Charms.BundleDir(name)
 	ba.Data().Tags = append(strings.Split(name, "-"), "baz")
 	return ba
 }

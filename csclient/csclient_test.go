@@ -16,7 +16,6 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
-	charmtesting "gopkg.in/juju/charm.v4/testing"
 	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/csclient"
@@ -98,7 +97,7 @@ var getTests = []struct {
 }}
 
 func (s *suite) TestGet(c *gc.C) {
-	ch := charmtesting.Charms.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
@@ -135,7 +134,7 @@ func (s *suite) TestGet(c *gc.C) {
 
 func (s *suite) TestDoAuthorization(c *gc.C) {
 	// Add a charm to be deleted.
-	ch := charmtesting.Charms.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
@@ -286,7 +285,7 @@ var hyphenateTests = []struct {
 func (s *suite) TestDo(c *gc.C) {
 	// Do is tested fairly comprehensively (but indirectly)
 	// in TestGet, so just a trivial smoke test here.
-	ch := charmtesting.Charms.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
@@ -339,7 +338,7 @@ type Embed struct{}
 type embed struct{}
 
 func (s *suite) TestMeta(c *gc.C) {
-	ch := charmtesting.Charms.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
@@ -449,7 +448,7 @@ func (s *suite) TestMeta(c *gc.C) {
 }
 
 func (s *suite) TestPutExtraInfo(c *gc.C) {
-	ch := charmtesting.Charms.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
