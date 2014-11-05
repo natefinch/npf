@@ -158,8 +158,11 @@ func timeToStamp(t time.Time) int32 {
 // IncCounterAsync increases by one the counter associated with the composed
 // key. The action is done in the background using a separate goroutine.
 func (s *Store) IncCounterAsync(key []string) {
-	// TODO frankban 2014-09-15: log possible IncCounter errors.
-	go s.IncCounter(key)
+	go func() {
+		if err := s.IncCounter(key); err != nil {
+			logger.Errorf("cannot increase stats counter for key %v: %v", key, err)
+		}
+	}()
 }
 
 // IncCounter increases by one the counter associated with the composed key.

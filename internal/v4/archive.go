@@ -69,7 +69,9 @@ func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 	header := w.Header()
 	header.Set(params.ContentHashHeader, hash)
 	header.Set(params.EntityIdHeader, id.String())
-	h.store.IncCounterAsync(entityStatsKey(id, params.StatsArchiveDownload))
+	if req.URL.Query().Get("stats") != "0" {
+		h.store.IncCounterAsync(entityStatsKey(id, params.StatsArchiveDownload))
+	}
 	// TODO(rog) should we set connection=close here?
 	// See https://codereview.appspot.com/5958045
 	serveContent(w, req, size, r)

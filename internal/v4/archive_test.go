@@ -119,6 +119,25 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 	}
 }
 
+func (s *ArchiveSuite) TestGetCountersDisabled(c *gc.C) {
+	url := charm.MustParseReference("utopic/mysql-42")
+
+	// Add a charm to the database (including the archive).
+	err := s.store.AddCharmWithArchive(url, charmtesting.Charms.CharmArchive(c.MkDir(), "mysql"))
+	c.Assert(err, gc.IsNil)
+
+	// Download the charm archive using the API, passing stats=0.
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL(url.Path() + "/archive?stats=0"),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+
+	// Check that the downloads count for the entity has not been updated.
+	key := []string{params.StatsArchiveDownload, "utopic", "mysql", "", "42"}
+	stats.CheckCounterSum(c, s.store, key, false, 0)
+}
+
 var archivePostErrorsTests = []struct {
 	about           string
 	path            string
