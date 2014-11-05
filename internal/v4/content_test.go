@@ -12,7 +12,6 @@ import (
 
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
-	charmtesting "gopkg.in/juju/charm.v4/testing"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/storetesting"
@@ -168,7 +167,7 @@ func (s *APISuite) TestServeReadMe(c *gc.C) {
 	url := charm.MustParseReference("cs:precise/wordpress-0")
 	for i, test := range serveReadMeTests {
 		c.Logf("test %d: %s", i, test.name)
-		wordpress := charmtesting.Charms.ClonedDir(c.MkDir(), "wordpress")
+		wordpress := storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
 		content := fmt.Sprintf("some content %d", i)
 		if test.name != "" {
 			err := ioutil.WriteFile(filepath.Join(wordpress.Path, test.name), []byte(content), 0666)
@@ -222,7 +221,7 @@ func (s *APISuite) TestServeIconEntityNotFound(c *gc.C) {
 
 func (s *APISuite) TestServeIcon(c *gc.C) {
 	url := charm.MustParseReference("cs:precise/wordpress-0")
-	wordpress := charmtesting.Charms.ClonedDir(c.MkDir(), "wordpress")
+	wordpress := storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
 	content := "<xml>an icon, really</xml>"
 	err := ioutil.WriteFile(filepath.Join(wordpress.Path, "icon.svg"), []byte(content), 0666)
 	c.Assert(err, gc.IsNil)
@@ -253,7 +252,7 @@ func (s *APISuite) TestServeBundleIcon(c *gc.C) {
 
 func (s *APISuite) TestServeDefaultIcon(c *gc.C) {
 	url := charm.MustParseReference("cs:precise/wordpress-0")
-	wordpress := charmtesting.Charms.ClonedDir(c.MkDir(), "wordpress")
+	wordpress := storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
 
 	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)

@@ -15,6 +15,6 @@ github.com/juju/txn	git	ee0346875f2ae9a21442f3ff64409f750f37afbc
 github.com/juju/utils	git	28f1fcf3aec9e481fa9fd7020d0b64c62fb30baf	
 gopkg.in/check.v1	git	f74cd4712c294b0b898bc694214563d14caf3b76	
 gopkg.in/errgo.v1	git	81357a83344ddd9f7772884874e5622c2a3da21c	
-gopkg.in/juju/charm.v4	git	5d3f0a3beddb43d776fc792528287a5fe0eef2ff	
+gopkg.in/juju/charm.v4	git	f7e5613ff75457d2700d1c3269546cc903ea0471	
 gopkg.in/mgo.v2	git	dc255bb679efa273b6544a03261c4053505498a4	
 gopkg.in/yaml.v1	git	1b9791953ba4027efaeb728c7355e542a203be5e	
