@@ -21,7 +21,7 @@ import (
 
 // GET id/diagram.svg
 // http://tinyurl.com/nqjvxov
-func (h *Handler) serveDiagram(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveDiagram(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	if id.Series != "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "diagrams not supported for charms")
 	}
@@ -48,7 +48,7 @@ func (h *Handler) serveDiagram(id *charm.Reference, w http.ResponseWriter, req *
 	if urlErr != nil {
 		return urlErr
 	}
-	setCacheControl(w.Header(), archiveCacheMaxAge)
+	setArchiveCacheControl(w.Header(), fullySpecified)
 	w.Header().Set("Content-Type", "image/svg+xml")
 	canvas.Marshal(w)
 	return nil
@@ -67,7 +67,7 @@ var allowedReadMe = map[string]bool{
 
 // GET id/readme
 // http://tinyurl.com/kygyvot
-func (h *Handler) serveReadMe(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveReadMe(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	entity, err := h.store.FindEntity(id, "_id", "contents", "blobname")
 	if err != nil {
 		return errgo.NoteMask(err, "cannot get README", errgo.Is(params.ErrNotFound))
@@ -83,14 +83,14 @@ func (h *Handler) serveReadMe(id *charm.Reference, w http.ResponseWriter, req *h
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	defer r.Close()
-	setCacheControl(w.Header(), archiveCacheMaxAge)
+	setArchiveCacheControl(w.Header(), fullySpecified)
 	io.Copy(w, r)
 	return nil
 }
 
 // GET id/icon.svg
 // http://tinyurl.com/lhodocb
-func (h *Handler) serveIcon(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveIcon(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	if id.Series == "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "icons not supported for bundles")
 	}
@@ -107,14 +107,14 @@ func (h *Handler) serveIcon(id *charm.Reference, w http.ResponseWriter, req *htt
 		if errgo.Cause(err) != params.ErrNotFound {
 			return errgo.Mask(err)
 		}
-		setCacheControl(w.Header(), archiveCacheMaxAge)
+		setArchiveCacheControl(w.Header(), fullySpecified)
 		w.Header().Set("Content-Type", "image/svg+xml")
 		io.Copy(w, strings.NewReader(defaultIcon))
 		return nil
 	}
 	defer r.Close()
 	w.Header().Set("Content-Type", "image/svg+xml")
-	setCacheControl(w.Header(), archiveCacheMaxAge)
+	setArchiveCacheControl(w.Header(), fullySpecified)
 	io.Copy(w, r)
 	return nil
 }

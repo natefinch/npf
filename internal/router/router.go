@@ -82,7 +82,9 @@ type BulkIncludeHandler interface {
 // IdHandler handles a charm store request rooted at the given id.
 // The request path (req.URL.Path) holds the URL path after
 // the id has been stripped off.
-type IdHandler func(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error
+// The fullySpecified parameter holds whether the charm id was
+// fully specified in the original client request.
+type IdHandler func(charmId *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error
 
 // Handlers specifies how HTTP requests will be routed
 // by the router. All errors returned by the handlers will
@@ -202,6 +204,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	if key == "" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "")
 	}
+	fullySpecified := url.Series != "" && url.Revision != -1
 	handler := r.handlers.Id[key]
 	if handler == nil || idHandlerNeedsResolveURL(req) {
 		// If it's not an id handler, it's a meta endpoint, so
@@ -215,7 +218,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	}
 	if handler != nil {
 		req.URL.Path = path
-		err := handler(url, w, req)
+		err := handler(url, fullySpecified, w, req)
 		// Note: preserve error cause from handlers.
 		return errgo.Mask(err, errgo.Any)
 	}

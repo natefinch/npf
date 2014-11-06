@@ -242,13 +242,13 @@ func (h *Handler) serveDebug(w http.ResponseWriter, req *http.Request) {
 //
 // PUT id/resources/[~user/]series/name.stream-revision/arch?sha256=hash
 // http://tinyurl.com/k8l8kdg
-func (h *Handler) serveResources(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveResources(charmId *charm.Reference, _ bool, w http.ResponseWriter, req *http.Request) error {
 	return errNotImplemented
 }
 
 // GET id/expand-id
 // https://docs.google.com/a/canonical.com/document/d/1TgRA7jW_mmXoKH3JiwBbtPvQu7WiM6XMrz1wSrhTMXw/edit#bookmark=id.4xdnvxphb2si
-func (h *Handler) serveExpandId(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveExpandId(id *charm.Reference, _ bool, w http.ResponseWriter, req *http.Request) error {
 	// Mutate the given id so that it represents a base URL.
 	id.Revision = -1
 	id.Series = ""
