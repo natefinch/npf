@@ -26,13 +26,6 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
-// archiveCacheMaxAge specifies the cache expiry duration for items
-// returned from the archive. We give a 15 minute expiry time for
-// everything. Strictly speaking this is wrong, as a non-fully-qualified
-// id may change, but this is a temporary hack and will be changed
-// later.
-var archiveCacheMaxAge = 15 * time.Minute
-
 // GET id/archive
 // http://tinyurl.com/qjrwq53
 //
@@ -47,7 +40,7 @@ var archiveCacheMaxAge = 15 * time.Minute
 // rather than choosing a new one. As this feature is to support legacy
 // ingestion methods, and will be removed in the future, it has no entry
 // in the specification.
-func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveArchive(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
 	default:
 		// TODO(rog) params.ErrMethodNotAllowed
@@ -75,7 +68,7 @@ func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 	}
 	defer r.Close()
 	header := w.Header()
-	setCacheControl(header, archiveCacheMaxAge)
+	setArchiveCacheControl(w.Header(), fullySpecified)
 	header.Set(params.ContentHashHeader, hash)
 	header.Set(params.EntityIdHeader, id.String())
 
@@ -86,11 +79,6 @@ func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 	// See https://codereview.appspot.com/5958045
 	serveContent(w, req, size, r)
 	return nil
-}
-
-func setCacheControl(h http.Header, age time.Duration) {
-	seconds := int(age / time.Second)
-	h.Set("Cache-Control", "public, max-age="+strconv.Itoa(seconds))
 }
 
 func (h *Handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
@@ -287,7 +275,7 @@ func verifyConstraints(s string) error {
 
 // GET id/archive/…
 // http://tinyurl.com/lampm24
-func (h *Handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveArchiveFile(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	r, size, _, err := h.store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
@@ -320,7 +308,7 @@ func (h *Handler) serveArchiveFile(id *charm.Reference, w http.ResponseWriter, r
 			w.Header().Set("Content-Type", ctype)
 		}
 		w.Header().Set("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
-		setCacheControl(w.Header(), archiveCacheMaxAge)
+		setArchiveCacheControl(w.Header(), fullySpecified)
 		w.WriteHeader(http.StatusOK)
 		io.Copy(w, content)
 		return nil
@@ -414,4 +402,27 @@ func verificationError(err error) error {
 		return err
 	}
 	return errgo.New(string(encodedMessages))
+}
+
+var (
+	// archiveCacheVersionedMaxAge specifies the cache expiry duration for items
+	// returned from the archive where the id is fully specified.
+	archiveCacheVersionedMaxAge = 365 * 24 * time.Hour
+
+	// archiveCacheNonVersionedMaxAge specifies the cache expiry duration for items
+	// returned from the archive where the id is not fully specified.
+	archiveCacheNonVersionedMaxAge = 5 * time.Minute
+)
+
+// setArchiveCacheControl sets any cache control headers
+// in a response to an archive-derived endpoint.
+// The idFullySpecified header specifies whether
+// the entity id in the request was fully specified by the client.
+func setArchiveCacheControl(h http.Header, idFullySpecified bool) {
+	age := archiveCacheVersionedMaxAge
+	if !idFullySpecified {
+		age = archiveCacheNonVersionedMaxAge
+	}
+	seconds := int(age / time.Second)
+	h.Set("Cache-Control", "public, max-age="+strconv.Itoa(seconds))
 }

@@ -47,7 +47,7 @@ func (s *ArchiveSuite) SetUpTest(c *gc.C) {
 }
 
 func (s *ArchiveSuite) TestGet(c *gc.C) {
-	s.PatchValue(v4.ArchiveCacheMaxAge, 5*time.Second)
+	patchArchiveCacheAges(s)
 	wordpress := s.assertUploadCharm(c, "POST", charm.MustParseReference("cs:precise/wordpress-0"), "wordpress")
 
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
@@ -62,7 +62,7 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
 	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
 	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:precise/wordpress-0")
-	assertCacheControl(c, rec.Header(), 5)
+	assertCacheControl(c, rec.Header(), true)
 
 	// Check that the HTTP range logic is plugged in OK. If this
 	// is working, we assume that the whole thing is working OK,
@@ -77,7 +77,7 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
 	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
 	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:precise/wordpress-0")
-	assertCacheControl(c, rec.Header(), 5)
+	assertCacheControl(c, rec.Header(), true)
 }
 
 func (s *ArchiveSuite) TestGetWithPartialId(c *gc.C) {
@@ -643,7 +643,7 @@ func (s *ArchiveSuite) TestArchiveFileGet(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	defer zipFile.Close()
 
-	s.PatchValue(v4.ArchiveCacheMaxAge, 5*time.Second)
+	patchArchiveCacheAges(s)
 
 	// Check a file in the root directory.
 	s.assertArchiveFileContents(c, zipFile, "utopic/all-hooks-0/archive/metadata.yaml")
@@ -685,7 +685,7 @@ func (s *ArchiveSuite) assertArchiveFileContents(c *gc.C, zipFile *zip.ReadClose
 	c.Assert(headers.Get("Content-Length"), gc.Equals, strconv.Itoa(len(expectBytes)))
 	// We only have text files in the charm repository used for tests.
 	c.Assert(headers.Get("Content-Type"), gc.Equals, "text/plain; charset=utf-8")
-	assertCacheControl(c, rec.Header(), 5)
+	assertCacheControl(c, rec.Header(), true)
 }
 
 func (s *ArchiveSuite) TestBundleCharms(c *gc.C) {
@@ -1033,6 +1033,22 @@ func hashOf(r io.Reader) (hashSum string, size int64) {
 	return fmt.Sprintf("%x", hash.Sum(nil)), n
 }
 
-func assertCacheControl(c *gc.C, h http.Header, seconds int) {
+func patchArchiveCacheAges(s interface {
+	PatchValue(interface{}, interface{})
+}) {
+	s.PatchValue(v4.ArchiveCacheVersionedMaxAge, 20*time.Second)
+	s.PatchValue(v4.ArchiveCacheNonVersionedMaxAge, 5*time.Second)
+}
+
+// assertCacheControl asserts that the cache control headers are
+// appropriately set. The isFullySpecified parameter specifies
+// whether the id in the request was fully specified.
+// It assumes that patchArchiveCacheAges has been called
+// for the current test.
+func assertCacheControl(c *gc.C, h http.Header, idFullySpecified bool) {
+	seconds := 5
+	if idFullySpecified {
+		seconds = 20
+	}
 	c.Assert(h.Get("Cache-Control"), gc.Equals, fmt.Sprintf("public, max-age=%d", seconds))
 }

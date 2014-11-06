@@ -4,9 +4,10 @@
 package v4
 
 var (
-	BundleCharms       = (*Handler).bundleCharms
-	ParseSearchParams  = parseSearchParams
-	StartTime          = &startTime
-	DefaultIcon        = defaultIcon
-	ArchiveCacheMaxAge = &archiveCacheMaxAge
+	BundleCharms                   = (*Handler).bundleCharms
+	ParseSearchParams              = parseSearchParams
+	StartTime                      = &startTime
+	DefaultIcon                    = defaultIcon
+	ArchiveCacheVersionedMaxAge    = &archiveCacheVersionedMaxAge
+	ArchiveCacheNonVersionedMaxAge = &archiveCacheNonVersionedMaxAge
 )

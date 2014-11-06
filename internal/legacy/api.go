@@ -117,23 +117,24 @@ func (h *Handler) serveCharm(w http.ResponseWriter, req *http.Request) error {
 	if req.Method != "GET" && req.Method != "HEAD" {
 		return params.ErrMethodNotAllowed
 	}
-	url, err := h.resolveURLStr(strings.TrimPrefix(req.URL.Path, "/"))
+	url, fullySpecified, err := h.resolveURLStr(strings.TrimPrefix(req.URL.Path, "/"))
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
-	return h.v4.Id["archive"](url, w, req)
+	return h.v4.Id["archive"](url, fullySpecified, w, req)
 }
 
-func (h *Handler) resolveURLStr(urlStr string) (*charm.Reference, error) {
+func (h *Handler) resolveURLStr(urlStr string) (*charm.Reference, bool, error) {
 	curl, err := charm.ParseReference(urlStr)
 	if err != nil {
-		return nil, errgo.WithCausef(err, params.ErrNotFound, "")
+		return nil, false, errgo.WithCausef(err, params.ErrNotFound, "")
 	}
+	fullySpecified := curl.Series != "" && curl.Revision != -1
 	if err := v4.ResolveURL(h.store, curl); err != nil {
 		// Note: preserve error cause from resolveURL.
-		return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+		return nil, false, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
-	return curl, nil
+	return curl, fullySpecified, nil
 }
 
 // charmStatsKey returns a stats key for the given charm reference and kind.
@@ -152,7 +153,7 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 		c := &charm.InfoResponse{}
 		response[url] = c
 		var entity mongodoc.Entity
-		curl, err := h.resolveURLStr(url)
+		curl, _, err := h.resolveURLStr(url)
 		if err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				err = errNotFound

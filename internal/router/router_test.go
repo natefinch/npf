@@ -99,8 +99,35 @@ var routerGetTests = []struct {
 	urlStr:       "/precise/wordpress-34/foo",
 	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
+		Method:         "GET",
+		CharmURL:       "cs:precise/wordpress-34",
+		FullySpecified: true,
+	},
+}, {
+	about: "id handler with no series in id",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:       "/wordpress-34/foo",
+	expectStatus: http.StatusOK,
+	expectBody: idHandlerTestResp{
 		Method:   "GET",
-		CharmURL: "cs:precise/wordpress-34",
+		CharmURL: "cs:wordpress-34",
+	},
+}, {
+	about: "id handler with no revision in id",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:       "/precise/wordpress/foo",
+	expectStatus: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		Method:   "GET",
+		CharmURL: "cs:precise/wordpress",
 	},
 }, {
 	about: "id handler with extra path",
@@ -112,9 +139,10 @@ var routerGetTests = []struct {
 	urlStr:       "/precise/wordpress-34/foo/blah/arble",
 	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
-		Method:   "GET",
-		CharmURL: "cs:precise/wordpress-34",
-		Path:     "/blah/arble",
+		Method:         "GET",
+		CharmURL:       "cs:precise/wordpress-34",
+		FullySpecified: true,
+		Path:           "/blah/arble",
 	},
 }, {
 	about: "id handler with allowed extra path but none given",
@@ -152,8 +180,9 @@ var routerGetTests = []struct {
 	urlStr:       "/~joe/precise/wordpress-34/foo",
 	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
-		Method:   "GET",
-		CharmURL: "cs:~joe/precise/wordpress-34",
+		Method:         "GET",
+		FullySpecified: true,
+		CharmURL:       "cs:~joe/precise/wordpress-34",
 	},
 }, {
 	about: "id handler with user and extra path",
@@ -165,9 +194,10 @@ var routerGetTests = []struct {
 	urlStr:       "/~joe/precise/wordpress-34/foo/blah/arble",
 	expectStatus: http.StatusOK,
 	expectBody: idHandlerTestResp{
-		Method:   "GET",
-		CharmURL: "cs:~joe/precise/wordpress-34",
-		Path:     "/blah/arble",
+		Method:         "GET",
+		CharmURL:       "cs:~joe/precise/wordpress-34",
+		FullySpecified: true,
+		Path:           "/blah/arble",
 	},
 }, {
 	about: "id handler that returns an error",
@@ -185,7 +215,7 @@ var routerGetTests = []struct {
 	about: "id handler that returns a not-found error",
 	handlers: Handlers{
 		Id: map[string]IdHandler{
-			"foo": func(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+			"foo": func(charmId *charm.Reference, _ bool, w http.ResponseWriter, req *http.Request) error {
 				return params.ErrNotFound
 			},
 		},
@@ -200,7 +230,7 @@ var routerGetTests = []struct {
 	about: "id handler that returns some other kind of coded error",
 	handlers: Handlers{
 		Id: map[string]IdHandler{
-			"foo": func(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+			"foo": func(charmId *charm.Reference, _ bool, w http.ResponseWriter, req *http.Request) error {
 				return errgo.WithCausef(nil, params.ErrorCode("foo"), "a message")
 			},
 		},
@@ -805,8 +835,9 @@ var routerPutTests = []struct {
 	urlStr:     "/precise/wordpress-34/foo",
 	expectCode: http.StatusOK,
 	expectBody: idHandlerTestResp{
-		Method:   "PUT",
-		CharmURL: "cs:precise/wordpress-34",
+		Method:         "PUT",
+		CharmURL:       "cs:precise/wordpress-34",
+		FullySpecified: true,
 	},
 }, {
 	about: "meta handler",
@@ -1790,21 +1821,23 @@ func (s *RouterSuite) TestHandlers(c *gc.C) {
 	}
 }
 
-func errorIdHandler(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func errorIdHandler(charmId *charm.Reference, _ bool, w http.ResponseWriter, req *http.Request) error {
 	return errgo.Newf("errorIdHandler error")
 }
 
 type idHandlerTestResp struct {
-	Method   string
-	CharmURL string
-	Path     string
+	Method         string
+	CharmURL       string
+	FullySpecified bool
+	Path           string
 }
 
-func testIdHandler(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func testIdHandler(charmId *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	jsonhttp.WriteJSON(w, http.StatusOK, idHandlerTestResp{
-		CharmURL: charmId.String(),
-		Path:     req.URL.Path,
-		Method:   req.Method,
+		CharmURL:       charmId.String(),
+		Path:           req.URL.Path,
+		Method:         req.Method,
+		FullySpecified: fullySpecified,
 	})
 	return nil
 }
