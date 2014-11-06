@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
@@ -64,6 +65,7 @@ func (s *APISuite) TestServeDiagramErrors(c *gc.C) {
 }
 
 func (s *APISuite) TestServeDiagram(c *gc.C) {
+	s.PatchValue(v4.ArchiveCacheMaxAge, 5*time.Second)
 	bundle := &testingBundle{
 		data: &charm.BundleData{
 			Services: map[string]*charm.ServiceSpec{
@@ -99,6 +101,7 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %q", rec.Body.Bytes()))
 	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
+	assertCacheControl(c, rec.Header(), 5)
 
 	// Check that the output contains valid XML with an SVG tag,
 	// but don't check the details of the output so that this test doesn't
@@ -164,6 +167,7 @@ var serveReadMeTests = []struct {
 }}
 
 func (s *APISuite) TestServeReadMe(c *gc.C) {
+	s.PatchValue(v4.ArchiveCacheMaxAge, 5*time.Second)
 	url := charm.MustParseReference("cs:precise/wordpress-0")
 	for i, test := range serveReadMeTests {
 		c.Logf("test %d: %s", i, test.name)
@@ -191,6 +195,7 @@ func (s *APISuite) TestServeReadMe(c *gc.C) {
 		} else {
 			c.Assert(rec.Code, gc.Equals, http.StatusOK)
 			c.Assert(rec.Body.String(), gc.DeepEquals, content)
+			assertCacheControl(c, rec.Header(), 5)
 		}
 	}
 }
@@ -220,6 +225,7 @@ func (s *APISuite) TestServeIconEntityNotFound(c *gc.C) {
 }
 
 func (s *APISuite) TestServeIcon(c *gc.C) {
+	s.PatchValue(v4.ArchiveCacheMaxAge, 5*time.Second)
 	url := charm.MustParseReference("cs:precise/wordpress-0")
 	wordpress := storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
 	content := "<xml>an icon, really</xml>"
@@ -236,6 +242,7 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.String(), gc.Equals, content)
 	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
+	assertCacheControl(c, rec.Header(), 5)
 }
 
 func (s *APISuite) TestServeBundleIcon(c *gc.C) {
@@ -251,6 +258,7 @@ func (s *APISuite) TestServeBundleIcon(c *gc.C) {
 }
 
 func (s *APISuite) TestServeDefaultIcon(c *gc.C) {
+	s.PatchValue(v4.ArchiveCacheMaxAge, 5*time.Second)
 	url := charm.MustParseReference("cs:precise/wordpress-0")
 	wordpress := storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
 
@@ -264,4 +272,5 @@ func (s *APISuite) TestServeDefaultIcon(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.String(), gc.Equals, v4.DefaultIcon)
 	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
+	assertCacheControl(c, rec.Header(), 5)
 }

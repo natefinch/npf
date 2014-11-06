@@ -48,6 +48,7 @@ func (h *Handler) serveDiagram(id *charm.Reference, w http.ResponseWriter, req *
 	if urlErr != nil {
 		return urlErr
 	}
+	setCacheControl(w.Header(), archiveCacheMaxAge)
 	w.Header().Set("Content-Type", "image/svg+xml")
 	canvas.Marshal(w)
 	return nil
@@ -82,6 +83,7 @@ func (h *Handler) serveReadMe(id *charm.Reference, w http.ResponseWriter, req *h
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	defer r.Close()
+	setCacheControl(w.Header(), archiveCacheMaxAge)
 	io.Copy(w, r)
 	return nil
 }
@@ -105,12 +107,14 @@ func (h *Handler) serveIcon(id *charm.Reference, w http.ResponseWriter, req *htt
 		if errgo.Cause(err) != params.ErrNotFound {
 			return errgo.Mask(err)
 		}
+		setCacheControl(w.Header(), archiveCacheMaxAge)
 		w.Header().Set("Content-Type", "image/svg+xml")
 		io.Copy(w, strings.NewReader(defaultIcon))
 		return nil
 	}
 	defer r.Close()
 	w.Header().Set("Content-Type", "image/svg+xml")
+	setCacheControl(w.Header(), archiveCacheMaxAge)
 	io.Copy(w, r)
 	return nil
 }
