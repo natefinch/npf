@@ -13,8 +13,10 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/juju/utils/jsonhttp"
+	"github.com/juju/utils/parallel"
 	"gopkg.in/errgo.v1"
 	charm "gopkg.in/juju/charm.v4"
 
@@ -506,6 +508,12 @@ func (r *Router) serveBulkMetaPutOne(req *http.Request, id string, val *json.Raw
 	return nil
 }
 
+// maxMetadataConcurrency specifies the maximum number
+// of goroutines started to service a given GetMetadata request.
+// 5 is enough to more that cover the number of metadata
+// group handlers in the current API.
+const maxMetadataConcurrency = 5
+
 // GetMetadata retrieves metadata for the given charm or bundle id,
 // including information as specified by the includes slice.
 func (r *Router) GetMetadata(id *charm.Reference, includes []string) (map[string]interface{}, error) {
@@ -526,37 +534,53 @@ func (r *Router) GetMetadata(id *charm.Reference, includes []string) (map[string
 		includesByGroup[key] = append(includesByGroup[key], include)
 	}
 	results := make(map[string]interface{})
+	// TODO when the number of groups is 1 (a common case,
+	// using parallel.NewRun is actually slowing things down
+	// by creating a goroutine). We could optimise it so that
+	// it doesn't actually create a goroutine in that case.
+	run := parallel.NewRun(maxMetadataConcurrency)
+	var mu sync.Mutex
 	for _, g := range groups {
-		// We know that we must have at least one element in the
-		// slice here. We could use any member of the slice to
-		// actually handle the request, so arbitrarily choose
-		// g[0]. Note that g[0].Key() is equal to g[i].Key() for
-		// every i in the slice.
-		groupIncludes := includesByGroup[g[0].Key()]
+		g := g
+		run.Do(func() error {
+			// We know that we must have at least one element in the
+			// slice here. We could use any member of the slice to
+			// actually handle the request, so arbitrarily choose
+			// g[0]. Note that g[0].Key() is equal to g[i].Key() for
+			// every i in the slice.
+			groupIncludes := includesByGroup[g[0].Key()]
 
-		// Paths contains all the path elements after
-		// the handler key has been stripped off.
-		// TODO(rog) BUG shouldn't this be len(groupIncludes) ?
-		paths := make([]string, len(g))
-		for i, include := range groupIncludes {
-			_, paths[i] = handlerKey(include)
-		}
-		groupResults, err := g[0].HandleGet(g, id, paths, nil)
-		if err != nil {
-			// TODO(rog) if it's a BulkError, attach
-			// the original include path to error (the BulkError
-			// should contain the index of the failed one).
-			return nil, errgo.Mask(err, errgo.Any)
-		}
-		for i, result := range groupResults {
-			// Omit nil results from map. Note: omit statically typed
-			// nil results too to make it easy for handlers to return
-			// possibly nil data with a static type.
-			// http://tinyurl.com/o5ptfkk
-			if !isNull(result) {
-				results[groupIncludes[i]] = result
+			// Paths contains all the path elements after
+			// the handler key has been stripped off.
+			// TODO(rog) BUG shouldn't this be len(groupIncludes) ?
+			paths := make([]string, len(g))
+			for i, include := range groupIncludes {
+				_, paths[i] = handlerKey(include)
 			}
-		}
+			groupResults, err := g[0].HandleGet(g, id, paths, nil)
+			if err != nil {
+				// TODO(rog) if it's a BulkError, attach
+				// the original include path to error (the BulkError
+				// should contain the index of the failed one).
+				return errgo.Mask(err, errgo.Any)
+			}
+			mu.Lock()
+			for i, result := range groupResults {
+				// Omit nil results from map. Note: omit statically typed
+				// nil results too to make it easy for handlers to return
+				// possibly nil data with a static type.
+				// http://tinyurl.com/o5ptfkk
+				if !isNull(result) {
+					results[groupIncludes[i]] = result
+				}
+			}
+			mu.Unlock()
+			return nil
+		})
+	}
+	if err := run.Wait(); err != nil {
+		// We could have got multiple errors, but we'll only return one of them.
+		return nil, errgo.Mask(err.(parallel.Errors)[0], errgo.Any)
 	}
 	return results, nil
 }

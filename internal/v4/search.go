@@ -6,13 +6,17 @@ package v4
 import (
 	"net/http"
 	"strconv"
+	"sync/atomic"
 
+	"github.com/juju/utils/parallel"
 	"gopkg.in/errgo.v1"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/router"
 	"github.com/juju/charmstore/params"
 )
+
+const maxConcurrency = 20
 
 // GET search[?text=text][&autocomplete=1][&filter=value…][&limit=limit][&include=meta]
 // http://tinyurl.com/qzobc69
@@ -29,23 +33,43 @@ func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, er
 	response := params.SearchResponse{
 		SearchTime: results.SearchTime,
 		Total:      results.Total,
-		Results:    make([]params.SearchResult, 0, len(results.Results)),
+		Results:    make([]params.SearchResult, len(results.Results)),
 	}
-	// TODO(mhilton) collect the metadata concurrently.
-	for _, ref := range results.Results {
-		meta, err := h.Router.GetMetadata(ref, sp.Include)
-		if err != nil {
-			// Unfortunately it is possible to get errors here due to
-			// internal inconsistency, so rather than throwing away
-			// all the search results, we just log the error and move on.
-			logger.Errorf("cannot retrieve metadata for %v: %v", ref, err)
-			continue
-		}
-		response.Results = append(response.Results, params.SearchResult{
-			Id:   ref,
-			Meta: meta,
+	run := parallel.NewRun(maxConcurrency)
+	var missing int32
+	for i, ref := range results.Results {
+		i, ref := i, ref
+		run.Do(func() error {
+			meta, err := h.Router.GetMetadata(ref, sp.Include)
+			if err != nil {
+				// Unfortunately it is possible to get errors here due to
+				// internal inconsistency, so rather than throwing away
+				// all the search results, we just log the error and move on.
+				logger.Errorf("cannot retrieve metadata for %v: %v", ref, err)
+				atomic.AddInt32(&missing, 1)
+				return nil
+			}
+			response.Results[i] = params.SearchResult{
+				Id:   ref,
+				Meta: meta,
+			}
+			return nil
 		})
 	}
+	run.Wait()
+	if missing == 0 {
+		return response, nil
+	}
+	// We're missing some results - shuffle all the results down to
+	// fill the gaps.
+	j := 0
+	for _, result := range response.Results {
+		if result.Id != nil {
+			response.Results[j] = result
+			j++
+		}
+	}
+	response.Results = response.Results[0:j]
 	return response, nil
 }
 
