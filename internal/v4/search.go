@@ -56,6 +56,8 @@ func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, er
 			return nil
 		})
 	}
+	// We never return an error from the Do function above, so no need to
+	// check the error here.
 	run.Wait()
 	if missing == 0 {
 		return response, nil
