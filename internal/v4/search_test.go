@@ -383,6 +383,7 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 		err := json.Unmarshal(rec.Body.Bytes(), &sr)
 		c.Assert(err, gc.IsNil)
 		c.Assert(sr.Results, gc.HasLen, len(test.results))
+		c.Logf("results: %s", rec.Body.Bytes())
 	OUTER:
 		for _, res := range sr.Results {
 			for i, r := range test.results {
