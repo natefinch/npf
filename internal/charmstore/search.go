@@ -145,6 +145,8 @@ func (store *Store) Search(sp SearchParams) (SearchResult, error) {
 func queryFields(sp SearchParams) map[string]float64 {
 	fields := map[string]float64{
 		"URL.ngrams":              8,
+		"Name":                    8,
+		"Series":                  8,
 		"CharmMeta.Categories":    5,
 		"BundleData.Tags":         5,
 		"CharmProvidedInterfaces": 3,
@@ -266,34 +268,36 @@ func descriptionFilter(value string) elasticsearch.Filter {
 // nameFilter generates a filter that will match against the
 // name of the charm or bundle.
 func nameFilter(value string) elasticsearch.Filter {
-	// TODO(mhilton) implement wildcards as in http://tinyurl.com/k46xexe
-	return elasticsearch.RegexpFilter{
-		Field:  "URL",
-		Regexp: `cs:(\~[^/]*/)?[^/]*/` + elasticsearch.EscapeRegexp(value) + "-[0-9]+",
+	return elasticsearch.QueryFilter{
+		Query: elasticsearch.MatchQuery{
+			Field: "Name",
+			Query: value,
+			Type:  "phrase",
+		},
 	}
 }
 
 // ownerFilter generates a filter that will match against the
 // owner taken from the URL.
 func ownerFilter(value string) elasticsearch.Filter {
-	var re string
-	if value == "" {
-		re = `cs:[^\~].*`
-	} else {
-		re = `cs:\~` + elasticsearch.EscapeRegexp(value) + "/.*"
-	}
-	return elasticsearch.RegexpFilter{
-		Field:  "URL",
-		Regexp: re,
+	return elasticsearch.QueryFilter{
+		Query: elasticsearch.MatchQuery{
+			Field: "User",
+			Query: value,
+			Type:  "phrase",
+		},
 	}
 }
 
 // seriesFilter generates a filter that will match against the
 // series taken from the URL.
 func seriesFilter(value string) elasticsearch.Filter {
-	return elasticsearch.RegexpFilter{
-		Field:  "URL",
-		Regexp: `cs:(\~[^/]*/)?` + elasticsearch.EscapeRegexp(value) + "/.*-[0-9]+",
+	return elasticsearch.QueryFilter{
+		Query: elasticsearch.MatchQuery{
+			Field: "Series",
+			Query: value,
+			Type:  "phrase",
+		},
 	}
 }
 
