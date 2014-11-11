@@ -285,6 +285,42 @@ var metaEndpoints = []metaEndpoint{{
 			Tags: []string{"openstack", "storage"},
 		})
 	},
+}, {
+	name: "id-user",
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		return params.IdUserResponse{url.User}, nil
+	},
+	checkURL: "cs:~bob/utopic/wordpress-2",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.Equals, params.IdUserResponse{"bob"})
+	},
+}, {
+	name: "id-series",
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		return params.IdSeriesResponse{url.Series}, nil
+	},
+	checkURL: "cs:utopic/category-2",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.Equals, params.IdSeriesResponse{"utopic"})
+	},
+}, {
+	name: "id-name",
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		return params.IdNameResponse{url.Name}, nil
+	},
+	checkURL: "cs:utopic/category-2",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.Equals, params.IdNameResponse{"category"})
+	},
+}, {
+	name: "id-revision",
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		return params.IdRevisionResponse{url.Revision}, nil
+	},
+	checkURL: "cs:utopic/category-2",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.Equals, params.IdRevisionResponse{2})
+	},
 }}
 
 // TestEndpointGet tries to ensure that the endpoint
@@ -333,8 +369,10 @@ var testEntities = []string{
 	"cs:bundle/wordpress-simple-42",
 	// A charm with some actions.
 	"cs:precise/dummy-10",
-	// A charm with some tags
+	// A charm with some tags.
 	"cs:utopic/category-2",
+	// A charm with a user.
+	"cs:~bob/utopic/wordpress-2",
 }
 
 func (s *APISuite) addTestEntities(c *gc.C) []*charm.Reference {

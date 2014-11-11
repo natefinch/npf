@@ -123,5 +123,29 @@ type SearchResponse struct {
 	Results    []SearchResult
 }
 
+// IdUserResponse holds the result of an id/meta/id-user GET request.
+// See http://tinyurl.com/o7xmhz2
+type IdUserResponse struct {
+	User string
+}
+
+// IdSeriesResponse holds the result of an id/meta/id-series GET request.
+// See http://tinyurl.com/pnwmr6j
+type IdSeriesResponse struct {
+	Series string
+}
+
+// IdNameResponse holds the result of an id/meta/id-name GET request.
+// See http://tinyurl.com/m5q8gcy
+type IdNameResponse struct {
+	Name string
+}
+
+// IdRevisionResponse holds the result of an id/meta/id-revision GET request.
+// See http://tinyurl.com/ntd3coz
+type IdRevisionResponse struct {
+	Revision int
+}
+
 // BzrDigestKey is the extra-info key used to store the Bazaar digest
 const BzrDigestKey = "bzr-digest"

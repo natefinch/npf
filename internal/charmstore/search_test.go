@@ -49,13 +49,13 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	for _, ref := range exportTestCharms {
-		var expected mongodoc.Entity
+		var entity *mongodoc.Entity
+		err = s.store.DB.Entities().FindId(ref).One(&entity)
+		c.Assert(err, gc.IsNil)
 		var actual json.RawMessage
-		err = s.store.DB.Entities().FindId(ref).One(&expected)
+		err = s.store.ES.GetDocument(typeName, s.store.ES.getID(entity), &actual)
 		c.Assert(err, gc.IsNil)
-		err = s.store.ES.GetDocument(typeName, s.store.ES.getID(&expected), &actual)
-		c.Assert(err, gc.IsNil)
-		c.Assert([]byte(actual), storetesting.JSONEquals, expected)
+		c.Assert([]byte(actual), storetesting.JSONEquals, esDocForEntity(entity))
 	}
 }
 
@@ -73,7 +73,7 @@ func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	err = s.store.ES.GetDocument(typeName, s.store.ES.getID(old), &actual)
 	c.Assert(err, gc.IsNil)
-	c.Assert([]byte(actual), storetesting.JSONEquals, expected)
+	c.Assert([]byte(actual), storetesting.JSONEquals, esDocForEntity(expected))
 }
 
 func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
@@ -367,5 +367,14 @@ func assertSearchResults(c *gc.C, obtained SearchResult, expected []string) {
 	sort.Strings(ids)
 	for i, v := range expected {
 		c.Assert(ids[i], gc.Equals, v)
+	}
+}
+
+func esDocForEntity(e *mongodoc.Entity) esDoc {
+	return esDoc{
+		Entity: e,
+		Name:   e.URL.Name,
+		User:   e.URL.User,
+		Series: e.URL.Series,
 	}
 }

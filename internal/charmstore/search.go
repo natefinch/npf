@@ -26,14 +26,27 @@ type StoreElasticSearch struct {
 
 const typeName = "entity"
 
+type esDoc struct {
+	*mongodoc.Entity
+	Name   string
+	User   string
+	Series string
+}
+
 // Put inserts the mongodoc.Entity into elasticsearch if elasticsearch
 // is configured.
 func (ses *StoreElasticSearch) put(entity *mongodoc.Entity) error {
 	if ses == nil || ses.Index == nil {
 		return nil
 	}
-	_, err := ses.PutDocumentVersion(typeName, ses.getID(entity), int64(entity.URL.Revision), entity)
-	return err
+	doc := esDoc{
+		Entity: entity,
+		Name:   entity.URL.Name,
+		User:   entity.URL.User,
+		Series: entity.URL.Series,
+	}
+	_, err := ses.PutDocumentVersion(typeName, ses.getID(entity), int64(entity.URL.Revision), doc)
+	return errgo.Mask(err)
 }
 
 // getID returns an ID for the elasticsearch document based on the contents of the

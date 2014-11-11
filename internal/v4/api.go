@@ -80,6 +80,10 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 				h.putMetaExtraInfoWithKey,
 				"extrainfo",
 			),
+			"id-name":       h.entityHandler(h.metaIdName, "_id"),
+			"id-user":       h.entityHandler(h.metaIdUser, "_id"),
+			"id-revision":   h.entityHandler(h.metaIdRevision, "_id"),
+			"id-series":     h.entityHandler(h.metaIdSeries, "_id"),
 			"manifest":      h.entityHandler(h.metaManifest, "blobname"),
 			"revision-info": router.SingleIncludeHandler(h.metaRevisionInfo),
 			"stats":         h.entityHandler(h.metaStats),
@@ -437,6 +441,38 @@ func (h *Handler) metaRevisionInfo(id *charm.Reference, path string, flags url.V
 
 	// Write the response in JSON format.
 	return response, nil
+}
+
+// GET id/meta/id-user
+// http://tinyurl.com/o7xmhz2
+func (h *Handler) metaIdUser(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	return params.IdUserResponse{
+		User: id.User,
+	}, nil
+}
+
+// GET id/meta/id-series
+// http://tinyurl.com/pnwmr6j
+func (h *Handler) metaIdSeries(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	return params.IdSeriesResponse{
+		Series: id.Series,
+	}, nil
+}
+
+// GET id/meta/id-name
+// http://tinyurl.com/m5q8gcy
+func (h *Handler) metaIdName(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	return params.IdNameResponse{
+		Name: id.Name,
+	}, nil
+}
+
+// GET id/meta/id-revision
+// http://tinyurl.com/ntd3coz
+func (h *Handler) metaIdRevision(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	return params.IdRevisionResponse{
+		Revision: id.Revision,
+	}, nil
 }
 
 type entitiesByRevision []mongodoc.Entity
