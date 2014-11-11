@@ -2,6 +2,24 @@
   "entity" : {
     "dynamic" : "false",
     "properties" : {
+      "Name" : {
+        "type" : "string",
+        "index" : "not_analyzed",
+        "omit_norms" : true,
+        "index_options" : "docs"
+      },
+      "Series" : {
+        "type" : "string",
+        "index" : "not_analyzed",
+        "omit_norms" : true,
+        "index_options" : "docs"
+      },
+      "User" : {
+        "type" : "string",
+        "index" : "not_analyzed",
+        "omit_norms" : true,
+        "index_options" : "docs"
+      },  
       "URL" : {
         "type" : "multi_field",
         "fields" : {
