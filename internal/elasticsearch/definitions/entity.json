@@ -1,7 +1,7 @@
 {
   "entity" : {
     "dynamic" : "false",
-    "properties" : {  
+    "properties" : {
       "Name" : {
         "type" : "string",
         "index" : "not_analyzed",

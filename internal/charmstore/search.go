@@ -145,8 +145,6 @@ func (store *Store) Search(sp SearchParams) (SearchResult, error) {
 func queryFields(sp SearchParams) map[string]float64 {
 	fields := map[string]float64{
 		"URL.ngrams":              8,
-		"Name":                    8,
-		"Series":                  8,
 		"CharmMeta.Categories":    5,
 		"BundleData.Tags":         5,
 		"CharmProvidedInterfaces": 3,
