@@ -354,6 +354,83 @@ func (s *StoreSearchSuite) TestPromulgatedRank(c *gc.C) {
 	c.Assert(res.Results[1].String(), gc.Equals, exportTestCharms["varnish"])
 }
 
+func (s *StoreSearchSuite) TestSorting(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	tests := []struct {
+		about     string
+		sortQuery string
+		results   []string
+	}{{
+		about:     "name ascending",
+		sortQuery: "name",
+		results: []string{
+			exportTestCharms["mysql"],
+			exportTestCharms["varnish"],
+			exportTestCharms["wordpress"],
+			exportTestBundles["wordpress-simple"],
+		},
+	}, {
+		about:     "name descending",
+		sortQuery: "-name",
+		results: []string{
+			exportTestBundles["wordpress-simple"],
+			exportTestCharms["wordpress"],
+			exportTestCharms["varnish"],
+			exportTestCharms["mysql"],
+		},
+	}, {
+		about:     "series ascending",
+		sortQuery: "series,name",
+		results: []string{
+			exportTestBundles["wordpress-simple"],
+			exportTestCharms["wordpress"],
+			exportTestCharms["mysql"],
+			exportTestCharms["varnish"],
+		},
+	}, {
+		about:     "series descending",
+		sortQuery: "-series,name",
+		results: []string{
+			exportTestCharms["mysql"],
+			exportTestCharms["varnish"],
+			exportTestCharms["wordpress"],
+			exportTestBundles["wordpress-simple"],
+		},
+	}, {
+		about:     "owner ascending",
+		sortQuery: "owner,name",
+		results: []string{
+			exportTestCharms["mysql"],
+			exportTestCharms["wordpress"],
+			exportTestBundles["wordpress-simple"],
+			exportTestCharms["varnish"],
+		},
+	}, {
+		about:     "owner descending",
+		sortQuery: "-owner,name",
+		results: []string{
+			exportTestCharms["varnish"],
+			exportTestCharms["mysql"],
+			exportTestCharms["wordpress"],
+			exportTestBundles["wordpress-simple"],
+		},
+	}}
+	for i, test := range tests {
+		c.Logf("test %d. %s", i, test.about)
+		var sp SearchParams
+		err := sp.ParseSortFields(test.sortQuery)
+		c.Assert(err, gc.IsNil)
+		res, err := s.store.Search(sp)
+		c.Assert(err, gc.IsNil)
+		c.Assert(res.Results, gc.HasLen, len(test.results))
+		for i, ref := range res.Results {
+			c.Assert(ref.String(), gc.Equals, test.results[i])
+		}
+	}
+}
+
 // assertSearchResults checks that the results obtained from a search are the same
 // as those in the expected set, but in any order.
 func assertSearchResults(c *gc.C, obtained SearchResult, expected []string) {

@@ -88,13 +88,13 @@ func (s *SearchSuite) TestParseSearchParams(c *gc.C) {
 			Text: "test",
 		},
 	}, {
-		about: "autocomple",
+		about: "autocomplete",
 		query: "autocomplete=1",
 		expectParams: charmstore.SearchParams{
 			AutoComplete: true,
 		},
 	}, {
-		about:       "invalid autocomple",
+		about:       "invalid autocomplete",
 		query:       "autocomplete=true",
 		expectError: `invalid autocomplete parameter: unexpected bool value "true" (must be "0" or "1")`,
 	}, {
@@ -230,6 +230,7 @@ func (s *SearchSuite) TestParseSearchParams(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		sp, err := ParseSearchParams(&req)
 		if test.expectError != "" {
+			c.Assert(err, gc.Not(gc.IsNil))
 			c.Assert(err.Error(), gc.Equals, test.expectError)
 		} else {
 			c.Assert(err, gc.IsNil)
@@ -565,4 +566,92 @@ func (s *SearchSuite) TestSearchIncludeError(c *gc.C) {
 	c.Assert(resp.Results, gc.HasLen, len(exportTestCharms)-1)
 
 	c.Assert(tw.Log(), jc.LogMatches, []string{"cannot retrieve metadata for cs:precise/wordpress-23: cannot open archive data for cs:precise/wordpress-23: .*"})
+}
+
+func (s *SearchSuite) TestSorting(c *gc.C) {
+	tests := []struct {
+		about   string
+		query   string
+		results []string
+	}{{
+		about: "name ascending",
+		query: "sort=name",
+		results: []string{
+			exportTestCharms["mysql"],
+			exportTestCharms["varnish"],
+			exportTestCharms["wordpress"],
+			exportTestBundles["wordpress-simple"],
+		},
+	}, {
+		about: "name descending",
+		query: "sort=-name",
+		results: []string{
+			exportTestBundles["wordpress-simple"],
+			exportTestCharms["wordpress"],
+			exportTestCharms["varnish"],
+			exportTestCharms["mysql"],
+		},
+	}, {
+		about: "series ascending",
+		query: "sort=series,name",
+		results: []string{
+			exportTestBundles["wordpress-simple"],
+			exportTestCharms["wordpress"],
+			exportTestCharms["mysql"],
+			exportTestCharms["varnish"],
+		},
+	}, {
+		about: "series descending",
+		query: "sort=-series&sort=name",
+		results: []string{
+			exportTestCharms["mysql"],
+			exportTestCharms["varnish"],
+			exportTestCharms["wordpress"],
+			exportTestBundles["wordpress-simple"],
+		},
+	}, {
+		about: "owner ascending",
+		query: "sort=owner,name",
+		results: []string{
+			exportTestCharms["mysql"],
+			exportTestCharms["wordpress"],
+			exportTestBundles["wordpress-simple"],
+			exportTestCharms["varnish"],
+		},
+	}, {
+		about: "owner descending",
+		query: "sort=-owner&sort=name",
+		results: []string{
+			exportTestCharms["varnish"],
+			exportTestCharms["mysql"],
+			exportTestCharms["wordpress"],
+			exportTestBundles["wordpress-simple"],
+		},
+	}}
+	for i, test := range tests {
+		c.Logf("test %d. %s", i, test.about)
+		rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+			Handler: s.srv,
+			URL:     storeURL("search?" + test.query),
+		})
+		var sr params.SearchResponse
+		err := json.Unmarshal(rec.Body.Bytes(), &sr)
+		c.Assert(err, gc.IsNil)
+		c.Assert(sr.Results, gc.HasLen, len(test.results))
+		for i, res := range sr.Results {
+			c.Assert(res.Id.String(), gc.Equals, test.results[i])
+		}
+	}
+}
+
+func (s *SearchSuite) TestSortUnsupportedField(c *gc.C) {
+	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("search?sort=foo"),
+	})
+	var e params.Error
+	err := json.Unmarshal(rec.Body.Bytes(), &e)
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.Code, gc.Equals, params.ErrBadRequest)
+	c.Assert(e.Message, gc.Equals, "invalid sort field: foo")
 }
