@@ -216,6 +216,12 @@ func (s Sort) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// Ascending is an Order that orders a sort by ascending through the values.
+var Ascending = Order{"asc"}
+
+// Descending is an Order that orders a sort by descending throuth the values.
+var Descending = Order{"desc"}
+
 // marshalNamedObject provides a helper that creates json objects in a form
 // often required by the elasticsearch query DSL. The objects created
 // take the following form:

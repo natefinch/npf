@@ -117,10 +117,52 @@ type SearchParams struct {
 	Filters map[string][]string
 	// Limit the number of returned items to the specified count.
 	Limit int
-	// Include the following metadata items in the search results
+	// Include the following metadata items in the search results.
 	Include []string
-	// Start the the returned items at a specific offset
+	// Start the the returned items at a specific offset.
 	Skip int
+	// Sort the returned items.
+	sort []sortParam
+}
+
+func (sp *SearchParams) ParseSortFields(f ...string) error {
+	for _, s := range f {
+		for _, s := range strings.Split(s, ",") {
+			var sort sortParam
+			if strings.HasPrefix(s, "-") {
+				sort.Order = sortDescending
+				s = s[1:]
+			}
+			sort.Field = sortFields[s]
+			if sort.Field == "" {
+				return errgo.Newf("%s", s)
+			}
+			sp.sort = append(sp.sort, sort)
+		}
+	}
+
+	return nil
+}
+
+// sortOrder defines the order in which a field should be sorted.
+type sortOrder int
+
+const (
+	sortAscending sortOrder = iota
+	sortDescending
+)
+
+// sortParam represents a field and direction on which results should be sorted.
+type sortParam struct {
+	Field string
+	Order sortOrder
+}
+
+// sortFields contains a mapping from api fieldnames to the esdoc fields to search.
+var sortFields = map[string]string{
+	"name":   "Name",
+	"owner":  "User",
+	"series": "Series",
 }
 
 // SearchResult represents the result of performing a search.
@@ -208,6 +250,11 @@ func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 	qdsl.Query = elasticsearch.FilteredQuery{
 		Query:  q,
 		Filter: createFilters(sp.Filters),
+	}
+
+	// Sorting
+	for _, s := range sp.sort {
+		qdsl.Sort = append(qdsl.Sort, createSort(s))
 	}
 
 	return qdsl
@@ -365,4 +412,16 @@ func typeFilter(value string) elasticsearch.Filter {
 		return bundleFilter
 	}
 	return elasticsearch.NotFilter{bundleFilter}
+}
+
+// createSort creates an elasticsearch.Sort query parameter out of a Sort parameter.
+func createSort(s sortParam) elasticsearch.Sort {
+	sort := elasticsearch.Sort{
+		Field: s.Field,
+		Order: elasticsearch.Ascending,
+	}
+	if s.Order == sortDescending {
+		sort.Order = elasticsearch.Descending
+	}
+	return sort
 }

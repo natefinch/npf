@@ -18,7 +18,7 @@ import (
 
 const maxConcurrency = 20
 
-// GET search[?text=text][&autocomplete=1][&filter=value…][&limit=limit][&include=meta]
+// GET search[?text=text][&autocomplete=1][&filter=value…][&limit=limit][&include=meta][&skip=count][&sort=field[+dir]]
 // http://tinyurl.com/qzobc69
 func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, error) {
 	sp, err := parseSearchParams(req)
@@ -120,6 +120,11 @@ func parseSearchParams(req *http.Request) (charmstore.SearchParams, error) {
 			}
 			if sp.Skip < 0 {
 				return charmstore.SearchParams{}, badRequestf(nil, "invalid skip parameter: expected non-negative integer")
+			}
+		case "sort":
+			err = sp.ParseSortFields(v...)
+			if err != nil {
+				return charmstore.SearchParams{}, badRequestf(err, "invalid sort field")
 			}
 		default:
 			return charmstore.SearchParams{}, badRequestf(nil, "invalid parameter: %s", k)
