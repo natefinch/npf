@@ -83,7 +83,7 @@ just configured, and create the first Juju machine in Digital Ocean:
 Now, it'll take about a minute for the machine to come up.
 
 Discourse *requires* email to function, so you need an account at
-[mandrill](http://maindrill.com), [mailgun](mailgun.com), etc.  They're free, so
+[mandrill](http://mandrill.com), [mailgun](http://mailgun.com), etc.  They're free, so
 don't worry.  From that account you need to get some information to properly set
 up Discourse.  You can do this after installing discourse, but it's faster if
 you do it before and give the configuration at deploy time. (changing settings
