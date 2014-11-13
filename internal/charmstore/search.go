@@ -44,10 +44,23 @@ var seriesBoost = map[string]float64{
 	"utopic":  1.1,
 }
 
+// deprecatedSeries are series that should not show up in search
+// results. This list is used to filter out the charms before they are
+// indexed.
+var deprecatedSeries = map[string]bool{
+	"oneiric": true,
+	"quantal": true,
+	"raring":  true,
+	"saucy":   true,
+}
+
 // Put inserts the mongodoc.Entity into elasticsearch if elasticsearch
 // is configured.
 func (ses *StoreElasticSearch) put(entity *mongodoc.Entity) error {
 	if ses == nil || ses.Index == nil {
+		return nil
+	}
+	if deprecatedSeries[entity.URL.Series] {
 		return nil
 	}
 	doc := esDoc{
