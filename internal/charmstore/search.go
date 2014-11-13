@@ -26,11 +26,22 @@ type StoreElasticSearch struct {
 
 const typeName = "entity"
 
+// esDoc is a mongodoc.Entity that has denormalised values for use in searching.
 type esDoc struct {
 	*mongodoc.Entity
 	Name   string
 	User   string
 	Series string
+}
+
+// seriesBoost defines how much the results for each
+// series will be boosted. Series are currently ranked in
+// reverse order of LTS releases, followed by the latest
+// non-LTS release, followed by everything else.
+var seriesBoost = map[string]float64{
+	"trusty":  1.125,
+	"precise": 1.1125,
+	"utopic":  1.1,
 }
 
 // Put inserts the mongodoc.Entity into elasticsearch if elasticsearch
@@ -231,19 +242,22 @@ func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 		}
 	}
 
-	q = elasticsearch.FunctionScoreQuery{
-		Query: q,
-		Functions: []elasticsearch.Function{
-			elasticsearch.DecayFunction{
-				Function: "linear",
-				Field:    "UploadTime",
-				Scale:    "365d",
-			},
-			elasticsearch.BoostFactorFunction{
-				Filter:      ownerFilter(""),
-				BoostFactor: 1.25,
-			},
+	// Boosting
+	f := []elasticsearch.Function{
+		elasticsearch.BoostFactorFunction{
+			Filter:      ownerFilter(""),
+			BoostFactor: 1.25,
 		},
+	}
+	for k, v := range seriesBoost {
+		f = append(f, elasticsearch.BoostFactorFunction{
+			Filter:      seriesFilter(k),
+			BoostFactor: v,
+		})
+	}
+	q = elasticsearch.FunctionScoreQuery{
+		Query:     q,
+		Functions: f,
 	}
 
 	// Filters
