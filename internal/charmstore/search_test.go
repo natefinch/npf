@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 
@@ -429,6 +430,22 @@ func (s *StoreSearchSuite) TestSorting(c *gc.C) {
 			c.Assert(ref.String(), gc.Equals, test.results[i])
 		}
 	}
+}
+
+func (s *StoreSearchSuite) TestBoosting(c *gc.C) {
+	err := s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	var sp SearchParams
+	res, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(res.Results, gc.HasLen, 4)
+	c.Assert(res.Results, jc.DeepEquals, []*charm.Reference{
+		charm.MustParseReference(exportTestCharms["mysql"]),
+		charm.MustParseReference(exportTestCharms["wordpress"]),
+		charm.MustParseReference(exportTestBundles["wordpress-simple"]),
+		charm.MustParseReference(exportTestCharms["varnish"]),
+	})
 }
 
 // assertSearchResults checks that the results obtained from a search are the same
