@@ -1,21 +1,20 @@
-code.google.com/p/go.crypto	hg	aa2644fe4aa50e3b38d75187b4799b1f0c9ddcef	212
+code.google.com/p/go.crypto	hg	8fec09c61d5d66f460d227fd1df3473d7e015bc6	232
 github.com/ajstarks/svgo	git	89e3ac64b5b3e403a5e7c35ea4f98d45db7b4518	
 github.com/juju/blobstore	git	c8e097e6dc9619475be92918c20de5f2d05ffa0b	
-github.com/juju/errgo	git	2cf7b553faddc588f903020c33e71c527d5e0838	
-github.com/juju/errors	git	11f260fcce20d158a2c68d6d2a7fb6b98e83b658	
+github.com/juju/errors	git	8c374326f1293bcedc0d596e9cfe5af838ed0105	
 github.com/juju/gojsonpointer	git	0154bf5a168b672d8c97d8dd83a54cb60cd088e8	
 github.com/juju/gojsonreference	git	0673d58f64bacac2db34c7d1e87a599d58923981	
 github.com/juju/gojsonschema	git	33fa79718fa9b24e2a04122f91a75496c0f77098	
-github.com/juju/jujusvg	git	83ec5be5e56a0c0b96e531b95e0812186ea5b71b	
-github.com/juju/loggo	git	158009fb40c4a52b3d2c23eb56e72859cfc5321a	
-github.com/juju/names	git	cfcf5a79106d26fce039a35ffca277def4496f4b	
+github.com/juju/jujusvg	git	805fd9aa842cc6fdf283edd3ef55ce581708c1e7	
+github.com/juju/loggo	git	d2fb76909109d51bf42f3671abdee01104dac83f	
+github.com/juju/names	git	84ad1d88f60e93f572e3dfdbdeaeae061d20885a	
 github.com/juju/schema	git	27a52be50766490a6fd3531865095fda6c0eeb6d	
-github.com/juju/testing	git	f31a00bb9066ec19667dd0aa65121ed5d4b1949d	
-github.com/juju/txn	git	ee0346875f2ae9a21442f3ff64409f750f37afbc	
-github.com/juju/utils	git	d39e19a993cc03bb5b99e9718c2fcf889c524a6b	
-gopkg.in/check.v1	git	f74cd4712c294b0b898bc694214563d14caf3b76	
+github.com/juju/testing	git	3cae07cf4f821a476e80255e75c1e3d32ca1d911	
+github.com/juju/txn	git	e02f26c56cfb81c7c1236df499deebb0369bd97c	
+github.com/juju/utils	git	a2a4ba970472d7f55382941ab1d38cc270ae4a0e	
+gopkg.in/check.v1	git	64131543e7896d5bcc6bd5a76287eb75ea96c673	
 gopkg.in/errgo.v1	git	81357a83344ddd9f7772884874e5622c2a3da21c	
-gopkg.in/juju/charm.v4	git	f7e5613ff75457d2700d1c3269546cc903ea0471	
-gopkg.in/mgo.v2	git	dc255bb679efa273b6544a03261c4053505498a4	
-gopkg.in/yaml.v1	git	1b9791953ba4027efaeb728c7355e542a203be5e	
-launchpad.net/tomb	bzr	gustavo@niemeyer.net-20130531003818-70ikdgklbxopn8x4	17
+gopkg.in/juju/charm.v4	git	1e65bcc779a55e4681bfd4d6d36a3b60f154740c	
+gopkg.in/mgo.v2	git	e2e914857713db7497cca2bd7fc0b030fc9cb22d	
+gopkg.in/yaml.v1	git	9f9df34309c04878acc86042b16630b0f696e1de	
+launchpad.net/tomb	bzr	gustavo@niemeyer.net-20140529072043-hzcrlnl3ygvg914q	18
