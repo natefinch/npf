@@ -212,8 +212,12 @@ func (db *Database) do(method, url string, body, v interface{}) error {
 		var eserr ElasticSearchError
 		if err = json.Unmarshal(b, &eserr); err != nil {
 			log.Debugf("*** %s", err)
-			eserr.Err = fmt.Sprintf(`elasticsearch status "%s"`, resp.Status)
+		}
+		if eserr.Status == 0 {
 			eserr.Status = resp.StatusCode
+		}
+		if eserr.Err == "" {
+			eserr.Err = fmt.Sprintf(`elasticsearch status "%s"`, resp.Status)
 		}
 		return eserr
 	}

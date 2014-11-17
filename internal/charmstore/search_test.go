@@ -60,6 +60,28 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 	}
 }
 
+func (s *StoreSearchSuite) TestNoExportDeprecated(c *gc.C) {
+	charmArchive := storetesting.Charms.CharmDir("mysql")
+	url := charm.MustParseReference("cs:saucy/mysql-4")
+	err := s.store.AddCharmWithArchive(url, charmArchive)
+	c.Assert(err, gc.IsNil)
+	err = s.store.ExportToElasticSearch()
+	c.Assert(err, gc.IsNil)
+
+	var entity *mongodoc.Entity
+	err = s.store.DB.Entities().FindId("cs:trusty/mysql-7").One(&entity)
+	c.Assert(err, gc.IsNil)
+	present, err := s.store.ES.Database.EnsureID(s.store.ES.Index.Index, typeName, s.store.ES.getID(entity))
+	c.Assert(err, gc.IsNil)
+	c.Assert(present, gc.Equals, true)
+
+	err = s.store.DB.Entities().FindId("cs:saucy/mysql-4").One(&entity)
+	c.Assert(err, gc.IsNil)
+	present, err = s.store.ES.Database.EnsureID(s.store.ES.Index.Index, typeName, s.store.ES.getID(entity))
+	c.Assert(err, gc.IsNil)
+	c.Assert(present, gc.Equals, false)
+}
+
 func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("cs:precise/wordpress-22")
