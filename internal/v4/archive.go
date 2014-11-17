@@ -240,6 +240,9 @@ func (h *Handler) addEntity(id *charm.Reference, r io.ReadSeeker, blobName strin
 	if err != nil {
 		return errgo.Notef(err, "cannot read charm archive")
 	}
+	if err := checkCharmIsValid(ch); err != nil {
+		return errgo.Mask(err)
+	}
 	if err := h.store.AddCharm(ch, charmstore.AddParams{
 		URL:      id,
 		BlobName: blobName,
@@ -247,6 +250,28 @@ func (h *Handler) addEntity(id *charm.Reference, r io.ReadSeeker, blobName strin
 		BlobSize: contentLength,
 	}); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
+	}
+	return nil
+}
+
+func checkCharmIsValid(ch charm.Charm) error {
+	m := ch.Meta()
+	for _, rels := range []map[string]charm.Relation{m.Provides, m.Requires, m.Peers} {
+		if err := checkRelationsAreValid(rels); err != nil {
+			return errgo.Mask(err)
+		}
+	}
+	return nil
+}
+
+func checkRelationsAreValid(rels map[string]charm.Relation) error {
+	for _, rel := range rels {
+		if rel.Name == "relation-name" {
+			return errgo.Newf("relation %s has almost certainly not been changed from the template", rel.Name)
+		}
+		if rel.Interface == "interface-name" {
+			return errgo.Newf("interface %s in relation %s has almost certainly not been changed from the template", rel.Interface, rel.Name)
+		}
 	}
 	return nil
 }

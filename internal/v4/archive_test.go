@@ -22,6 +22,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
+	charmtesting "gopkg.in/juju/charm.v4/testing"
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/blobstore"
@@ -424,6 +425,99 @@ func (s *ArchiveSuite) TestPostInvalidCharmZip(c *gc.C) {
 
 func (s *ArchiveSuite) TestPostInvalidBundleZip(c *gc.C) {
 	s.assertCannotUpload(c, "bundle/wordpress", invalidZip(), "cannot read bundle archive: zip: not a valid zip file")
+}
+
+var postInvalidCharmMetadataTests = []struct {
+	about       string
+	spec        charmtesting.CharmSpec
+	expectError string
+}{{
+	about: "bad provider relation name",
+	spec: charmtesting.CharmSpec{
+		Meta: `
+name: foo
+summary: bar
+description: d
+provides:
+    relation-name:
+        interface: baz
+`,
+	},
+	expectError: "relation relation-name has almost certainly not been changed from the template",
+}, {
+	about: "bad provider interface name",
+	spec: charmtesting.CharmSpec{
+		Meta: `
+name: foo
+summary: bar
+description: d
+provides:
+    baz:
+        interface: interface-name
+`,
+	},
+	expectError: "interface interface-name in relation baz has almost certainly not been changed from the template",
+}, {
+	about: "bad requirer relation name",
+	spec: charmtesting.CharmSpec{
+		Meta: `
+name: foo
+summary: bar
+description: d
+requires:
+    relation-name:
+        interface: baz
+`,
+	},
+	expectError: "relation relation-name has almost certainly not been changed from the template",
+}, {
+	about: "bad requirer interface name",
+	spec: charmtesting.CharmSpec{
+		Meta: `
+name: foo
+summary: bar
+description: d
+requires:
+    baz:
+        interface: interface-name
+`,
+	},
+	expectError: "interface interface-name in relation baz has almost certainly not been changed from the template",
+}, {
+	about: "bad peer relation name",
+	spec: charmtesting.CharmSpec{
+		Meta: `
+name: foo
+summary: bar
+description: d
+peers:
+    relation-name:
+        interface: baz
+`,
+	},
+	expectError: "relation relation-name has almost certainly not been changed from the template",
+}, {
+	about: "bad peer interface name",
+	spec: charmtesting.CharmSpec{
+		Meta: `
+name: foo
+summary: bar
+description: d
+peers:
+    baz:
+        interface: interface-name
+`,
+	},
+	expectError: "interface interface-name in relation baz has almost certainly not been changed from the template",
+}}
+
+func (s *ArchiveSuite) TestPostInvalidCharmMetadata(c *gc.C) {
+	for i, test := range postInvalidCharmMetadataTests {
+		c.Logf("test %d: %s", i, test.about)
+		ch := charmtesting.NewCharm(c, test.spec)
+		r := bytes.NewReader(ch.ArchiveBytes())
+		s.assertCannotUpload(c, "trusty/wordpress", r, test.expectError)
+	}
 }
 
 func (s *ArchiveSuite) TestPostInvalidBundleData(c *gc.C) {
