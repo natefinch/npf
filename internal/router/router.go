@@ -131,6 +131,7 @@ type Router struct {
 	handlers   *Handlers
 	handler    http.Handler
 	resolveURL func(ref *charm.Reference) error
+	exists     func(id *charm.Reference) (bool, error)
 }
 
 // New returns a charm store router that will route requests to
@@ -141,10 +142,19 @@ type Router struct {
 // fields of its argument URL if they are not specified.
 // The Cause of the resolveURL error will be left unchanged,
 // as for the handlers.
-func New(handlers *Handlers, resolveURL func(url *charm.Reference) error) *Router {
+//
+// The exists function may be called to test whether an entity
+// exists when an API endpoint needs to know that
+// but has no appropriate handler to call.
+func New(
+	handlers *Handlers,
+	resolveURL func(url *charm.Reference) error,
+	exists func(url *charm.Reference) (bool, error),
+) *Router {
 	r := &Router{
 		handlers:   handlers,
 		resolveURL: resolveURL,
+		exists:     exists,
 	}
 	mux := NewServeMux()
 	mux.Handle("/meta/", http.StripPrefix("/meta", HandleErrors(r.serveBulkMeta)))
@@ -285,7 +295,21 @@ func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface
 	if key == "any" {
 		// GET id/meta/any?[include=meta[&include=meta...]]
 		// http://tinyurl.com/q5vcjpk
-		meta, err := r.GetMetadata(id, req.Form["include"])
+		includes := req.Form["include"]
+		// If there are no includes, we have no handlers to generate
+		// a "not found" error when the id doesn't exist, so we need
+		// to check explicitly.
+		if len(includes) == 0 {
+			exists, err := r.exists(id)
+			if err != nil {
+				return nil, errgo.Notef(err, "cannot determine existence of %q", id)
+			}
+			if !exists {
+				return nil, errgo.WithCausef(nil, params.ErrNotFound, "")
+			}
+			return params.MetaAnyResponse{Id: id}, nil
+		}
+		meta, err := r.GetMetadata(id, includes)
 		if err != nil {
 			// Note: preserve error cause from handlers.
 			return nil, errgo.Mask(err, errgo.Any)
@@ -307,7 +331,7 @@ func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface
 		}
 		return results[0], nil
 	}
-	return nil, errgo.WithCausef(nil, params.ErrNotFound, "unknown metadata %q", key)
+	return nil, errgo.WithCausef(nil, params.ErrNotFound, "unknown metadata %q", strings.TrimPrefix(req.URL.Path, "/"))
 }
 
 const jsonContentType = "application/json"
@@ -452,7 +476,7 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 			return nil, errgo.Mask(err, errgo.Any)
 		}
 		meta, err := r.serveMetaGet(url, req)
-		if errgo.Cause(err) == params.ErrMetadataNotFound {
+		if cause := errgo.Cause(err); cause == params.ErrNotFound || cause == params.ErrMetadataNotFound {
 			// The relevant data does not exist.
 			// http://tinyurl.com/o5ptfkk
 			continue

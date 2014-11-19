@@ -602,6 +602,37 @@ func (s *APISuite) TestMetaEndpointsAny(c *gc.C) {
 	}
 }
 
+func (s *APISuite) TestMetaAnyWithNoIncludesAndNoEntity(c *gc.C) {
+	wordpressURL, _ := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("precise/wordpress-1/meta/any"),
+		ExpectStatus: http.StatusNotFound,
+		ExpectBody: params.Error{
+			Code:    params.ErrNotFound,
+			Message: "not found",
+		},
+	})
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("meta/any?id=precise/wordpress-23&id=precise/wordpress-1"),
+		ExpectStatus: http.StatusOK,
+		ExpectBody: map[string]interface{}{
+			"precise/wordpress-23": params.MetaAnyResponse{
+				Id: wordpressURL,
+			},
+		},
+	})
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("precise/wordpress-23/meta/any"),
+		ExpectStatus: http.StatusOK,
+		ExpectBody: params.MetaAnyResponse{
+			Id: wordpressURL,
+		},
+	})
+}
+
 // In this test we rely on the charm.v2 testing repo package and
 // dummy charm that has actions included.
 func (s *APISuite) TestMetaCharmActions(c *gc.C) {
