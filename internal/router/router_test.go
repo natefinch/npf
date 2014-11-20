@@ -40,6 +40,7 @@ var routerGetTests = []struct {
 	expectBody       interface{}
 	expectQueryCount int32
 	resolveURL       func(*charm.Reference) error
+	exists           func(*charm.Reference) (bool, error)
 }{{
 	about: "global handler",
 	handlers: Handlers{
@@ -374,6 +375,14 @@ var routerGetTests = []struct {
 		Message: `unknown metadata "foo"`,
 	},
 }, {
+	about:        "meta sub-handler that's not found",
+	urlStr:       "/precise/wordpress-42/meta/foo/bar",
+	expectStatus: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: `unknown metadata "foo/bar"`,
+	},
+}, {
 	about: "meta handler with nil data",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
@@ -431,11 +440,25 @@ var routerGetTests = []struct {
 		Message: "a message",
 	},
 }, {
-	about:        "meta/any, no includes",
-	urlStr:       "/precise/wordpress-42/meta/any",
+	about:  "meta/any, no includes, id exists",
+	urlStr: "/precise/wordpress-42/meta/any",
+	exists: func(id *charm.Reference) (bool, error) {
+		return true, nil
+	},
 	expectStatus: http.StatusOK,
 	expectBody: params.MetaAnyResponse{
 		Id: charm.MustParseReference("cs:precise/wordpress-42"),
+	},
+}, {
+	about:  "meta/any, no includes, id does not exist",
+	urlStr: "/precise/wordpress/meta/any",
+	exists: func(id *charm.Reference) (bool, error) {
+		return false, nil
+	},
+	expectStatus: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: "not found",
 	},
 }, {
 	about:  "meta/any, some includes all using same key",
@@ -720,6 +743,23 @@ var routerGetTests = []struct {
 	expectBody: map[string]string{
 		"bundle/something-24": "bundlefoo",
 	},
+}, {
+	about:  "bulk meta handler with entity not found",
+	urlStr: "/meta/foo?id=bundle/something-24&id=precise/wordpress-23",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": SingleIncludeHandler(func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+				if id.Revision == 23 {
+					return nil, errgo.WithCausef(nil, params.ErrNotFound, "")
+				}
+				return "something", nil
+			}),
+		},
+	},
+	expectStatus: http.StatusOK,
+	expectBody: map[string]string{
+		"bundle/something-24": "something",
+	},
 }}
 
 // newResolveURL returns a URL resolver that resolves
@@ -754,7 +794,11 @@ func (s *RouterSuite) TestRouterGet(c *gc.C) {
 		if test.resolveURL != nil {
 			resolve = test.resolveURL
 		}
-		router := New(&test.handlers, resolve)
+		exists := alwaysExists
+		if test.exists != nil {
+			exists = test.exists
+		}
+		router := New(&test.handlers, resolve, exists)
 		// Note that fieldSelectHandler increments queryCount each time
 		// a query is made.
 		queryCount = 0
@@ -773,7 +817,7 @@ func (s *RouterSuite) TestCORSHeaders(c *gc.C) {
 		Global: map[string]http.Handler{
 			"foo": http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {}),
 		},
-	}, noResolveURL)
+	}, noResolveURL, alwaysExists)
 	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
 		Handler: h,
 		URL:     "/foo",
@@ -784,7 +828,7 @@ func (s *RouterSuite) TestCORSHeaders(c *gc.C) {
 }
 
 func (s *RouterSuite) TestOptionsHTTPMethod(c *gc.C) {
-	h := New(&Handlers{}, noResolveURL)
+	h := New(&Handlers{}, noResolveURL, alwaysExists)
 	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
 		Handler: h,
 		Method:  "OPTIONS",
@@ -1327,7 +1371,7 @@ func (s *RouterSuite) TestRouterPut(c *gc.C) {
 		}
 		bodyVal, err := json.Marshal(test.body)
 		c.Assert(err, gc.IsNil)
-		router := New(&test.handlers, resolve)
+		router := New(&test.handlers, resolve, alwaysExists)
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 			Handler: router,
 			URL:     test.urlStr,
@@ -1396,7 +1440,7 @@ func (s *RouterSuite) TestRouterPutWithInvalidContent(c *gc.C) {
 				"foo": testMetaHandler(0),
 			},
 		}
-		router := New(handlers, noResolveURL)
+		router := New(handlers, noResolveURL, alwaysExists)
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 			Handler: router,
 			URL:     test.urlStr,
@@ -1446,7 +1490,7 @@ func (s *RouterSuite) TestMethodsThatPassThroughUnresolvedId(c *gc.C) {
 		} else {
 			resp.CharmURL = "cs:wordpress"
 		}
-		router := New(&handlers, newResolveURL("series", 1234))
+		router := New(&handlers, newResolveURL("series", 1234), alwaysExists)
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 			Handler:    router,
 			Body:       strings.NewReader(""),
@@ -1456,6 +1500,10 @@ func (s *RouterSuite) TestMethodsThatPassThroughUnresolvedId(c *gc.C) {
 			ExpectBody: resp,
 		})
 	}
+}
+
+func alwaysExists(*charm.Reference) (bool, error) {
+	return true, nil
 }
 
 var getMetadataTests = []struct {
@@ -1506,7 +1554,7 @@ func (s *RouterSuite) TestGetMetadata(c *gc.C) {
 				"item2": fieldSelectHandler("handler2", 0, "item2"),
 				"test":  testMetaHandler(0),
 			},
-		}, noResolveURL)
+		}, noResolveURL, alwaysExists)
 		id := charm.MustParseReference(test.id)
 		result, err := router.GetMetadata(id, test.includes)
 		if test.expectError != "" {

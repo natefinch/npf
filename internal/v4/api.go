@@ -92,7 +92,7 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 			// endpoints not yet implemented:
 			// "color": router.SingleIncludeHandler(h.metaColor),
 		},
-	}, h.resolveURL)
+	}, h.resolveURL, h.entityExists)
 	return h
 }
 
@@ -169,6 +169,17 @@ func (h *Handler) updateEntity(id *charm.Reference, fields map[string]interface{
 		return errgo.Notef(err, "cannot update %q", id)
 	}
 	return nil
+}
+
+func (h *Handler) entityExists(id *charm.Reference) (bool, error) {
+	_, err := h.entityQuery(id, nil)
+	if errgo.Cause(err) == params.ErrNotFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, errgo.Mask(err)
+	}
+	return true, nil
 }
 
 func (h *Handler) entityQuery(id *charm.Reference, selector map[string]int) (interface{}, error) {
