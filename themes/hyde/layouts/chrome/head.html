@@ -7,10 +7,13 @@
   <!-- Enable responsiveness on mobile devices-->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 
-  {{with .Params.repo}}
-  <meta name="go-import" content="npf.io/{{.}} git https://gopkg.in/natefinch/{{.}}">
+  {{if .Params.repo}}
+    {{if .Params.pkg}}
+    <meta name="go-import" content="npf.io/{{.Params.pkg}} git https://gopkg.in/natefinch/{{.Params.repo}}">
+    {{else}}
+    <meta name="go-import" content="npf.io/{{.Params.repo}} git https://gopkg.in/natefinch/{{.Params.repo}}">   
+    {{end}}
   {{end}}
-
 
   <title> {{ .Title }} {{if ne .Title .Site.Title}} &middot; {{ .Site.Title }} {{end}}</title>
 
