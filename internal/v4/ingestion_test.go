@@ -330,11 +330,6 @@ var postIngestionLogErrorsTests = []struct {
 	expectMessage string
 	expectCode    params.ErrorCode
 }{{
-	about:         "no content type",
-	expectStatus:  http.StatusBadRequest,
-	expectMessage: `unexpected Content-Type ""; expected 'application/json'`,
-	expectCode:    params.ErrBadRequest,
-}, {
 	about:         "invalid content type",
 	contentType:   "application/zip",
 	expectStatus:  http.StatusBadRequest,
@@ -342,21 +337,18 @@ var postIngestionLogErrorsTests = []struct {
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid body",
-	contentType:   "application/json",
 	body:          []byte("!"),
 	expectStatus:  http.StatusBadRequest,
 	expectMessage: "cannot unmarshal body: invalid character '!' looking for beginning of value",
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid log message",
-	contentType:   "application/json",
 	body:          makeByteLog([]byte("!"), nil, params.IngestionInfo),
 	expectStatus:  http.StatusBadRequest,
 	expectMessage: "cannot unmarshal the ingestion log message: invalid character '!' looking for beginning of value",
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid log level",
-	contentType:   "application/json",
 	body:          makeByteLog(rawMessage("message"), nil, params.IngestionLogLevel(42)),
 	expectStatus:  http.StatusBadRequest,
 	expectMessage: "invalid ingestion log level",
@@ -367,6 +359,9 @@ func (s *ingestionSuite) TestPostIngestionLogErrors(c *gc.C) {
 	url := storeURL("debug/ingestion")
 	for i, test := range postIngestionLogErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
+		if test.contentType == "" {
+			test.contentType = "application/json"
+		}
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 			Handler: s.srv,
 			URL:     url,
@@ -389,9 +384,12 @@ func (s *ingestionSuite) TestPostIngestionLogErrors(c *gc.C) {
 func (s *ingestionSuite) TestPostIngestionLogUnauthorizedError(c *gc.C) {
 	// Add a non-parsable log message to the db.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
-		Handler:      s.srv,
-		URL:          storeURL("debug/ingestion"),
-		Method:       "POST",
+		Handler: s.srv,
+		URL:     storeURL("debug/ingestion"),
+		Method:  "POST",
+		Header: http.Header{
+			"Content-Type": {"application/json"},
+		},
 		ExpectStatus: http.StatusUnauthorized,
 		ExpectBody: params.Error{
 			Message: "authentication failed: invalid or missing HTTP auth header",
