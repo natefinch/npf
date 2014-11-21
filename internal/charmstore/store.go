@@ -66,6 +66,9 @@ func (s *Store) ensureIndexes() error {
 	}, {
 		s.DB.Entities(),
 		mgo.Index{Key: []string{"uploadtime"}},
+	}, {
+		s.DB.IngestionLogs(),
+		mgo.Index{Key: []string{"urls"}},
 	}}
 	for _, idx := range indexes {
 		err := idx.c.EnsureIndex(idx.i)
@@ -555,6 +558,20 @@ func bundleCharms(data *charm.BundleData) ([]*charm.Reference, error) {
 	return urls, nil
 }
 
+// AddIngestionLog adds an ingestion log to the database.
+func (s *Store) AddIngestionLog(message []byte, urls []*charm.Reference, level mongodoc.IngestionLogLevel) error {
+	log := &mongodoc.IngestionLog{
+		Message: message,
+		Level:   level,
+		URLs:    urls,
+		Time:    time.Now(),
+	}
+	if err := s.DB.IngestionLogs().Insert(log); err != nil {
+		return errgo.Mask(err)
+	}
+	return nil
+}
+
 // StoreDatabase wraps an mgo.DB ands adds a few convenience methods.
 type StoreDatabase struct {
 	*mgo.Database
@@ -580,12 +597,18 @@ func (s StoreDatabase) Entities() *mgo.Collection {
 	return s.C("entities")
 }
 
+// IngestionLogs returns the mongo collection where ingestion logs are stored.
+func (s StoreDatabase) IngestionLogs() *mgo.Collection {
+	return s.C("ingestionlogs")
+}
+
 // allCollections holds for each collection used by the charm store a
 // function returns that collection.
 var allCollections = []func(StoreDatabase) *mgo.Collection{
 	StoreDatabase.StatCounters,
 	StoreDatabase.StatTokens,
 	StoreDatabase.Entities,
+	StoreDatabase.IngestionLogs,
 }
 
 // Collections returns a slice of all the collections used

@@ -7,6 +7,7 @@
 package params
 
 import (
+	"encoding/json"
 	"time"
 
 	"gopkg.in/juju/charm.v4"
@@ -149,3 +150,42 @@ type IdRevisionResponse struct {
 
 // BzrDigestKey is the extra-info key used to store the Bazaar digest
 const BzrDigestKey = "bzr-digest"
+
+// IngestionLogLevel defines ingestion log levels to be used in ingestion log
+// requests and responses.
+type IngestionLogLevel string
+
+const (
+	IngestionInfo  IngestionLogLevel = "info"
+	IngestionError IngestionLogLevel = "error"
+)
+
+// IngestionLog holds the representation of a log message sent while
+// ingesting/uploading charms or bundles.
+type IngestionLog struct {
+	// Message holds the log message.
+	Message []byte
+
+	// Level holds the log level.
+	Level IngestionLogLevel
+
+	// URLs holds a slice of entity URLs associated with the log message.
+	URLs []*charm.Reference
+}
+
+// IngestionLogResponse represents a ingestion log and is used in the responses
+// to debug/ingestion GET requests.
+// See http://tinyurl.com/nj77rcr
+type IngestionLogResponse struct {
+	// Message holds the log message.
+	Message json.RawMessage
+
+	// Level holds the log level as a string.
+	Level IngestionLogLevel
+
+	// URLs holds a slice of entity URLs associated with the log message.
+	URLs []*charm.Reference
+
+	// Time holds the time of the log.
+	Time time.Time
+}

@@ -80,6 +80,30 @@ type Entity struct {
 	Contents map[FileId]ZipFile `json:",omitempty" bson:",omitempty"`
 }
 
+// IngestionLog holds the in-database representation of a log message sent
+// while ingesting/uploading charms or bundles.
+type IngestionLog struct {
+	// Message holds the log message.
+	Message []byte
+
+	// Level holds the log level.
+	Level IngestionLogLevel
+
+	// URLs holds a slice of entity URLs associated with the log message.
+	URLs []*charm.Reference
+
+	// Time holds the time of the log.
+	Time time.Time
+}
+
+// IngestionLogLevel holds the log level associated with an ingestion log.
+type IngestionLogLevel int
+
+const (
+	IngestionInfo IngestionLogLevel = iota
+	IngestionError
+)
+
 type FileId string
 
 const (
