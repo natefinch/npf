@@ -404,10 +404,7 @@ func makeByteLog(message json.RawMessage, urls []*charm.Reference, level params.
 	log := &params.IngestionLog{
 		Message: message,
 		Level:   level,
-		URLs: []*charm.Reference{
-			charm.MustParseReference("trusty/django"),
-			charm.MustParseReference("utopic/rails"),
-		},
+		URLs:    urls,
 	}
 	b, err := json.Marshal(log)
 	if err != nil {
