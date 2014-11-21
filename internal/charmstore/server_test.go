@@ -107,9 +107,10 @@ func (s *ServerSuite) TestNewServerWithElasticSearch(c *gc.C) {
 			return config, nil
 		})
 	}
-	h, err := NewServer(s.Session.DB("foo"), s.ES.Index(s.TestIndex), serverParams, map[string]NewAPIHandlerFunc{
-		"version1": serveConfig,
-	})
+	h, err := NewServer(s.Session.DB("foo"), &SearchIndex{s.ES, s.TestIndex}, serverParams,
+		map[string]NewAPIHandlerFunc{
+			"version1": serveConfig,
+		})
 	c.Assert(err, gc.IsNil)
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:    h,

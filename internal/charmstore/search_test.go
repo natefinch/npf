@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"sync"
 
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
@@ -19,20 +20,19 @@ import (
 type StoreSearchSuite struct {
 	storetesting.IsolatedMgoESSuite
 	store *Store
+	index SearchIndex
 }
 
 var _ = gc.Suite(&StoreSearchSuite{})
 
 func (s *StoreSearchSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoESSuite.SetUpTest(c)
-	store, err := NewStore(s.Session.DB("foo"), &StoreElasticSearch{
-		s.ES.Index(s.TestIndex),
-	})
-	c.Assert(err, gc.IsNil)
-	err = s.LoadESConfig(s.TestIndex)
+	s.index = SearchIndex{s.ES, s.TestIndex}
+	s.ES.RefreshIndex(".versions")
+	store, err := NewStore(s.Session.DB("foo"), &s.index)
+	s.addCharmsToStore(c, store)
 	c.Assert(err, gc.IsNil)
 	s.store = store
-	s.addCharmsToStore(c, store)
 }
 
 var exportTestCharms = map[string]string{
@@ -46,15 +46,12 @@ var exportTestBundles = map[string]string{
 }
 
 func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
-	err := s.store.ExportToElasticSearch()
-	c.Assert(err, gc.IsNil)
-
 	for _, ref := range exportTestCharms {
 		var entity *mongodoc.Entity
-		err = s.store.DB.Entities().FindId(ref).One(&entity)
+		err := s.store.DB.Entities().FindId(ref).One(&entity)
 		c.Assert(err, gc.IsNil)
 		var actual json.RawMessage
-		err = s.store.ES.GetDocument(typeName, s.store.ES.getID(entity), &actual)
+		err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL), &actual)
 		c.Assert(err, gc.IsNil)
 		c.Assert([]byte(actual), storetesting.JSONEquals, esDocForEntity(entity))
 	}
@@ -65,19 +62,17 @@ func (s *StoreSearchSuite) TestNoExportDeprecated(c *gc.C) {
 	url := charm.MustParseReference("cs:saucy/mysql-4")
 	err := s.store.AddCharmWithArchive(url, charmArchive)
 	c.Assert(err, gc.IsNil)
-	err = s.store.ExportToElasticSearch()
-	c.Assert(err, gc.IsNil)
 
 	var entity *mongodoc.Entity
 	err = s.store.DB.Entities().FindId("cs:trusty/mysql-7").One(&entity)
 	c.Assert(err, gc.IsNil)
-	present, err := s.store.ES.Database.EnsureID(s.store.ES.Index.Index, typeName, s.store.ES.getID(entity))
+	present, err := s.store.ES.HasDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL))
 	c.Assert(err, gc.IsNil)
 	c.Assert(present, gc.Equals, true)
 
 	err = s.store.DB.Entities().FindId("cs:saucy/mysql-4").One(&entity)
 	c.Assert(err, gc.IsNil)
-	present, err = s.store.ES.Database.EnsureID(s.store.ES.Index.Index, typeName, s.store.ES.getID(entity))
+	present, err = s.store.ES.HasDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL))
 	c.Assert(err, gc.IsNil)
 	c.Assert(present, gc.Equals, false)
 }
@@ -85,8 +80,7 @@ func (s *StoreSearchSuite) TestNoExportDeprecated(c *gc.C) {
 func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("cs:precise/wordpress-22")
-	s.store.AddCharmWithArchive(url, charmArchive)
-	err := s.store.ExportToElasticSearch()
+	err := s.store.AddCharmWithArchive(url, charmArchive)
 	c.Assert(err, gc.IsNil)
 	var expected, old *mongodoc.Entity
 	var actual json.RawMessage
@@ -94,7 +88,7 @@ func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	err = s.store.DB.Entities().FindId("cs:precise/wordpress-23").One(&expected)
 	c.Assert(err, gc.IsNil)
-	err = s.store.ES.GetDocument(typeName, s.store.ES.getID(old), &actual)
+	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(old.URL), &actual)
 	c.Assert(err, gc.IsNil)
 	c.Assert([]byte(actual), storetesting.JSONEquals, esDocForEntity(expected))
 }
@@ -321,8 +315,6 @@ var searchTests = []struct {
 }
 
 func (s *StoreSearchSuite) TestSearches(c *gc.C) {
-	err := s.store.ExportToElasticSearch()
-	c.Assert(err, gc.IsNil)
 	s.store.ES.Database.RefreshIndex(s.TestIndex)
 	for i, test := range searchTests {
 		c.Logf("test %d: %s", i, test.about)
@@ -333,8 +325,7 @@ func (s *StoreSearchSuite) TestSearches(c *gc.C) {
 }
 
 func (s *StoreSearchSuite) TestPaginatedSearch(c *gc.C) {
-	err := s.store.ExportToElasticSearch()
-	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	err := s.store.ES.Database.RefreshIndex(s.TestIndex)
 	c.Assert(err, gc.IsNil)
 	sp := SearchParams{
 		Text: "wordpress",
@@ -347,8 +338,7 @@ func (s *StoreSearchSuite) TestPaginatedSearch(c *gc.C) {
 }
 
 func (s *StoreSearchSuite) TestLimitTestSearch(c *gc.C) {
-	err := s.store.ExportToElasticSearch()
-	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	err := s.store.ES.Database.RefreshIndex(s.TestIndex)
 	c.Assert(err, gc.IsNil)
 	sp := SearchParams{
 		Text:  "wordpress",
@@ -363,7 +353,6 @@ func (s *StoreSearchSuite) TestPromulgatedRank(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("varnish")
 	url := charm.MustParseReference("cs:trusty/varnish-1")
 	s.store.AddCharmWithArchive(url, charmArchive)
-	err := s.store.ExportToElasticSearch()
 	s.store.ES.Database.RefreshIndex(s.TestIndex)
 	sp := SearchParams{
 		Filters: map[string][]string{
@@ -378,8 +367,6 @@ func (s *StoreSearchSuite) TestPromulgatedRank(c *gc.C) {
 }
 
 func (s *StoreSearchSuite) TestSorting(c *gc.C) {
-	err := s.store.ExportToElasticSearch()
-	c.Assert(err, gc.IsNil)
 	s.store.ES.Database.RefreshIndex(s.TestIndex)
 	tests := []struct {
 		about     string
@@ -455,8 +442,6 @@ func (s *StoreSearchSuite) TestSorting(c *gc.C) {
 }
 
 func (s *StoreSearchSuite) TestBoosting(c *gc.C) {
-	err := s.store.ExportToElasticSearch()
-	c.Assert(err, gc.IsNil)
 	s.store.ES.Database.RefreshIndex(s.TestIndex)
 	var sp SearchParams
 	res, err := s.store.Search(sp)
@@ -468,6 +453,145 @@ func (s *StoreSearchSuite) TestBoosting(c *gc.C) {
 		charm.MustParseReference(exportTestBundles["wordpress-simple"]),
 		charm.MustParseReference(exportTestCharms["varnish"]),
 	})
+}
+
+func (s *StoreSearchSuite) TestEnsureIndex(c *gc.C) {
+	s.store.ES.Index = s.TestIndex + "-ensure-index"
+	defer s.ES.DeleteDocument(".versions", "version", s.store.ES.Index)
+	indexes, err := s.ES.ListIndexesForAlias(s.store.ES.Index)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(indexes, gc.HasLen, 0)
+	err = s.store.ES.ensureIndexes(false)
+	c.Assert(err, gc.Equals, nil)
+	indexes, err = s.ES.ListIndexesForAlias(s.store.ES.Index)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(indexes, gc.HasLen, 1)
+	index := indexes[0]
+	err = s.store.ES.ensureIndexes(false)
+	c.Assert(err, gc.Equals, nil)
+	indexes, err = s.ES.ListIndexesForAlias(s.store.ES.Index)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(indexes, gc.HasLen, 1)
+	c.Assert(indexes[0], gc.Equals, index)
+}
+
+func (s *StoreSearchSuite) TestEnsureConcurrent(c *gc.C) {
+	s.store.ES.Index = s.TestIndex + "-ensure-index-conc"
+	defer s.ES.DeleteDocument(".versions", "version", s.store.ES.Index)
+	indexes, err := s.ES.ListIndexesForAlias(s.store.ES.Index)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(indexes, gc.HasLen, 0)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		err = s.store.ES.ensureIndexes(false)
+		c.Check(err, gc.Equals, nil)
+		wg.Done()
+	}()
+	err = s.store.ES.ensureIndexes(false)
+	c.Assert(err, gc.Equals, nil)
+	indexes, err = s.ES.ListIndexesForAlias(s.store.ES.Index)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(indexes, gc.HasLen, 1)
+	wg.Wait()
+}
+
+func (s *StoreSearchSuite) TestEnsureIndexForce(c *gc.C) {
+	s.store.ES.Index = s.TestIndex + "-ensure-index-force"
+	defer s.ES.DeleteDocument(".versions", "version", s.store.ES.Index)
+	indexes, err := s.ES.ListIndexesForAlias(s.store.ES.Index)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(indexes, gc.HasLen, 0)
+	err = s.store.ES.ensureIndexes(false)
+	c.Assert(err, gc.Equals, nil)
+	indexes, err = s.ES.ListIndexesForAlias(s.store.ES.Index)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(indexes, gc.HasLen, 1)
+	index := indexes[0]
+	err = s.store.ES.ensureIndexes(true)
+	c.Assert(err, gc.Equals, nil)
+	indexes, err = s.ES.ListIndexesForAlias(s.store.ES.Index)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(indexes, gc.HasLen, 1)
+	c.Assert(indexes[0], gc.Not(gc.Equals), index)
+}
+
+func (s *StoreSearchSuite) TestGetCurrentVersionNoVersion(c *gc.C) {
+	s.store.ES.Index = s.TestIndex + "-current-version"
+	defer s.ES.DeleteDocument(".versions", "version", s.store.ES.Index)
+	v, dv, err := s.store.ES.getCurrentVersion()
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(v, gc.Equals, version{})
+	c.Assert(dv, gc.Equals, int64(0))
+}
+
+func (s *StoreSearchSuite) TestGetCurrentVersionWithVersion(c *gc.C) {
+	s.store.ES.Index = s.TestIndex + "-current-version"
+	defer s.ES.DeleteDocument(".versions", "version", s.store.ES.Index)
+	index, err := s.store.ES.newIndex()
+	c.Assert(err, gc.Equals, nil)
+	updated, err := s.store.ES.updateVersion(version{1, index}, 0)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(updated, gc.Equals, true)
+	v, dv, err := s.store.ES.getCurrentVersion()
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(v, gc.Equals, version{1, index})
+	c.Assert(dv, gc.Equals, int64(1))
+}
+
+func (s *StoreSearchSuite) TestUpdateVersionNew(c *gc.C) {
+	s.store.ES.Index = s.TestIndex + "-update-version"
+	defer s.ES.DeleteDocument(".versions", "version", s.store.ES.Index)
+	index, err := s.store.ES.newIndex()
+	c.Assert(err, gc.Equals, nil)
+	updated, err := s.store.ES.updateVersion(version{1, index}, 0)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(updated, gc.Equals, true)
+}
+
+func (s *StoreSearchSuite) TestUpdateVersionUpdate(c *gc.C) {
+	s.store.ES.Index = s.TestIndex + "-update-version"
+	defer s.ES.DeleteDocument(".versions", "version", s.store.ES.Index)
+	index, err := s.store.ES.newIndex()
+	c.Assert(err, gc.Equals, nil)
+	updated, err := s.store.ES.updateVersion(version{1, index}, 0)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(updated, gc.Equals, true)
+	index, err = s.store.ES.newIndex()
+	c.Assert(err, gc.Equals, nil)
+	updated, err = s.store.ES.updateVersion(version{2, index}, 1)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(updated, gc.Equals, true)
+}
+
+func (s *StoreSearchSuite) TestUpdateCreateConflict(c *gc.C) {
+	s.store.ES.Index = s.TestIndex + "-update-version"
+	defer s.ES.DeleteDocument(".versions", "version", s.store.ES.Index)
+	index, err := s.store.ES.newIndex()
+	c.Assert(err, gc.Equals, nil)
+	updated, err := s.store.ES.updateVersion(version{1, index}, 0)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(updated, gc.Equals, true)
+	index, err = s.store.ES.newIndex()
+	c.Assert(err, gc.Equals, nil)
+	updated, err = s.store.ES.updateVersion(version{1, index}, 0)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(updated, gc.Equals, false)
+}
+
+func (s *StoreSearchSuite) TestUpdateConflict(c *gc.C) {
+	s.store.ES.Index = s.TestIndex + "-update-version"
+	defer s.ES.DeleteDocument(".versions", "version", s.store.ES.Index)
+	index, err := s.store.ES.newIndex()
+	c.Assert(err, gc.Equals, nil)
+	updated, err := s.store.ES.updateVersion(version{1, index}, 0)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(updated, gc.Equals, true)
+	index, err = s.store.ES.newIndex()
+	c.Assert(err, gc.Equals, nil)
+	updated, err = s.store.ES.updateVersion(version{1, index}, 3)
+	c.Assert(err, gc.Equals, nil)
+	c.Assert(updated, gc.Equals, false)
 }
 
 // assertSearchResults checks that the results obtained from a search are the same

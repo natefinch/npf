@@ -27,7 +27,7 @@ var logger = loggo.GetLogger("charmstore.internal.charmstore")
 type Store struct {
 	DB        StoreDatabase
 	BlobStore *blobstore.Store
-	ES        *StoreElasticSearch
+	ES        *storeElasticSearch
 
 	// Cache for statistics key words (two generations).
 	cacheMu       sync.RWMutex
@@ -38,15 +38,29 @@ type Store struct {
 }
 
 // NewStore returns a Store that uses the given database.
-func NewStore(db *mgo.Database, ses *StoreElasticSearch) (*Store, error) {
+func NewStore(db *mgo.Database, si *SearchIndex) (*Store, error) {
 	s := &Store{
 		DB:        StoreDatabase{db},
 		BlobStore: blobstore.New(db, "entitystore"),
-		ES:        ses,
 	}
 	if err := s.ensureIndexes(); err != nil {
 		return nil, errgo.Notef(err, "cannot ensure indexes")
 	}
+	if si == nil {
+		return s, nil
+	}
+	s.ES = &storeElasticSearch{
+		SearchIndex: si,
+		DB:          s.DB,
+	}
+	if err := si.ensureIndexes(false); err != nil {
+		return nil, errgo.Notef(err, "cannot ensure elasticsearch indexes")
+	}
+	go func() {
+		if err := s.ES.sync(); err != nil {
+			logger.Errorf("Cannot populate elasticsearch: %v", err)
+		}
+	}()
 	return s, nil
 }
 
@@ -212,9 +226,8 @@ func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 			}
 		}
 	}()
-
 	// Add entity to ElasticSearch.
-	if err := s.ES.put(entity); err != nil {
+	if err := s.ES.put(entity.URL); err != nil {
 		return errgo.Notef(err, "cannot index %s to ElasticSearch", entity.URL)
 	}
 	return nil
@@ -614,4 +627,26 @@ func (r *readerAtSeeker) ReadAt(buf []byte, p int64) (int, error) {
 // of ReaderAt, it is not OK to use concurrently.
 func ReaderAtSeeker(r io.ReadSeeker) io.ReaderAt {
 	return &readerAtSeeker{r}
+}
+
+// Search searches the store for the given SearchParams.
+// It returns a SearchResult containing the results of the search.
+func (store *Store) Search(sp SearchParams) (SearchResult, error) {
+	result, err := store.ES.search(sp)
+	if err != nil {
+		return SearchResult{}, errgo.Mask(err)
+	}
+	return result, nil
+}
+
+// SynchroniseElasticsearch creates new indexes in elasticsearch
+// and populetes them with the current data from the mongodb database.
+func (s *Store) SynchroniseElasticsearch() error {
+	if err := s.ES.ensureIndexes(true); err != nil {
+		return errgo.Notef(err, "cannot create indexes")
+	}
+	if err := s.ES.sync(); err != nil {
+		return errgo.Notef(err, "cannot synchronise indexes")
+	}
+	return nil
 }

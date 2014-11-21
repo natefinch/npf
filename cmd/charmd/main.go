@@ -62,9 +62,11 @@ func serve(confPath string) error {
 	defer session.Close()
 	db := session.DB("juju")
 
-	var es *elasticsearch.Index
+	var es *elasticsearch.Database
 	if conf.ESAddr != "" {
-		es = (&elasticsearch.Database{conf.ESAddr}).Index("charmstore")
+		es = &elasticsearch.Database{
+			conf.ESAddr,
+		}
 	}
 
 	logger.Infof("setting up the API server")
@@ -72,7 +74,7 @@ func serve(confPath string) error {
 		AuthUsername: conf.AuthUsername,
 		AuthPassword: conf.AuthPassword,
 	}
-	server, err := charmstore.NewServer(db, es, cfg, charmstore.Legacy, charmstore.V4)
+	server, err := charmstore.NewServer(db, es, "cs", cfg, charmstore.Legacy, charmstore.V4)
 	if err != nil {
 		return errgo.Notef(err, "cannot create new server at %q", conf.APIAddr)
 	}

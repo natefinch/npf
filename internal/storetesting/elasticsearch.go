@@ -48,7 +48,8 @@ func (s *ElasticSearchSuite) SetUpTest(c *gc.C) {
 
 func (s *ElasticSearchSuite) TearDownTest(c *gc.C) {
 	for _, index := range s.indexes {
-		s.ES.DeleteIndex(index)
+		s.ES.DeleteIndex(index + "*")
+		s.ES.DeleteDocument(".versions", "version", index)
 	}
 	s.indexes = nil
 }
@@ -58,17 +59,17 @@ func (s *ElasticSearchSuite) TearDownTest(c *gc.C) {
 func (s *ElasticSearchSuite) NewIndex(c *gc.C) string {
 	uuid, err := utils.NewUUID()
 	c.Assert(err, gc.IsNil)
-	id := time.Now().Format("20060102") + uuid.String() + "-"
+	id := time.Now().Format("20060102") + uuid.String()
 	s.indexes = append(s.indexes, id)
 	return id
 }
 
 // LoadESConfig loads a canned test configuration to the specified index
-func (s *ElasticSearchSuite) LoadESConfig(index string) error {
-	if err := s.ES.PutIndex(index, esIndex); err != nil {
+func (s *ElasticSearchSuite) LoadESConfig(index string, settings, mapping interface{}) error {
+	if err := s.ES.PutIndex(index, settings); err != nil {
 		return err
 	}
-	if err := s.ES.PutMapping(index, "entity", esMapping); err != nil {
+	if err := s.ES.PutMapping(index, "entity", mapping); err != nil {
 		return err
 	}
 	return nil

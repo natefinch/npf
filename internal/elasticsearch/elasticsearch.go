@@ -25,7 +25,24 @@ import (
 	"gopkg.in/errgo.v1"
 )
 
+const (
+	// Internal provides elasticsearche's "internal" versioning system, as described in
+	// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/docs-index_.html#_version_types
+	Internal = "internal"
+
+	// External provides elasticsearche's "external" versioning system, as described in
+	// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/docs-index_.html#_version_types
+	External = "external"
+
+	// ExternalGTE provides elasticsearche's "external_gte" versioning system, as described in
+	// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/docs-index_.html#_version_types
+	ExternalGTE = "external_gte"
+)
+
 var log = loggo.GetLogger("charmstore.elasticsearch")
+
+var ErrConflict = errgo.New("elasticsearch document conflict")
+var ErrNotFound = errgo.New("elasticsearch document not found")
 
 type ElasticSearchError struct {
 	Err    string `json:"error"`
@@ -40,36 +57,114 @@ type Database struct {
 	Addr string
 }
 
+// Document represents a document in the elasticsearch database.
+type Document struct {
+	Found   bool            `json:"found"`
+	Id      string          `json:"_id"`
+	Index   string          `json:"_index"`
+	Type    string          `json:"_type"`
+	Version int64           `json:"_version"`
+	Source  json.RawMessage `json:"_source"`
+}
+
+// Alias creates or updates an index alias. An alias a is created,
+// or modified if it already exists, to point to i. See
+// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/indices-aliases.html#indices-aliases
+// for further details.
+func (db *Database) Alias(i, a string) error {
+	indexes, err := db.ListIndexesForAlias(a)
+	if err != nil {
+		return errgo.Notef(err, "cannot retrieve current aliases")
+	}
+	var actions struct {
+		Actions []action `json:"actions"`
+	}
+	for _, i := range indexes {
+		actions.Actions = append(actions.Actions, action{Remove: &alias{Index: i, Alias: a}})
+	}
+	if i != "" {
+		actions.Actions = append(actions.Actions, action{Add: &alias{Index: i, Alias: a}})
+	}
+	if len(actions.Actions) == 0 {
+		return nil
+	}
+	if err := db.post(db.url("_aliases"), actions, nil); err != nil {
+		return errgo.Notef(err, "error updating aliases")
+	}
+	return nil
+}
+
+// Create document attempts to create a new document at index/type_/id with the
+// contents in doc. If the document already exists then CreateDocument will return
+// ErrConflict and return a non-nil error if any other error occurs.
+// See http://www.elasticsearch.org/guide/en/elasticsearch/guide/current/create-doc.html#create-doc
+// for further details.
+func (db *Database) CreateDocument(index, type_, id string, doc interface{}) error {
+	if err := db.put(db.url(index, type_, id, "_create"), doc, nil); err != nil {
+		return getError(err)
+	}
+	return nil
+}
+
+// DeleteDocument deletes the document at index/type_/id from the elasticsearch
+// database. See http://www.elasticsearch.org/guide/en/elasticsearch/guide/current/delete-doc.html#delete-doc
+// for further details.
+func (db *Database) DeleteDocument(index, type_, id string) error {
+	if err := db.delete(db.url(index, type_, id), nil, nil); err != nil {
+		return getError(err)
+	}
+	return nil
+}
+
 // DeleteIndex deletes the index with the given name from the database.
 // http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/indices-delete-index.html
 // If the index does not exist or if the database cannot be
 // reached, then an error is returned.
 func (db *Database) DeleteIndex(index string) error {
 	if err := db.delete(db.url(index), nil, nil); err != nil {
-		return errgo.Mask(err)
+		return getError(err)
 	}
 	return nil
-}
-
-// EnsureID tests to see a document of the given index, type_, and id exists
-// in ElasticSearch.
-func (db *Database) EnsureID(index, type_, id string) (bool, error) {
-	if err := db.get(db.url(index, type_, id)+"?_source=false", nil, nil); err != nil {
-		if ese, ok := err.(ElasticSearchError); ok && ese.Status == http.StatusNotFound {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
 }
 
 // GetDocument retrieves the document with the given index, type_ and id and
-// unmarshals the json response into v.
+// unmarshals the json response into v. GetDocument returns ErrNotFound if the
+// requested document is not present, and returns a non-nil error if any other error
+// occurs.
 func (db *Database) GetDocument(index, type_, id string, v interface{}) error {
-	if err := db.get(db.url(index, type_, id, "_source"), nil, v); err != nil {
+	d, err := db.GetESDocument(index, type_, id)
+	if err != nil {
+		return getError(err)
+	}
+	if !d.Found {
+		return ErrNotFound
+	}
+	if err := json.Unmarshal([]byte(d.Source), &v); err != nil {
 		return errgo.Mask(err)
 	}
 	return nil
+}
+
+// GetESDocument returns elasticsearch's view of the document stored at
+// index/type_/id. It is not an error if this document does not exist, in that case
+// the Found field of the returned Document will be false.
+func (db *Database) GetESDocument(index, type_, id string) (Document, error) {
+	var d Document
+	if err := db.get(db.url(index, type_, id), nil, &d); err != nil {
+		return Document{}, getError(err)
+	}
+	return d, nil
+}
+
+// HasDocument tests to see a document of the given index, type_, and id exists
+// in the elasticsearch database. A non-nil error is returned if there is an error
+// communicating with the elasticsearch database.
+func (db *Database) HasDocument(index, type_, id string) (bool, error) {
+	var d Document
+	if err := db.get(db.url(index, type_, id)+"?_source=false", nil, &d); err != nil {
+		return false, getError(err)
+	}
+	return d.Found, nil
 }
 
 // ListAllIndexes retreieves the list of all user indexes in the elasticsearch database.
@@ -78,7 +173,7 @@ func (db *Database) GetDocument(index, type_, id string, v interface{}) error {
 func (db *Database) ListAllIndexes() ([]string, error) {
 	var result map[string]interface{}
 	if err := db.get(db.url("_aliases"), nil, &result); err != nil {
-		return nil, errgo.Mask(err)
+		return nil, getError(err)
 	}
 	var indexes []string
 	for key := range result {
@@ -87,6 +182,20 @@ func (db *Database) ListAllIndexes() ([]string, error) {
 		if !strings.HasPrefix(key, ".") {
 			indexes = append(indexes, key)
 		}
+	}
+	return indexes, nil
+}
+
+// ListIndexesForAlias retreieves the list of all indexes in the elasticsearch database
+// that have the alias a.
+func (db *Database) ListIndexesForAlias(a string) ([]string, error) {
+	var result map[string]struct{}
+	if err := db.get(db.url("*", "_alias", a), nil, &result); err != nil {
+		return nil, getError(err)
+	}
+	var indexes []string
+	for key := range result {
+		indexes = append(indexes, key)
 	}
 	return indexes, nil
 }
@@ -100,7 +209,7 @@ func (db *Database) PostDocument(index, type_ string, doc interface{}) (string, 
 		ID string `json:"_id"`
 	}
 	if err := db.post(db.url(index, type_), doc, &resp); err != nil {
-		return "", errgo.Mask(err)
+		return "", getError(err)
 	}
 	return resp.ID, nil
 }
@@ -111,37 +220,50 @@ func (db *Database) PostDocument(index, type_ string, doc interface{}) (string, 
 // for more details.
 func (db *Database) PutDocument(index, type_, id string, doc interface{}) error {
 	if err := db.put(db.url(index, type_, id), doc, nil); err != nil {
-		return errgo.Mask(err)
+		return getError(err)
 	}
 	return nil
 }
 
-// PutDocumentVersion creates or updates the document with the given index
-// if the version is equal or newer than the currently stored version. The type_ parameter
-// controls how the document will be indexed. PutDocumentVersion returns a
-// bool indicating if the data was stored and an error. If the data was not stored
-// due to a version conflict the returned value will be false, nil.
+// PutDocumentVersion creates or updates the document in the given index if the version
+// parameter is the same as the currently stored version. The type_ parameter
+// controls how the document will be indexed. PutDocumentVersion returns
+// ErrConflict if the data cannot be stored due to a version mismatch, and a non-nil error if
+// any other error occurs.
 // See http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/docs-index_.html#index-versioning
 // for more information.
-func (db *Database) PutDocumentVersion(index, type_, id string, version int64, doc interface{}) (bool, error) {
-	// "external_gte" informs elasticsearch to check the versions and update the
-	// document if the new version is the same or newer than the existing version.
-	// See http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/docs-index_.html#_version_types
-	// for more information.
-	url := fmt.Sprintf("%s?version=%d&version_type=external_gte", db.url(index, type_, id), version)
+func (db *Database) PutDocumentVersion(index, type_, id string, version int64, doc interface{}) error {
+	return db.PutDocumentVersionWithType(index, type_, id, version, "internal", doc)
+}
+
+// PutDocumentVersion creates or updates the document in the given index if the version
+// parameter is the same as the currently stored version. The type_ parameter
+// controls how the document will be indexed. PutDocumentVersionWithType returns
+// ErrConflict if the data cannot be stored due to a version mismatch, and a non-nil error if
+// any other error occurs.
+//
+// The constants Internal, External and ExternalGTE represent some of the available
+// version types. Other version types may also be available, plese check the elasticsearch
+// documentation.
+//
+// See http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/docs-index_.html#index-versioning
+// and http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/docs-index_.html#_version_types for more information.
+func (db *Database) PutDocumentVersionWithType(
+	index, type_, id string,
+	version int64,
+	versionType string,
+	doc interface{}) error {
+	url := fmt.Sprintf("%s?version=%d&version_type=%s", db.url(index, type_, id), version, versionType)
 	if err := db.put(url, doc, nil); err != nil {
-		if eserr, ok := err.(ElasticSearchError); ok && eserr.Status == http.StatusConflict {
-			return false, nil
-		}
-		return false, errgo.Mask(err)
+		return getError(err)
 	}
-	return true, nil
+	return nil
 }
 
 // PutIndex creates the index with the given configuration.
 func (db *Database) PutIndex(index string, config interface{}) error {
 	if err := db.put(db.url(index), config, nil); err != nil {
-		return errgo.Mask(err)
+		return getError(err)
 	}
 	return nil
 }
@@ -149,7 +271,7 @@ func (db *Database) PutIndex(index string, config interface{}) error {
 // PutMapping creates or updates the mapping with the given configuration.
 func (db *Database) PutMapping(index, type_ string, config interface{}) error {
 	if err := db.put(db.url(index, "_mapping", type_), config, nil); err != nil {
-		return errgo.Mask(err)
+		return getError(err)
 	}
 	return nil
 }
@@ -158,7 +280,7 @@ func (db *Database) PutMapping(index, type_ string, config interface{}) error {
 // http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/indices-refresh.html
 func (db *Database) RefreshIndex(index string) error {
 	if err := db.post(db.url(index, "_refresh"), nil, nil); err != nil {
-		return errgo.Mask(err)
+		return getError(err)
 	}
 	return nil
 }
@@ -168,7 +290,7 @@ func (db *Database) RefreshIndex(index string) error {
 func (db *Database) Search(index, type_ string, q QueryDSL) (SearchResult, error) {
 	var sr SearchResult
 	if err := db.get(db.url(index, type_, "_search"), q, &sr); err != nil {
-		return SearchResult{}, errgo.Notef(err, "search failed")
+		return SearchResult{}, errgo.Notef(getError(err), "search failed")
 	}
 	return sr, nil
 }
@@ -208,17 +330,11 @@ func (db *Database) do(method, url string, body, v interface{}) error {
 	}
 	log.Debugf("<<< %s", resp.Status)
 	log.Debugf("<<< %s", b)
-	if resp.StatusCode >= http.StatusBadRequest {
-		var eserr ElasticSearchError
-		if err = json.Unmarshal(b, &eserr); err != nil {
-			log.Debugf("*** %s", err)
-		}
-		if eserr.Status == 0 {
-			eserr.Status = resp.StatusCode
-		}
-		if eserr.Err == "" {
-			eserr.Err = fmt.Sprintf(`elasticsearch status "%s"`, resp.Status)
-		}
+	var eserr *ElasticSearchError
+	if err = json.Unmarshal(b, &eserr); err != nil {
+		log.Debugf("*** %s", err)
+	}
+	if eserr.Status != 0 {
 		return eserr
 	}
 	if v != nil {
@@ -260,9 +376,6 @@ func (db *Database) put(url string, body, v interface{}) error {
 
 // url constructs the URL for accessing the database.
 func (db *Database) url(pathParts ...string) string {
-	for i, part := range pathParts {
-		pathParts[i] = url.QueryEscape(part)
-	}
 	path := path.Join(pathParts...)
 	url := &url.URL{
 		Scheme: "http",
@@ -271,47 +384,6 @@ func (db *Database) url(pathParts ...string) string {
 	}
 	return url.String()
 
-}
-
-// Index creates a reference to an index in the elasticsearch database.
-func (db *Database) Index(name string) *Index {
-	return &Index{Database: db, Index: name}
-}
-
-// Index represents an index in the elasticsearch database.
-type Index struct {
-	Database *Database
-	Index    string
-}
-
-// PutDocument creates or updates the document with the given type_ and id
-// in the index. This is a wrapper around Database.PutDocument.
-func (i *Index) PutDocument(type_, id string, doc interface{}) error {
-	return i.Database.PutDocument(i.Index, type_, id, doc)
-}
-
-// PutDocumentVersion creates or updates the document with the given type_ and id
-// in the index if the version is the same or newer than the currently store version.
-// This is a wrapper around Database.PutDocumentVersion.
-func (i *Index) PutDocumentVersion(type_, id string, version int64, doc interface{}) (bool, error) {
-	return i.Database.PutDocumentVersion(i.Index, type_, id, version, doc)
-}
-
-// GetDocument retrieves the document with the given type_ and id
-// in the index. This is a wrapper around Database.GetDocument.
-func (i *Index) GetDocument(type_, id string, doc interface{}) error {
-	return i.Database.GetDocument(i.Index, type_, id, doc)
-}
-
-// Search searches the index on the given type_ with the given QueryDSL.
-// This is a wrapper around Database.Search
-func (i *Index) Search(type_ string, q QueryDSL) (SearchResult, error) {
-	return i.Database.Search(i.Index, type_, q)
-}
-
-// Delete deletes the index. This is a wrapper around Database.DeleteIndex.
-func (i *Index) Delete() error {
-	return i.Database.DeleteIndex(i.Index)
 }
 
 // SearchResult is the result returned after performing a search in elasticsearch
@@ -384,3 +456,31 @@ var regexpReplacer = strings.NewReplacer(
 	`>`, `\>`,
 	`~`, `\~`,
 )
+
+// alias describes an alias in elasticsearch.
+type alias struct {
+	Index string `json:"index"`
+	Alias string `json:"alias"`
+}
+
+// action is an action that can be performed on an alias
+type action struct {
+	Remove *alias `json:"remove,omitempty"`
+	Add    *alias `json:"add,omitempty"`
+}
+
+// getError derives an error from the underlaying error returned
+// by elasticsearch.
+func getError(err error) error {
+	if eserr, ok := err.(*ElasticSearchError); ok {
+		switch eserr.Status {
+		case http.StatusNotFound:
+			return ErrNotFound
+		case http.StatusConflict:
+			return ErrConflict
+		default:
+			return err
+		}
+	}
+	return err
+}

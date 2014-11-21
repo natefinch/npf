@@ -30,18 +30,17 @@ import (
 
 type StoreSuite struct {
 	storetesting.IsolatedMgoESSuite
+	index string
 }
 
 var _ = gc.Suite(&StoreSuite{})
 
 func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
-	var ses *StoreElasticSearch
+	var es *elasticsearch.Database
 	if addToES {
-		ses = &StoreElasticSearch{
-			s.ES.Index(s.TestIndex),
-		}
+		es = s.ES
 	}
-	store, err := NewStore(s.Session.DB("juju_test"), ses)
+	store, err := NewStore(s.Session.DB("juju_test"), &SearchIndex{s.ES, s.TestIndex})
 	c.Assert(err, gc.IsNil)
 	url := charm.MustParseReference("cs:precise/wordpress-23")
 
@@ -56,11 +55,12 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
 	c.Assert(err, gc.IsNil)
 
 	// Ensure the document was indexed in ElasticSearch, if an ES database was provided.
-	if ses != nil {
+	if es != nil {
 		var result mongodoc.Entity
-		err = ses.GetDocument(typeName, ses.getID(&doc), &result)
+		id := store.ES.getID(doc.URL)
+		err = store.ES.GetDocument(s.TestIndex, typeName, id, &result)
 		c.Assert(err, gc.IsNil)
-		exists, err := ses.Database.EnsureID(ses.Index.Index, typeName, ses.getID(&doc))
+		exists, err := store.ES.HasDocument(s.TestIndex, typeName, id)
 		c.Assert(err, gc.IsNil)
 		c.Assert(exists, gc.Equals, true)
 	}
@@ -110,14 +110,12 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
 }
 
 func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) {
-	var ses *StoreElasticSearch
+	var es *elasticsearch.Database
 
 	if addToES {
-		ses = &StoreElasticSearch{
-			s.ES.Index(s.TestIndex),
-		}
+		es = s.ES
 	}
-	store, err := NewStore(s.Session.DB("juju_test"), ses)
+	store, err := NewStore(s.Session.DB("juju_test"), &SearchIndex{s.ES, s.TestIndex})
 	c.Assert(err, gc.IsNil)
 	url := charm.MustParseReference("cs:bundle/wordpress-simple-42")
 
@@ -133,9 +131,9 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 	sort.Sort(orderedURLs(doc.BundleCharms))
 
 	// Ensure the document was indexed in ElasticSearch, if an ES database was provided.
-	if ses != nil {
+	if es != nil {
 		var result mongodoc.Entity
-		err = ses.GetDocument(typeName, ses.getID(&doc), &result)
+		err = store.ES.GetDocument(s.TestIndex, typeName, store.ES.getID(doc.URL), &result)
 		c.Assert(err, gc.IsNil)
 	}
 
@@ -332,11 +330,13 @@ func (s *StoreSuite) TestAddCharmWithFailedESInsert(c *gc.C) {
 	esdb := &elasticsearch.Database{
 		Addr: "0.1.2.3:0123",
 	}
-	es := &StoreElasticSearch{
-		Index: esdb.Index("an-index"),
-	}
 
-	store, err := NewStore(s.Session.DB("juju_test"), es)
+	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	es := &storeElasticSearch{
+		SearchIndex: &SearchIndex{esdb, "no-index"},
+		DB:          store.DB,
+	}
+	store.ES = es
 	c.Assert(err, gc.IsNil)
 
 	url := charm.MustParseReference("precise/wordpress-12")
@@ -1109,7 +1109,7 @@ func (s *StoreSuite) TestSESPutDoesNotErrorWithNoESConfigured(c *gc.C) {
 	store, err := NewStore(s.Session.DB("mongodoctoelasticsearch"), nil)
 	c.Assert(err, gc.IsNil)
 	var entity mongodoc.Entity
-	err = store.ES.put(&entity)
+	err = store.ES.put(entity.URL)
 	c.Assert(err, gc.IsNil)
 }
 

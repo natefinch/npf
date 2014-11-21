@@ -15,7 +15,6 @@ import (
 	"gopkg.in/juju/charm.v4"
 
 	"github.com/juju/charmstore/internal/charmstore"
-	"github.com/juju/charmstore/internal/elasticsearch"
 	"github.com/juju/charmstore/internal/storetesting"
 	. "github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
@@ -41,11 +40,10 @@ var exportTestBundles = map[string]string{
 
 func (s *SearchSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoESSuite.SetUpTest(c)
-	s.srv, s.store = newServer(c, s.Session, s.ES.Index(s.TestIndex), serverParams)
-	err := s.LoadESConfig(s.TestIndex)
-	c.Assert(err, gc.IsNil)
+	si := &charmstore.SearchIndex{s.ES, s.TestIndex}
+	s.srv, s.store = newServer(c, s.Session, si, serverParams)
 	s.addCharmsToStore(c, s.store)
-	err = s.ES.RefreshIndex(s.TestIndex)
+	err := s.ES.RefreshIndex(s.TestIndex)
 	c.Assert(err, gc.IsNil)
 }
 
@@ -511,16 +509,15 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 }
 
 func (s *SearchSuite) TestSearchError(c *gc.C) {
-	badES := &elasticsearch.Database{"0.1.2.3:1234"}
-	srv, _ := newServer(c, s.Session, badES.Index("bad-index"), serverParams)
-
+	err := s.ES.DeleteIndex(s.TestIndex)
+	c.Assert(err, gc.Equals, nil)
 	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
-		Handler: srv,
+		Handler: s.srv,
 		URL:     storeURL("search?name=wordpress"),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusInternalServerError)
 	var resp params.Error
-	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	err = json.Unmarshal(rec.Body.Bytes(), &resp)
 	c.Assert(err, gc.IsNil)
 	c.Assert(resp.Code, gc.Equals, params.ErrorCode(""))
 	c.Assert(resp.Message, gc.Matches, "error performing search: search failed: .*")
