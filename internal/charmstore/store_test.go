@@ -7,6 +7,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"crypto/sha512"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -912,45 +913,58 @@ func (s *StoreSuite) TestBlobNameAndHash(c *gc.C) {
 	c.Assert(hashOfReader(c, r), gc.Equals, expectHash)
 }
 
-func (s *StoreSuite) TestAddIngestionLog(c *gc.C) {
+func (s *StoreSuite) TestAddLog(c *gc.C) {
 	store, err := NewStore(s.Session.DB("juju_test"), nil)
 	c.Assert(err, gc.IsNil)
 	urls := []*charm.Reference{
 		charm.MustParseReference("cs:trusty/wordpress"),
 		charm.MustParseReference("cs:~who/trusty/wordpress"),
 	}
-	infoMessage, errorMessage := []byte("info message"), []byte("error message")
+	infoData := json.RawMessage([]byte(`"info data"`))
+	errorData := json.RawMessage([]byte(`"error data"`))
 
-	// Add ingestion logs to the store.
+	// Add logs to the store.
 	beforeAdding := time.Now().Add(-time.Second)
-	err = store.AddIngestionLog(infoMessage, nil, mongodoc.IngestionInfo)
+	err = store.AddLog(&infoData, mongodoc.InfoLevel, mongodoc.IngestionType, nil)
 	c.Assert(err, gc.IsNil)
-	err = store.AddIngestionLog(errorMessage, urls, mongodoc.IngestionError)
+	err = store.AddLog(&errorData, mongodoc.ErrorLevel, mongodoc.IngestionType, urls)
 	c.Assert(err, gc.IsNil)
 	afterAdding := time.Now().Add(time.Second)
 
-	// Retrieve the ingestion logs from the store.
-	var docs []mongodoc.IngestionLog
-	err = store.DB.IngestionLogs().Find(nil).Sort("_id").All(&docs)
+	// Retrieve the logs from the store.
+	var docs []mongodoc.Log
+	err = store.DB.Logs().Find(nil).Sort("_id").All(&docs)
 	c.Assert(err, gc.IsNil)
 	c.Assert(docs, gc.HasLen, 2)
 
-	// The ingestion docs have been correctly added to the Mongo collection.
+	// The docs have been correctly added to the Mongo collection.
 	infoDoc, errorDoc := docs[0], docs[1]
 	c.Assert(infoDoc.Time, jc.TimeBetween(beforeAdding, afterAdding))
 	c.Assert(errorDoc.Time, jc.TimeBetween(beforeAdding, afterAdding))
 	infoDoc.Time = time.Time{}
 	errorDoc.Time = time.Time{}
-	c.Assert(infoDoc, jc.DeepEquals, mongodoc.IngestionLog{
-		Message: infoMessage,
-		Level:   mongodoc.IngestionInfo,
-		URLs:    nil,
+	c.Assert(infoDoc, jc.DeepEquals, mongodoc.Log{
+		Data:  []byte(infoData),
+		Level: mongodoc.InfoLevel,
+		Type:  mongodoc.IngestionType,
+		URLs:  nil,
 	})
-	c.Assert(errorDoc, jc.DeepEquals, mongodoc.IngestionLog{
-		Message: errorMessage,
-		Level:   mongodoc.IngestionError,
-		URLs:    urls,
+	c.Assert(errorDoc, jc.DeepEquals, mongodoc.Log{
+		Data:  []byte(errorData),
+		Level: mongodoc.ErrorLevel,
+		Type:  mongodoc.IngestionType,
+		URLs:  urls,
 	})
+}
+
+func (s *StoreSuite) TestAddLogDataError(c *gc.C) {
+	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	c.Assert(err, gc.IsNil)
+	data := json.RawMessage([]byte("!"))
+
+	// Try to add the invalid log message to the store.
+	err = store.AddLog(&data, mongodoc.InfoLevel, mongodoc.IngestionType, nil)
+	c.Assert(err, gc.ErrorMatches, "cannot marshal log data: json: error calling MarshalJSON .*")
 }
 
 func (s *StoreSuite) TestCollections(c *gc.C) {

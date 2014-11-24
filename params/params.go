@@ -151,37 +151,34 @@ type IdRevisionResponse struct {
 // BzrDigestKey is the extra-info key used to store the Bazaar digest
 const BzrDigestKey = "bzr-digest"
 
-// IngestionLogLevel defines ingestion log levels to be used in ingestion log
-// requests and responses.
-type IngestionLogLevel string
+// Log holds the representation of a log message.
+// This is used by clients to store log events in the charm store.
+type Log struct {
+	// Data holds the log message as a JSON.
+	Data *json.RawMessage
 
-const (
-	IngestionInfo  IngestionLogLevel = "info"
-	IngestionError IngestionLogLevel = "error"
-)
+	// Level holds the log level as a string.
+	Level LogLevel
 
-// IngestionLog holds the representation of a log message sent while
-// ingesting/uploading charms or bundles.
-type IngestionLog struct {
-	// Message holds the log message.
-	Message []byte
-
-	// Level holds the log level.
-	Level IngestionLogLevel
+	// Type holds the log type as a string.
+	Type LogType
 
 	// URLs holds a slice of entity URLs associated with the log message.
 	URLs []*charm.Reference
 }
 
-// IngestionLogResponse represents a ingestion log and is used in the responses
-// to debug/ingestion GET requests.
+// LogResponse represents a single log message and is used in the responses
+// to /log GET requests.
 // See http://tinyurl.com/nj77rcr
-type IngestionLogResponse struct {
-	// Message holds the log message.
-	Message json.RawMessage
+type LogResponse struct {
+	// Data holds the log message as a JSON.
+	Data json.RawMessage
 
 	// Level holds the log level as a string.
-	Level IngestionLogLevel
+	Level LogLevel
+
+	// Type holds the log type as a string.
+	Type LogType
 
 	// URLs holds a slice of entity URLs associated with the log message.
 	URLs []*charm.Reference
@@ -189,3 +186,19 @@ type IngestionLogResponse struct {
 	// Time holds the time of the log.
 	Time time.Time
 }
+
+// LogLevel defines log levels (e.g. "info" or "error") to be used in log
+// requests and responses.
+type LogLevel string
+
+const (
+	InfoLevel    LogLevel = "info"
+	WarningLevel LogLevel = "warning"
+	ErrorLevel   LogLevel = "error"
+)
+
+// LogType defines log types (e.g. "ingestion") to be used in log requests and
+// responses.
+type LogType string
+
+const IngestionType LogType = "ingestion"

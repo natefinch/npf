@@ -21,134 +21,163 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
-type ingestionSuite struct {
+type logSuite struct {
 	storetesting.IsolatedMgoSuite
 	srv   http.Handler
 	store *charmstore.Store
 }
 
-var _ = gc.Suite(&ingestionSuite{})
+var _ = gc.Suite(&logSuite{})
 
-func (s *ingestionSuite) SetUpTest(c *gc.C) {
+func (s *logSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
 	s.srv, s.store = newServer(c, s.Session, nil, serverParams)
 }
 
-func (s *ingestionSuite) addLog(c *gc.C, message json.RawMessage, ids []string, level mongodoc.IngestionLogLevel) {
-	urls := make([]*charm.Reference, len(ids))
-	for i, id := range ids {
-		urls[i] = charm.MustParseReference(id)
-	}
-	err := s.store.AddIngestionLog(message, urls, level)
-	c.Assert(err, gc.IsNil)
-}
-
-var ingestionLogResponses = map[string]*params.IngestionLogResponse{
+var logResponses = map[string]*params.LogResponse{
 	"info1": {
-		Message: rawMessage("info message 1"),
-		URLs:    nil,
-		Level:   params.IngestionInfo,
+		Data:  rawMessage("info data 1"),
+		Level: params.InfoLevel,
+		Type:  params.IngestionType,
+		URLs:  nil,
 	},
 	"error1": {
-		Message: rawMessage("error message 1"),
-		URLs:    nil,
-		Level:   params.IngestionError,
+		Data:  rawMessage("error data 1"),
+		Level: params.ErrorLevel,
+		Type:  params.IngestionType,
+		URLs:  nil,
 	},
 	"info2": {
-		Message: rawMessage("info message 2"),
+		Data:  rawMessage("info data 2"),
+		Level: params.InfoLevel,
+		Type:  params.IngestionType,
 		URLs: []*charm.Reference{
 			charm.MustParseReference("precise/django"),
 			charm.MustParseReference("trusty/rails"),
 		},
-		Level: params.IngestionInfo,
+	},
+	"warning1": {
+		Data:  rawMessage("warning data 1"),
+		Level: params.WarningLevel,
+		Type:  params.IngestionType,
+		URLs:  nil,
 	},
 	"error2": {
-		Message: rawMessage("error message 2"),
-		URLs:    nil,
-		Level:   params.IngestionError,
+		Data:  rawMessage("error data 2"),
+		Level: params.ErrorLevel,
+		Type:  params.IngestionType,
+		URLs:  nil,
 	},
 	"info3": {
-		Message: rawMessage("info message 3"),
+		Data:  rawMessage("info data 3"),
+		Level: params.InfoLevel,
+		Type:  params.IngestionType,
 		URLs: []*charm.Reference{
 			charm.MustParseReference("trusty/django"),
 			charm.MustParseReference("utopic/hadoop"),
 		},
-		Level: params.IngestionInfo,
 	},
 	"error3": {
-		Message: rawMessage("error message 3"),
+		Data:  rawMessage("error data 3"),
+		Level: params.ErrorLevel,
+		Type:  params.IngestionType,
 		URLs: []*charm.Reference{
 			charm.MustParseReference("utopic/hadoop"),
 			charm.MustParseReference("precise/django"),
 		},
-		Level: params.IngestionError,
 	},
 }
 
-var getIngestionLogsTests = []struct {
+var getLogsTests = []struct {
 	about       string
 	querystring string
-	expectBody  []*params.IngestionLogResponse
+	expectBody  []*params.LogResponse
 }{{
 	about: "retrieve logs",
-	expectBody: []*params.IngestionLogResponse{
-		ingestionLogResponses["error3"],
-		ingestionLogResponses["info3"],
-		ingestionLogResponses["error2"],
-		ingestionLogResponses["info2"],
-		ingestionLogResponses["error1"],
-		ingestionLogResponses["info1"],
+	expectBody: []*params.LogResponse{
+		logResponses["error3"],
+		logResponses["info3"],
+		logResponses["error2"],
+		logResponses["warning1"],
+		logResponses["info2"],
+		logResponses["error1"],
+		logResponses["info1"],
 	},
 }, {
 	about:       "use limit",
 	querystring: "?limit=2",
-	expectBody: []*params.IngestionLogResponse{
-		ingestionLogResponses["error3"],
-		ingestionLogResponses["info3"],
+	expectBody: []*params.LogResponse{
+		logResponses["error3"],
+		logResponses["info3"],
 	},
 }, {
 	about:       "use offset",
 	querystring: "?offset=3",
-	expectBody: []*params.IngestionLogResponse{
-		ingestionLogResponses["info2"],
-		ingestionLogResponses["error1"],
-		ingestionLogResponses["info1"],
+	expectBody: []*params.LogResponse{
+		logResponses["warning1"],
+		logResponses["info2"],
+		logResponses["error1"],
+		logResponses["info1"],
+	},
+}, {
+	about:       "zero offset",
+	querystring: "?offset=0",
+	expectBody: []*params.LogResponse{
+		logResponses["error3"],
+		logResponses["info3"],
+		logResponses["error2"],
+		logResponses["warning1"],
+		logResponses["info2"],
+		logResponses["error1"],
+		logResponses["info1"],
 	},
 }, {
 	about:       "use both limit and offset",
 	querystring: "?limit=3&offset=1",
-	expectBody: []*params.IngestionLogResponse{
-		ingestionLogResponses["info3"],
-		ingestionLogResponses["error2"],
-		ingestionLogResponses["info2"],
+	expectBody: []*params.LogResponse{
+		logResponses["info3"],
+		logResponses["error2"],
+		logResponses["warning1"],
 	},
 }, {
 	about:       "filter by level",
 	querystring: "?level=info",
-	expectBody: []*params.IngestionLogResponse{
-		ingestionLogResponses["info3"],
-		ingestionLogResponses["info2"],
-		ingestionLogResponses["info1"],
+	expectBody: []*params.LogResponse{
+		logResponses["info3"],
+		logResponses["info2"],
+		logResponses["info1"],
+	},
+}, {
+	about:       "filter by type",
+	querystring: "?type=ingestion",
+	expectBody: []*params.LogResponse{
+		logResponses["error3"],
+		logResponses["info3"],
+		logResponses["error2"],
+		logResponses["warning1"],
+		logResponses["info2"],
+		logResponses["error1"],
+		logResponses["info1"],
 	},
 }, {
 	about:       "filter by level with a limit",
 	querystring: "?level=error&limit=2",
-	expectBody: []*params.IngestionLogResponse{
-		ingestionLogResponses["error3"],
-		ingestionLogResponses["error2"],
+	expectBody: []*params.LogResponse{
+		logResponses["error3"],
+		logResponses["error2"],
 	},
 }, {
 	about:       "filter by id",
 	querystring: "?id=precise/django",
-	expectBody: []*params.IngestionLogResponse{
-		ingestionLogResponses["error3"],
-		ingestionLogResponses["info2"],
+	expectBody: []*params.LogResponse{
+		logResponses["error3"],
+		logResponses["info2"],
 	},
 }, {
 	about:       "multiple query",
 	querystring: "?id=utopic/hadoop&limit=1&level=error",
-	expectBody: []*params.IngestionLogResponse{
-		ingestionLogResponses["error3"],
+	expectBody: []*params.LogResponse{
+		logResponses["error3"],
 	},
 }, {
 	about:       "empty response offset",
@@ -161,21 +190,22 @@ var getIngestionLogsTests = []struct {
 	querystring: "?id=trusty/rails&level=error",
 }}
 
-func (s *ingestionSuite) TestGetIngestionLogs(c *gc.C) {
-	// Add ingestion logs to the database.
+func (s *logSuite) TestGetLogs(c *gc.C) {
+	// Add logs to the database.
 	beforeAdding := time.Now().Add(-time.Second)
-	for _, key := range []string{"info1", "error1", "info2", "error2", "info3", "error3"} {
-		resp := ingestionLogResponses[key]
-		s.store.AddIngestionLog(resp.Message, resp.URLs, v4.ParamsLevels[resp.Level])
+	for _, key := range []string{"info1", "error1", "info2", "warning1", "error2", "info3", "error3"} {
+		resp := logResponses[key]
+		err := s.store.AddLog(&resp.Data, v4.ParamsLogLevels[resp.Level], v4.ParamsLogTypes[resp.Type], resp.URLs)
+		c.Assert(err, gc.IsNil)
 	}
 	afterAdding := time.Now().Add(time.Second)
 
 	// Run the tests.
-	for i, test := range getIngestionLogsTests {
+	for i, test := range getLogsTests {
 		c.Logf("test %d: %s", i, test.about)
 		rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
 			Handler:  s.srv,
-			URL:      storeURL("debug/ingestion" + test.querystring),
+			URL:      storeURL("log" + test.querystring),
 			Username: serverParams.AuthUsername,
 			Password: serverParams.AuthPassword,
 		})
@@ -185,9 +215,9 @@ func (s *ingestionSuite) TestGetIngestionLogs(c *gc.C) {
 		c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "application/json")
 		// Decode the response stream.
 		decoder := json.NewDecoder(rec.Body)
-		var responses []*params.IngestionLogResponse
+		var responses []*params.LogResponse
 		for {
-			var response params.IngestionLogResponse
+			var response params.LogResponse
 			err := decoder.Decode(&response)
 			if err == io.EOF {
 				break
@@ -211,7 +241,7 @@ func rawMessage(msg string) json.RawMessage {
 	return json.RawMessage(message)
 }
 
-var getIngestionLogsErrorsTests = []struct {
+var getLogsErrorsTests = []struct {
 	about         string
 	querystring   string
 	expectStatus  int
@@ -221,52 +251,70 @@ var getIngestionLogsErrorsTests = []struct {
 	about:         "invalid limit (negative number)",
 	querystring:   "?limit=-100",
 	expectStatus:  http.StatusBadRequest,
-	expectMessage: "invalid query: invalid value for limit",
+	expectMessage: "invalid limit value: value must be >= 1",
+	expectCode:    params.ErrBadRequest,
+}, {
+	about:         "invalid limit (zero value)",
+	querystring:   "?limit=0",
+	expectStatus:  http.StatusBadRequest,
+	expectMessage: "invalid limit value: value must be >= 1",
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid limit (not a number)",
 	querystring:   "?limit=foo",
 	expectStatus:  http.StatusBadRequest,
-	expectMessage: "invalid query: invalid value for limit",
+	expectMessage: "invalid limit value: value must be a number",
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid offset (negative number)",
 	querystring:   "?offset=-100",
 	expectStatus:  http.StatusBadRequest,
-	expectMessage: "invalid query: invalid value for offset",
+	expectMessage: "invalid offset value: value must be >= 0",
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid offset (not a number)",
 	querystring:   "?offset=bar",
 	expectStatus:  http.StatusBadRequest,
-	expectMessage: "invalid query: invalid value for offset",
+	expectMessage: "invalid offset value: value must be a number",
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid id",
 	querystring:   "?id=no-such:reference",
 	expectStatus:  http.StatusBadRequest,
-	expectMessage: `invalid query: cannot parse id: charm URL has invalid schema: "no-such:reference"`,
+	expectMessage: `invalid id value: charm URL has invalid schema: "no-such:reference"`,
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid log level",
 	querystring:   "?level=bar",
 	expectStatus:  http.StatusBadRequest,
-	expectMessage: "invalid query: invalid log level",
+	expectMessage: "invalid log level value",
+	expectCode:    params.ErrBadRequest,
+}, {
+	about:         "invalid log type",
+	querystring:   "?type=no-such",
+	expectStatus:  http.StatusBadRequest,
+	expectMessage: "invalid log type value",
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid log message",
 	expectStatus:  http.StatusInternalServerError,
-	expectMessage: "cannot unmarshal the log message: invalid character '!' looking for beginning of value",
+	expectMessage: "cannot unmarshal log data: invalid character '!' looking for beginning of value",
 }}
 
-func (s *ingestionSuite) TestGetIngestionLogsErrors(c *gc.C) {
+func (s *logSuite) TestGetLogsErrors(c *gc.C) {
 	// Add a non-parsable log message to the db.
-	s.store.AddIngestionLog([]byte("!"), nil, 0)
-	for i, test := range getIngestionLogsErrorsTests {
+	err := s.store.DB.Logs().Insert(mongodoc.Log{
+		Data:  []byte("!"),
+		Level: mongodoc.InfoLevel,
+		Type:  mongodoc.IngestionType,
+		Time:  time.Now(),
+	})
+	c.Assert(err, gc.IsNil)
+	for i, test := range getLogsErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 			Handler:      s.srv,
-			URL:          storeURL("debug/ingestion" + test.querystring),
+			URL:          storeURL("log" + test.querystring),
 			Username:     serverParams.AuthUsername,
 			Password:     serverParams.AuthPassword,
 			ExpectStatus: test.expectStatus,
@@ -278,11 +326,11 @@ func (s *ingestionSuite) TestGetIngestionLogsErrors(c *gc.C) {
 	}
 }
 
-func (s *ingestionSuite) TestGetIngestionLogsUnauthorizedError(c *gc.C) {
+func (s *logSuite) TestGetLogsUnauthorizedError(c *gc.C) {
 	// Add a non-parsable log message to the db.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:      s.srv,
-		URL:          storeURL("debug/ingestion"),
+		URL:          storeURL("log"),
 		ExpectStatus: http.StatusUnauthorized,
 		ExpectBody: params.Error{
 			Message: "authentication failed: invalid or missing HTTP auth header",
@@ -291,18 +339,18 @@ func (s *ingestionSuite) TestGetIngestionLogsUnauthorizedError(c *gc.C) {
 	})
 }
 
-func (s *ingestionSuite) TestPostIngestionLog(c *gc.C) {
+func (s *logSuite) TestPostLog(c *gc.C) {
 	// Prepare the request body.
 	urls := []*charm.Reference{
 		charm.MustParseReference("trusty/django"),
 		charm.MustParseReference("utopic/rails"),
 	}
-	body := makeByteLog(rawMessage("info message"), urls, params.IngestionInfo)
+	body := makeByteLog(rawMessage("info message"), params.InfoLevel, params.IngestionType, urls)
 
 	// Send the request.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler:  s.srv,
-		URL:      storeURL("debug/ingestion"),
+		URL:      storeURL("log"),
 		Method:   "POST",
 		Username: serverParams.AuthUsername,
 		Password: serverParams.AuthPassword,
@@ -314,15 +362,16 @@ func (s *ingestionSuite) TestPostIngestionLog(c *gc.C) {
 	})
 
 	// Ensure the log message has been added to the database.
-	var doc mongodoc.IngestionLog
-	err := s.store.DB.IngestionLogs().Find(nil).One(&doc)
+	var doc mongodoc.Log
+	err := s.store.DB.Logs().Find(nil).One(&doc)
 	c.Assert(err, gc.IsNil)
-	c.Assert(string(doc.Message), gc.Equals, `"info message"`)
-	c.Assert(doc.Level, gc.Equals, mongodoc.IngestionInfo)
+	c.Assert(string(doc.Data), gc.Equals, `"info message"`)
+	c.Assert(doc.Level, gc.Equals, mongodoc.InfoLevel)
+	c.Assert(doc.Type, gc.Equals, mongodoc.IngestionType)
 	c.Assert(doc.URLs, jc.DeepEquals, urls)
 }
 
-var postIngestionLogErrorsTests = []struct {
+var postLogErrorsTests = []struct {
 	about         string
 	contentType   string
 	body          []byte
@@ -343,21 +392,27 @@ var postIngestionLogErrorsTests = []struct {
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid log message",
-	body:          makeByteLog([]byte("!"), nil, params.IngestionInfo),
+	body:          []byte("!"),
 	expectStatus:  http.StatusBadRequest,
-	expectMessage: "cannot unmarshal the ingestion log message: invalid character '!' looking for beginning of value",
+	expectMessage: "cannot unmarshal body: invalid character '!' looking for beginning of value",
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid log level",
-	body:          makeByteLog(rawMessage("message"), nil, params.IngestionLogLevel(42)),
+	body:          makeByteLog(rawMessage("message"), params.LogLevel(42), params.IngestionType, nil),
 	expectStatus:  http.StatusBadRequest,
-	expectMessage: "invalid ingestion log level",
+	expectMessage: "invalid log level",
+	expectCode:    params.ErrBadRequest,
+}, {
+	about:         "invalid log type",
+	body:          makeByteLog(rawMessage("message"), params.WarningLevel, params.LogType(42), nil),
+	expectStatus:  http.StatusBadRequest,
+	expectMessage: "invalid log type",
 	expectCode:    params.ErrBadRequest,
 }}
 
-func (s *ingestionSuite) TestPostIngestionLogErrors(c *gc.C) {
-	url := storeURL("debug/ingestion")
-	for i, test := range postIngestionLogErrorsTests {
+func (s *logSuite) TestPostLogErrors(c *gc.C) {
+	url := storeURL("log")
+	for i, test := range postLogErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
 		if test.contentType == "" {
 			test.contentType = "application/json"
@@ -381,11 +436,11 @@ func (s *ingestionSuite) TestPostIngestionLogErrors(c *gc.C) {
 	}
 }
 
-func (s *ingestionSuite) TestPostIngestionLogUnauthorizedError(c *gc.C) {
+func (s *logSuite) TestPostLogUnauthorizedError(c *gc.C) {
 	// Add a non-parsable log message to the db.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler: s.srv,
-		URL:     storeURL("debug/ingestion"),
+		URL:     storeURL("log"),
 		Method:  "POST",
 		Header: http.Header{
 			"Content-Type": {"application/json"},
@@ -398,11 +453,12 @@ func (s *ingestionSuite) TestPostIngestionLogUnauthorizedError(c *gc.C) {
 	})
 }
 
-func makeByteLog(message json.RawMessage, urls []*charm.Reference, level params.IngestionLogLevel) []byte {
-	log := &params.IngestionLog{
-		Message: message,
-		Level:   level,
-		URLs:    urls,
+func makeByteLog(data json.RawMessage, logLevel params.LogLevel, logType params.LogType, urls []*charm.Reference) []byte {
+	log := &params.Log{
+		Data:  &data,
+		Level: logLevel,
+		Type:  logType,
+		URLs:  urls,
 	}
 	b, err := json.Marshal(log)
 	if err != nil {

@@ -80,14 +80,17 @@ type Entity struct {
 	Contents map[FileId]ZipFile `json:",omitempty" bson:",omitempty"`
 }
 
-// IngestionLog holds the in-database representation of a log message sent
-// while ingesting/uploading charms or bundles.
-type IngestionLog struct {
-	// Message holds the log message.
-	Message []byte
+// Log holds the in-database representation of a log message sent to the charm
+// store.
+type Log struct {
+	// Data holds the log message.
+	Data []byte
 
-	// Level holds the log level.
-	Level IngestionLogLevel
+	// Level holds the log level: whether the log is a warning, an error, etc.
+	Level LogLevel
+
+	// Type holds the log type.
+	Type LogType
 
 	// URLs holds a slice of entity URLs associated with the log message.
 	URLs []*charm.Reference
@@ -96,12 +99,32 @@ type IngestionLog struct {
 	Time time.Time
 }
 
-// IngestionLogLevel holds the log level associated with an ingestion log.
-type IngestionLogLevel int
+// LogLevel holds the level associated with a log.
+type LogLevel int
 
+// When introducing a new log level, do the following:
+// 1) add the new level as a constant below;
+// 2) add the new level in params as a string for HTTP requests/responses;
+// 3) include the new level in the mongodocLogLevels and paramsLogLevels maps
+//    in internal/v4.
 const (
-	IngestionInfo IngestionLogLevel = iota
-	IngestionError
+	_ LogLevel = iota
+	InfoLevel
+	WarningLevel
+	ErrorLevel
+)
+
+// LogType holds the type of the log.
+type LogType int
+
+// When introducing a new log type, do the following:
+// 1) add the new type as a constant below;
+// 2) add the new type in params as a string for HTTP requests/responses;
+// 3) include the new type in the mongodocLogTypes and paramsLogTypes maps
+//    in internal/v4.
+const (
+	_ LogType = iota
+	IngestionType
 )
 
 type FileId string

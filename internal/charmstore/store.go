@@ -5,6 +5,7 @@ package charmstore
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sync"
@@ -67,7 +68,7 @@ func (s *Store) ensureIndexes() error {
 		s.DB.Entities(),
 		mgo.Index{Key: []string{"uploadtime"}},
 	}, {
-		s.DB.IngestionLogs(),
+		s.DB.Logs(),
 		mgo.Index{Key: []string{"urls"}},
 	}}
 	for _, idx := range indexes {
@@ -558,15 +559,20 @@ func bundleCharms(data *charm.BundleData) ([]*charm.Reference, error) {
 	return urls, nil
 }
 
-// AddIngestionLog adds an ingestion log to the database.
-func (s *Store) AddIngestionLog(message []byte, urls []*charm.Reference, level mongodoc.IngestionLogLevel) error {
-	log := &mongodoc.IngestionLog{
-		Message: message,
-		Level:   level,
-		URLs:    urls,
-		Time:    time.Now(),
+// AddLog adds a log message to the database.
+func (s *Store) AddLog(data *json.RawMessage, logLevel mongodoc.LogLevel, logType mongodoc.LogType, urls []*charm.Reference) error {
+	b, err := json.Marshal(data)
+	if err != nil {
+		return errgo.Notef(err, "cannot marshal log data")
 	}
-	if err := s.DB.IngestionLogs().Insert(log); err != nil {
+	log := &mongodoc.Log{
+		Data:  b,
+		Level: logLevel,
+		Type:  logType,
+		URLs:  urls,
+		Time:  time.Now(),
+	}
+	if err := s.DB.Logs().Insert(log); err != nil {
 		return errgo.Mask(err)
 	}
 	return nil
@@ -597,9 +603,9 @@ func (s StoreDatabase) Entities() *mgo.Collection {
 	return s.C("entities")
 }
 
-// IngestionLogs returns the mongo collection where ingestion logs are stored.
-func (s StoreDatabase) IngestionLogs() *mgo.Collection {
-	return s.C("ingestionlogs")
+// Logs returns the Mongo collection where charm store logs are stored.
+func (s StoreDatabase) Logs() *mgo.Collection {
+	return s.C("logs")
 }
 
 // allCollections holds for each collection used by the charm store a
@@ -608,7 +614,7 @@ var allCollections = []func(StoreDatabase) *mgo.Collection{
 	StoreDatabase.StatCounters,
 	StoreDatabase.StatTokens,
 	StoreDatabase.Entities,
-	StoreDatabase.IngestionLogs,
+	StoreDatabase.Logs,
 }
 
 // Collections returns a slice of all the collections used
