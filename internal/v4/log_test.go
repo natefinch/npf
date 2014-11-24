@@ -313,7 +313,7 @@ func (s *logSuite) TestGetLogsErrors(c *gc.C) {
 }
 
 func (s *logSuite) TestGetLogsErrorInvalidLog(c *gc.C) {
-	// Add a non-parsable log message to the db.
+	// Add a non-parsable log message to the db directly.
 	err := s.store.DB.Logs().Insert(mongodoc.Log{
 		Data:  []byte("!"),
 		Level: mongodoc.InfoLevel,
