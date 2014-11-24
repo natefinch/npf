@@ -160,6 +160,7 @@ func writeString(w io.Writer, content string) error {
 	return err
 }
 
+// TODO (frankban): use slices instead of maps for the data structures below.
 var (
 	// mongodocLogLevels maps internal mongodoc log levels to API ones.
 	mongodocLogLevels = map[mongodoc.LogLevel]params.LogLevel{
