@@ -6,7 +6,6 @@ package v4_test
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"net/http"
 	"time"
 
@@ -112,7 +111,7 @@ var getLogsTests = []struct {
 	},
 }, {
 	about:       "use offset",
-	querystring: "?offset=3",
+	querystring: "?skip=3",
 	expectBody: []*params.LogResponse{
 		logResponses["warning1"],
 		logResponses["info2"],
@@ -121,7 +120,7 @@ var getLogsTests = []struct {
 	},
 }, {
 	about:       "zero offset",
-	querystring: "?offset=0",
+	querystring: "?skip=0",
 	expectBody: []*params.LogResponse{
 		logResponses["error3"],
 		logResponses["info3"],
@@ -133,7 +132,7 @@ var getLogsTests = []struct {
 	},
 }, {
 	about:       "use both limit and offset",
-	querystring: "?limit=3&offset=1",
+	querystring: "?limit=3&skip=1",
 	expectBody: []*params.LogResponse{
 		logResponses["info3"],
 		logResponses["error2"],
@@ -181,7 +180,7 @@ var getLogsTests = []struct {
 	},
 }, {
 	about:       "empty response offset",
-	querystring: "?id=utopic/hadoop&offset=10",
+	querystring: "?id=utopic/hadoop&skip=10",
 }, {
 	about:       "empty response id not found",
 	querystring: "?id=utopic/mysql",
@@ -213,23 +212,22 @@ func (s *logSuite) TestGetLogs(c *gc.C) {
 		// Ensure the response is what we expect.
 		c.Assert(rec.Code, gc.Equals, http.StatusOK)
 		c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "application/json")
-		// Decode the response stream.
+
+		// Decode the response.
+		var logs []*params.LogResponse
 		decoder := json.NewDecoder(rec.Body)
-		var responses []*params.LogResponse
-		for {
-			var response params.LogResponse
-			err := decoder.Decode(&response)
-			if err == io.EOF {
-				break
-			}
-			c.Assert(err, gc.IsNil)
-			// Check and then reset the response time so that the whole body
-			// can be more easily compared later.
-			c.Assert(response.Time, jc.TimeBetween(beforeAdding, afterAdding))
-			response.Time = time.Time{}
-			responses = append(responses, &response)
+		err := decoder.Decode(&logs)
+		c.Assert(err, gc.IsNil)
+
+		// Check and then reset the response time so that the whole body
+		// can be more easily compared later.
+		for _, log := range logs {
+			c.Assert(log.Time, jc.TimeBetween(beforeAdding, afterAdding))
+			log.Time = time.Time{}
 		}
-		c.Assert(responses, jc.DeepEquals, test.expectBody)
+
+		// Ensure the response includes the expected logs.
+		c.Assert(logs, jc.DeepEquals, test.expectBody)
 	}
 }
 
@@ -267,15 +265,15 @@ var getLogsErrorsTests = []struct {
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid offset (negative number)",
-	querystring:   "?offset=-100",
+	querystring:   "?skip=-100",
 	expectStatus:  http.StatusBadRequest,
-	expectMessage: "invalid offset value: value must be >= 0",
+	expectMessage: "invalid skip value: value must be >= 0",
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid offset (not a number)",
-	querystring:   "?offset=bar",
+	querystring:   "?skip=bar",
 	expectStatus:  http.StatusBadRequest,
-	expectMessage: "invalid offset value: value must be a number",
+	expectMessage: "invalid skip value: value must be a number",
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid id",
@@ -295,21 +293,9 @@ var getLogsErrorsTests = []struct {
 	expectStatus:  http.StatusBadRequest,
 	expectMessage: "invalid log type value",
 	expectCode:    params.ErrBadRequest,
-}, {
-	about:         "invalid log message",
-	expectStatus:  http.StatusInternalServerError,
-	expectMessage: "cannot unmarshal log data: invalid character '!' looking for beginning of value",
 }}
 
 func (s *logSuite) TestGetLogsErrors(c *gc.C) {
-	// Add a non-parsable log message to the db.
-	err := s.store.DB.Logs().Insert(mongodoc.Log{
-		Data:  []byte("!"),
-		Level: mongodoc.InfoLevel,
-		Type:  mongodoc.IngestionType,
-		Time:  time.Now(),
-	})
-	c.Assert(err, gc.IsNil)
 	for i, test := range getLogsErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
 		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
@@ -326,6 +312,26 @@ func (s *logSuite) TestGetLogsErrors(c *gc.C) {
 	}
 }
 
+func (s *logSuite) TestGetLogsErrorInvalidLog(c *gc.C) {
+	// Add a non-parsable log message to the db.
+	err := s.store.DB.Logs().Insert(mongodoc.Log{
+		Data:  []byte("!"),
+		Level: mongodoc.InfoLevel,
+		Type:  mongodoc.IngestionType,
+		Time:  time.Now(),
+	})
+	c.Assert(err, gc.IsNil)
+	// The log is just ignored.
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("log"),
+		Username:     serverParams.AuthUsername,
+		Password:     serverParams.AuthPassword,
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   []params.LogResponse{},
+	})
+}
+
 func (s *logSuite) TestGetLogsUnauthorizedError(c *gc.C) {
 	// Add a non-parsable log message to the db.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
@@ -339,13 +345,13 @@ func (s *logSuite) TestGetLogsUnauthorizedError(c *gc.C) {
 	})
 }
 
-func (s *logSuite) TestPostLog(c *gc.C) {
+func (s *logSuite) TestPostLogs(c *gc.C) {
 	// Prepare the request body.
 	urls := []*charm.Reference{
 		charm.MustParseReference("trusty/django"),
 		charm.MustParseReference("utopic/rails"),
 	}
-	body := makeByteLog(rawMessage("info message"), params.InfoLevel, params.IngestionType, urls)
+	body := makeByteLogs(rawMessage("info data"), params.InfoLevel, params.IngestionType, urls)
 
 	// Send the request.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
@@ -365,13 +371,54 @@ func (s *logSuite) TestPostLog(c *gc.C) {
 	var doc mongodoc.Log
 	err := s.store.DB.Logs().Find(nil).One(&doc)
 	c.Assert(err, gc.IsNil)
-	c.Assert(string(doc.Data), gc.Equals, `"info message"`)
+	c.Assert(string(doc.Data), gc.Equals, `"info data"`)
 	c.Assert(doc.Level, gc.Equals, mongodoc.InfoLevel)
 	c.Assert(doc.Type, gc.Equals, mongodoc.IngestionType)
 	c.Assert(doc.URLs, jc.DeepEquals, urls)
 }
 
-var postLogErrorsTests = []struct {
+func (s *logSuite) TestPostLogsMultipleEntries(c *gc.C) {
+	// Prepare the request body.
+	infoData := rawMessage("info data")
+	warningData := rawMessage("warning data")
+	logs := []params.Log{{
+		Data:  &infoData,
+		Level: params.InfoLevel,
+		Type:  params.IngestionType,
+	}, {
+		Data:  &warningData,
+		Level: params.WarningLevel,
+		Type:  params.IngestionType,
+	}}
+	body, err := json.Marshal(logs)
+	c.Assert(err, gc.IsNil)
+
+	// Send the request.
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:  s.srv,
+		URL:      storeURL("log"),
+		Method:   "POST",
+		Username: serverParams.AuthUsername,
+		Password: serverParams.AuthPassword,
+		Header: http.Header{
+			"Content-Type": {"application/json"},
+		},
+		Body:         bytes.NewReader(body),
+		ExpectStatus: http.StatusOK,
+	})
+
+	// Ensure the log messages has been added to the database.
+	var docs []mongodoc.Log
+	err = s.store.DB.Logs().Find(nil).Sort("id").All(&docs)
+	c.Assert(err, gc.IsNil)
+	c.Assert(docs, gc.HasLen, 2)
+	c.Assert(string(docs[0].Data), gc.Equals, string(infoData))
+	c.Assert(docs[0].Level, gc.Equals, mongodoc.InfoLevel)
+	c.Assert(string(docs[1].Data), gc.Equals, string(warningData))
+	c.Assert(docs[1].Level, gc.Equals, mongodoc.WarningLevel)
+}
+
+var postLogsErrorsTests = []struct {
 	about         string
 	contentType   string
 	body          []byte
@@ -392,21 +439,21 @@ var postLogErrorsTests = []struct {
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid log level",
-	body:          makeByteLog(rawMessage("message"), params.LogLevel(42), params.IngestionType, nil),
+	body:          makeByteLogs(rawMessage("message"), params.LogLevel(42), params.IngestionType, nil),
 	expectStatus:  http.StatusBadRequest,
 	expectMessage: "invalid log level",
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "invalid log type",
-	body:          makeByteLog(rawMessage("message"), params.WarningLevel, params.LogType(42), nil),
+	body:          makeByteLogs(rawMessage("message"), params.WarningLevel, params.LogType(42), nil),
 	expectStatus:  http.StatusBadRequest,
 	expectMessage: "invalid log type",
 	expectCode:    params.ErrBadRequest,
 }}
 
-func (s *logSuite) TestPostLogErrors(c *gc.C) {
+func (s *logSuite) TestPostLogsErrors(c *gc.C) {
 	url := storeURL("log")
-	for i, test := range postLogErrorsTests {
+	for i, test := range postLogsErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
 		if test.contentType == "" {
 			test.contentType = "application/json"
@@ -430,7 +477,7 @@ func (s *logSuite) TestPostLogErrors(c *gc.C) {
 	}
 }
 
-func (s *logSuite) TestPostLogUnauthorizedError(c *gc.C) {
+func (s *logSuite) TestPostLogsUnauthorizedError(c *gc.C) {
 	// Add a non-parsable log message to the db.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
 		Handler: s.srv,
@@ -447,14 +494,14 @@ func (s *logSuite) TestPostLogUnauthorizedError(c *gc.C) {
 	})
 }
 
-func makeByteLog(data json.RawMessage, logLevel params.LogLevel, logType params.LogType, urls []*charm.Reference) []byte {
-	log := &params.Log{
+func makeByteLogs(data json.RawMessage, logLevel params.LogLevel, logType params.LogType, urls []*charm.Reference) []byte {
+	logs := []params.Log{{
 		Data:  &data,
 		Level: logLevel,
 		Type:  logType,
 		URLs:  urls,
-	}
-	b, err := json.Marshal(log)
+	}}
+	b, err := json.Marshal(logs)
 	if err != nil {
 		panic(err)
 	}

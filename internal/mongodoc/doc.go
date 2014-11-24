@@ -83,7 +83,7 @@ type Entity struct {
 // Log holds the in-database representation of a log message sent to the charm
 // store.
 type Log struct {
-	// Data holds the log message.
+	// Data holds the JSON-encoded log message.
 	Data []byte
 
 	// Level holds the log level: whether the log is a warning, an error, etc.

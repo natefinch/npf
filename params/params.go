@@ -171,7 +171,7 @@ type Log struct {
 // to /log GET requests.
 // See http://tinyurl.com/nj77rcr
 type LogResponse struct {
-	// Data holds the log message as a JSON.
+	// Data holds the log message as a JSON-encoded value.
 	Data json.RawMessage
 
 	// Level holds the log level as a string.
@@ -181,7 +181,7 @@ type LogResponse struct {
 	Type LogType
 
 	// URLs holds a slice of entity URLs associated with the log message.
-	URLs []*charm.Reference
+	URLs []*charm.Reference `json:",omitempty"`
 
 	// Time holds the time of the log.
 	Time time.Time

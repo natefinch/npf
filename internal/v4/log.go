@@ -5,6 +5,7 @@ package v4
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -29,7 +30,7 @@ func (h *Handler) serveLog(w http.ResponseWriter, req *http.Request) error {
 	case "GET":
 		return h.getLogs(w, req)
 	case "POST":
-		return h.postLog(w, req)
+		return h.postLogs(w, req)
 	}
 	return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s method not allowed", req.Method)
 }
@@ -43,9 +44,9 @@ func (h *Handler) getLogs(w http.ResponseWriter, req *http.Request) error {
 	if err != nil {
 		return badRequestf(err, "invalid limit value")
 	}
-	offset, err := intValue(req.Form.Get("offset"), 0, 0)
+	offset, err := intValue(req.Form.Get("skip"), 0, 0)
 	if err != nil {
-		return badRequestf(err, "invalid offset value")
+		return badRequestf(err, "invalid skip value")
 	}
 	id := req.Form.Get("id")
 	strLevel := req.Form.Get("level")
@@ -76,58 +77,87 @@ func (h *Handler) getLogs(w http.ResponseWriter, req *http.Request) error {
 	}
 
 	// Retrieve the logs.
+	outputStarted := false
+	closingContent := "[]"
 	var log mongodoc.Log
 	iter := h.store.DB.Logs().Find(query).Sort("-_id").Skip(offset).Limit(limit).Iter()
 	for iter.Next(&log) {
-		var data json.RawMessage
-		if err := json.Unmarshal(log.Data, &data); err != nil {
-			return errgo.Notef(err, "cannot unmarshal log data")
+		// Start writing the response body. The logs are streamed, but we wrap
+		// the output in square brackets and we separate entries with commas so
+		// that it's more easy for clients to parse the response.
+		closingContent = "]"
+		if outputStarted {
+			if err := writeString(w, ","); err != nil {
+				return errgo.Notef(err, "cannot write response")
+			}
+		} else {
+			if err := writeString(w, "["); err != nil {
+				return errgo.Notef(err, "cannot write response")
+			}
+			outputStarted = true
 		}
 		logResponse := &params.LogResponse{
-			Data:  data,
+			Data:  json.RawMessage(log.Data),
 			Level: mongodocLogLevels[log.Level],
 			Type:  mongodocLogTypes[log.Type],
 			URLs:  log.URLs,
 			Time:  log.Time.UTC(),
 		}
 		if err := encoder.Encode(logResponse); err != nil {
-			return errgo.Notef(err, "cannot marshal log")
+			// Since we only allow properly encoded JSON messages to be stored
+			// in the database, this should never happen. Moreover, at this
+			// point we already sent a chunk of the 200 response, so we just
+			// log the error.
+			logger.Errorf("cannot marshal log: %s", err)
 		}
 	}
 	if err := iter.Close(); err != nil {
 		return errgo.Notef(err, "cannot retrieve logs")
 	}
+
+	// Close the JSON list, or just write an empty list, depending on whether
+	// we had results.
+	if err := writeString(w, closingContent); err != nil {
+		return errgo.Notef(err, "cannot write response")
+	}
 	return nil
 }
 
-func (h *Handler) postLog(w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) postLogs(w http.ResponseWriter, req *http.Request) error {
 	// Check the request content type.
 	if ctype := req.Header.Get("Content-Type"); ctype != "application/json" {
 		return badRequestf(nil, "unexpected Content-Type %q; expected 'application/json'", ctype)
 	}
 
 	// Unmarshal the request body.
-	var log params.Log
+	var logs []params.Log
 	decoder := json.NewDecoder(req.Body)
-	if err := decoder.Decode(&log); err != nil {
+	if err := decoder.Decode(&logs); err != nil {
 		return badRequestf(err, "cannot unmarshal body")
 	}
 
-	// Validate the provided level and type.
-	logLevel, ok := paramsLogLevels[log.Level]
-	if !ok {
-		return badRequestf(nil, "invalid log level")
-	}
-	logType, ok := paramsLogTypes[log.Type]
-	if !ok {
-		return badRequestf(nil, "invalid log type")
-	}
+	for _, log := range logs {
+		// Validate the provided level and type.
+		logLevel, ok := paramsLogLevels[log.Level]
+		if !ok {
+			return badRequestf(nil, "invalid log level")
+		}
+		logType, ok := paramsLogTypes[log.Type]
+		if !ok {
+			return badRequestf(nil, "invalid log type")
+		}
 
-	// Add the log to the database.
-	if err := h.store.AddLog(log.Data, logLevel, logType, log.URLs); err != nil {
-		return errgo.Notef(err, "cannot add log")
+		// Add the log to the database.
+		if err := h.store.AddLog(log.Data, logLevel, logType, log.URLs); err != nil {
+			return errgo.Notef(err, "cannot add log")
+		}
 	}
 	return nil
+}
+
+func writeString(w io.Writer, content string) error {
+	_, err := w.Write([]byte(content))
+	return err
 }
 
 var (
@@ -153,9 +183,9 @@ var (
 	}
 )
 
-// intValue checks that the given string value is a number greater than the
-// given minValue. If the provided value is an empty string, the defaultValue
-// is returned without errors.
+// intValue checks that the given string value is a number greater than or
+// equal to the given minValue. If the provided value is an empty string, the
+// defaultValue is returned without errors.
 func intValue(strValue string, minValue, defaultValue int) (int, error) {
 	if strValue == "" {
 		return defaultValue, nil
