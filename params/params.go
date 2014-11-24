@@ -154,7 +154,7 @@ const BzrDigestKey = "bzr-digest"
 // Log holds the representation of a log message.
 // This is used by clients to store log events in the charm store.
 type Log struct {
-	// Data holds the log message as a JSON.
+	// Data holds the log message as a JSON-encoded value.
 	Data *json.RawMessage
 
 	// Level holds the log level as a string.
@@ -164,7 +164,7 @@ type Log struct {
 	Type LogType
 
 	// URLs holds a slice of entity URLs associated with the log message.
-	URLs []*charm.Reference
+	URLs []*charm.Reference `json:",omitempty"`
 }
 
 // LogResponse represents a single log message and is used in the responses
