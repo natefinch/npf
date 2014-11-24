@@ -19,7 +19,7 @@ import (
 // GET /log
 // http://tinyurl.com/nj77rcr
 //
-// POST .log
+// POST /log
 // http://tinyurl.com/o27hqxe
 func (h *Handler) serveLog(w http.ResponseWriter, req *http.Request) error {
 	if err := h.authenticate(w, req); err != nil {
@@ -153,9 +153,9 @@ var (
 	}
 )
 
-// intValue checks that the given string value a number greater than the given
-// minValue. If the provided value is an empty string, the defaultValue is
-// returned without errors.
+// intValue checks that the given string value is a number greater than the
+// given minValue. If the provided value is an empty string, the defaultValue
+// is returned without errors.
 func intValue(strValue string, minValue, defaultValue int) (int, error) {
 	if strValue == "" {
 		return defaultValue, nil

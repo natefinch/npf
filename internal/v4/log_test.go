@@ -391,12 +391,6 @@ var postLogErrorsTests = []struct {
 	expectMessage: "cannot unmarshal body: invalid character '!' looking for beginning of value",
 	expectCode:    params.ErrBadRequest,
 }, {
-	about:         "invalid log message",
-	body:          []byte("!"),
-	expectStatus:  http.StatusBadRequest,
-	expectMessage: "cannot unmarshal body: invalid character '!' looking for beginning of value",
-	expectCode:    params.ErrBadRequest,
-}, {
 	about:         "invalid log level",
 	body:          makeByteLog(rawMessage("message"), params.LogLevel(42), params.IngestionType, nil),
 	expectStatus:  http.StatusBadRequest,
