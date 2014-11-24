@@ -52,7 +52,8 @@ var logResponses = map[string]*params.LogResponse{
 		Type:  params.IngestionType,
 		URLs: []*charm.Reference{
 			charm.MustParseReference("precise/django"),
-			charm.MustParseReference("trusty/rails"),
+			charm.MustParseReference("django"),
+			charm.MustParseReference("rails"),
 		},
 	},
 	"warning1": {
@@ -65,7 +66,9 @@ var logResponses = map[string]*params.LogResponse{
 		Data:  rawMessage("error data 2"),
 		Level: params.ErrorLevel,
 		Type:  params.IngestionType,
-		URLs:  nil,
+		URLs: []*charm.Reference{
+			charm.MustParseReference("hadoop"),
+		},
 	},
 	"info3": {
 		Data:  rawMessage("info data 3"),
@@ -73,7 +76,9 @@ var logResponses = map[string]*params.LogResponse{
 		Type:  params.IngestionType,
 		URLs: []*charm.Reference{
 			charm.MustParseReference("trusty/django"),
+			charm.MustParseReference("django"),
 			charm.MustParseReference("utopic/hadoop"),
+			charm.MustParseReference("hadoop"),
 		},
 	},
 	"error3": {
@@ -82,7 +87,9 @@ var logResponses = map[string]*params.LogResponse{
 		Type:  params.IngestionType,
 		URLs: []*charm.Reference{
 			charm.MustParseReference("utopic/hadoop"),
+			charm.MustParseReference("hadoop"),
 			charm.MustParseReference("precise/django"),
+			charm.MustParseReference("django"),
 		},
 	},
 }
@@ -347,11 +354,10 @@ func (s *logSuite) TestGetLogsUnauthorizedError(c *gc.C) {
 
 func (s *logSuite) TestPostLogs(c *gc.C) {
 	// Prepare the request body.
-	urls := []*charm.Reference{
+	body := makeByteLogs(rawMessage("info data"), params.InfoLevel, params.IngestionType, []*charm.Reference{
 		charm.MustParseReference("trusty/django"),
 		charm.MustParseReference("utopic/rails"),
-	}
-	body := makeByteLogs(rawMessage("info data"), params.InfoLevel, params.IngestionType, urls)
+	})
 
 	// Send the request.
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
@@ -374,7 +380,12 @@ func (s *logSuite) TestPostLogs(c *gc.C) {
 	c.Assert(string(doc.Data), gc.Equals, `"info data"`)
 	c.Assert(doc.Level, gc.Equals, mongodoc.InfoLevel)
 	c.Assert(doc.Type, gc.Equals, mongodoc.IngestionType)
-	c.Assert(doc.URLs, jc.DeepEquals, urls)
+	c.Assert(doc.URLs, jc.DeepEquals, []*charm.Reference{
+		charm.MustParseReference("trusty/django"),
+		charm.MustParseReference("django"),
+		charm.MustParseReference("utopic/rails"),
+		charm.MustParseReference("rails"),
+	})
 }
 
 func (s *logSuite) TestPostLogsMultipleEntries(c *gc.C) {

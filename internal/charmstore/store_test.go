@@ -917,8 +917,8 @@ func (s *StoreSuite) TestAddLog(c *gc.C) {
 	store, err := NewStore(s.Session.DB("juju_test"), nil)
 	c.Assert(err, gc.IsNil)
 	urls := []*charm.Reference{
-		charm.MustParseReference("cs:trusty/wordpress"),
-		charm.MustParseReference("cs:~who/trusty/wordpress"),
+		charm.MustParseReference("cs:django"),
+		charm.MustParseReference("cs:rails"),
 	}
 	infoData := json.RawMessage([]byte(`"info data"`))
 	errorData := json.RawMessage([]byte(`"error data"`))
@@ -965,6 +965,58 @@ func (s *StoreSuite) TestAddLogDataError(c *gc.C) {
 	// Try to add the invalid log message to the store.
 	err = store.AddLog(&data, mongodoc.InfoLevel, mongodoc.IngestionType, nil)
 	c.Assert(err, gc.ErrorMatches, "cannot marshal log data: json: error calling MarshalJSON .*")
+}
+
+func (s *StoreSuite) TestAddLogBaseURLs(c *gc.C) {
+	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	c.Assert(err, gc.IsNil)
+
+	// Add the log to the store with associated URLs.
+	data := json.RawMessage([]byte(`"info data"`))
+	err = store.AddLog(&data, mongodoc.WarningLevel, mongodoc.IngestionType, []*charm.Reference{
+		charm.MustParseReference("trusty/django-42"),
+		charm.MustParseReference("~who/utopic/wordpress"),
+	})
+	c.Assert(err, gc.IsNil)
+
+	// Retrieve the log from the store.
+	var doc mongodoc.Log
+	err = store.DB.Logs().Find(nil).One(&doc)
+	c.Assert(err, gc.IsNil)
+
+	// The log includes the base URLs.
+	c.Assert(doc.URLs, jc.DeepEquals, []*charm.Reference{
+		charm.MustParseReference("trusty/django-42"),
+		charm.MustParseReference("django"),
+		charm.MustParseReference("~who/utopic/wordpress"),
+		charm.MustParseReference("~who/wordpress"),
+	})
+}
+
+func (s *StoreSuite) TestAddLogDuplicateURLs(c *gc.C) {
+	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	c.Assert(err, gc.IsNil)
+
+	// Add the log to the store with associated URLs.
+	data := json.RawMessage([]byte(`"info data"`))
+	err = store.AddLog(&data, mongodoc.WarningLevel, mongodoc.IngestionType, []*charm.Reference{
+		charm.MustParseReference("trusty/django-42"),
+		charm.MustParseReference("django"),
+		charm.MustParseReference("trusty/django-42"),
+		charm.MustParseReference("django"),
+	})
+	c.Assert(err, gc.IsNil)
+
+	// Retrieve the log from the store.
+	var doc mongodoc.Log
+	err = store.DB.Logs().Find(nil).One(&doc)
+	c.Assert(err, gc.IsNil)
+
+	// The log excludes duplicate URLs.
+	c.Assert(doc.URLs, jc.DeepEquals, []*charm.Reference{
+		charm.MustParseReference("trusty/django-42"),
+		charm.MustParseReference("django"),
+	})
 }
 
 func (s *StoreSuite) TestCollections(c *gc.C) {
