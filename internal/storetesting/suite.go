@@ -41,24 +41,24 @@ type IsolatedMgoESSuite struct {
 
 func (s *IsolatedMgoESSuite) SetUpSuite(c *gc.C) {
 	s.IsolationSuite.SetUpSuite(c)
-	s.MgoSuite.SetUpSuite(c)
 	s.ElasticSearchSuite.SetUpSuite(c)
+	s.MgoSuite.SetUpSuite(c)
 }
 
 func (s *IsolatedMgoESSuite) TearDownSuite(c *gc.C) {
-	s.ElasticSearchSuite.TearDownSuite(c)
 	s.MgoSuite.TearDownSuite(c)
+	s.ElasticSearchSuite.TearDownSuite(c)
 	s.IsolationSuite.TearDownSuite(c)
 }
 
 func (s *IsolatedMgoESSuite) SetUpTest(c *gc.C) {
 	s.IsolationSuite.SetUpTest(c)
-	s.MgoSuite.SetUpTest(c)
 	s.ElasticSearchSuite.SetUpTest(c)
+	s.MgoSuite.SetUpTest(c)
 }
 
 func (s *IsolatedMgoESSuite) TearDownTest(c *gc.C) {
-	s.ElasticSearchSuite.TearDownTest(c)
 	s.MgoSuite.TearDownTest(c)
+	s.ElasticSearchSuite.TearDownTest(c)
 	s.IsolationSuite.TearDownTest(c)
 }

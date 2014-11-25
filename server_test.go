@@ -38,13 +38,13 @@ func (s *ServerSuite) SetUpSuite(c *gc.C) {
 }
 
 func (s *ServerSuite) TestNewServerWithNoVersions(c *gc.C) {
-	h, err := charmstore.NewServer(s.Session.DB("foo"), nil, s.config)
+	h, err := charmstore.NewServer(s.Session.DB("foo"), nil, "", s.config)
 	c.Assert(err, gc.ErrorMatches, `charm store server must serve at least one version of the API`)
 	c.Assert(h, gc.IsNil)
 }
 
 func (s *ServerSuite) TestNewServerWithUnregisteredVersion(c *gc.C) {
-	h, err := charmstore.NewServer(s.Session.DB("foo"), nil, s.config, "wrong")
+	h, err := charmstore.NewServer(s.Session.DB("foo"), nil, "", s.config, "wrong")
 	c.Assert(err, gc.ErrorMatches, `unknown version "wrong"`)
 	c.Assert(h, gc.IsNil)
 }
@@ -61,7 +61,7 @@ func (s *ServerSuite) TestVersions(c *gc.C) {
 func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	db := s.Session.DB("foo")
 
-	h, err := charmstore.NewServer(db, nil, s.config, charmstore.V4)
+	h, err := charmstore.NewServer(db, nil, "", s.config, charmstore.V4)
 	c.Assert(err, gc.IsNil)
 
 	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
@@ -97,4 +97,26 @@ func assertDoesNotServeVersion(c *gc.C, h http.Handler, vers string) {
 			Code:    params.ErrNotFound,
 		},
 	})
+}
+
+type ServerESSuite struct {
+	storetesting.IsolatedMgoESSuite
+	config charmstore.ServerParams
+}
+
+var _ = gc.Suite(&ServerESSuite{})
+
+func (s *ServerESSuite) SetUpSuite(c *gc.C) {
+	s.IsolatedMgoESSuite.SetUpSuite(c)
+	s.config = charmstore.ServerParams{
+		AuthUsername: "test-user",
+		AuthPassword: "test-password",
+	}
+}
+
+func (s *ServerESSuite) TestNewServerWithElasticsearch(c *gc.C) {
+	db := s.Session.DB("foo")
+
+	_, err := charmstore.NewServer(db, s.ES, s.TestIndex, s.config, charmstore.V4)
+	c.Assert(err, gc.IsNil)
 }

@@ -6,22 +6,33 @@ package charmstore
 import (
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/json"
 	"strings"
 	"time"
 
+	"github.com/juju/utils"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/elasticsearch"
 	"github.com/juju/charmstore/internal/mongodoc"
+	"github.com/juju/charmstore/params"
 )
 
-// StoreElasticSearch provides strongly typed methods for accessing the
+type SearchIndex struct {
+	*elasticsearch.Database
+	Index string
+}
+
+// storeElasticSearch provides strongly typed methods for accessing the
 // elasticsearch database. These methods will not return errors if
 // elasticsearch is not configured, allowing them to be safely called even if
 // it is not enabled in this service.
-type StoreElasticSearch struct {
-	*elasticsearch.Index
+type storeElasticSearch struct {
+	*SearchIndex
+	DB StoreDatabase
 }
 
 const typeName = "entity"
@@ -54,30 +65,47 @@ var deprecatedSeries = map[string]bool{
 	"saucy":   true,
 }
 
-// Put inserts the mongodoc.Entity into elasticsearch if elasticsearch
-// is configured.
-func (ses *StoreElasticSearch) put(entity *mongodoc.Entity) error {
-	if ses == nil || ses.Index == nil {
+// put inserts an entity into elasticsearch if elasticsearch
+// is configured. The entity with id r is extracted from mongodb
+// and written into elasticsearch.
+func (ses *storeElasticSearch) put(r *charm.Reference) error {
+	if ses == nil || ses.SearchIndex == nil {
 		return nil
 	}
-	if deprecatedSeries[entity.URL.Series] {
+	if deprecatedSeries[r.Series] {
 		return nil
+	}
+	var entity mongodoc.Entity
+	if err := ses.DB.Entities().FindId(r).One(&entity); err != nil {
+		if err == mgo.ErrNotFound {
+			return errgo.WithCausef(nil, params.ErrNotFound, "entity not found %s", r)
+		}
+		return errgo.Notef(err, "cannot get %s", r)
 	}
 	doc := esDoc{
-		Entity: entity,
+		Entity: &entity,
 		Name:   entity.URL.Name,
 		User:   entity.URL.User,
 		Series: entity.URL.Series,
 	}
-	_, err := ses.PutDocumentVersion(typeName, ses.getID(entity), int64(entity.URL.Revision), doc)
-	return errgo.Mask(err)
+	err := ses.PutDocumentVersionWithType(
+		ses.Index,
+		typeName,
+		ses.getID(entity.URL),
+		int64(entity.URL.Revision),
+		elasticsearch.ExternalGTE,
+		doc)
+	if err != nil && err != elasticsearch.ErrConflict {
+		return errgo.Mask(err)
+	}
+	return nil
 }
 
 // getID returns an ID for the elasticsearch document based on the contents of the
 // mongoDB document. This is to allow elasticsearch documents to be replaced with
 // updated versions when charm data is changed.
-func (ses *StoreElasticSearch) getID(entity *mongodoc.Entity) string {
-	ref := *entity.URL
+func (ses *storeElasticSearch) getID(r *charm.Reference) string {
+	ref := *r
 	ref.Revision = -1
 	b := sha1.Sum([]byte(ref.String()))
 	s := base64.URLEncoding.EncodeToString(b[:])
@@ -88,13 +116,13 @@ func (ses *StoreElasticSearch) getID(entity *mongodoc.Entity) string {
 // Search searches for matching entities in the configured elasticsearch index.
 // If there is no elasticsearch index configured then it will return an empty
 // SearchResult, as if no results were found.
-func (ses *StoreElasticSearch) search(sp SearchParams) (SearchResult, error) {
-	if ses == nil || ses.Index == nil {
+func (ses *storeElasticSearch) search(sp SearchParams) (SearchResult, error) {
+	if ses == nil || ses.SearchIndex == nil {
 		return SearchResult{}, nil
 	}
 	q := createSearchDSL(sp)
 	q.Fields = append(q.Fields, "URL")
-	esr, err := ses.Search(typeName, q)
+	esr, err := ses.Search(ses.Index, typeName, q)
 	if err != nil {
 		return SearchResult{}, errgo.Mask(err)
 	}
@@ -113,14 +141,128 @@ func (ses *StoreElasticSearch) search(sp SearchParams) (SearchResult, error) {
 	return r, nil
 }
 
-// ExportToElasticSearch reads all of the mongodoc Entities and writes
-// them to elasticsearch
-func (store *Store) ExportToElasticSearch() error {
+// version is a document that stores the structure information
+// in the elasticsearch database.
+type version struct {
+	Version int64
+	Index   string
+}
+
+const versionIndex = ".versions"
+const versionType = "version"
+
+// ensureIndexes makes sure that the required indexes exist and have the right
+// settings. If force is true then ensureIndexes will create new indexes irrespective
+// of the status of the current index.
+func (si *SearchIndex) ensureIndexes(force bool) error {
+	if si == nil {
+		return nil
+	}
+	old, dv, err := si.getCurrentVersion()
+	if err != nil {
+		return errgo.Notef(err, "cannot get current version")
+	}
+	if !force && old.Version >= esSettingsVersion {
+		return nil
+	}
+	index, err := si.newIndex()
+	if err != nil {
+		return errgo.Notef(err, "cannot create index")
+	}
+	new := version{
+		Version: esSettingsVersion,
+		Index:   index,
+	}
+	updated, err := si.updateVersion(new, dv)
+	if err != nil {
+		return errgo.Notef(err, "cannot update version")
+	}
+	if !updated {
+		// Update failed so delete the new index
+		if err := si.DeleteIndex(index); err != nil {
+			return errgo.Notef(err, "cannot delete index")
+		}
+		return nil
+	}
+	// Update succeeded - update the aliases
+	if err := si.Alias(index, si.Index); err != nil {
+		return errgo.Notef(err, "cannot create alias")
+	}
+	// Delete the old unused index
+	if old.Index != "" {
+		if err := si.DeleteIndex(old.Index); err != nil {
+			return errgo.Notef(err, "cannot delete index")
+		}
+	}
+	return nil
+}
+
+// getCurrentVersion gets the version of elasticsearch settings, if any
+// that are deployed to elasticsearch.
+func (si *SearchIndex) getCurrentVersion() (version, int64, error) {
+	var v version
+	d, err := si.GetESDocument(versionIndex, versionType, si.Index)
+	if err != nil && err != elasticsearch.ErrNotFound {
+		return version{}, 0, errgo.Notef(err, "cannot get settings version")
+	}
+	if d.Found {
+		if err := json.Unmarshal(d.Source, &v); err != nil {
+			return version{}, 0, errgo.Notef(err, "invalid version")
+		}
+	}
+	return v, d.Version, nil
+}
+
+// newIndex creates a new index with current elasticsearch settings.
+// The new Index will have a randomized name based on si.Index.
+func (si *SearchIndex) newIndex() (string, error) {
+	uuid, err := utils.NewUUID()
+	if err != nil {
+		return "", errgo.Notef(err, "cannot create index name")
+	}
+	index := si.Index + "-" + uuid.String()
+	if err := si.PutIndex(index, esIndex); err != nil {
+		return "", errgo.Notef(err, "cannot set index settings")
+	}
+	if err := si.PutMapping(index, "entity", esMapping); err != nil {
+		return "", errgo.Notef(err, "cannot set index mapping")
+	}
+	return index, nil
+}
+
+// updateVersion attempts to atomically update the document specifying the version of
+// the elasticsearch settings. If it succeeds then err will be nil, if the update could not be
+// made atomically then err will be elasticsearch.ErrConflict, otherwise err is a non-nil
+// error.
+func (si *SearchIndex) updateVersion(v version, dv int64) (bool, error) {
+	var err error
+	if dv == 0 {
+		err = si.CreateDocument(versionIndex, versionType, si.Index, v)
+	} else {
+		err = si.PutDocumentVersion(versionIndex, versionType, si.Index, dv, v)
+	}
+	if err != nil {
+		if errgo.Cause(err) == elasticsearch.ErrConflict {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// sync populates an elasticsearch index with all the data currently stored in
+// mongodb.
+func (ses *storeElasticSearch) sync() error {
+	if ses == nil || ses.SearchIndex == nil {
+		return nil
+	}
 	var result mongodoc.Entity
-	iter := store.DB.Entities().Find(nil).Iter()
+	// Only get the IDs here, put will get the full document if it is in a series that
+	// is indexed.
+	iter := ses.DB.Entities().Find(nil).Select(bson.M{"_id": 1}).Iter()
 	defer iter.Close() // Make sure we always close on error.
 	for iter.Next(&result) {
-		if err := store.ES.put(&result); err != nil {
+		if err := ses.put(result.URL); err != nil {
 			return errgo.Notef(err, "cannot index %s", result.URL)
 		}
 	}
@@ -194,16 +336,6 @@ type SearchResult struct {
 	SearchTime time.Duration
 	Total      int
 	Results    []*charm.Reference
-}
-
-// Search searches the store for the given SearchParams.
-// It returns a slice a SearchResult containing the results of the search.
-func (store *Store) Search(sp SearchParams) (SearchResult, error) {
-	results, err := store.ES.search(sp)
-	if err != nil {
-		return SearchResult{}, errgo.Mask(err)
-	}
-	return results, nil
 }
 
 // queryFields provides a map of fields to weighting to use with the

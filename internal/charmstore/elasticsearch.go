@@ -1,3 +1,53 @@
+// Copyright 2014 Canonical Ltd.
+// Licensed under the AGPLv3, see LICENCE file for details.
+
+package charmstore
+
+import "encoding/json"
+
+var (
+	esIndex   = mustParseJSON(esIndexJSON)
+	esMapping = mustParseJSON(esMappingJSON)
+)
+
+const esSettingsVersion = 1
+
+func mustParseJSON(s string) interface{} {
+	var j json.RawMessage
+	if err := json.Unmarshal([]byte(s), &j); err != nil {
+		panic(err)
+	}
+	return &j
+}
+
+const esIndexJSON = `
+{
+    "settings": {
+        "number_of_shards": 1,
+        "analysis": {
+            "filter": {
+                "n3_20grams_filter": {
+                    "type":     "nGram",
+                    "min_gram": 3,
+                    "max_gram": 20
+                }
+            },
+            "analyzer": {
+                "n3_20grams": {
+                    "type":      "custom",
+                    "tokenizer": "standard",
+                    "filter": [
+                        "lowercase",
+                        "n3_20grams_filter"
+                    ]
+                }
+            }
+        }
+    }
+}
+`
+
+const esMappingJSON = `
 {
   "entity" : {
     "dynamic" : "false",
@@ -255,3 +305,4 @@
     }
   }
 }
+`

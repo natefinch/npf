@@ -12,7 +12,6 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/mgo.v2"
 
-	"github.com/juju/charmstore/internal/elasticsearch"
 	"github.com/juju/charmstore/internal/router"
 )
 
@@ -28,13 +27,15 @@ type ServerParams struct {
 
 // NewServer returns a handler that serves the given charm store API
 // versions using db to store that charm store data.
+// An optional elasticsearch configuration can be specified in si. If
+// elasticsearch is not being used then si can be set to nil.
 // The key of the versions map is the version name.
 // The handler configuration is provided to all version handlers.
-func NewServer(db *mgo.Database, es *elasticsearch.Index, config ServerParams, versions map[string]NewAPIHandlerFunc) (http.Handler, error) {
+func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions map[string]NewAPIHandlerFunc) (http.Handler, error) {
 	if len(versions) == 0 {
 		return nil, errgo.Newf("charm store server must serve at least one version of the API")
 	}
-	store, err := NewStore(db, &StoreElasticSearch{es})
+	store, err := NewStore(db, si)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot make store")
 	}
