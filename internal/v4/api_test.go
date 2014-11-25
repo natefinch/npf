@@ -320,6 +320,26 @@ var metaEndpoints = []metaEndpoint{{
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data, gc.Equals, params.IdRevisionResponse{2})
 	},
+}, {
+	name: "id",
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		return params.IdResponse{
+			Id:       url,
+			User:     url.User,
+			Series:   url.Series,
+			Name:     url.Name,
+			Revision: url.Revision,
+		}, nil
+	},
+	checkURL: "cs:utopic/category-2",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, jc.DeepEquals, params.IdResponse{
+			Id:       charm.MustParseReference("cs:utopic/category-2"),
+			Series:   "utopic",
+			Name:     "category",
+			Revision: 2,
+		})
+	},
 }}
 
 // TestEndpointGet tries to ensure that the endpoint

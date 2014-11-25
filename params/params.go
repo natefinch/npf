@@ -147,5 +147,15 @@ type IdRevisionResponse struct {
 	Revision int
 }
 
+// IdResponse holds the result of an id/meta/id GET request.
+// See http://tinyurl.com/lnqwbsp
+type IdResponse struct {
+	Id       *charm.Reference
+	User     string `json:",omitempty"`
+	Series   string `json:",omitempty"`
+	Name     string
+	Revision int
+}
+
 // BzrDigestKey is the extra-info key used to store the Bazaar digest
 const BzrDigestKey = "bzr-digest"
