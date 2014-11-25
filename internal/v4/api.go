@@ -80,6 +80,7 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 				h.putMetaExtraInfoWithKey,
 				"extrainfo",
 			),
+			"id":            h.entityHandler(h.metaId, "_id"),
 			"id-name":       h.entityHandler(h.metaIdName, "_id"),
 			"id-user":       h.entityHandler(h.metaIdUser, "_id"),
 			"id-revision":   h.entityHandler(h.metaIdRevision, "_id"),
@@ -467,6 +468,18 @@ func (h *Handler) metaIdUser(entity *mongodoc.Entity, id *charm.Reference, path 
 func (h *Handler) metaIdSeries(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	return params.IdSeriesResponse{
 		Series: id.Series,
+	}, nil
+}
+
+// GET id/meta/id-name
+// http://tinyurl.com/lnqwbsp
+func (h *Handler) metaId(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	return params.IdResponse{
+		Id:       id,
+		User:     id.User,
+		Series:   id.Series,
+		Name:     id.Name,
+		Revision: id.Revision,
 	}, nil
 }
 
