@@ -52,24 +52,6 @@ const esMappingJSON = `
   "entity" : {
     "dynamic" : "false",
     "properties" : {
-      "Name" : {
-        "type" : "string",
-        "index" : "not_analyzed",
-        "omit_norms" : true,
-        "index_options" : "docs"
-      },
-      "Series" : {
-        "type" : "string",
-        "index" : "not_analyzed",
-        "omit_norms" : true,
-        "index_options" : "docs"
-      },
-      "User" : {
-        "type" : "string",
-        "index" : "not_analyzed",
-        "omit_norms" : true,
-        "index_options" : "docs"
-      },  
       "URL" : {
         "type" : "multi_field",
         "fields" : {
@@ -89,6 +71,28 @@ const esMappingJSON = `
       "BaseURL" : {
         "type" : "string",
         "index": "not_analyzed",
+        "index_options" : "docs"
+      },
+      "User" : {
+        "type" : "string",
+        "index" : "not_analyzed",
+        "omit_norms" : true,
+        "index_options" : "docs"
+      },
+      "Name" : {
+        "type" : "string",
+        "index" : "not_analyzed",
+        "omit_norms" : true,
+        "index_options" : "docs"
+      },
+      "Revision" : {
+        "type" : "integer",
+        "index" : "not_analyzed"
+      },
+      "Series" : {
+        "type" : "string",
+        "index" : "not_analyzed",
+        "omit_norms" : true,
         "index_options" : "docs"
       },
       "BlobHash" : {

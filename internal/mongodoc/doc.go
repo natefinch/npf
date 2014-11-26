@@ -19,7 +19,7 @@ type Entity struct {
 	BaseURL *charm.Reference
 
 	// User holds the user part of the entity URL (for instance, "joe").
-	User string `bson:",omitempty" json:",omitempty"`
+	User string
 
 	// Name holds the name of the entity (for instance "wordpress").
 	Name string
