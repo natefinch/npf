@@ -10,4 +10,6 @@ var (
 	DefaultIcon                    = defaultIcon
 	ArchiveCacheVersionedMaxAge    = &archiveCacheVersionedMaxAge
 	ArchiveCacheNonVersionedMaxAge = &archiveCacheNonVersionedMaxAge
+	ParamsLogLevels                = paramsLogLevels
+	ParamsLogTypes                 = paramsLogTypes
 )

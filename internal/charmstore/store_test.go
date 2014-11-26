@@ -7,6 +7,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"crypto/sha512"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -910,6 +911,112 @@ func (s *StoreSuite) TestBlobNameAndHash(c *gc.C) {
 
 	c.Assert(hash, gc.Equals, expectHash)
 	c.Assert(hashOfReader(c, r), gc.Equals, expectHash)
+}
+
+func (s *StoreSuite) TestAddLog(c *gc.C) {
+	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	c.Assert(err, gc.IsNil)
+	urls := []*charm.Reference{
+		charm.MustParseReference("cs:django"),
+		charm.MustParseReference("cs:rails"),
+	}
+	infoData := json.RawMessage([]byte(`"info data"`))
+	errorData := json.RawMessage([]byte(`"error data"`))
+
+	// Add logs to the store.
+	beforeAdding := time.Now().Add(-time.Second)
+	err = store.AddLog(&infoData, mongodoc.InfoLevel, mongodoc.IngestionType, nil)
+	c.Assert(err, gc.IsNil)
+	err = store.AddLog(&errorData, mongodoc.ErrorLevel, mongodoc.IngestionType, urls)
+	c.Assert(err, gc.IsNil)
+	afterAdding := time.Now().Add(time.Second)
+
+	// Retrieve the logs from the store.
+	var docs []mongodoc.Log
+	err = store.DB.Logs().Find(nil).Sort("_id").All(&docs)
+	c.Assert(err, gc.IsNil)
+	c.Assert(docs, gc.HasLen, 2)
+
+	// The docs have been correctly added to the Mongo collection.
+	infoDoc, errorDoc := docs[0], docs[1]
+	c.Assert(infoDoc.Time, jc.TimeBetween(beforeAdding, afterAdding))
+	c.Assert(errorDoc.Time, jc.TimeBetween(beforeAdding, afterAdding))
+	infoDoc.Time = time.Time{}
+	errorDoc.Time = time.Time{}
+	c.Assert(infoDoc, jc.DeepEquals, mongodoc.Log{
+		Data:  []byte(infoData),
+		Level: mongodoc.InfoLevel,
+		Type:  mongodoc.IngestionType,
+		URLs:  nil,
+	})
+	c.Assert(errorDoc, jc.DeepEquals, mongodoc.Log{
+		Data:  []byte(errorData),
+		Level: mongodoc.ErrorLevel,
+		Type:  mongodoc.IngestionType,
+		URLs:  urls,
+	})
+}
+
+func (s *StoreSuite) TestAddLogDataError(c *gc.C) {
+	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	c.Assert(err, gc.IsNil)
+	data := json.RawMessage([]byte("!"))
+
+	// Try to add the invalid log message to the store.
+	err = store.AddLog(&data, mongodoc.InfoLevel, mongodoc.IngestionType, nil)
+	c.Assert(err, gc.ErrorMatches, "cannot marshal log data: json: error calling MarshalJSON .*")
+}
+
+func (s *StoreSuite) TestAddLogBaseURLs(c *gc.C) {
+	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	c.Assert(err, gc.IsNil)
+
+	// Add the log to the store with associated URLs.
+	data := json.RawMessage([]byte(`"info data"`))
+	err = store.AddLog(&data, mongodoc.WarningLevel, mongodoc.IngestionType, []*charm.Reference{
+		charm.MustParseReference("trusty/django-42"),
+		charm.MustParseReference("~who/utopic/wordpress"),
+	})
+	c.Assert(err, gc.IsNil)
+
+	// Retrieve the log from the store.
+	var doc mongodoc.Log
+	err = store.DB.Logs().Find(nil).One(&doc)
+	c.Assert(err, gc.IsNil)
+
+	// The log includes the base URLs.
+	c.Assert(doc.URLs, jc.DeepEquals, []*charm.Reference{
+		charm.MustParseReference("trusty/django-42"),
+		charm.MustParseReference("django"),
+		charm.MustParseReference("~who/utopic/wordpress"),
+		charm.MustParseReference("~who/wordpress"),
+	})
+}
+
+func (s *StoreSuite) TestAddLogDuplicateURLs(c *gc.C) {
+	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	c.Assert(err, gc.IsNil)
+
+	// Add the log to the store with associated URLs.
+	data := json.RawMessage([]byte(`"info data"`))
+	err = store.AddLog(&data, mongodoc.WarningLevel, mongodoc.IngestionType, []*charm.Reference{
+		charm.MustParseReference("trusty/django-42"),
+		charm.MustParseReference("django"),
+		charm.MustParseReference("trusty/django-42"),
+		charm.MustParseReference("django"),
+	})
+	c.Assert(err, gc.IsNil)
+
+	// Retrieve the log from the store.
+	var doc mongodoc.Log
+	err = store.DB.Logs().Find(nil).One(&doc)
+	c.Assert(err, gc.IsNil)
+
+	// The log excludes duplicate URLs.
+	c.Assert(doc.URLs, jc.DeepEquals, []*charm.Reference{
+		charm.MustParseReference("trusty/django-42"),
+		charm.MustParseReference("django"),
+	})
 }
 
 func (s *StoreSuite) TestCollections(c *gc.C) {

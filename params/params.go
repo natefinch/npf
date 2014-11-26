@@ -7,6 +7,7 @@
 package params
 
 import (
+	"encoding/json"
 	"time"
 
 	"gopkg.in/juju/charm.v4"
@@ -159,3 +160,55 @@ type IdResponse struct {
 
 // BzrDigestKey is the extra-info key used to store the Bazaar digest
 const BzrDigestKey = "bzr-digest"
+
+// Log holds the representation of a log message.
+// This is used by clients to store log events in the charm store.
+type Log struct {
+	// Data holds the log message as a JSON-encoded value.
+	Data *json.RawMessage
+
+	// Level holds the log level as a string.
+	Level LogLevel
+
+	// Type holds the log type as a string.
+	Type LogType
+
+	// URLs holds a slice of entity URLs associated with the log message.
+	URLs []*charm.Reference `json:",omitempty"`
+}
+
+// LogResponse represents a single log message and is used in the responses
+// to /log GET requests.
+// See http://tinyurl.com/nj77rcr
+type LogResponse struct {
+	// Data holds the log message as a JSON-encoded value.
+	Data json.RawMessage
+
+	// Level holds the log level as a string.
+	Level LogLevel
+
+	// Type holds the log type as a string.
+	Type LogType
+
+	// URLs holds a slice of entity URLs associated with the log message.
+	URLs []*charm.Reference `json:",omitempty"`
+
+	// Time holds the time of the log.
+	Time time.Time
+}
+
+// LogLevel defines log levels (e.g. "info" or "error") to be used in log
+// requests and responses.
+type LogLevel string
+
+const (
+	InfoLevel    LogLevel = "info"
+	WarningLevel LogLevel = "warning"
+	ErrorLevel   LogLevel = "error"
+)
+
+// LogType defines log types (e.g. "ingestion") to be used in log requests and
+// responses.
+type LogType string
+
+const IngestionType LogType = "ingestion"

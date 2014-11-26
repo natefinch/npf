@@ -5,6 +5,7 @@ package charmstore
 
 import (
 	"archive/zip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sync"
@@ -80,6 +81,9 @@ func (s *Store) ensureIndexes() error {
 	}, {
 		s.DB.Entities(),
 		mgo.Index{Key: []string{"uploadtime"}},
+	}, {
+		s.DB.Logs(),
+		mgo.Index{Key: []string{"urls"}},
 	}}
 	for _, idx := range indexes {
 		err := idx.c.EnsureIndex(idx.i)
@@ -568,6 +572,46 @@ func bundleCharms(data *charm.BundleData) ([]*charm.Reference, error) {
 	return urls, nil
 }
 
+// AddLog adds a log message to the database.
+func (s *Store) AddLog(data *json.RawMessage, logLevel mongodoc.LogLevel, logType mongodoc.LogType, urls []*charm.Reference) error {
+	// Encode the JSON data.
+	b, err := json.Marshal(data)
+	if err != nil {
+		return errgo.Notef(err, "cannot marshal log data")
+	}
+
+	// Add the base URLs to the list of references associated with the log.
+	// Also remove duplicate URLs while maintaining the references' order.
+	var allUrls []*charm.Reference
+	urlMap := make(map[string]bool)
+	for _, url := range urls {
+		urlStr := url.String()
+		if ok, _ := urlMap[urlStr]; !ok {
+			urlMap[urlStr] = true
+			allUrls = append(allUrls, url)
+		}
+		base := baseURL(url)
+		urlStr = base.String()
+		if ok, _ := urlMap[urlStr]; !ok {
+			urlMap[urlStr] = true
+			allUrls = append(allUrls, base)
+		}
+	}
+
+	// Add the log to the database.
+	log := &mongodoc.Log{
+		Data:  b,
+		Level: logLevel,
+		Type:  logType,
+		URLs:  allUrls,
+		Time:  time.Now(),
+	}
+	if err := s.DB.Logs().Insert(log); err != nil {
+		return errgo.Mask(err)
+	}
+	return nil
+}
+
 // StoreDatabase wraps an mgo.DB ands adds a few convenience methods.
 type StoreDatabase struct {
 	*mgo.Database
@@ -593,12 +637,18 @@ func (s StoreDatabase) Entities() *mgo.Collection {
 	return s.C("entities")
 }
 
+// Logs returns the Mongo collection where charm store logs are stored.
+func (s StoreDatabase) Logs() *mgo.Collection {
+	return s.C("logs")
+}
+
 // allCollections holds for each collection used by the charm store a
 // function returns that collection.
 var allCollections = []func(StoreDatabase) *mgo.Collection{
 	StoreDatabase.StatCounters,
 	StoreDatabase.StatTokens,
 	StoreDatabase.Entities,
+	StoreDatabase.Logs,
 }
 
 // Collections returns a slice of all the collections used
