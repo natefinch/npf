@@ -448,9 +448,9 @@ func (s *StoreSearchSuite) TestBoosting(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(res.Results, gc.HasLen, 4)
 	c.Assert(res.Results, jc.DeepEquals, []*charm.Reference{
+		charm.MustParseReference(exportTestBundles["wordpress-simple"]),
 		charm.MustParseReference(exportTestCharms["mysql"]),
 		charm.MustParseReference(exportTestCharms["wordpress"]),
-		charm.MustParseReference(exportTestBundles["wordpress-simple"]),
 		charm.MustParseReference(exportTestCharms["varnish"]),
 	})
 }
