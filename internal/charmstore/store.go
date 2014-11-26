@@ -84,6 +84,9 @@ func (s *Store) ensureIndexes() error {
 	}, {
 		s.DB.Logs(),
 		mgo.Index{Key: []string{"urls"}},
+	}, {
+		s.DB.Migrations(),
+		mgo.Index{Key: []string{"executed"}},
 	}}
 	for _, idx := range indexes {
 		err := idx.c.EnsureIndex(idx.i)
@@ -650,6 +653,11 @@ func (s StoreDatabase) Logs() *mgo.Collection {
 	return s.C("logs")
 }
 
+// Migrations returns the Mongo collection where the migration info is stored.
+func (s StoreDatabase) Migrations() *mgo.Collection {
+	return s.C("migrations")
+}
+
 // allCollections holds for each collection used by the charm store a
 // function returns that collection.
 var allCollections = []func(StoreDatabase) *mgo.Collection{
@@ -657,6 +665,7 @@ var allCollections = []func(StoreDatabase) *mgo.Collection{
 	StoreDatabase.StatTokens,
 	StoreDatabase.Entities,
 	StoreDatabase.Logs,
+	StoreDatabase.Migrations,
 }
 
 // Collections returns a slice of all the collections used
