@@ -183,6 +183,10 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	entity := &mongodoc.Entity{
 		URL:                     p.URL,
 		BaseURL:                 baseURL(p.URL),
+		User:                    p.URL.User,
+		Name:                    p.URL.Name,
+		Revision:                p.URL.Revision,
+		Series:                  p.URL.Series,
 		BlobHash:                p.BlobHash,
 		BlobName:                p.BlobName,
 		Size:                    p.BlobSize,
@@ -354,6 +358,10 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 	entity := &mongodoc.Entity{
 		URL:                p.URL,
 		BaseURL:            baseURL(p.URL),
+		User:               p.URL.User,
+		Name:               p.URL.Name,
+		Revision:           p.URL.Revision,
+		Series:             p.URL.Series,
 		BlobHash:           p.BlobHash,
 		BlobName:           p.BlobName,
 		Size:               p.BlobSize,

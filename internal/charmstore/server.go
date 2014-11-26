@@ -39,6 +39,9 @@ func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions 
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot make store")
 	}
+	if err := migrate(store.DB); err != nil {
+		return nil, errgo.Notef(err, "database migration failed")
+	}
 	mux := router.NewServeMux()
 	for vers, newAPI := range versions {
 		handle(mux, "/"+vers, newAPI(store, config))

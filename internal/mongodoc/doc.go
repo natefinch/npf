@@ -18,6 +18,18 @@ type Entity struct {
 	// e.g. cs:wordpress, cs:~user/foo
 	BaseURL *charm.Reference
 
+	// User holds the user part of the entity URL (for instance, "joe").
+	User string `bson:",omitempty" json:",omitempty"`
+
+	// Name holds the name of the entity (for instance "wordpress").
+	Name string
+
+	// Revision holds the entity revision (it cannot be -1/unset).
+	Revision int
+
+	// Series holds the entity series (for instance "trusty" or "bundle").
+	Series string
+
 	// BlobHash holds the hash checksum of the blob, in hexadecimal format,
 	// as created by blobstore.NewHash.
 	BlobHash string
