@@ -176,7 +176,7 @@ func (s *migrationsSuite) TestMigrateMigrationNames(c *gc.C) {
 	}
 }
 
-func (s *migrationsSuite) TestMigrateMigrationNotRemoved(c *gc.C) {
+func (s *migrationsSuite) TestMigrateMigrationList(c *gc.C) {
 	// When adding migration, update the list below, but never remove existing
 	// migrations.
 	existing := []string{

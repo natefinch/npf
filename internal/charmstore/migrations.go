@@ -15,13 +15,15 @@ import (
 // they are defined when the charm store server is started. Each migration is
 // associated with a name that is used to check whether the migration has been
 // already run. To introduce a new database migration, just add the
-// corresponding migration name and function to this list. Note that names must
-// be unique across the list.
+// corresponding migration name and function to this list, and update the
+// TestMigrateMigrationList test in migration_test.go adding the new name(s).
+// Note that migration names must be unique across the list.
 var migrations = []migration{{
 	name:    "entity ids denormalization",
 	migrate: denormalizeEntityIds,
 }}
 
+// migration holds a migration function with its corresponding name.
 type migration struct {
 	name    string
 	migrate func(StoreDatabase) error
