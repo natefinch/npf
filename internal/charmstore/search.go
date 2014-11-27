@@ -37,14 +37,6 @@ type storeElasticSearch struct {
 
 const typeName = "entity"
 
-// esDoc is a mongodoc.Entity that has denormalised values for use in searching.
-type esDoc struct {
-	*mongodoc.Entity
-	Name   string
-	User   string
-	Series string
-}
-
 // seriesBoost defines how much the results for each
 // series will be boosted. Series are currently ranked in
 // reverse order of LTS releases, followed by the latest
@@ -83,19 +75,13 @@ func (ses *storeElasticSearch) put(r *charm.Reference) error {
 		}
 		return errgo.Notef(err, "cannot get %s", r)
 	}
-	doc := esDoc{
-		Entity: &entity,
-		Name:   entity.URL.Name,
-		User:   entity.URL.User,
-		Series: entity.URL.Series,
-	}
 	err := ses.PutDocumentVersionWithType(
 		ses.Index,
 		typeName,
 		ses.getID(entity.URL),
 		int64(entity.URL.Revision),
 		elasticsearch.ExternalGTE,
-		doc)
+		&entity)
 	if err != nil && err != elasticsearch.ErrConflict {
 		return errgo.Mask(err)
 	}
@@ -325,7 +311,7 @@ type sortParam struct {
 	Order sortOrder
 }
 
-// sortFields contains a mapping from api fieldnames to the esdoc fields to search.
+// sortFields contains a mapping from api fieldnames to the entity fields to search.
 var sortFields = map[string]string{
 	"name":   "Name",
 	"owner":  "User",

@@ -82,6 +82,10 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
 		URL:                     url,
 		BaseURL:                 charm.MustParseReference("cs:wordpress"),
+		User:                    url.User,
+		Name:                    url.Name,
+		Revision:                url.Revision,
+		Series:                  url.Series,
 		BlobHash:                hash,
 		Size:                    size,
 		CharmMeta:               ch.Meta(),
@@ -154,6 +158,10 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
 		URL:          url,
 		BaseURL:      charm.MustParseReference("cs:wordpress-simple"),
+		User:         url.User,
+		Name:         url.Name,
+		Revision:     url.Revision,
+		Series:       url.Series,
 		BlobHash:     hash,
 		Size:         size,
 		BundleData:   bundle.Data(),
@@ -802,6 +810,46 @@ func (s *StoreSuite) TestAddCharmArchive(c *gc.C) {
 	s.checkAddCharm(c, charmArchive, false)
 }
 
+func (s *StoreSuite) TestAddUserOwnedCharm(c *gc.C) {
+	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	c.Assert(err, gc.IsNil)
+
+	// Add the charm to the store.
+	err = store.AddCharmWithArchive(
+		charm.MustParseReference("cs:~who/utopic/django-0"),
+		storetesting.Charms.CharmDir("wordpress"),
+	)
+	c.Assert(err, gc.IsNil)
+
+	// Retrieve the entity.
+	var doc mongodoc.Entity
+	err = store.DB.Entities().FindId("cs:~who/utopic/django-0").One(&doc)
+	c.Assert(err, gc.IsNil)
+
+	// The user has been correctly added to the document.
+	c.Assert(doc.User, gc.Equals, "who")
+}
+
+func (s *StoreSuite) TestAddUserOwnedBundle(c *gc.C) {
+	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	c.Assert(err, gc.IsNil)
+
+	// Add the charm to the store.
+	err = store.AddBundleWithArchive(
+		charm.MustParseReference("cs:~dalek/bundle/django-simple-0"),
+		storetesting.Charms.BundleDir("wordpress-simple"),
+	)
+	c.Assert(err, gc.IsNil)
+
+	// Retrieve the entity.
+	var doc mongodoc.Entity
+	err = store.DB.Entities().FindId("cs:~dalek/bundle/django-simple-0").One(&doc)
+	c.Assert(err, gc.IsNil)
+
+	// The user has been correctly added to the document.
+	c.Assert(doc.User, gc.Equals, "dalek")
+}
+
 func (s *StoreSuite) TestAddBundleDir(c *gc.C) {
 	bundleDir := storetesting.Charms.BundleDir("wordpress-simple")
 	s.checkAddBundle(c, bundleDir, false)
@@ -1025,11 +1073,15 @@ func (s *StoreSuite) TestCollections(c *gc.C) {
 	colls := store.DB.Collections()
 	names, err := store.DB.CollectionNames()
 	c.Assert(err, gc.IsNil)
+	// Some collections don't have indexes so they are created only when used.
+	createdOnUse := map[string]bool{
+		"migrations": true,
+	}
 	// Check that all collections mentioned by Collections are actually created.
 	for _, coll := range colls {
 		found := false
 		for _, name := range names {
-			if name == coll.Name {
+			if name == coll.Name || createdOnUse[coll.Name] {
 				found = true
 			}
 		}

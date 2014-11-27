@@ -18,6 +18,18 @@ type Entity struct {
 	// e.g. cs:wordpress, cs:~user/foo
 	BaseURL *charm.Reference
 
+	// User holds the user part of the entity URL (for instance, "joe").
+	User string
+
+	// Name holds the name of the entity (for instance "wordpress").
+	Name string
+
+	// Revision holds the entity revision (it cannot be -1/unset).
+	Revision int
+
+	// Series holds the entity series (for instance "trusty" or "bundle").
+	Series string
+
 	// BlobHash holds the hash checksum of the blob, in hexadecimal format,
 	// as created by blobstore.NewHash.
 	BlobHash string
@@ -80,6 +92,34 @@ type Entity struct {
 	Contents map[FileId]ZipFile `json:",omitempty" bson:",omitempty"`
 }
 
+type FileId string
+
+const (
+	FileReadMe FileId = "readme"
+	FileIcon   FileId = "icon"
+)
+
+// ZipFile refers to a specific file in the uploaded archive blob.
+type ZipFile struct {
+	// Compressed specifies whether the file is compressed or not.
+	Compressed bool
+
+	// Offset holds the offset into the zip archive of the start of
+	// the file's data.
+	Offset int64
+
+	// Size holds the size of the file before decompression.
+	Size int64
+}
+
+// Valid reports whether f is a valid (non-zero) reference to
+// a zip file.
+func (f ZipFile) IsValid() bool {
+	// Note that no valid zip files can start at offset zero,
+	// because that's where the zip header lives.
+	return f != ZipFile{}
+}
+
 // Log holds the in-database representation of a log message sent to the charm
 // store.
 type Log struct {
@@ -127,30 +167,8 @@ const (
 	IngestionType
 )
 
-type FileId string
-
-const (
-	FileReadMe FileId = "readme"
-	FileIcon   FileId = "icon"
-)
-
-// ZipFile refers to a specific file in the uploaded archive blob.
-type ZipFile struct {
-	// Compressed specifies whether the file is compressed or not.
-	Compressed bool
-
-	// Offset holds the offset into the zip archive of the start of
-	// the file's data.
-	Offset int64
-
-	// Size holds the size of the file before decompression.
-	Size int64
-}
-
-// Valid reports whether f is a valid (non-zero) reference to
-// a zip file.
-func (f ZipFile) IsValid() bool {
-	// Note that no valid zip files can start at offset zero,
-	// because that's where the zip header lives.
-	return f != ZipFile{}
+// Migration holds information about the database migration.
+type Migration struct {
+	// Executed holds the migration names for migrations already executed.
+	Executed []string
 }

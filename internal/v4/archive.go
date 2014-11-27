@@ -374,7 +374,7 @@ func (h *Handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 
 	entityCharms := make(map[charm.Reference]charm.Charm, len(entities))
 	for i, entity := range entities {
-		entityCharms[*entity.URL] = (*entityCharm)(&entities[i])
+		entityCharms[*entity.URL] = &entityCharm{entities[i]}
 	}
 	charms := make(map[string]charm.Charm, len(urls))
 	for i, url := range urls {
@@ -386,7 +386,9 @@ func (h *Handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 }
 
 // entityCharm implements charm.Charm.
-type entityCharm mongodoc.Entity
+type entityCharm struct {
+	mongodoc.Entity
+}
 
 func (e *entityCharm) Meta() *charm.Meta {
 	return e.CharmMeta

@@ -53,7 +53,7 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 		var actual json.RawMessage
 		err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL), &actual)
 		c.Assert(err, gc.IsNil)
-		c.Assert([]byte(actual), storetesting.JSONEquals, esDocForEntity(entity))
+		c.Assert([]byte(actual), storetesting.JSONEquals, entity)
 	}
 }
 
@@ -90,7 +90,7 @@ func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(old.URL), &actual)
 	c.Assert(err, gc.IsNil)
-	c.Assert([]byte(actual), storetesting.JSONEquals, esDocForEntity(expected))
+	c.Assert([]byte(actual), storetesting.JSONEquals, expected)
 }
 
 func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
@@ -607,14 +607,5 @@ func assertSearchResults(c *gc.C, obtained SearchResult, expected []string) {
 	sort.Strings(ids)
 	for i, v := range expected {
 		c.Assert(ids[i], gc.Equals, v)
-	}
-}
-
-func esDocForEntity(e *mongodoc.Entity) esDoc {
-	return esDoc{
-		Entity: e,
-		Name:   e.URL.Name,
-		User:   e.URL.User,
-		Series: e.URL.Series,
 	}
 }

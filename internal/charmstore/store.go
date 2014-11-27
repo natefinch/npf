@@ -183,6 +183,10 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	entity := &mongodoc.Entity{
 		URL:                     p.URL,
 		BaseURL:                 baseURL(p.URL),
+		User:                    p.URL.User,
+		Name:                    p.URL.Name,
+		Revision:                p.URL.Revision,
+		Series:                  p.URL.Series,
 		BlobHash:                p.BlobHash,
 		BlobName:                p.BlobName,
 		Size:                    p.BlobSize,
@@ -354,6 +358,10 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 	entity := &mongodoc.Entity{
 		URL:                p.URL,
 		BaseURL:            baseURL(p.URL),
+		User:               p.URL.User,
+		Name:               p.URL.Name,
+		Revision:           p.URL.Revision,
+		Series:             p.URL.Series,
 		BlobHash:           p.BlobHash,
 		BlobName:           p.BlobName,
 		Size:               p.BlobSize,
@@ -642,6 +650,11 @@ func (s StoreDatabase) Logs() *mgo.Collection {
 	return s.C("logs")
 }
 
+// Migrations returns the Mongo collection where the migration info is stored.
+func (s StoreDatabase) Migrations() *mgo.Collection {
+	return s.C("migrations")
+}
+
 // allCollections holds for each collection used by the charm store a
 // function returns that collection.
 var allCollections = []func(StoreDatabase) *mgo.Collection{
@@ -649,6 +662,7 @@ var allCollections = []func(StoreDatabase) *mgo.Collection{
 	StoreDatabase.StatTokens,
 	StoreDatabase.Entities,
 	StoreDatabase.Logs,
+	StoreDatabase.Migrations,
 }
 
 // Collections returns a slice of all the collections used
