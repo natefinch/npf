@@ -6,6 +6,7 @@ package charmstore
 import (
 	"net/http"
 	"sort"
+	"sync"
 
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
@@ -186,6 +187,55 @@ func (s *migrationsSuite) TestMigrateMigrationList(c *gc.C) {
 		m := migrations[i]
 		c.Assert(m.name, gc.Equals, name)
 	}
+}
+
+func (s *migrationsSuite) TestMigrateParallelMigration(c *gc.C) {
+	// This test uses real migrations to check they are idempotent and works
+	// well when done in parallel, for example when multiple charm store units
+	// are deployed together.
+
+	// Prepare a database for the denormalizeEntityIds migration.
+	id1 := charm.MustParseReference("trusty/django-42")
+	id2 := charm.MustParseReference("~who/utopic/rails-47")
+	s.insertEntity(c, id1, "", 12)
+	s.insertEntity(c, id2, "", 13)
+
+	// Run the migrations in parallel.
+	var wg sync.WaitGroup
+	wg.Add(5)
+	errors := make(chan error, 5)
+	for i := 0; i < 5; i++ {
+		go func() {
+			errors <- s.newServer(c)
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	close(errors)
+
+	// Check the server is correctly started in all the units.
+	for err := range errors {
+		c.Assert(err, gc.IsNil)
+	}
+
+	// Ensure entities have been updated correctly by denormalizeEntityIds.
+	s.checkCount(c, 2)
+	s.checkEntity(c, &mongodoc.Entity{
+		URL:      id1,
+		User:     "",
+		Name:     "django",
+		Revision: 42,
+		Series:   "trusty",
+		Size:     12,
+	})
+	s.checkEntity(c, &mongodoc.Entity{
+		URL:      id2,
+		User:     "who",
+		Name:     "rails",
+		Revision: 47,
+		Series:   "utopic",
+		Size:     13,
+	})
 }
 
 func (s *migrationsSuite) checkExecuted(c *gc.C, expected ...string) {

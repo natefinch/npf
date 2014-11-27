@@ -1073,11 +1073,15 @@ func (s *StoreSuite) TestCollections(c *gc.C) {
 	colls := store.DB.Collections()
 	names, err := store.DB.CollectionNames()
 	c.Assert(err, gc.IsNil)
+	// Some collections don't have indexes so they are created only when used.
+	createdOnUse := map[string]bool{
+		"migrations": true,
+	}
 	// Check that all collections mentioned by Collections are actually created.
 	for _, coll := range colls {
 		found := false
 		for _, name := range names {
-			if name == coll.Name {
+			if name == coll.Name || createdOnUse[coll.Name] {
 				found = true
 			}
 		}

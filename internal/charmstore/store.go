@@ -84,9 +84,6 @@ func (s *Store) ensureIndexes() error {
 	}, {
 		s.DB.Logs(),
 		mgo.Index{Key: []string{"urls"}},
-	}, {
-		s.DB.Migrations(),
-		mgo.Index{Key: []string{"executed"}},
 	}}
 	for _, idx := range indexes {
 		err := idx.c.EnsureIndex(idx.i)
