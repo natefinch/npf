@@ -10,7 +10,7 @@ var (
 	esMapping = mustParseJSON(esMappingJSON)
 )
 
-const esSettingsVersion = 1
+const esSettingsVersion = 2
 
 func mustParseJSON(s string) interface{} {
 	var j json.RawMessage
