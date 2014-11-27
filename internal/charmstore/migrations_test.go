@@ -134,7 +134,7 @@ func (s *migrationsSuite) TestMigrateErrorUnknownMigration(c *gc.C) {
 
 	// Start the server.
 	err = s.newServer(c)
-	c.Assert(err, gc.ErrorMatches, "database migration failed: unexpected already executed migration: migr-1")
+	c.Assert(err, gc.ErrorMatches, `database migration failed: found unknown migration "migr-1"; running old charm store code on newer charm store database\?`)
 
 	// No new migrations were executed.
 	c.Assert(s.executed, gc.HasLen, 0)

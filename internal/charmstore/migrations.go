@@ -14,8 +14,8 @@ import (
 // migrations holds all the migration functions that are executed in the order
 // they are defined when the charm store server is started. Each migration is
 // associated with a name that is used to check whether the migration has been
-// already run. To introduce a new database migration, just add the
-// corresponding migration name and function to this list, and update the
+// already run. To introduce a new database migration, add the corresponding
+// migration name and function to this list, and update the
 // TestMigrateMigrationList test in migration_test.go adding the new name(s).
 // Note that migration names must be unique across the list.
 var migrations = []migration{{
@@ -73,7 +73,7 @@ func getExecuted(db StoreDatabase) (map[string]bool, error) {
 	for _, name := range doc.Executed {
 		// Check that the already executed migrations are known.
 		if !names[name] {
-			return nil, errgo.Newf("unexpected already executed migration: %s", name)
+			return nil, errgo.Newf("found unknown migration %q; running old charm store code on newer charm store database?", name)
 		}
 		// Collect the name of the executed migration.
 		executed[name] = true
@@ -100,9 +100,10 @@ func denormalizeEntityIds(db StoreDatabase) error {
 		// Use the name field to collect not migrated entities.
 		"name", bson.D{{"$exists", false}},
 	}}).Select(bson.D{{"_id", 1}}).Iter()
+	defer iter.Close()
 
 	for iter.Next(&entity) {
-		logger.Debugf("updating %s", entity.URL)
+		logger.Infof("updating %s", entity.URL)
 		if err := entities.UpdateId(entity.URL, bson.D{{
 			"$set", bson.D{
 				{"user", entity.URL.User},
