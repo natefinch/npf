@@ -139,7 +139,7 @@ func (h *Handler) getRelatedIfaceResponses(
 	return responses, nil
 }
 
-// GET id/meta/bundles-containing[?include=meta[&include=meta…]][&any-series=1][&any-revision=1]
+// GET id/meta/bundles-containing[?include=meta[&include=meta…]][&any-series=1][&any-revision=1][&all-results=1]
 // http://tinyurl.com/oqc386r
 func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	if id.Series == "bundle" {
@@ -155,6 +155,10 @@ func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 	if err != nil {
 		return nil, badRequestf(err, "invalid value for any-revision")
 	}
+	allResults, err := parseBool(flags.Get("all-results"))
+	if err != nil {
+		return nil, badRequestf(err, "invalid value for all-results")
+	}
 
 	// Mutate the reference so that it represents a base URL if required.
 	searchId := *id
@@ -168,26 +172,43 @@ func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 	if err := h.store.DB.Entities().
 		Find(bson.D{{"bundlecharms", &searchId}}).
 		Select(bson.D{{"_id", 1}, {"bundlecharms", 1}}).
-		Sort("_id").
+		Sort("-revision", "_id").
 		All(&entities); err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related bundles")
 	}
 
-	// Further filter the entities if required.
-	if anySeries != anyRevision {
-		predicate := func(e *mongodoc.Entity) bool {
-			for _, charmId := range e.BundleCharms {
-				if charmId.Name == id.Name &&
-					charmId.User == id.User &&
-					(anySeries || charmId.Series == id.Series) &&
-					(anyRevision || charmId.Revision == id.Revision) {
-					return true
-				}
+	// Further filter the entities if required, by only including latest
+	// bundle revisions and/or excluding specific charm series or revisions.
+	anySeriesOrRevisionPredicate := func(e *mongodoc.Entity) bool {
+		if anySeries == anyRevision {
+			return true
+		}
+		for _, charmId := range e.BundleCharms {
+			if charmId.Name == id.Name &&
+				charmId.User == id.User &&
+				(anySeries || charmId.Series == id.Series) &&
+				(anyRevision || charmId.Revision == id.Revision) {
+				return true
+			}
+		}
+		return false
+	}
+	predicate := anySeriesOrRevisionPredicate
+	if !allResults {
+		alreadyIncluded := make(map[string]bool, len(entities))
+		predicate = func(e *mongodoc.Entity) bool {
+			urlStr := noRevision(e.URL).String()
+			if _, ok := alreadyIncluded[urlStr]; ok {
+				return false
+			}
+			if included := anySeriesOrRevisionPredicate(e); included {
+				alreadyIncluded[urlStr] = true
+				return true
 			}
 			return false
 		}
-		entities = filterEntities(entities, predicate)
 	}
+	entities = filterEntities(entities, predicate)
 
 	// Prepare and return the response.
 	response := make([]*params.MetaAnyResponse, 0, len(entities))
@@ -215,4 +236,10 @@ func filterEntities(entities []mongodoc.Entity, predicate func(*mongodoc.Entity)
 		}
 	}
 	return results
+}
+
+func noRevision(id *charm.Reference) *charm.Reference {
+	url := *id
+	url.Revision = -1
+	return &url
 }
