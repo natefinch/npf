@@ -42,7 +42,7 @@ const typeName = "entity"
 // reverse order of LTS releases, followed by the latest
 // non-LTS release, followed by everything else.
 var seriesBoost = map[string]float64{
-	"bundle": 1.1255,
+	"bundle":  1.1255,
 	"trusty":  1.125,
 	"precise": 1.1125,
 	"utopic":  1.1,
