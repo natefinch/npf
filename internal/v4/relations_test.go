@@ -506,9 +506,9 @@ var metaBundlesContainingTests = []struct {
 	id:           "utopic/wordpress-42",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
-	}, {
 		Id: charm.MustParseReference("bundle/useless-0"),
+	}, {
+		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 	}, {
 		Id: charm.MustParseReference("bundle/wordpress-simple-0"),
 	}},
@@ -627,9 +627,9 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?any-series=1&any-revision=1&all-results=1",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: charm.MustParseReference("bundle/mediawiki-simple-47"),
-	}, {
 		Id: charm.MustParseReference("bundle/django-generic-42"),
+	}, {
+		Id: charm.MustParseReference("bundle/mediawiki-simple-47"),
 	}, {
 		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 	}, {
@@ -643,9 +643,9 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?any-series=1&any-revision=1",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: charm.MustParseReference("bundle/mediawiki-simple-47"),
-	}, {
 		Id: charm.MustParseReference("bundle/django-generic-42"),
+	}, {
+		Id: charm.MustParseReference("bundle/mediawiki-simple-47"),
 	}, {
 		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 	}, {
@@ -667,6 +667,12 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?any-series=1&any-revision=1&include=archive-size&include=bundle-metadata",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
+		Id: charm.MustParseReference("bundle/useless-0"),
+		Meta: map[string]interface{}{
+			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
+			"bundle-metadata": metaBundlesContainingBundles["bundle/useless-0"].Data(),
+		},
+	}, {
 		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
@@ -677,12 +683,6 @@ var metaBundlesContainingTests = []struct {
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
 			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-simple-1"].Data(),
-		},
-	}, {
-		Id: charm.MustParseReference("bundle/useless-0"),
-		Meta: map[string]interface{}{
-			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
-			"bundle-metadata": metaBundlesContainingBundles["bundle/useless-0"].Data(),
 		},
 	}},
 }, {

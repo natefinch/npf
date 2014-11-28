@@ -172,7 +172,7 @@ func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 	if err := h.store.DB.Entities().
 		Find(bson.D{{"bundlecharms", &searchId}}).
 		Select(bson.D{{"_id", 1}, {"bundlecharms", 1}}).
-		Sort("-revision", "_id").
+		Sort("baseurl", "series", "-revision").
 		All(&entities); err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related bundles")
 	}
@@ -195,14 +195,13 @@ func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 	}
 	predicate := anySeriesOrRevisionPredicate
 	if !allResults {
-		alreadyIncluded := make(map[string]bool, len(entities))
+		previous := &charm.Reference{}
 		predicate = func(e *mongodoc.Entity) bool {
-			urlStr := noRevision(e.URL).String()
-			if _, ok := alreadyIncluded[urlStr]; ok {
+			if e.URL.User == previous.User && e.URL.Name == previous.Name && e.URL.Series == previous.Series {
 				return false
 			}
 			if included := anySeriesOrRevisionPredicate(e); included {
-				alreadyIncluded[urlStr] = true
+				previous = e.URL
 				return true
 			}
 			return false
@@ -236,10 +235,4 @@ func filterEntities(entities []mongodoc.Entity, predicate func(*mongodoc.Entity)
 		}
 	}
 	return results
-}
-
-func noRevision(id *charm.Reference) *charm.Reference {
-	url := *id
-	url.Revision = -1
-	return &url
 }
