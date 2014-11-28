@@ -4,8 +4,10 @@
 package v4
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"gopkg.in/mgo.v2/bson"
@@ -33,6 +35,10 @@ var statusChecks = map[string]struct {
 	"server_started": {
 		name:  "Server started",
 		check: (*Handler).checkServerStarted,
+	},
+	"ingestion": {
+		name:  "Ingestion",
+		check: (*Handler).checkIngestion,
 	},
 }
 
@@ -101,6 +107,37 @@ func (h *Handler) checkEntities() (string, bool) {
 		return "Cannot count entities: " + err.Error(), false
 	}
 	return fmt.Sprintf("%d charms; %d bundles; %d promulgated", charms, bundles, promulgated), true
+}
+
+func (h *Handler) checkIngestion() (string, bool) {
+	var start time.Time
+	var end time.Time
+	var log mongodoc.Log
+	iter := h.store.DB.Logs().
+		Find(bson.D{
+		{"level", mongodoc.InfoLevel},
+		{"type", mongodoc.IngestionType},
+	}).Sort("-time").Iter()
+	for iter.Next(&log) {
+		var msg string
+		if err := json.Unmarshal(log.Data, &msg); err != nil {
+			// an error here probably means the log isn't in the form we are looking for.
+			continue
+		}
+		if start.IsZero() && strings.HasPrefix(msg, "ingestion started") {
+			start = log.Time
+		}
+		if end.IsZero() && strings.HasPrefix(msg, "ingestion completed") {
+			end = log.Time
+		}
+		if !start.IsZero() && !end.IsZero() {
+			break
+		}
+	}
+	if err := iter.Close(); err != nil {
+		return "Cannot query ingestion logs: " + err.Error(), false
+	}
+	return fmt.Sprintf("started: %s, completed: %s", start.Format(time.RFC3339), end.Format(time.RFC3339)), !(start.IsZero() || end.IsZero())
 }
 
 // startTime holds the time that the code started running.
