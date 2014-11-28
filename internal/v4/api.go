@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -430,24 +429,18 @@ func (h *Handler) metaRevisionInfo(id *charm.Reference, path string, flags url.V
 
 	var docs []mongodoc.Entity
 	if err := h.store.DB.Entities().Find(
-		bson.D{{"baseurl", &baseURL}}).Select(
-		bson.D{{"_id", 1}}).All(&docs); err != nil {
+		bson.D{{"baseurl", &baseURL}, {"series", id.Series}}).Select(
+		bson.D{{"_id", 1}}).Sort("-revision").All(&docs); err != nil {
 		return "", errgo.Notef(err, "cannot get ids")
 	}
 
 	if len(docs) == 0 {
 		return "", errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
-
-	// Sort in descending order by revision.
-	sort.Sort(entitiesByRevision(docs))
 	response := &params.RevisionInfoResponse{}
 	for _, doc := range docs {
-		if doc.URL.Series == id.Series {
-			response.Revisions = append(response.Revisions, doc.URL)
-		}
+		response.Revisions = append(response.Revisions, doc.URL)
 	}
-
 	if len(response.Revisions) == 0 {
 		return "", noMatchingURLError(&baseURL)
 	}
@@ -499,15 +492,6 @@ func (h *Handler) metaIdRevision(entity *mongodoc.Entity, id *charm.Reference, p
 		Revision: id.Revision,
 	}, nil
 }
-
-type entitiesByRevision []mongodoc.Entity
-
-func (s entitiesByRevision) Len() int      { return len(s) }
-func (s entitiesByRevision) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-
-// Implement the Less method of the sort interface backward, with > so that
-// the sort order is descending.
-func (s entitiesByRevision) Less(i, j int) bool { return s[i].URL.Revision > s[j].URL.Revision }
 
 // GET id/meta/extra-info
 // http://tinyurl.com/keos7wd

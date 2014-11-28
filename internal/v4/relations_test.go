@@ -476,10 +476,17 @@ var metaBundlesContainingBundles = map[string]charm.Bundle{
 	}),
 	"bundle/useless-0": relationTestingBundle([]string{
 		"cs:utopic/wordpress-42",
+		"precise/mediawiki-10",
 	}),
-	"bundle/mediawiki-47": relationTestingBundle([]string{
+	"bundle/mediawiki-simple-46": relationTestingBundle([]string{
+		"precise/mediawiki-0",
+	}),
+	"bundle/mediawiki-simple-47": relationTestingBundle([]string{
 		"precise/mediawiki-0",
 		"mysql",
+	}),
+	"bundle/mediawiki-simple-48": relationTestingBundle([]string{
+		"precise/mediawiki-0",
 	}),
 }
 
@@ -547,6 +554,18 @@ var metaBundlesContainingTests = []struct {
 		Id: charm.MustParseReference("bundle/wordpress-simple-0"),
 	}},
 }, {
+	about:        "any series and all-results set to true",
+	id:           "trusty/mysql-0",
+	querystring:  "?any-series=1&all-results=1",
+	expectStatus: http.StatusOK,
+	expectBody: []*params.MetaAnyResponse{{
+		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
+	}, {
+		// This result is included even if the latest wordpress-simple does not
+		// contain the mysql-0 charm.
+		Id: charm.MustParseReference("bundle/wordpress-simple-0"),
+	}},
+}, {
 	about:        "invalid any series",
 	id:           "utopic/mysql-0",
 	querystring:  "?any-series=true",
@@ -575,20 +594,72 @@ var metaBundlesContainingTests = []struct {
 		Message: `invalid value for any-revision: unexpected bool value "why-not" (must be "0" or "1")`,
 	},
 }, {
-	about:        "any series and revision",
+	about:        "all-results set to true",
+	id:           "precise/mediawiki-0",
+	expectStatus: http.StatusOK,
+	querystring:  "?all-results=1",
+	expectBody: []*params.MetaAnyResponse{{
+		Id: charm.MustParseReference("bundle/mediawiki-simple-48"),
+	}, {
+		Id: charm.MustParseReference("bundle/mediawiki-simple-47"),
+	}, {
+		Id: charm.MustParseReference("bundle/mediawiki-simple-46"),
+	}},
+}, {
+	about:        "all-results set to false",
+	id:           "precise/mediawiki-0",
+	expectStatus: http.StatusOK,
+	expectBody: []*params.MetaAnyResponse{{
+		Id: charm.MustParseReference("bundle/mediawiki-simple-48"),
+	}},
+}, {
+	about:        "invalid all-results",
+	id:           "trusty/memcached-99",
+	querystring:  "?all-results=yes!",
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: `invalid value for all-results: unexpected bool value "yes!" (must be "0" or "1")`,
+	},
+}, {
+	about:        "any series and revision, all results",
+	id:           "saucy/mysql-99",
+	querystring:  "?any-series=1&any-revision=1&all-results=1",
+	expectStatus: http.StatusOK,
+	expectBody: []*params.MetaAnyResponse{{
+		Id: charm.MustParseReference("bundle/django-generic-42"),
+	}, {
+		Id: charm.MustParseReference("bundle/mediawiki-simple-47"),
+	}, {
+		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
+	}, {
+		Id: charm.MustParseReference("bundle/wordpress-simple-1"),
+	}, {
+		Id: charm.MustParseReference("bundle/wordpress-simple-0"),
+	}},
+}, {
+	about:        "any series, any revision",
 	id:           "saucy/mysql-99",
 	querystring:  "?any-series=1&any-revision=1",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: charm.MustParseReference("bundle/django-generic-42"),
 	}, {
-		Id: charm.MustParseReference("bundle/mediawiki-47"),
+		Id: charm.MustParseReference("bundle/mediawiki-simple-47"),
 	}, {
 		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 	}, {
-		Id: charm.MustParseReference("bundle/wordpress-simple-0"),
-	}, {
 		Id: charm.MustParseReference("bundle/wordpress-simple-1"),
+	}},
+}, {
+	about:        "any series and revision, last results",
+	id:           "saucy/mediawiki",
+	querystring:  "?any-series=1&any-revision=1",
+	expectStatus: http.StatusOK,
+	expectBody: []*params.MetaAnyResponse{{
+		Id: charm.MustParseReference("bundle/mediawiki-simple-48"),
+	}, {
+		Id: charm.MustParseReference("bundle/useless-0"),
 	}},
 }, {
 	about:        "any series and revision with includes",
@@ -606,12 +677,6 @@ var metaBundlesContainingTests = []struct {
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
 			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-complex-1"].Data(),
-		},
-	}, {
-		Id: charm.MustParseReference("bundle/wordpress-simple-0"),
-		Meta: map[string]interface{}{
-			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
-			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-simple-0"].Data(),
 		},
 	}, {
 		Id: charm.MustParseReference("bundle/wordpress-simple-1"),
