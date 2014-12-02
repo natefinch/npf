@@ -1082,14 +1082,19 @@ var metaStatsTests = []struct {
 		"utopic/django-42": {0: 1},
 	},
 	expectResponse: params.StatsResponse{
-		ArchiveDownloadCount:                      1,
-		ArchiveDownloadCountLastDay:               1,
-		ArchiveDownloadCountLastWeek:              1,
-		ArchiveDownloadCountLastMonth:             1,
-		ArchiveDownloadCountAllRevisions:          1,
-		ArchiveDownloadCountLastDayAllRevisions:   1,
-		ArchiveDownloadCountLastWeekAllRevisions:  1,
-		ArchiveDownloadCountLastMonthAllRevisions: 1,
+		ArchiveDownloadCount: 1,
+		ArchiveDownload: params.StatsCount{
+			Total: 1,
+			Day:   1,
+			Week:  1,
+			Month: 1,
+		},
+		ArchiveDownloadAllRevisions: params.StatsCount{
+			Total: 1,
+			Day:   1,
+			Week:  1,
+			Month: 1,
+		},
 	},
 }, {
 	about: "single download a long time ago",
@@ -1098,8 +1103,13 @@ var metaStatsTests = []struct {
 		"utopic/django-42": {100: 1},
 	},
 	expectResponse: params.StatsResponse{
-		ArchiveDownloadCount:             1,
-		ArchiveDownloadCountAllRevisions: 1,
+		ArchiveDownloadCount: 1,
+		ArchiveDownload: params.StatsCount{
+			Total: 1,
+		},
+		ArchiveDownloadAllRevisions: params.StatsCount{
+			Total: 1,
+		},
 	},
 }, {
 	about: "some downloads this month",
@@ -1108,10 +1118,15 @@ var metaStatsTests = []struct {
 		"utopic/wordpress-47": {20: 2, 25: 5},
 	},
 	expectResponse: params.StatsResponse{
-		ArchiveDownloadCount:                      2 + 5,
-		ArchiveDownloadCountLastMonth:             2 + 5,
-		ArchiveDownloadCountAllRevisions:          2 + 5,
-		ArchiveDownloadCountLastMonthAllRevisions: 2 + 5,
+		ArchiveDownloadCount: 2 + 5,
+		ArchiveDownload: params.StatsCount{
+			Total: 2 + 5,
+			Month: 2 + 5,
+		},
+		ArchiveDownloadAllRevisions: params.StatsCount{
+			Total: 2 + 5,
+			Month: 2 + 5,
+		},
 	},
 }, {
 	about: "multiple recent downloads",
@@ -1120,14 +1135,19 @@ var metaStatsTests = []struct {
 		"utopic/django-42": {100: 1, 12: 3, 8: 5, 4: 10, 2: 1, 0: 3},
 	},
 	expectResponse: params.StatsResponse{
-		ArchiveDownloadCount:                      1 + 3 + 5 + 10 + 1 + 3,
-		ArchiveDownloadCountLastDay:               3,
-		ArchiveDownloadCountLastWeek:              10 + 1 + 3,
-		ArchiveDownloadCountLastMonth:             3 + 5 + 10 + 1 + 3,
-		ArchiveDownloadCountAllRevisions:          1 + 3 + 5 + 10 + 1 + 3,
-		ArchiveDownloadCountLastDayAllRevisions:   3,
-		ArchiveDownloadCountLastWeekAllRevisions:  10 + 1 + 3,
-		ArchiveDownloadCountLastMonthAllRevisions: 3 + 5 + 10 + 1 + 3,
+		ArchiveDownloadCount: 1 + 3 + 5 + 10 + 1 + 3,
+		ArchiveDownload: params.StatsCount{
+			Total: 1 + 3 + 5 + 10 + 1 + 3,
+			Day:   3,
+			Week:  10 + 1 + 3,
+			Month: 3 + 5 + 10 + 1 + 3,
+		},
+		ArchiveDownloadAllRevisions: params.StatsCount{
+			Total: 1 + 3 + 5 + 10 + 1 + 3,
+			Day:   3,
+			Week:  10 + 1 + 3,
+			Month: 3 + 5 + 10 + 1 + 3,
+		},
 	},
 }, {
 	about: "sparse downloads",
@@ -1136,12 +1156,17 @@ var metaStatsTests = []struct {
 		"utopic/django-42": {200: 3, 28: 4, 3: 5},
 	},
 	expectResponse: params.StatsResponse{
-		ArchiveDownloadCount:                      3 + 4 + 5,
-		ArchiveDownloadCountLastWeek:              5,
-		ArchiveDownloadCountLastMonth:             4 + 5,
-		ArchiveDownloadCountAllRevisions:          3 + 4 + 5,
-		ArchiveDownloadCountLastWeekAllRevisions:  5,
-		ArchiveDownloadCountLastMonthAllRevisions: 4 + 5,
+		ArchiveDownloadCount: 3 + 4 + 5,
+		ArchiveDownload: params.StatsCount{
+			Total: 3 + 4 + 5,
+			Week:  5,
+			Month: 4 + 5,
+		},
+		ArchiveDownloadAllRevisions: params.StatsCount{
+			Total: 3 + 4 + 5,
+			Week:  5,
+			Month: 4 + 5,
+		},
 	},
 }, {
 	about: "bundle downloads",
@@ -1150,12 +1175,17 @@ var metaStatsTests = []struct {
 		"bundle/django-simple-2": {200: 3, 28: 4, 3: 5},
 	},
 	expectResponse: params.StatsResponse{
-		ArchiveDownloadCount:                      3 + 4 + 5,
-		ArchiveDownloadCountLastWeek:              5,
-		ArchiveDownloadCountLastMonth:             4 + 5,
-		ArchiveDownloadCountAllRevisions:          3 + 4 + 5,
-		ArchiveDownloadCountLastWeekAllRevisions:  5,
-		ArchiveDownloadCountLastMonthAllRevisions: 4 + 5,
+		ArchiveDownloadCount: 3 + 4 + 5,
+		ArchiveDownload: params.StatsCount{
+			Total: 3 + 4 + 5,
+			Week:  5,
+			Month: 4 + 5,
+		},
+		ArchiveDownloadAllRevisions: params.StatsCount{
+			Total: 3 + 4 + 5,
+			Week:  5,
+			Month: 4 + 5,
+		},
 	},
 }, {
 	about: "different charms",
@@ -1166,12 +1196,17 @@ var metaStatsTests = []struct {
 		"trusty/mysql-0":  {200: 1, 14: 2, 1: 7},
 	},
 	expectResponse: params.StatsResponse{
-		ArchiveDownloadCount:                      2 + 10,
-		ArchiveDownloadCountLastWeek:              10,
-		ArchiveDownloadCountLastMonth:             2 + 10,
-		ArchiveDownloadCountAllRevisions:          2 + 10,
-		ArchiveDownloadCountLastWeekAllRevisions:  10,
-		ArchiveDownloadCountLastMonthAllRevisions: 2 + 10,
+		ArchiveDownloadCount: 2 + 10,
+		ArchiveDownload: params.StatsCount{
+			Total: 2 + 10,
+			Week:  10,
+			Month: 2 + 10,
+		},
+		ArchiveDownloadAllRevisions: params.StatsCount{
+			Total: 2 + 10,
+			Week:  10,
+			Month: 2 + 10,
+		},
 	},
 }, {
 	about: "different revisions of the same charm",
@@ -1182,13 +1217,18 @@ var metaStatsTests = []struct {
 		"precise/rails-2": {6: 10, 0: 9},
 	},
 	expectResponse: params.StatsResponse{
-		ArchiveDownloadCount:                      5 + 3 + 7,
-		ArchiveDownloadCountLastWeek:              7,
-		ArchiveDownloadCountLastMonth:             3 + 7,
-		ArchiveDownloadCountAllRevisions:          (1 + 2) + (5 + 3 + 7) + (10 + 9),
-		ArchiveDownloadCountLastDayAllRevisions:   0 + 0 + 9,
-		ArchiveDownloadCountLastWeekAllRevisions:  0 + 7 + (10 + 9),
-		ArchiveDownloadCountLastMonthAllRevisions: 0 + (3 + 7) + (10 + 9),
+		ArchiveDownloadCount: 5 + 3 + 7,
+		ArchiveDownload: params.StatsCount{
+			Total: 5 + 3 + 7,
+			Week:  7,
+			Month: 3 + 7,
+		},
+		ArchiveDownloadAllRevisions: params.StatsCount{
+			Total: (1 + 2) + (5 + 3 + 7) + (10 + 9),
+			Day:   0 + 0 + 9,
+			Week:  0 + 7 + (10 + 9),
+			Month: 0 + (3 + 7) + (10 + 9),
+		},
 	},
 }, {
 	about: "downloads only in an old revision",
@@ -1199,7 +1239,9 @@ var metaStatsTests = []struct {
 		"trusty/wordpress-2":  {},
 	},
 	expectResponse: params.StatsResponse{
-		ArchiveDownloadCountAllRevisions: 10,
+		ArchiveDownloadAllRevisions: params.StatsCount{
+			Total: 10,
+		},
 	},
 }, {
 	about: "downloads only in newer revision",
@@ -1210,10 +1252,12 @@ var metaStatsTests = []struct {
 		"utopic/wordpress-2": {6: 9, 0: 2},
 	},
 	expectResponse: params.StatsResponse{
-		ArchiveDownloadCountAllRevisions:          (7 + 1 + 2 + 1) + (9 + 2),
-		ArchiveDownloadCountLastDayAllRevisions:   1 + 2,
-		ArchiveDownloadCountLastWeekAllRevisions:  (2 + 1) + (9 + 2),
-		ArchiveDownloadCountLastMonthAllRevisions: (1 + 2 + 1) + (9 + 2),
+		ArchiveDownloadAllRevisions: params.StatsCount{
+			Total: (7 + 1 + 2 + 1) + (9 + 2),
+			Day:   1 + 2,
+			Week:  (2 + 1) + (9 + 2),
+			Month: (1 + 2 + 1) + (9 + 2),
+		},
 	},
 }, {
 	about: "non promulgated charms",
@@ -1223,12 +1267,17 @@ var metaStatsTests = []struct {
 		"~who/utopic/django-0": {2: 5},
 	},
 	expectResponse: params.StatsResponse{
-		ArchiveDownloadCount:                      5,
-		ArchiveDownloadCountLastWeek:              5,
-		ArchiveDownloadCountLastMonth:             5,
-		ArchiveDownloadCountAllRevisions:          5,
-		ArchiveDownloadCountLastWeekAllRevisions:  5,
-		ArchiveDownloadCountLastMonthAllRevisions: 5,
+		ArchiveDownloadCount: 5,
+		ArchiveDownload: params.StatsCount{
+			Total: 5,
+			Week:  5,
+			Month: 5,
+		},
+		ArchiveDownloadAllRevisions: params.StatsCount{
+			Total: 5,
+			Week:  5,
+			Month: 5,
+		},
 	},
 }}
 

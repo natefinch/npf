@@ -22,31 +22,24 @@ type Statistic struct {
 	Count int64
 }
 
-// StatsResponse holds the result of an
-// id/meta/stats GET request. See http://tinyurl.com/lvyp2l5
+// StatsResponse holds the result of an id/meta/stats GET request.
+// See http://tinyurl.com/lvyp2l5
 type StatsResponse struct {
-	// ArchiveDownloadCount is the global downloads count for a specific
-	// revision of the entity.
+	// ArchiveDownloadCount is superceded by ArchiveDownload but maintained for
+	// backward compatibility.
 	ArchiveDownloadCount int64
-	// ArchiveDownloadCountLastDay is the download count in the last 24 hours
-	// for a specific revision of the entity.
-	ArchiveDownloadCountLastDay int64
-	// ArchiveDownloadCountLastWeek is the download count in the last week for
-	// a specific revision of the entity.
-	ArchiveDownloadCountLastWeek int64
-	// ArchiveDownloadCountLastMonth is the download count in the last month
-	// for a specific revision of the entity.
-	ArchiveDownloadCountLastMonth int64
-	// ArchiveDownloadCountAllRevisions is the global downloads count for all
-	// revisions of the entity.
-	ArchiveDownloadCountAllRevisions int64
-	// ArchiveDownloadCountLastDayAllRevisions is the download count in the
-	// last 24 hours for all revisions of the entity.
-	ArchiveDownloadCountLastDayAllRevisions int64
-	// ArchiveDownloadCountLastWeekAllRevisions is the download count in the
-	// last week for all revisions of the entity.
-	ArchiveDownloadCountLastWeekAllRevisions int64
-	// ArchiveDownloadCountLastMonthAllRevisions is the download count in the
-	// last month for all revisions of the entity.
-	ArchiveDownloadCountLastMonthAllRevisions int64
+	// ArchiveDownload holds the downloads count for a specific revision of the
+	// entity.
+	ArchiveDownload StatsCount
+	// ArchiveDownloadAllRevisions holds the downloads count for all revisions
+	// of the entity.
+	ArchiveDownloadAllRevisions StatsCount
+}
+
+// StatsCount holds stats counts and is used as part of StatsResponse.
+type StatsCount struct {
+	Total int64 // Total count over all time.
+	Day   int64 // Count over the last day.
+	Week  int64 // Count over the last week.
+	Month int64 // Count over the last month.
 }

@@ -421,14 +421,19 @@ func (h *Handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path s
 
 	// Return the response.
 	return &params.StatsResponse{
-		ArchiveDownloadCount:                      counts.total,
-		ArchiveDownloadCountLastDay:               counts.lastDay,
-		ArchiveDownloadCountLastWeek:              counts.lastWeek,
-		ArchiveDownloadCountLastMonth:             counts.lastMonth,
-		ArchiveDownloadCountAllRevisions:          countsAllRevisions.total,
-		ArchiveDownloadCountLastDayAllRevisions:   countsAllRevisions.lastDay,
-		ArchiveDownloadCountLastWeekAllRevisions:  countsAllRevisions.lastWeek,
-		ArchiveDownloadCountLastMonthAllRevisions: countsAllRevisions.lastMonth,
+		ArchiveDownloadCount: counts.total,
+		ArchiveDownload: params.StatsCount{
+			Total: counts.total,
+			Day:   counts.lastDay,
+			Week:  counts.lastWeek,
+			Month: counts.lastMonth,
+		},
+		ArchiveDownloadAllRevisions: params.StatsCount{
+			Total: countsAllRevisions.total,
+			Day:   countsAllRevisions.lastDay,
+			Week:  countsAllRevisions.lastWeek,
+			Month: countsAllRevisions.lastMonth,
+		},
 	}, nil
 }
 
