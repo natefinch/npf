@@ -73,6 +73,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
@@ -100,6 +101,7 @@ func NewAPIHandler(store *charmstore.Store, config charmstore.ServerParams) http
 	}
 	h.handle("/charm-info", router.HandleJSON(h.serveCharmInfo))
 	h.handle("/charm/", router.HandleErrors(h.serveCharm))
+	h.handle("/charm-event", router.HandleJSON(h.serveCharmEvent))
 	return h
 }
 
@@ -220,4 +222,62 @@ func (h *Handler) updateEntitySHA256(curl *charm.Reference) (string, error) {
 	go updateEntitySHA256(h.store, curl, sum256)
 
 	return sum256, nil
+}
+
+func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}, error) {
+	response := make(map[string]*charm.EventResponse)
+	for _, url := range req.Form["charms"] {
+		c := &charm.EventResponse{}
+
+		// Ignore the digest part of the request.
+		if i := strings.Index(url, "@"); i != -1 {
+			url = url[:i]
+		}
+		// Intentionally not supporting long_keys query parameter which
+		// previous charm store supported as "juju publish" does not use it.
+		response[url] = c
+
+		// Validate the charm URL.
+		id, err := charm.ParseReference(url)
+		if err != nil {
+			c.Errors = []string{"invalid charm URL: " + err.Error()}
+			continue
+		}
+		if id.Revision != -1 {
+			c.Errors = []string{"got charm URL with revision: " + id.String()}
+			continue
+		}
+		if err := v4.ResolveURL(h.store, id); err != nil {
+			if errgo.Cause(err) == params.ErrNotFound {
+				err = errNotFound
+			}
+			c.Errors = []string{err.Error()}
+			continue
+		}
+
+		// Retrieve the charm.
+		entity, err := h.store.FindEntity(id, "_id", "uploadtime", "extrainfo")
+		if err != nil {
+			if err == params.ErrNotFound {
+				// The old API actually returned "entry not found"
+				// on *any* error, but it seems reasonable to be
+				// a little more descriptive for other errors.
+				err = errNotFound
+			}
+			c.Errors = []string{err.Error()}
+			continue
+		}
+
+		// Prepare the response part for this charm.
+		c.Kind = "published"
+		c.Revision = id.Revision
+		c.Time = entity.UploadTime.UTC().Format(time.RFC3339)
+		if digest, found := entity.ExtraInfo[params.BzrDigestKey]; found {
+			if err := json.Unmarshal(digest, &c.Digest); err != nil {
+				c.Errors = []string{"cannot unmarshal digest: " + err.Error()}
+			}
+		}
+		h.store.IncCounterAsync(charmStatsKey(id, params.StatsCharmEvent))
+	}
+	return response, nil
 }
