@@ -258,7 +258,7 @@ func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}
 		// Retrieve the charm.
 		entity, err := h.store.FindEntity(id, "_id", "uploadtime", "extrainfo")
 		if err != nil {
-			if err == params.ErrNotFound {
+			if errgo.Cause(err) == params.ErrNotFound {
 				// The old API actually returned "entry not found"
 				// on *any* error, but it seems reasonable to be
 				// a little more descriptive for other errors.
