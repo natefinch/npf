@@ -461,18 +461,10 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 	riakUrl, _ := s.addCharm(c, "riak", "cs:utopic/riak-3")
 
 	// Update the mysql charm with a valid digest extra-info.
-	digest, err := json.Marshal("who@canonical.com-bzr-digest")
-	c.Assert(err, gc.IsNil)
-	entities := s.store.DB.Entities()
-	err = entities.UpdateId(mysqlUrl, bson.D{{
-		"$set", bson.D{{"extrainfo", map[string][]byte{
-			params.BzrDigestKey: digest,
-		}}},
-	}})
-	c.Assert(err, gc.IsNil)
+	s.addExtraInfoDigest(c, mysqlUrl, "who@canonical.com-bzr-digest")
 
 	// Update the riak charm with an invalid digest extra-info.
-	err = entities.UpdateId(riakUrl, bson.D{{
+	err := s.store.DB.Entities().UpdateId(riakUrl, bson.D{{
 		"$set", bson.D{{"extrainfo", map[string][]byte{
 			params.BzrDigestKey: []byte(":"),
 		}}},
@@ -571,4 +563,44 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 			ExpectBody:   test.expect,
 		})
 	}
+}
+
+func (s *APISuite) TestServeCharmEventLastRevision(c *gc.C) {
+	// Add two revisions of the same charm.
+	url1, _ := s.addCharm(c, "wordpress", "cs:trusty/wordpress-1")
+	url2, _ := s.addCharm(c, "wordpress", "cs:trusty/wordpress-2")
+
+	// Update the resulting entities with Bazaar digests.
+	s.addExtraInfoDigest(c, url1, "digest-1")
+	s.addExtraInfoDigest(c, url2, "digest-2")
+
+	// Retrieve the most recent revision of the entity.
+	entity, err := s.store.FindEntity(url2)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure the last revision is correctly returned.
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          "/charm-event?charms=wordpress",
+		ExpectStatus: http.StatusOK,
+		ExpectBody: map[string]*charm.EventResponse{
+			"wordpress": &charm.EventResponse{
+				Kind:     "published",
+				Revision: 2,
+				Time:     entity.UploadTime.UTC().Format(time.RFC3339),
+				Digest:   "digest-2",
+			},
+		},
+	})
+}
+
+func (s *APISuite) addExtraInfoDigest(c *gc.C, id *charm.Reference, digest string) {
+	b, err := json.Marshal(digest)
+	c.Assert(err, gc.IsNil)
+	err = s.store.DB.Entities().UpdateId(id, bson.D{{
+		"$set", bson.D{{"extrainfo", map[string][]byte{
+			params.BzrDigestKey: b,
+		}}},
+	}})
+	c.Assert(err, gc.IsNil)
 }
