@@ -1,5 +1,5 @@
 // Copyright 2014 Canonical Ltd.
-// Licensed under the LGPLv3, see LICENCE file for details.
+// Licensed under the AGPLv3, see LICENCE file for details.
 
 // The params package holds types that are a part of the charm store's external
 // contract - they will be marshalled (or unmarshalled) as JSON
