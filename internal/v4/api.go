@@ -405,19 +405,73 @@ func (h *Handler) metaTags(entity *mongodoc.Entity, id *charm.Reference, path st
 // GET id/meta/stats/
 // http://tinyurl.com/lvyp2l5
 func (h *Handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	// Retrieve the aggregated downloads count for the specific revision.
+	counts, err := h.aggregatedStats(entityStatsKey(id, params.StatsArchiveDownload))
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot get aggregated count for the specific revision")
+	}
+
+	// Retrieve the aggregated downloads count for all revisions.
+	noRevisionId := *id
+	noRevisionId.Revision = -1
+	countsAllRevisions, err := h.aggregatedStats(entityStatsKey(&noRevisionId, params.StatsArchiveDownload))
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot get aggregated count for all revisions")
+	}
+
+	// Return the response.
+	return &params.StatsResponse{
+		ArchiveDownloadCount:                      counts.total,
+		ArchiveDownloadCountLastDay:               counts.lastDay,
+		ArchiveDownloadCountLastWeek:              counts.lastWeek,
+		ArchiveDownloadCountLastMonth:             counts.lastMonth,
+		ArchiveDownloadCountAllRevisions:          countsAllRevisions.total,
+		ArchiveDownloadCountLastDayAllRevisions:   countsAllRevisions.lastDay,
+		ArchiveDownloadCountLastWeekAllRevisions:  countsAllRevisions.lastWeek,
+		ArchiveDownloadCountLastMonthAllRevisions: countsAllRevisions.lastMonth,
+	}, nil
+}
+
+// aggregatedStats returns the aggregated downloads counts for the given stats
+// key.
+func (h *Handler) aggregatedStats(key []string) (aggregatedCounts, error) {
+	var counts aggregatedCounts
+
+	// Set prefix to true if the key is not complete. A complete key includes
+	// 5 items: the stats kind and the entity series, name, user and revision.
 	req := charmstore.CounterRequest{
-		Key: entityStatsKey(id, params.StatsArchiveDownload),
+		Key:    key,
+		By:     charmstore.ByDay,
+		Prefix: len(key) < 5,
 	}
 	results, err := h.store.Counters(&req)
 	if err != nil {
-		return nil, errgo.Notef(err, "cannot retrieve stats")
+		return counts, errgo.Notef(err, "cannot retrieve stats")
 	}
-	return &params.StatsResponse{
-		// If a list is not requested as part of the charmstore.CounterRequest,
-		// one result is always returned: if the key is not found the count is
-		// set to 0.
-		ArchiveDownloadCount: results[0].Count,
-	}, nil
+
+	today := time.Now()
+	lastDay := today.AddDate(0, 0, -1)
+	lastWeek := today.AddDate(0, 0, -7)
+	lastMonth := today.AddDate(0, -1, 0)
+
+	// Aggregate the results.
+	for _, result := range results {
+		if result.Time.After(lastMonth) {
+			counts.lastMonth += result.Count
+			if result.Time.After(lastWeek) {
+				counts.lastWeek += result.Count
+				if result.Time.After(lastDay) {
+					counts.lastDay += result.Count
+				}
+			}
+		}
+		counts.total += result.Count
+	}
+	return counts, nil
+}
+
+type aggregatedCounts struct {
+	lastDay, lastWeek, lastMonth, total int64
 }
 
 // GET id/meta/revision-info

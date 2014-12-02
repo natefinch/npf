@@ -27,7 +27,6 @@ import (
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
-	"github.com/juju/charmstore/internal/storetesting/stats"
 	"github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
 )
@@ -1062,28 +1061,160 @@ func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 }
 
 var metaStatsTests = []struct {
-	about     string
-	url       string
-	downloads int64
+	// about describes the test.
+	about string
+	// url is the entity id to use when making the meta/stats request.
+	url string
+	// downloads maps entity ids to a numeric key/value pair where the key is
+	// the number of days in the past when the entity was downloaded and the
+	// value is the number of download performed that day.
+	downloads map[string]map[int]int
+	// expectResponse is the expected response from the meta/stats endpoint.
+	expectResponse params.StatsResponse
 }{{
-	about: "no downloads",
-	url:   "trusty/mysql-0",
+	about:     "no downloads",
+	url:       "trusty/mysql-0",
+	downloads: map[string]map[int]int{"trusty/mysql-0": {}},
 }, {
-	about:     "single download",
-	url:       "utopic/django-42",
-	downloads: 1,
+	about: "single download",
+	url:   "utopic/django-42",
+	downloads: map[string]map[int]int{
+		"utopic/django-42": {0: 1},
+	},
+	expectResponse: params.StatsResponse{
+		ArchiveDownloadCount:                      1,
+		ArchiveDownloadCountLastDay:               1,
+		ArchiveDownloadCountLastWeek:              1,
+		ArchiveDownloadCountLastMonth:             1,
+		ArchiveDownloadCountAllRevisions:          1,
+		ArchiveDownloadCountLastDayAllRevisions:   1,
+		ArchiveDownloadCountLastWeekAllRevisions:  1,
+		ArchiveDownloadCountLastMonthAllRevisions: 1,
+	},
 }, {
-	about:     "multiple downloads",
-	url:       "utopic/django-47",
-	downloads: 5,
+	about: "single download a long time ago",
+	url:   "utopic/django-42",
+	downloads: map[string]map[int]int{
+		"utopic/django-42": {100: 1},
+	},
+	expectResponse: params.StatsResponse{
+		ArchiveDownloadCount:             1,
+		ArchiveDownloadCountAllRevisions: 1,
+	},
 }, {
-	about:     "bundle downloads",
-	url:       "bundle/wordpress-simple-42",
-	downloads: 2,
+	about: "some downloads this month",
+	url:   "utopic/wordpress-47",
+	downloads: map[string]map[int]int{
+		"utopic/wordpress-47": {20: 2, 25: 5},
+	},
+	expectResponse: params.StatsResponse{
+		ArchiveDownloadCount:                      2 + 5,
+		ArchiveDownloadCountLastMonth:             2 + 5,
+		ArchiveDownloadCountAllRevisions:          2 + 5,
+		ArchiveDownloadCountLastMonthAllRevisions: 2 + 5,
+	},
 }, {
-	about:     "single user download",
-	url:       "~who/utopic/django-42",
-	downloads: 1,
+	about: "multiple recent downloads",
+	url:   "utopic/django-42",
+	downloads: map[string]map[int]int{
+		"utopic/django-42": {100: 1, 12: 3, 8: 5, 4: 10, 2: 1, 0: 3},
+	},
+	expectResponse: params.StatsResponse{
+		ArchiveDownloadCount:                      1 + 3 + 5 + 10 + 1 + 3,
+		ArchiveDownloadCountLastDay:               3,
+		ArchiveDownloadCountLastWeek:              10 + 1 + 3,
+		ArchiveDownloadCountLastMonth:             3 + 5 + 10 + 1 + 3,
+		ArchiveDownloadCountAllRevisions:          1 + 3 + 5 + 10 + 1 + 3,
+		ArchiveDownloadCountLastDayAllRevisions:   3,
+		ArchiveDownloadCountLastWeekAllRevisions:  10 + 1 + 3,
+		ArchiveDownloadCountLastMonthAllRevisions: 3 + 5 + 10 + 1 + 3,
+	},
+}, {
+	about: "sparse donwloads",
+	url:   "utopic/django-42",
+	downloads: map[string]map[int]int{
+		"utopic/django-42": {200: 3, 28: 4, 3: 5},
+	},
+	expectResponse: params.StatsResponse{
+		ArchiveDownloadCount:                      3 + 4 + 5,
+		ArchiveDownloadCountLastWeek:              5,
+		ArchiveDownloadCountLastMonth:             4 + 5,
+		ArchiveDownloadCountAllRevisions:          3 + 4 + 5,
+		ArchiveDownloadCountLastWeekAllRevisions:  5,
+		ArchiveDownloadCountLastMonthAllRevisions: 4 + 5,
+	},
+}, {
+	about: "bundle donwloads",
+	url:   "bundle/django-simple-2",
+	downloads: map[string]map[int]int{
+		"bundle/django-simple-2": {200: 3, 28: 4, 3: 5},
+	},
+	expectResponse: params.StatsResponse{
+		ArchiveDownloadCount:                      3 + 4 + 5,
+		ArchiveDownloadCountLastWeek:              5,
+		ArchiveDownloadCountLastMonth:             4 + 5,
+		ArchiveDownloadCountAllRevisions:          3 + 4 + 5,
+		ArchiveDownloadCountLastWeekAllRevisions:  5,
+		ArchiveDownloadCountLastMonthAllRevisions: 4 + 5,
+	},
+}, {
+	about: "different charms",
+	url:   "trusty/rails-47",
+	downloads: map[string]map[int]int{
+		"utopic/rails-47": {200: 3, 28: 4, 3: 5},
+		"trusty/rails-47": {20: 2, 6: 10},
+		"trusty/mysql-0":  {200: 1, 14: 2, 1: 7},
+	},
+	expectResponse: params.StatsResponse{
+		ArchiveDownloadCount:                      2 + 10,
+		ArchiveDownloadCountLastWeek:              10,
+		ArchiveDownloadCountLastMonth:             2 + 10,
+		ArchiveDownloadCountAllRevisions:          2 + 10,
+		ArchiveDownloadCountLastWeekAllRevisions:  10,
+		ArchiveDownloadCountLastMonthAllRevisions: 2 + 10,
+	},
+}, {
+	about: "different revisions of the same charm",
+	url:   "precise/rails-1",
+	downloads: map[string]map[int]int{
+		"precise/rails-0": {300: 1, 200: 2},
+		"precise/rails-1": {100: 5, 10: 3, 2: 7},
+		"precise/rails-2": {6: 10, 0: 9},
+	},
+	expectResponse: params.StatsResponse{
+		ArchiveDownloadCount:                      5 + 3 + 7,
+		ArchiveDownloadCountLastWeek:              7,
+		ArchiveDownloadCountLastMonth:             3 + 7,
+		ArchiveDownloadCountAllRevisions:          (1 + 2) + (5 + 3 + 7) + (10 + 9),
+		ArchiveDownloadCountLastDayAllRevisions:   0 + 0 + 9,
+		ArchiveDownloadCountLastWeekAllRevisions:  0 + 7 + (10 + 9),
+		ArchiveDownloadCountLastMonthAllRevisions: 0 + (3 + 7) + (10 + 9),
+	},
+}, {
+	about: "downloads only in an old revision",
+	url:   "trusty/wordpress-2",
+	downloads: map[string]map[int]int{
+		"precise/wordpress-2": {2: 2, 0: 1},
+		"trusty/wordpress-0":  {100: 10},
+		"trusty/wordpress-2":  {},
+	},
+	expectResponse: params.StatsResponse{
+		ArchiveDownloadCountAllRevisions: 10,
+	},
+}, {
+	about: "downloads only in newer revision",
+	url:   "utopic/wordpress-0",
+	downloads: map[string]map[int]int{
+		"utopic/wordpress-0": {},
+		"utopic/wordpress-1": {31: 7, 10: 1, 3: 2, 0: 1},
+		"utopic/wordpress-2": {6: 9, 0: 2},
+	},
+	expectResponse: params.StatsResponse{
+		ArchiveDownloadCountAllRevisions:          (7 + 1 + 2 + 1) + (9 + 2),
+		ArchiveDownloadCountLastDayAllRevisions:   1 + 2,
+		ArchiveDownloadCountLastWeekAllRevisions:  (2 + 1) + (9 + 2),
+		ArchiveDownloadCountLastMonthAllRevisions: (1 + 2 + 1) + (9 + 2),
+	},
 }}
 
 func (s *APISuite) TestMetaStats(c *gc.C) {
@@ -1091,35 +1222,39 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 		c.Skip("MongoDB JavaScript not available")
 	}
 
-	// Add a bunch of entities in the database.
-	s.addCharm(c, "wordpress", "cs:trusty/mysql-0")
-	s.addCharm(c, "wordpress", "cs:utopic/django-42")
-	s.addCharm(c, "wordpress", "cs:utopic/django-47")
-	s.addCharm(c, "wordpress", "cs:~who/utopic/django-42")
-	s.addBundle(c, "wordpress-simple", "cs:bundle/wordpress-simple-42")
-
+	today := time.Now()
 	for i, test := range metaStatsTests {
 		c.Logf("test %d: %s", i, test.about)
 
-		// Download the entity archive for the requested number of times.
-		archiveUrl := storeURL(test.url + "/archive")
-		for i := 0; i < int(test.downloads); i++ {
-			rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
-				Handler: s.srv,
-				URL:     archiveUrl,
-			})
-			c.Assert(rec.Code, gc.Equals, http.StatusOK)
+		for id, downloadsPerDay := range test.downloads {
+			url := charm.MustParseReference(id)
+
+			// Add the required entities to the database.
+			if url.Series == "bundle" {
+				s.addBundle(c, "wordpress-simple", id)
+			} else {
+				s.addCharm(c, "wordpress", id)
+			}
+
+			// Simulate the entity was downloaded at the specified dates.
+			for daysAgo, downloads := range downloadsPerDay {
+				date := today.AddDate(0, 0, -daysAgo)
+				key := []string{params.StatsArchiveDownload, url.Series, url.Name, url.User, strconv.Itoa(url.Revision)}
+				for i := 0; i < downloads; i++ {
+					err := s.store.IncCounterAtTime(key, date)
+					c.Assert(err, gc.IsNil)
+				}
+			}
 		}
 
-		// Wait until the counters are updated.
-		url := charm.MustParseReference(test.url)
-		key := []string{params.StatsArchiveDownload, url.Series, url.Name, url.User, strconv.Itoa(url.Revision)}
-		stats.CheckCounterSum(c, s.store, key, false, test.downloads)
-
 		// Ensure the meta/stats response reports the correct downloads count.
-		s.assertGet(c, test.url+"/meta/stats", params.StatsResponse{
-			ArchiveDownloadCount: test.downloads,
-		})
+		s.assertGet(c, test.url+"/meta/stats", test.expectResponse)
+
+		// Clean up the collections.
+		_, err := s.store.DB.Entities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+		_, err = s.store.DB.StatCounters().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
 	}
 }
 
