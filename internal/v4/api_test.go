@@ -1130,7 +1130,7 @@ var metaStatsTests = []struct {
 		ArchiveDownloadCountLastMonthAllRevisions: 3 + 5 + 10 + 1 + 3,
 	},
 }, {
-	about: "sparse donwloads",
+	about: "sparse downloads",
 	url:   "utopic/django-42",
 	downloads: map[string]map[int]int{
 		"utopic/django-42": {200: 3, 28: 4, 3: 5},
@@ -1144,7 +1144,7 @@ var metaStatsTests = []struct {
 		ArchiveDownloadCountLastMonthAllRevisions: 4 + 5,
 	},
 }, {
-	about: "bundle donwloads",
+	about: "bundle downloads",
 	url:   "bundle/django-simple-2",
 	downloads: map[string]map[int]int{
 		"bundle/django-simple-2": {200: 3, 28: 4, 3: 5},
@@ -1214,6 +1214,21 @@ var metaStatsTests = []struct {
 		ArchiveDownloadCountLastDayAllRevisions:   1 + 2,
 		ArchiveDownloadCountLastWeekAllRevisions:  (2 + 1) + (9 + 2),
 		ArchiveDownloadCountLastMonthAllRevisions: (1 + 2 + 1) + (9 + 2),
+	},
+}, {
+	about: "non promulgated charms",
+	url:   "~who/utopic/django-0",
+	downloads: map[string]map[int]int{
+		"utopic/django-0":      {100: 1, 10: 2, 1: 3, 0: 4},
+		"~who/utopic/django-0": {2: 5},
+	},
+	expectResponse: params.StatsResponse{
+		ArchiveDownloadCount:                      5,
+		ArchiveDownloadCountLastWeek:              5,
+		ArchiveDownloadCountLastMonth:             5,
+		ArchiveDownloadCountAllRevisions:          5,
+		ArchiveDownloadCountLastWeekAllRevisions:  5,
+		ArchiveDownloadCountLastMonthAllRevisions: 5,
 	},
 }}
 
