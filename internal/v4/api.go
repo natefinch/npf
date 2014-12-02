@@ -406,7 +406,7 @@ func (h *Handler) metaTags(entity *mongodoc.Entity, id *charm.Reference, path st
 // http://tinyurl.com/lvyp2l5
 func (h *Handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	// Retrieve the aggregated downloads count for the specific revision.
-	counts, err := h.aggregatedStats(entityStatsKey(id, params.StatsArchiveDownload))
+	counts, err := h.aggregatedStats(entityStatsKey(id, params.StatsArchiveDownload), false)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot get aggregated count for the specific revision")
 	}
@@ -414,7 +414,7 @@ func (h *Handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path s
 	// Retrieve the aggregated downloads count for all revisions.
 	noRevisionId := *id
 	noRevisionId.Revision = -1
-	countsAllRevisions, err := h.aggregatedStats(entityStatsKey(&noRevisionId, params.StatsArchiveDownload))
+	countsAllRevisions, err := h.aggregatedStats(entityStatsKey(&noRevisionId, params.StatsArchiveDownload), true)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot get aggregated count for all revisions")
 	}
@@ -434,15 +434,13 @@ func (h *Handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path s
 
 // aggregatedStats returns the aggregated downloads counts for the given stats
 // key.
-func (h *Handler) aggregatedStats(key []string) (aggregatedCounts, error) {
+func (h *Handler) aggregatedStats(key []string, prefix bool) (aggregatedCounts, error) {
 	var counts aggregatedCounts
 
-	// Set prefix to true if the key is not complete. A complete key includes
-	// 5 items: the stats kind and the entity series, name, user and revision.
 	req := charmstore.CounterRequest{
 		Key:    key,
 		By:     charmstore.ByDay,
-		Prefix: len(key) < 5,
+		Prefix: prefix,
 	}
 	results, err := h.store.Counters(&req)
 	if err != nil {
