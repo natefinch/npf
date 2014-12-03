@@ -270,14 +270,33 @@ func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}
 			continue
 		}
 
+		// Retrieve the entity Bazaar digest.
+		c.Digest, err = entityBzrDigest(entity)
+		if err != nil {
+			c.Errors = []string{err.Error()}
+		} else if c.Digest == "" {
+			// There are two possible reasons why an entity is found without a
+			// digest:
+			// 1) the entity has been recently added in the ingestion process,
+			//    but the extra-info has not been sent yet by "charmload";
+			// 2) there was an error while ingesting the entity.
+			// If the entity has been recently published, we assume case 1),
+			// and therefore we return a not found error, forcing
+			// "juju publish" to keep retrying and possibly succeed later.
+			// Otherwise, we return an error so that "juju publish" exits with
+			// an error and avoids an infinite loop.
+			if time.Since(entity.UploadTime).Minutes() < 2 {
+				c.Errors = []string{errNotFound.Error()}
+			} else {
+				c.Errors = []string{"digest not found: this can be due to an error while ingesting the entity"}
+			}
+			continue
+		}
+
 		// Prepare the response part for this charm.
 		c.Kind = "published"
 		c.Revision = id.Revision
 		c.Time = entity.UploadTime.UTC().Format(time.RFC3339)
-		c.Digest, err = entityBzrDigest(entity)
-		if err != nil {
-			c.Errors = []string{err.Error()}
-		}
 		h.store.IncCounterAsync(charmStatsKey(id, params.StatsCharmEvent))
 	}
 	return response, nil

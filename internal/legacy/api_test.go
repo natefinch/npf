@@ -456,7 +456,6 @@ func (s *APISuite) TestServeCharmEventErrors(c *gc.C) {
 
 func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 	// Add three charms to the charm store.
-	wordpressUrl, _ := s.addCharm(c, "wordpress", "cs:precise/wordpress-1")
 	mysqlUrl, _ := s.addCharm(c, "mysql", "cs:trusty/mysql-2")
 	riakUrl, _ := s.addCharm(c, "riak", "cs:utopic/riak-3")
 
@@ -472,8 +471,6 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Retrieve the entities.
-	wordpress, err := s.store.FindEntity(wordpressUrl)
-	c.Assert(err, gc.IsNil)
 	mysql, err := s.store.FindEntity(mysqlUrl)
 	c.Assert(err, gc.IsNil)
 	riak, err := s.store.FindEntity(riakUrl)
@@ -484,16 +481,6 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 		query  string
 		expect map[string]*charm.EventResponse
 	}{{
-		about: "no digest",
-		query: "?charms=cs:precise/wordpress",
-		expect: map[string]*charm.EventResponse{
-			"cs:precise/wordpress": &charm.EventResponse{
-				Kind:     "published",
-				Revision: wordpress.Revision,
-				Time:     wordpress.UploadTime.UTC().Format(time.RFC3339),
-			},
-		},
-	}, {
 		about: "valid digest",
 		query: "?charms=cs:trusty/mysql",
 		expect: map[string]*charm.EventResponse{
@@ -517,12 +504,13 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 		},
 	}, {
 		about: "partial charm URL",
-		query: "?charms=cs:wordpress",
+		query: "?charms=cs:mysql",
 		expect: map[string]*charm.EventResponse{
-			"cs:wordpress": &charm.EventResponse{
+			"cs:mysql": &charm.EventResponse{
 				Kind:     "published",
-				Revision: wordpress.Revision,
-				Time:     wordpress.UploadTime.UTC().Format(time.RFC3339),
+				Revision: mysql.Revision,
+				Time:     mysql.UploadTime.UTC().Format(time.RFC3339),
+				Digest:   "who@canonical.com-bzr-digest",
 			},
 		},
 	}, {
@@ -538,7 +526,7 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 		},
 	}, {
 		about: "multiple charms",
-		query: "?charms=cs:mysql&charms=precise/wordpress",
+		query: "?charms=cs:mysql&charms=utopic/riak",
 		expect: map[string]*charm.EventResponse{
 			"cs:mysql": &charm.EventResponse{
 				Kind:     "published",
@@ -546,10 +534,11 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 				Time:     mysql.UploadTime.UTC().Format(time.RFC3339),
 				Digest:   "who@canonical.com-bzr-digest",
 			},
-			"precise/wordpress": &charm.EventResponse{
+			"utopic/riak": &charm.EventResponse{
 				Kind:     "published",
-				Revision: wordpress.Revision,
-				Time:     wordpress.UploadTime.UTC().Format(time.RFC3339),
+				Revision: riak.Revision,
+				Time:     riak.UploadTime.UTC().Format(time.RFC3339),
+				Errors:   []string{"cannot unmarshal digest: invalid character ':' looking for beginning of value"},
 			},
 		},
 	}}
@@ -563,6 +552,38 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 			ExpectBody:   test.expect,
 		})
 	}
+}
+
+func (s *APISuite) TestServeCharmEventDigestNotFound(c *gc.C) {
+	// Add a charm without a Bazaar digest.
+	url, _ := s.addCharm(c, "wordpress", "cs:trusty/wordpress-42")
+
+	// Pretend the entity has been uploaded right now, and assume the test does
+	// not take more than two minutes to run.
+	s.updateUploadTime(c, url, time.Now())
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          "/charm-event?charms=cs:trusty/wordpress",
+		ExpectStatus: http.StatusOK,
+		ExpectBody: map[string]charm.EventResponse{
+			"cs:trusty/wordpress": {
+				Errors: []string{"entry not found"},
+			},
+		},
+	})
+
+	// Now change the entity upload time to be more than 2 minutes ago.
+	s.updateUploadTime(c, url, time.Now().Add(-121*time.Second))
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          "/charm-event?charms=cs:trusty/wordpress",
+		ExpectStatus: http.StatusOK,
+		ExpectBody: map[string]charm.EventResponse{
+			"cs:trusty/wordpress": {
+				Errors: []string{"digest not found: this can be due to an error while ingesting the entity"},
+			},
+		},
+	})
 }
 
 func (s *APISuite) TestServeCharmEventLastRevision(c *gc.C) {
@@ -601,6 +622,13 @@ func (s *APISuite) addExtraInfoDigest(c *gc.C, id *charm.Reference, digest strin
 		"$set", bson.D{{"extrainfo", map[string][]byte{
 			params.BzrDigestKey: b,
 		}}},
+	}})
+	c.Assert(err, gc.IsNil)
+}
+
+func (s *APISuite) updateUploadTime(c *gc.C, id *charm.Reference, uploadTime time.Time) {
+	err := s.store.DB.Entities().UpdateId(id, bson.D{{
+		"$set", bson.D{{"uploadtime", uploadTime}},
 	}})
 	c.Assert(err, gc.IsNil)
 }
