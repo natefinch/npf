@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
+
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"

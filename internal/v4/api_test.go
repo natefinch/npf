@@ -16,8 +16,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
 	jc "github.com/juju/testing/checkers"
-	httptesting "github.com/juju/testing/httptesting"
+	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 

@@ -6,6 +6,7 @@ package v4_test
 import (
 	"fmt"
 	"net/http"
+
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"

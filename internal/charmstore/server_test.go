@@ -5,6 +5,7 @@ package charmstore
 
 import (
 	"net/http"
+
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 
