@@ -410,3 +410,225 @@ func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, 
 	c.Assert(err, gc.IsNil)
 	return url, wordpress
 }
+
+var serveCharmEventErrorsTests = []struct {
+	about       string
+	url         string
+	responseUrl string
+	err         string
+}{{
+	about: "invalid charm URL",
+	url:   "no-such:charm",
+	err:   `invalid charm URL: charm URL has invalid schema: "no-such:charm"`,
+}, {
+	about: "revision specified",
+	url:   "cs:utopic/django-42",
+	err:   "got charm URL with revision: cs:utopic/django-42",
+}, {
+	about: "charm not found",
+	url:   "cs:trusty/django",
+	err:   "entry not found",
+}, {
+	about:       "ignoring digest",
+	url:         "precise/django-47@a-bzr-digest",
+	responseUrl: "precise/django-47",
+	err:         "got charm URL with revision: cs:precise/django-47",
+}}
+
+func (s *APISuite) TestServeCharmEventErrors(c *gc.C) {
+	for i, test := range serveCharmEventErrorsTests {
+		c.Logf("test %d: %s", i, test.about)
+		if test.responseUrl == "" {
+			test.responseUrl = test.url
+		}
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:      s.srv,
+			URL:          "/charm-event?charms=" + test.url,
+			ExpectStatus: http.StatusOK,
+			ExpectBody: map[string]charm.EventResponse{
+				test.responseUrl: {
+					Errors: []string{test.err},
+				},
+			},
+		})
+	}
+}
+
+func (s *APISuite) TestServeCharmEvent(c *gc.C) {
+	// Add three charms to the charm store.
+	mysqlUrl, _ := s.addCharm(c, "mysql", "cs:trusty/mysql-2")
+	riakUrl, _ := s.addCharm(c, "riak", "cs:utopic/riak-3")
+
+	// Update the mysql charm with a valid digest extra-info.
+	s.addExtraInfoDigest(c, mysqlUrl, "who@canonical.com-bzr-digest")
+
+	// Update the riak charm with an invalid digest extra-info.
+	err := s.store.DB.Entities().UpdateId(riakUrl, bson.D{{
+		"$set", bson.D{{"extrainfo", map[string][]byte{
+			params.BzrDigestKey: []byte(":"),
+		}}},
+	}})
+	c.Assert(err, gc.IsNil)
+
+	// Retrieve the entities.
+	mysql, err := s.store.FindEntity(mysqlUrl)
+	c.Assert(err, gc.IsNil)
+	riak, err := s.store.FindEntity(riakUrl)
+	c.Assert(err, gc.IsNil)
+
+	tests := []struct {
+		about  string
+		query  string
+		expect map[string]*charm.EventResponse
+	}{{
+		about: "valid digest",
+		query: "?charms=cs:trusty/mysql",
+		expect: map[string]*charm.EventResponse{
+			"cs:trusty/mysql": &charm.EventResponse{
+				Kind:     "published",
+				Revision: mysql.Revision,
+				Time:     mysql.UploadTime.UTC().Format(time.RFC3339),
+				Digest:   "who@canonical.com-bzr-digest",
+			},
+		},
+	}, {
+		about: "invalid digest",
+		query: "?charms=cs:utopic/riak",
+		expect: map[string]*charm.EventResponse{
+			"cs:utopic/riak": &charm.EventResponse{
+				Kind:     "published",
+				Revision: riak.Revision,
+				Time:     riak.UploadTime.UTC().Format(time.RFC3339),
+				Errors:   []string{"cannot unmarshal digest: invalid character ':' looking for beginning of value"},
+			},
+		},
+	}, {
+		about: "partial charm URL",
+		query: "?charms=cs:mysql",
+		expect: map[string]*charm.EventResponse{
+			"cs:mysql": &charm.EventResponse{
+				Kind:     "published",
+				Revision: mysql.Revision,
+				Time:     mysql.UploadTime.UTC().Format(time.RFC3339),
+				Digest:   "who@canonical.com-bzr-digest",
+			},
+		},
+	}, {
+		about: "digest in request",
+		query: "?charms=cs:trusty/mysql@my-digest",
+		expect: map[string]*charm.EventResponse{
+			"cs:trusty/mysql": &charm.EventResponse{
+				Kind:     "published",
+				Revision: mysql.Revision,
+				Time:     mysql.UploadTime.UTC().Format(time.RFC3339),
+				Digest:   "who@canonical.com-bzr-digest",
+			},
+		},
+	}, {
+		about: "multiple charms",
+		query: "?charms=cs:mysql&charms=utopic/riak",
+		expect: map[string]*charm.EventResponse{
+			"cs:mysql": &charm.EventResponse{
+				Kind:     "published",
+				Revision: mysql.Revision,
+				Time:     mysql.UploadTime.UTC().Format(time.RFC3339),
+				Digest:   "who@canonical.com-bzr-digest",
+			},
+			"utopic/riak": &charm.EventResponse{
+				Kind:     "published",
+				Revision: riak.Revision,
+				Time:     riak.UploadTime.UTC().Format(time.RFC3339),
+				Errors:   []string{"cannot unmarshal digest: invalid character ':' looking for beginning of value"},
+			},
+		},
+	}}
+
+	for i, test := range tests {
+		c.Logf("test %d: %s", i, test.about)
+		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+			Handler:      s.srv,
+			URL:          "/charm-event" + test.query,
+			ExpectStatus: http.StatusOK,
+			ExpectBody:   test.expect,
+		})
+	}
+}
+
+func (s *APISuite) TestServeCharmEventDigestNotFound(c *gc.C) {
+	// Add a charm without a Bazaar digest.
+	url, _ := s.addCharm(c, "wordpress", "cs:trusty/wordpress-42")
+
+	// Pretend the entity has been uploaded right now, and assume the test does
+	// not take more than two minutes to run.
+	s.updateUploadTime(c, url, time.Now())
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          "/charm-event?charms=cs:trusty/wordpress",
+		ExpectStatus: http.StatusOK,
+		ExpectBody: map[string]charm.EventResponse{
+			"cs:trusty/wordpress": {
+				Errors: []string{"entry not found"},
+			},
+		},
+	})
+
+	// Now change the entity upload time to be more than 2 minutes ago.
+	s.updateUploadTime(c, url, time.Now().Add(-121*time.Second))
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          "/charm-event?charms=cs:trusty/wordpress",
+		ExpectStatus: http.StatusOK,
+		ExpectBody: map[string]charm.EventResponse{
+			"cs:trusty/wordpress": {
+				Errors: []string{"digest not found: this can be due to an error while ingesting the entity"},
+			},
+		},
+	})
+}
+
+func (s *APISuite) TestServeCharmEventLastRevision(c *gc.C) {
+	// Add two revisions of the same charm.
+	url1, _ := s.addCharm(c, "wordpress", "cs:trusty/wordpress-1")
+	url2, _ := s.addCharm(c, "wordpress", "cs:trusty/wordpress-2")
+
+	// Update the resulting entities with Bazaar digests.
+	s.addExtraInfoDigest(c, url1, "digest-1")
+	s.addExtraInfoDigest(c, url2, "digest-2")
+
+	// Retrieve the most recent revision of the entity.
+	entity, err := s.store.FindEntity(url2)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure the last revision is correctly returned.
+	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          "/charm-event?charms=wordpress",
+		ExpectStatus: http.StatusOK,
+		ExpectBody: map[string]*charm.EventResponse{
+			"wordpress": &charm.EventResponse{
+				Kind:     "published",
+				Revision: 2,
+				Time:     entity.UploadTime.UTC().Format(time.RFC3339),
+				Digest:   "digest-2",
+			},
+		},
+	})
+}
+
+func (s *APISuite) addExtraInfoDigest(c *gc.C, id *charm.Reference, digest string) {
+	b, err := json.Marshal(digest)
+	c.Assert(err, gc.IsNil)
+	err = s.store.DB.Entities().UpdateId(id, bson.D{{
+		"$set", bson.D{{"extrainfo", map[string][]byte{
+			params.BzrDigestKey: b,
+		}}},
+	}})
+	c.Assert(err, gc.IsNil)
+}
+
+func (s *APISuite) updateUploadTime(c *gc.C, id *charm.Reference, uploadTime time.Time) {
+	err := s.store.DB.Entities().UpdateId(id, bson.D{{
+		"$set", bson.D{{"uploadtime", uploadTime}},
+	}})
+	c.Assert(err, gc.IsNil)
+}

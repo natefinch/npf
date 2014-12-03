@@ -12,6 +12,7 @@ const (
 	// The following kinds are in use in the legacy API.
 	StatsCharmInfo    = "charm-info"
 	StatsCharmMissing = "charm-missing"
+	StatsCharmEvent   = "charm-event"
 )
 
 // Statistic holds one element of a stats/counter

@@ -73,6 +73,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
@@ -100,6 +101,7 @@ func NewAPIHandler(store *charmstore.Store, config charmstore.ServerParams) http
 	}
 	h.handle("/charm-info", router.HandleJSON(h.serveCharmInfo))
 	h.handle("/charm/", router.HandleErrors(h.serveCharm))
+	h.handle("/charm-event", router.HandleJSON(h.serveCharmEvent))
 	return h
 }
 
@@ -178,10 +180,9 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 			c.CanonicalURL = curl.String()
 			c.Sha256 = entity.BlobHash256
 			c.Revision = curl.Revision
-			if digest, found := entity.ExtraInfo[params.BzrDigestKey]; found {
-				if err := json.Unmarshal(digest, &c.Digest); err != nil {
-					c.Errors = append(c.Errors, "cannot unmarshal digest: "+err.Error())
-				}
+			c.Digest, err = entityBzrDigest(&entity)
+			if err != nil {
+				c.Errors = append(c.Errors, err.Error())
 			}
 			h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmInfo))
 		} else {
@@ -220,4 +221,95 @@ func (h *Handler) updateEntitySHA256(curl *charm.Reference) (string, error) {
 	go updateEntitySHA256(h.store, curl, sum256)
 
 	return sum256, nil
+}
+
+// serveCharmEvent returns events related to the charms specified in the
+// "charms" query. In this implementation, the only supported event is
+// "published", required by the "juju publish" command.
+func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}, error) {
+	response := make(map[string]*charm.EventResponse)
+	for _, url := range req.Form["charms"] {
+		c := &charm.EventResponse{}
+
+		// Ignore the digest part of the request.
+		if i := strings.Index(url, "@"); i != -1 {
+			url = url[:i]
+		}
+		// We intentionally do not implement the long_keys query parameter that
+		// the legacy charm store supported, as "juju publish" does not use it.
+		response[url] = c
+
+		// Validate the charm URL.
+		id, err := charm.ParseReference(url)
+		if err != nil {
+			c.Errors = []string{"invalid charm URL: " + err.Error()}
+			continue
+		}
+		if id.Revision != -1 {
+			c.Errors = []string{"got charm URL with revision: " + id.String()}
+			continue
+		}
+		if err := v4.ResolveURL(h.store, id); err != nil {
+			if errgo.Cause(err) == params.ErrNotFound {
+				err = errNotFound
+			}
+			c.Errors = []string{err.Error()}
+			continue
+		}
+
+		// Retrieve the charm.
+		entity, err := h.store.FindEntity(id, "_id", "uploadtime", "extrainfo")
+		if err != nil {
+			if errgo.Cause(err) == params.ErrNotFound {
+				// The old API actually returned "entry not found"
+				// on *any* error, but it seems reasonable to be
+				// a little more descriptive for other errors.
+				err = errNotFound
+			}
+			c.Errors = []string{err.Error()}
+			continue
+		}
+
+		// Retrieve the entity Bazaar digest.
+		c.Digest, err = entityBzrDigest(entity)
+		if err != nil {
+			c.Errors = []string{err.Error()}
+		} else if c.Digest == "" {
+			// There are two possible reasons why an entity is found without a
+			// digest:
+			// 1) the entity has been recently added in the ingestion process,
+			//    but the extra-info has not been sent yet by "charmload";
+			// 2) there was an error while ingesting the entity.
+			// If the entity has been recently published, we assume case 1),
+			// and therefore we return a not found error, forcing
+			// "juju publish" to keep retrying and possibly succeed later.
+			// Otherwise, we return an error so that "juju publish" exits with
+			// an error and avoids an infinite loop.
+			if time.Since(entity.UploadTime).Minutes() < 2 {
+				c.Errors = []string{errNotFound.Error()}
+			} else {
+				c.Errors = []string{"digest not found: this can be due to an error while ingesting the entity"}
+			}
+			continue
+		}
+
+		// Prepare the response part for this charm.
+		c.Kind = "published"
+		c.Revision = id.Revision
+		c.Time = entity.UploadTime.UTC().Format(time.RFC3339)
+		h.store.IncCounterAsync(charmStatsKey(id, params.StatsCharmEvent))
+	}
+	return response, nil
+}
+
+func entityBzrDigest(entity *mongodoc.Entity) (string, error) {
+	value, found := entity.ExtraInfo[params.BzrDigestKey]
+	if !found {
+		return "", nil
+	}
+	var digest string
+	if err := json.Unmarshal(value, &digest); err != nil {
+		return "", errgo.Notef(err, "cannot unmarshal digest")
+	}
+	return digest, nil
 }
