@@ -17,12 +17,12 @@ import (
 
 	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
+	"github.com/juju/testing/httptesting"
 	"github.com/juju/utils/jsonhttp"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 
-	"github.com/juju/charmstore/internal/storetesting"
 	"github.com/juju/charmstore/params"
 )
 
@@ -802,7 +802,7 @@ func (s *RouterSuite) TestRouterGet(c *gc.C) {
 		// Note that fieldSelectHandler increments queryCount each time
 		// a query is made.
 		queryCount = 0
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      router,
 			URL:          test.urlStr,
 			ExpectStatus: test.expectStatus,
@@ -818,7 +818,7 @@ func (s *RouterSuite) TestCORSHeaders(c *gc.C) {
 			"foo": http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {}),
 		},
 	}, noResolveURL, alwaysExists)
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: h,
 		URL:     "/foo",
 	})
@@ -829,7 +829,7 @@ func (s *RouterSuite) TestCORSHeaders(c *gc.C) {
 
 func (s *RouterSuite) TestOptionsHTTPMethod(c *gc.C) {
 	h := New(&Handlers{}, noResolveURL, alwaysExists)
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: h,
 		Method:  "OPTIONS",
 		URL:     "/foo",
@@ -1372,7 +1372,7 @@ func (s *RouterSuite) TestRouterPut(c *gc.C) {
 		bodyVal, err := json.Marshal(test.body)
 		c.Assert(err, gc.IsNil)
 		router := New(&test.handlers, resolve, alwaysExists)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: router,
 			URL:     test.urlStr,
 			Body:    bytes.NewReader(bodyVal),
@@ -1441,7 +1441,7 @@ func (s *RouterSuite) TestRouterPutWithInvalidContent(c *gc.C) {
 			},
 		}
 		router := New(handlers, noResolveURL, alwaysExists)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: router,
 			URL:     test.urlStr,
 			Body:    strings.NewReader(test.body),
@@ -1491,7 +1491,7 @@ func (s *RouterSuite) TestMethodsThatPassThroughUnresolvedId(c *gc.C) {
 			resp.CharmURL = "cs:wordpress"
 		}
 		router := New(&handlers, newResolveURL("series", 1234), alwaysExists)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:    router,
 			Body:       strings.NewReader(""),
 			Header:     header,
@@ -1727,12 +1727,12 @@ func (s *RouterSuite) TestServeMux(c *gc.C) {
 	mux.Handle("/data", HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
 		return Foo{"hello"}, nil
 	}))
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:    mux,
 		URL:        "/data",
 		ExpectBody: Foo{"hello"},
 	})
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      mux,
 		URL:          "/foo",
 		ExpectStatus: http.StatusNotFound,
@@ -1860,7 +1860,7 @@ type ReqInfo struct {
 func (s *RouterSuite) TestHandlers(c *gc.C) {
 	for i, test := range handlerTests {
 		c.Logf("test %d: %s", i, test.about)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      test.handler,
 			URL:          "",
 			ExpectStatus: test.expectStatus,

@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"path/filepath"
 
+	jc "github.com/juju/testing/checkers"
+	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 
@@ -54,7 +56,7 @@ func (s *APISuite) TestServeDiagramErrors(c *gc.C) {
 	s.addBundle(c, "wordpress-simple", "cs:bundle/nopositionbundle-42")
 	for i, test := range serveDiagramErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL(test.url),
 			ExpectStatus: test.expectStatus,
@@ -94,7 +96,7 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 	})
 	c.Assert(err, gc.IsNil)
 
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("bundle/wordpressbundle/diagram.svg"),
 	})
@@ -115,7 +117,7 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 
 	// Do the same check again, but with the short form of the id;
 	// the relative links should change accordingly.
-	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("wordpressbundle/diagram.svg"),
 	})
@@ -181,13 +183,13 @@ func (s *APISuite) TestServeReadMe(c *gc.C) {
 		err := s.store.AddCharmWithArchive(url, wordpress)
 		c.Assert(err, gc.IsNil)
 
-		rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,
 			URL:     storeURL(url.Path() + "/readme"),
 		})
 		if test.expectNotFound {
 			c.Assert(rec.Code, gc.Equals, http.StatusNotFound)
-			c.Assert(rec.Body.Bytes(), storetesting.JSONEquals, params.Error{
+			c.Assert(rec.Body.String(), jc.JSONEquals, params.Error{
 				Code:    params.ErrNotFound,
 				Message: "not found",
 			})
@@ -200,7 +202,7 @@ func (s *APISuite) TestServeReadMe(c *gc.C) {
 }
 
 func (s *APISuite) TestServeReadMeEntityNotFound(c *gc.C) {
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("precise/nothingatall-32/readme"),
 		ExpectStatus: http.StatusNotFound,
@@ -212,7 +214,7 @@ func (s *APISuite) TestServeReadMeEntityNotFound(c *gc.C) {
 }
 
 func (s *APISuite) TestServeIconEntityNotFound(c *gc.C) {
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("precise/nothingatall-32/icon.svg"),
 		ExpectStatus: http.StatusNotFound,
@@ -234,7 +236,7 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 	err = s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL(url.Path() + "/icon.svg"),
 	})
@@ -244,7 +246,7 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 	assertCacheControl(c, rec.Header(), true)
 
 	url.Revision = -1
-	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL(url.Path() + "/icon.svg"),
 	})
@@ -255,7 +257,7 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 }
 
 func (s *APISuite) TestServeBundleIcon(c *gc.C) {
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("bundle/something-32/icon.svg"),
 		ExpectStatus: http.StatusNotFound,
@@ -274,7 +276,7 @@ func (s *APISuite) TestServeDefaultIcon(c *gc.C) {
 	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL(url.Path() + "/icon.svg"),
 	})

@@ -1,20 +1,20 @@
 code.google.com/p/go.crypto	hg	8fec09c61d5d66f460d227fd1df3473d7e015bc6	232
-github.com/ajstarks/svgo	git	89e3ac64b5b3e403a5e7c35ea4f98d45db7b4518	
-github.com/juju/blobstore	git	c8e097e6dc9619475be92918c20de5f2d05ffa0b	
-github.com/juju/errors	git	8c374326f1293bcedc0d596e9cfe5af838ed0105	
-github.com/juju/gojsonpointer	git	0154bf5a168b672d8c97d8dd83a54cb60cd088e8	
-github.com/juju/gojsonreference	git	0673d58f64bacac2db34c7d1e87a599d58923981	
-github.com/juju/gojsonschema	git	33fa79718fa9b24e2a04122f91a75496c0f77098	
-github.com/juju/jujusvg	git	805fd9aa842cc6fdf283edd3ef55ce581708c1e7	
-github.com/juju/loggo	git	d2fb76909109d51bf42f3671abdee01104dac83f	
-github.com/juju/names	git	84ad1d88f60e93f572e3dfdbdeaeae061d20885a	
-github.com/juju/schema	git	27a52be50766490a6fd3531865095fda6c0eeb6d	
-github.com/juju/testing	git	3cae07cf4f821a476e80255e75c1e3d32ca1d911	
-github.com/juju/txn	git	e02f26c56cfb81c7c1236df499deebb0369bd97c	
-github.com/juju/utils	git	a2a4ba970472d7f55382941ab1d38cc270ae4a0e	
-gopkg.in/check.v1	git	64131543e7896d5bcc6bd5a76287eb75ea96c673	
-gopkg.in/errgo.v1	git	81357a83344ddd9f7772884874e5622c2a3da21c	
-gopkg.in/juju/charm.v4	git	7ef31c485ccfd7f1f9571d42ef4395bd04dc1006	
-gopkg.in/mgo.v2	git	e2e914857713db7497cca2bd7fc0b030fc9cb22d	
-gopkg.in/yaml.v1	git	9f9df34309c04878acc86042b16630b0f696e1de	
+github.com/ajstarks/svgo	git	89e3ac64b5b3e403a5e7c35ea4f98d45db7b4518	2014-10-04T23:11:59+02:00
+github.com/juju/blobstore	git	c8e097e6dc9619475be92918c20de5f2d05ffa0b	2014-09-25T13:47:50+02:00
+github.com/juju/errors	git	8c374326f1293bcedc0d596e9cfe5af838ed0105	2014-11-12T04:19:03+01:00
+github.com/juju/gojsonpointer	git	0154bf5a168b672d8c97d8dd83a54cb60cd088e8	2014-07-18T05:59:30+02:00
+github.com/juju/gojsonreference	git	0673d58f64bacac2db34c7d1e87a599d58923981	2014-07-18T05:57:39+02:00
+github.com/juju/gojsonschema	git	33fa79718fa9b24e2a04122f91a75496c0f77098	2014-07-17T18:12:25+02:00
+github.com/juju/jujusvg	git	805fd9aa842cc6fdf283edd3ef55ce581708c1e7	2014-11-13T20:06:04+01:00
+github.com/juju/loggo	git	d2fb76909109d51bf42f3671abdee01104dac83f	2014-11-12T03:52:55+01:00
+github.com/juju/names	git	84ad1d88f60e93f572e3dfdbdeaeae061d20885a	2014-10-22T20:57:05+02:00
+github.com/juju/schema	git	27a52be50766490a6fd3531865095fda6c0eeb6d	2014-07-23T06:23:18+02:00
+github.com/juju/testing	git	d0fb1a32e1702bda28711881f27c3a255e46ed0d	2014-12-03T17:55:57+01:00
+github.com/juju/txn	git	e02f26c56cfb81c7c1236df499deebb0369bd97c	2014-09-25T13:49:22+02:00
+github.com/juju/utils	git	a2a4ba970472d7f55382941ab1d38cc270ae4a0e	2014-11-13T05:39:48+01:00
+gopkg.in/check.v1	git	64131543e7896d5bcc6bd5a76287eb75ea96c673	2014-10-24T15:38:53+02:00
+gopkg.in/errgo.v1	git	81357a83344ddd9f7772884874e5622c2a3da21c	2014-10-13T19:33:38+02:00
+gopkg.in/juju/charm.v4	git	7ef31c485ccfd7f1f9571d42ef4395bd04dc1006	2014-11-17T18:46:04+01:00
+gopkg.in/mgo.v2	git	e2e914857713db7497cca2bd7fc0b030fc9cb22d	2014-11-07T15:25:03+01:00
+gopkg.in/yaml.v1	git	9f9df34309c04878acc86042b16630b0f696e1de	2014-09-24T18:16:07+02:00
 launchpad.net/tomb	bzr	gustavo@niemeyer.net-20140529072043-hzcrlnl3ygvg914q	18

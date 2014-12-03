@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 
 	"github.com/juju/charmstore/internal/charmstore"
@@ -79,7 +80,7 @@ func (s *StatsSuite) TestServerStatsStatus(c *gc.C) {
 	}}
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.path)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL(test.path),
 			ExpectStatus: test.status,
@@ -119,7 +120,7 @@ func (s *StatsSuite) TestStatsCounter(c *gc.C) {
 	for counter, n := range expected {
 		c.Logf("test %q", counter)
 		url := storeURL("stats/counter/" + counter)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: s.srv,
 			URL:     url,
 			ExpectBody: []params.Statistic{{
@@ -207,7 +208,7 @@ func (s *StatsSuite) TestStatsCounterList(c *gc.C) {
 	for i, test := range tests {
 		c.Logf("test %d: %s", i, test.key)
 		url := storeURL("stats/counter/" + test.key + "?list=1")
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:    s.srv,
 			URL:        url,
 			ExpectBody: test.result,
@@ -414,7 +415,7 @@ func (s *StatsSuite) TestStatsCounterBy(c *gc.C) {
 			url += "?" + flags.Encode()
 		}
 		c.Logf("test %d: %s", i, url)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:    s.srv,
 			URL:        url,
 			ExpectBody: test.result,

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2/bson"
@@ -388,7 +389,7 @@ func (s *RelationsSuite) TestMetaCharmRelated(c *gc.C) {
 		c.Logf("test %d: %s", i, test.about)
 		s.addCharms(c, test.charms)
 		storeURL := storeURL(test.id + "/meta/charm-related" + test.querystring)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL,
 			ExpectStatus: http.StatusOK,
@@ -403,7 +404,7 @@ func (s *RelationsSuite) TestMetaCharmRelated(c *gc.C) {
 func (s *RelationsSuite) TestMetaCharmRelatedIncludeError(c *gc.C) {
 	s.addCharms(c, metaCharmRelatedCharms)
 	storeURL := storeURL("utopic/wordpress-0/meta/charm-related?include=no-such")
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL,
 		ExpectStatus: http.StatusInternalServerError,
@@ -735,7 +736,7 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 
 		// Perform the request and ensure the response is what we expect.
 		storeURL := storeURL(test.id + "/meta/bundles-containing" + test.querystring)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL,
 			ExpectStatus: test.expectStatus,

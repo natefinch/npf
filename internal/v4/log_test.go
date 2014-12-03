@@ -10,6 +10,7 @@ import (
 	"time"
 
 	jc "github.com/juju/testing/checkers"
+	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 
@@ -209,7 +210,7 @@ func (s *logSuite) TestGetLogs(c *gc.C) {
 	// Run the tests.
 	for i, test := range getLogsTests {
 		c.Logf("test %d: %s", i, test.about)
-		rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler:  s.srv,
 			URL:      storeURL("log" + test.querystring),
 			Username: serverParams.AuthUsername,
@@ -305,7 +306,7 @@ var getLogsErrorsTests = []struct {
 func (s *logSuite) TestGetLogsErrors(c *gc.C) {
 	for i, test := range getLogsErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL("log" + test.querystring),
 			Username:     serverParams.AuthUsername,
@@ -329,7 +330,7 @@ func (s *logSuite) TestGetLogsErrorInvalidLog(c *gc.C) {
 	})
 	c.Assert(err, gc.IsNil)
 	// The log is just ignored.
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("log"),
 		Username:     serverParams.AuthUsername,
@@ -341,7 +342,7 @@ func (s *logSuite) TestGetLogsErrorInvalidLog(c *gc.C) {
 
 func (s *logSuite) TestGetLogsUnauthorizedError(c *gc.C) {
 	// Add a non-parsable log message to the db.
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("log"),
 		ExpectStatus: http.StatusUnauthorized,
@@ -360,7 +361,7 @@ func (s *logSuite) TestPostLogs(c *gc.C) {
 	})
 
 	// Send the request.
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:  s.srv,
 		URL:      storeURL("log"),
 		Method:   "POST",
@@ -405,7 +406,7 @@ func (s *logSuite) TestPostLogsMultipleEntries(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Send the request.
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:  s.srv,
 		URL:      storeURL("log"),
 		Method:   "POST",
@@ -469,7 +470,7 @@ func (s *logSuite) TestPostLogsErrors(c *gc.C) {
 		if test.contentType == "" {
 			test.contentType = "application/json"
 		}
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: s.srv,
 			URL:     url,
 			Method:  "POST",
@@ -490,7 +491,7 @@ func (s *logSuite) TestPostLogsErrors(c *gc.C) {
 
 func (s *logSuite) TestPostLogsUnauthorizedError(c *gc.C) {
 	// Add a non-parsable log message to the db.
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: s.srv,
 		URL:     storeURL("log"),
 		Method:  "POST",

@@ -6,6 +6,7 @@ package charmstore
 import (
 	"net/http"
 
+	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 
 	"github.com/juju/charmstore/internal/router"
@@ -94,7 +95,7 @@ func (s *ServerSuite) TestNewServerWithConfig(c *gc.C) {
 		"version1": serveConfig,
 	})
 	c.Assert(err, gc.IsNil)
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:    h,
 		URL:        "/version1/some/path",
 		ExpectBody: serverParams,
@@ -112,7 +113,7 @@ func (s *ServerSuite) TestNewServerWithElasticSearch(c *gc.C) {
 			"version1": serveConfig,
 		})
 	c.Assert(err, gc.IsNil)
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:    h,
 		URL:        "/version1/some/path",
 		ExpectBody: serverParams,
@@ -124,7 +125,7 @@ func assertServesVersion(c *gc.C, h http.Handler, vers string) {
 	if path != "" {
 		path = "/" + path
 	}
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: h,
 		URL:     path + "/some/path",
 		ExpectBody: versionResponse{
@@ -135,7 +136,7 @@ func assertServesVersion(c *gc.C, h http.Handler, vers string) {
 }
 
 func assertDoesNotServeVersion(c *gc.C, h http.Handler, vers string) {
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: h,
 		URL:     "/" + vers + "/some/path",
 	})

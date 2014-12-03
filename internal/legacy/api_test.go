@@ -15,6 +15,7 @@ import (
 	"time"
 
 	jc "github.com/juju/testing/checkers"
+	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2"
@@ -59,7 +60,7 @@ func (s *APISuite) TestCharmArchive(c *gc.C) {
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
 	c.Assert(err, gc.IsNil)
 
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     "/charm/precise/wordpress-0",
 	})
@@ -68,7 +69,7 @@ func (s *APISuite) TestCharmArchive(c *gc.C) {
 	c.Assert(rec.Header().Get("Content-Length"), gc.Equals, fmt.Sprint(len(rec.Body.Bytes())))
 
 	// Test with unresolved URL.
-	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     "/charm/wordpress",
 	})
@@ -79,7 +80,7 @@ func (s *APISuite) TestCharmArchive(c *gc.C) {
 	// Check that the HTTP range logic is plugged in OK. If this
 	// is working, we assume that the whole thing is working OK,
 	// as net/http is well-tested.
-	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     "/charm/precise/wordpress-0",
 		Header:  http.Header{"Range": {"bytes=10-100"}},
@@ -90,7 +91,7 @@ func (s *APISuite) TestCharmArchive(c *gc.C) {
 }
 
 func (s *APISuite) TestPostNotAllowed(c *gc.C) {
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		Method:       "POST",
 		URL:          "/charm/precise/wordpress",
@@ -103,7 +104,7 @@ func (s *APISuite) TestPostNotAllowed(c *gc.C) {
 }
 
 func (s *APISuite) TestCharmArchiveUnresolvedURL(c *gc.C) {
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          "/charm/wordpress",
 		ExpectStatus: http.StatusNotFound,
@@ -115,7 +116,7 @@ func (s *APISuite) TestCharmArchiveUnresolvedURL(c *gc.C) {
 }
 
 func (s *APISuite) TestCharmInfoNotFound(c *gc.C) {
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          "/charm-info?charms=cs:precise/something-23",
 		ExpectStatus: http.StatusOK,
@@ -218,7 +219,7 @@ func (s *APISuite) TestServerCharmInfo(c *gc.C) {
 		if test.err != "" {
 			expectInfo.Errors = []string{test.err}
 		}
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          "/charm-info?charms=" + test.url,
 			ExpectStatus: http.StatusOK,
@@ -240,7 +241,7 @@ func (s *APISuite) TestCharmInfoCounters(c *gc.C) {
 
 	requestInfo := func(id string, times int) {
 		for i := 0; i < times; i++ {
-			rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+			rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 				Handler: s.srv,
 				URL:     "/charm-info?charms=" + id,
 			})
@@ -340,7 +341,7 @@ func (s *APISuite) TestSHA256Laziness(c *gc.C) {
 	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-0")
 	sum256 := fileSHA256(c, wordpress.Path)
 
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          "/charm-info?charms=" + wordpressURL.String(),
 		ExpectStatus: http.StatusOK,
@@ -361,7 +362,7 @@ func (s *APISuite) TestSHA256Laziness(c *gc.C) {
 
 	// Try again - we should not update the SHA256 the second time.
 
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          "/charm-info?charms=" + wordpressURL.String(),
 		ExpectStatus: http.StatusOK,
@@ -395,7 +396,7 @@ func (s *APISuite) TestServerStatus(c *gc.C) {
 	// when we implement charm-info.
 	for i, test := range serverStatusTests {
 		c.Logf("test %d: %s", i, test.path)
-		resp := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		resp := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,
 			URL:     test.path,
 		})
@@ -441,7 +442,7 @@ func (s *APISuite) TestServeCharmEventErrors(c *gc.C) {
 		if test.responseUrl == "" {
 			test.responseUrl = test.url
 		}
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          "/charm-event?charms=" + test.url,
 			ExpectStatus: http.StatusOK,
@@ -545,7 +546,7 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 
 	for i, test := range tests {
 		c.Logf("test %d: %s", i, test.about)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          "/charm-event" + test.query,
 			ExpectStatus: http.StatusOK,
@@ -561,7 +562,7 @@ func (s *APISuite) TestServeCharmEventDigestNotFound(c *gc.C) {
 	// Pretend the entity has been uploaded right now, and assume the test does
 	// not take more than two minutes to run.
 	s.updateUploadTime(c, url, time.Now())
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          "/charm-event?charms=cs:trusty/wordpress",
 		ExpectStatus: http.StatusOK,
@@ -574,7 +575,7 @@ func (s *APISuite) TestServeCharmEventDigestNotFound(c *gc.C) {
 
 	// Now change the entity upload time to be more than 2 minutes ago.
 	s.updateUploadTime(c, url, time.Now().Add(-121*time.Second))
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          "/charm-event?charms=cs:trusty/wordpress",
 		ExpectStatus: http.StatusOK,
@@ -600,7 +601,7 @@ func (s *APISuite) TestServeCharmEventLastRevision(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Ensure the last revision is correctly returned.
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          "/charm-event?charms=wordpress",
 		ExpectStatus: http.StatusOK,

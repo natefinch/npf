@@ -18,6 +18,7 @@ import (
 	"time"
 
 	jc "github.com/juju/testing/checkers"
+	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
@@ -356,7 +357,7 @@ func (s *APISuite) TestEndpointGet(c *gc.C) {
 func (s *APISuite) TestAllMetaEndpointsTested(c *gc.C) {
 	// Make sure that we're testing all the metadata
 	// endpoints that we need to.
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("precise/wordpress-23/meta"),
 	})
@@ -422,7 +423,7 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 			c.Assert(err, gc.IsNil)
 			c.Logf("	expected data for %q: %#v", url, expectData)
 			if isNull(expectData) {
-				storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+				httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 					Handler:      s.srv,
 					URL:          storeURL(path),
 					ExpectStatus: http.StatusNotFound,
@@ -572,7 +573,7 @@ func (s *APISuite) TestExtraInfoBadPutRequests(c *gc.C) {
 		if contentType == "" {
 			contentType = "application/json"
 		}
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: s.srv,
 			URL:     storeURL(test.path),
 			Method:  "PUT",
@@ -622,7 +623,7 @@ func (s *APISuite) TestMetaEndpointsAny(c *gc.C) {
 
 func (s *APISuite) TestMetaAnyWithNoIncludesAndNoEntity(c *gc.C) {
 	wordpressURL, _ := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("precise/wordpress-1/meta/any"),
 		ExpectStatus: http.StatusNotFound,
@@ -631,7 +632,7 @@ func (s *APISuite) TestMetaAnyWithNoIncludesAndNoEntity(c *gc.C) {
 			Message: "not found",
 		},
 	})
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("meta/any?id=precise/wordpress-23&id=precise/wordpress-1"),
 		ExpectStatus: http.StatusOK,
@@ -641,7 +642,7 @@ func (s *APISuite) TestMetaAnyWithNoIncludesAndNoEntity(c *gc.C) {
 			},
 		},
 	})
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("precise/wordpress-23/meta/any"),
 		ExpectStatus: http.StatusOK,
@@ -750,7 +751,7 @@ func (s *APISuite) TestMetaCharmTags(c *gc.C) {
 			BlobSize: fakeBlobSize,
 		})
 		c.Assert(err, gc.IsNil)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL(url.Path() + "/meta/tags"),
 			ExpectStatus: http.StatusOK,
@@ -770,7 +771,7 @@ func (s *APISuite) TestBundleTags(c *gc.C) {
 		BlobSize: fakeBlobSize,
 	})
 	c.Assert(err, gc.IsNil)
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("bundle/wordpress-2/meta/tags"),
 		ExpectStatus: http.StatusOK,
@@ -803,14 +804,14 @@ func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
 			Message: "no matching charm or bundle for cs:precise/wordpress-23",
 			Code:    params.ErrNotFound,
 		}
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL("precise/wordpress-23/meta/" + ep.name),
 			ExpectStatus: http.StatusNotFound,
 			ExpectBody:   expected,
 		})
 		expected.Message = `no matching charm or bundle for "cs:wordpress"`
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL("wordpress/meta/" + ep.name),
 			ExpectStatus: http.StatusNotFound,
@@ -946,7 +947,7 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 				Message: test.err,
 			}
 		}
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL,
 			ExpectStatus: expectStatus,
@@ -1051,7 +1052,7 @@ func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 				Message: test.err,
 			}
 		}
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL,
 			ExpectStatus: expectStatus,
@@ -1395,7 +1396,7 @@ func (s *APISuite) TestChangesPublished(c *gc.C) {
 		for j, index := range test.expect {
 			expect[j] = publishedCharms[index].published()
 		}
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:    s.srv,
 			URL:        storeURL("changes/published") + test.args,
 			ExpectBody: expect,
@@ -1448,7 +1449,7 @@ func (s *APISuite) TestChangesPublishedErrors(c *gc.C) {
 	s.publishCharmsAtKnownTimes(c, publishedCharms)
 	for i, test := range changesPublishedErrorsTests {
 		c.Logf("test %d: %q", i, test.args)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL("changes/published") + test.args,
 			ExpectStatus: test.status,
@@ -1488,7 +1489,7 @@ func (s *APISuite) TestStatus(c *gc.C) {
 		Type:  mongodoc.IngestionType,
 		Time:  end,
 	})
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("debug/status"),
 		ExpectStatus: http.StatusOK,
@@ -1540,7 +1541,7 @@ func (s *APISuite) TestStatusWithoutCorrectCollections(c *gc.C) {
 		Type:  mongodoc.IngestionType,
 		Time:  end,
 	})
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("debug/status"),
 		ExpectStatus: http.StatusOK,
@@ -1593,7 +1594,7 @@ func (s *APISuite) TestStatusWithoutIngestion(c *gc.C) {
 	s.PatchValue(v4.StartTime, now)
 	start := time.Time{}
 	end := time.Time{}
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("debug/status"),
 		ExpectStatus: http.StatusOK,
@@ -1652,7 +1653,7 @@ func (s *APISuite) TestStatusIngestionStarted(c *gc.C) {
 		Time:  start,
 	})
 	end := time.Time{}
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("debug/status"),
 		ExpectStatus: http.StatusOK,
@@ -1698,7 +1699,7 @@ func (s *APISuite) publishCharmsAtKnownTimes(c *gc.C, charms []publishSpec) {
 }
 
 func assertNotImplemented(c *gc.C, h http.Handler, path string) {
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      h,
 		URL:          storeURL(path),
 		ExpectStatus: http.StatusInternalServerError,
@@ -1779,7 +1780,7 @@ func (s *APISuite) addBundle(c *gc.C, bundleName string, curl string) (*charm.Re
 func (s *APISuite) assertPut(c *gc.C, url string, val interface{}) {
 	body, err := json.Marshal(val)
 	c.Assert(err, gc.IsNil)
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL(url),
 		Method:  "PUT",
@@ -1793,7 +1794,7 @@ func (s *APISuite) assertPut(c *gc.C, url string, val interface{}) {
 }
 
 func (s *APISuite) assertGet(c *gc.C, url string, expectVal interface{}) {
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:    s.srv,
 		URL:        storeURL(url),
 		ExpectBody: expectVal,
