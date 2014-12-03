@@ -4,10 +4,10 @@
 package elasticsearch_test
 
 import (
+	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 
 	. "github.com/juju/charmstore/internal/elasticsearch"
-	"github.com/juju/charmstore/internal/storetesting"
 )
 
 type QuerySuite struct{}
@@ -136,6 +136,6 @@ func (s *QuerySuite) TestJSONEncodings(c *gc.C) {
 		c.Logf("%d: %s", i, test.about)
 		// Note JSONEquals is being used a bit backwards here, this is fine
 		// but any error results may be a little confusing.
-		c.Assert([]byte(test.json), storetesting.JSONEquals, test.query)
+		c.Assert(test.json, jc.JSONEquals, test.query)
 	}
 }

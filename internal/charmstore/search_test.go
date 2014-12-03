@@ -53,7 +53,7 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 		var actual json.RawMessage
 		err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL), &actual)
 		c.Assert(err, gc.IsNil)
-		c.Assert([]byte(actual), storetesting.JSONEquals, entity)
+		c.Assert(string(actual), jc.JSONEquals, entity)
 	}
 }
 
@@ -90,7 +90,7 @@ func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(old.URL), &actual)
 	c.Assert(err, gc.IsNil)
-	c.Assert([]byte(actual), storetesting.JSONEquals, expected)
+	c.Assert(string(actual), jc.JSONEquals, expected)
 }
 
 func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {

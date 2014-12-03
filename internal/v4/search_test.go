@@ -11,6 +11,7 @@ import (
 
 	"github.com/juju/loggo"
 	jc "github.com/juju/testing/checkers"
+	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 
@@ -374,7 +375,7 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 	}}
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.about)
-		rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,
 			URL:     storeURL("search?" + test.query),
 		})
@@ -397,7 +398,7 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 }
 
 func (s *SearchSuite) TestPaginatedSearch(c *gc.C) {
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("search?text=wordpress&skip=1"),
 	})
@@ -491,7 +492,7 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 	}}
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.about)
-		rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,
 			URL:     storeURL("search?" + test.query),
 		})
@@ -504,14 +505,14 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 		err := json.Unmarshal(rec.Body.Bytes(), &sr)
 		c.Assert(err, gc.IsNil)
 		c.Assert(sr.Results, gc.HasLen, 1)
-		c.Assert([]byte(sr.Results[0].Meta), storetesting.JSONEquals, test.meta)
+		c.Assert(string(sr.Results[0].Meta), jc.JSONEquals, test.meta)
 	}
 }
 
 func (s *SearchSuite) TestSearchError(c *gc.C) {
 	err := s.ES.DeleteIndex(s.TestIndex)
 	c.Assert(err, gc.Equals, nil)
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("search?name=wordpress"),
 	})
@@ -527,7 +528,7 @@ func (s *SearchSuite) TestSearchIncludeError(c *gc.C) {
 	// Perform a search for all charms, including the
 	// manifest, which will try to retrieve all charm
 	// blobs.
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("search?type=charm&include=manifest"),
 	})
@@ -553,7 +554,7 @@ func (s *SearchSuite) TestSearchIncludeError(c *gc.C) {
 	err = loggo.RegisterWriter("test-log", &tw, loggo.DEBUG)
 	c.Assert(err, gc.IsNil)
 
-	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("search?type=charm&include=manifest"),
 	})
@@ -627,7 +628,7 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 	}}
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.about)
-		rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,
 			URL:     storeURL("search?" + test.query),
 		})
@@ -642,7 +643,7 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 }
 
 func (s *SearchSuite) TestSortUnsupportedField(c *gc.C) {
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("search?sort=foo"),
 	})

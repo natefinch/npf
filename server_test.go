@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	jujutesting "github.com/juju/testing"
+	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 
 	"github.com/juju/charmstore"
@@ -64,7 +65,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	h, err := charmstore.NewServer(db, nil, "", s.config, charmstore.V4)
 	c.Assert(err, gc.IsNil)
 
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      h,
 		URL:          "/v4/debug",
 		ExpectStatus: http.StatusInternalServerError,
@@ -76,7 +77,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 }
 
 func assertServesVersion(c *gc.C, h http.Handler, vers string) {
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: h,
 		URL:     "/" + vers + "/some/path",
 		ExpectBody: versionResponse{
@@ -88,7 +89,7 @@ func assertServesVersion(c *gc.C, h http.Handler, vers string) {
 
 func assertDoesNotServeVersion(c *gc.C, h http.Handler, vers string) {
 	url := "/" + vers + "/debug"
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      h,
 		URL:          url,
 		ExpectStatus: http.StatusNotFound,

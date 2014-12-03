@@ -18,8 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
-
 	jc "github.com/juju/testing/checkers"
+	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 	charmtesting "gopkg.in/juju/charm.v4/testing"
@@ -55,7 +55,7 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	archiveUrl := storeURL("precise/wordpress-0/archive")
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     archiveUrl,
 	})
@@ -68,7 +68,7 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	// Check that the HTTP range logic is plugged in OK. If this
 	// is working, we assume that the whole thing is working OK,
 	// as net/http is well-tested.
-	rec = storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     archiveUrl,
 		Header:  http.Header{"Range": {"bytes=10-100"}},
@@ -87,7 +87,7 @@ func (s *ArchiveSuite) TestGetWithPartialId(c *gc.C) {
 		charm.MustParseReference(id),
 		storetesting.Charms.CharmArchive(c.MkDir(), "wordpress"))
 	c.Assert(err, gc.IsNil)
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("wordpress/archive"),
 	})
@@ -110,7 +110,7 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 
 		// Download the charm archive using the API.
-		rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,
 			URL:     storeURL(id + "/archive"),
 		})
@@ -130,7 +130,7 @@ func (s *ArchiveSuite) TestGetCountersDisabled(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Download the charm archive using the API, passing stats=0.
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL(url.Path() + "/archive?stats=0"),
 	})
@@ -188,7 +188,7 @@ func (s *ArchiveSuite) TestPostErrors(c *gc.C) {
 			// know about.
 			body = exoticReader{body}
 		}
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: s.srv,
 			URL:     storeURL(test.path),
 			Method:  "POST",
@@ -343,7 +343,7 @@ func (s *ArchiveSuite) TestPutCharm(c *gc.C) {
 	hash, size := hashOf(f)
 	_, err = f.Seek(0, 0)
 	c.Assert(err, gc.IsNil)
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:       s.srv,
 		URL:           storeURL("precise/wordpress-3/archive?hash=" + hash),
 		Method:        "PUT",
@@ -398,7 +398,7 @@ func (s *ArchiveSuite) TestPostHashMismatch(c *gc.C) {
 	// Corrupt the content.
 	copy(content, "bogus")
 	path := fmt.Sprintf("precise/wordpress/archive?hash=%s", hash)
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: s.srv,
 		URL:     storeURL(path),
 		Method:  "POST",
@@ -553,7 +553,7 @@ func (s *ArchiveSuite) TestPostFailureCounters(c *gc.C) {
 
 	hash, _ := hashOf(invalidZip())
 	doPost := func(url string, expectCode int) {
-		rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,
 			URL:     storeURL(url),
 			Method:  "POST",
@@ -585,7 +585,7 @@ func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSee
 	c.Assert(err, gc.IsNil)
 
 	path := fmt.Sprintf("%s/archive?hash=%s", id, hash)
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:       s.srv,
 		URL:           storeURL(path),
 		Method:        "POST",
@@ -656,7 +656,7 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *charm.Reference
 	}
 
 	path := fmt.Sprintf("%s/archive?hash=%s", strings.TrimPrefix(uploadURL.String(), "cs:"), hash)
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:       s.srv,
 		URL:           storeURL(path),
 		Method:        method,
@@ -716,7 +716,7 @@ func (s *ArchiveSuite) TestArchiveFileErrors(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	for i, test := range archiveFileErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL(test.path),
 			Method:       "GET",
@@ -767,7 +767,7 @@ func (s *ArchiveSuite) assertArchiveFileContents(c *gc.C, zipFile *zip.ReadClose
 
 	// Make the request.
 	url := storeURL(path)
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     url,
 	})
@@ -886,7 +886,7 @@ func (s *ArchiveSuite) TestDelete(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Delete the charm using the API.
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL(id + "/archive"),
 		Method:       "DELETE",
@@ -915,7 +915,7 @@ func (s *ArchiveSuite) TestDeleteSpecificCharm(c *gc.C) {
 	}
 
 	// Delete the second charm using the API.
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("utopic/mysql-42/archive"),
 		Method:       "DELETE",
@@ -938,7 +938,7 @@ func (s *ArchiveSuite) TestDeleteSpecificCharm(c *gc.C) {
 
 func (s *ArchiveSuite) TestDeleteNotFound(c *gc.C) {
 	// Try to delete a non existing charm using the API.
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("utopic/no-such-0/archive"),
 		Method:       "DELETE",
@@ -966,7 +966,7 @@ func (s *ArchiveSuite) TestDeleteError(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Try to delete the charm using the API.
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL(id + "/archive"),
 		Method:       "DELETE",
@@ -992,7 +992,7 @@ func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Delete the charm using the API.
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler:  s.srv,
 		Method:   "DELETE",
 		URL:      storeURL(id + "/archive"),
@@ -1052,7 +1052,7 @@ func checkAuthErrors(c *gc.C, handler http.Handler, method, url string) {
 		if method == "POST" {
 			test.header.Add("Content-Type", "application/zip")
 		}
-		storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      handler,
 			URL:          archiveURL,
 			Method:       method,
@@ -1084,7 +1084,7 @@ type entityMetaInfo struct {
 }
 
 func (s *ArchiveSuite) assertEntityInfo(c *gc.C, url *charm.Reference, expect entityInfo) {
-	storetesting.AssertJSONCall(c, storetesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: s.srv,
 		URL: storeURL(
 			strings.TrimPrefix(url.String(), "cs:") + "/meta/any" +
@@ -1101,7 +1101,7 @@ func (s *ArchiveSuite) assertEntityInfo(c *gc.C, url *charm.Reference, expect en
 func (s *ArchiveSuite) TestArchiveFileGetHasCORSHeaders(c *gc.C) {
 	id := "precise/wordpress-0"
 	s.assertUploadCharm(c, "POST", charm.MustParseReference(id), "wordpress")
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL(fmt.Sprintf("%s/archive/metadata.yaml", id)),
 	})
