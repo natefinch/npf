@@ -224,6 +224,9 @@ func (h *Handler) updateEntitySHA256(curl *charm.Reference) (string, error) {
 	return sum256, nil
 }
 
+// serveCharmEvent returns events related to the charms specified in the
+// "charms" query. In this implementation, the only supported event is
+// "published", required by the "juju publish" command.
 func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}, error) {
 	response := make(map[string]*charm.EventResponse)
 	for _, url := range req.Form["charms"] {
@@ -233,8 +236,8 @@ func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}
 		if i := strings.Index(url, "@"); i != -1 {
 			url = url[:i]
 		}
-		// Intentionally not supporting long_keys query parameter which
-		// previous charm store supported as "juju publish" does not use it.
+		// We intentionally do not implement the long_keys query parameter that
+		// the legacy charm store supported, as "juju publish" does not use it.
 		response[url] = c
 
 		// Validate the charm URL.
