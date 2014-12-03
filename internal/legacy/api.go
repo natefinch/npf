@@ -180,10 +180,9 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 			c.CanonicalURL = curl.String()
 			c.Sha256 = entity.BlobHash256
 			c.Revision = curl.Revision
-			if digest, found := entity.ExtraInfo[params.BzrDigestKey]; found {
-				if err := json.Unmarshal(digest, &c.Digest); err != nil {
-					c.Errors = append(c.Errors, "cannot unmarshal digest: "+err.Error())
-				}
+			c.Digest, err = entityBzrDigest(&entity)
+			if err != nil {
+				c.Errors = append(c.Errors, err.Error())
 			}
 			h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmInfo))
 		} else {
@@ -275,12 +274,23 @@ func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}
 		c.Kind = "published"
 		c.Revision = id.Revision
 		c.Time = entity.UploadTime.UTC().Format(time.RFC3339)
-		if digest, found := entity.ExtraInfo[params.BzrDigestKey]; found {
-			if err := json.Unmarshal(digest, &c.Digest); err != nil {
-				c.Errors = []string{"cannot unmarshal digest: " + err.Error()}
-			}
+		c.Digest, err = entityBzrDigest(entity)
+		if err != nil {
+			c.Errors = []string{err.Error()}
 		}
 		h.store.IncCounterAsync(charmStatsKey(id, params.StatsCharmEvent))
 	}
 	return response, nil
+}
+
+func entityBzrDigest(entity *mongodoc.Entity) (string, error) {
+	value, found := entity.ExtraInfo[params.BzrDigestKey]
+	if !found {
+		return "", nil
+	}
+	var digest string
+	if err := json.Unmarshal(value, &digest); err != nil {
+		return "", errgo.Notef(err, "cannot unmarshal digest")
+	}
+	return digest, nil
 }
