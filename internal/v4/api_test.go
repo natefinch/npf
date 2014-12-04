@@ -7,9 +7,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
-	"encoding/xml"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"reflect"
@@ -963,47 +961,6 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 			ExpectStatus: expectStatus,
 			ExpectBody:   expectBody,
 		})
-	}
-}
-
-// assertXMLContains asserts that the XML in body is well formed, and
-// contains at least one token that satisfies each of the functions in need.
-func assertXMLContains(c *gc.C, body []byte, need map[string]func(xml.Token) bool) {
-	dec := xml.NewDecoder(bytes.NewReader(body))
-	for {
-		tok, err := dec.Token()
-		if err == io.EOF {
-			break
-		}
-		c.Assert(err, gc.IsNil)
-		for what, f := range need {
-			if f(tok) {
-				delete(need, what)
-			}
-		}
-	}
-	c.Assert(need, gc.HasLen, 0, gc.Commentf("body:\n%s", body))
-}
-
-func isStartElementWithName(name string) func(xml.Token) bool {
-	return func(tok xml.Token) bool {
-		startElem, ok := tok.(xml.StartElement)
-		return ok && startElem.Name.Local == name
-	}
-}
-
-func isStartElementWithAttr(name, attr, val string) func(xml.Token) bool {
-	return func(tok xml.Token) bool {
-		startElem, ok := tok.(xml.StartElement)
-		if !ok {
-			return false
-		}
-		for _, a := range startElem.Attr {
-			if a.Name.Local == attr && a.Value == val {
-				return true
-			}
-		}
-		return false
 	}
 }
 

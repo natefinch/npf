@@ -12,4 +12,5 @@ var (
 	ArchiveCacheNonVersionedMaxAge = &archiveCacheNonVersionedMaxAge
 	ParamsLogLevels                = paramsLogLevels
 	ParamsLogTypes                 = paramsLogTypes
+	ProcessIcon                    = processIcon
 )
