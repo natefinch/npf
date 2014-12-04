@@ -26,15 +26,6 @@ type SearchIndex struct {
 	Index string
 }
 
-// storeElasticSearch provides strongly typed methods for accessing the
-// elasticsearch database. These methods will not return errors if
-// elasticsearch is not configured, allowing them to be safely called even if
-// it is not enabled in this service.
-type storeElasticSearch struct {
-	*SearchIndex
-	DB StoreDatabase
-}
-
 const typeName = "entity"
 
 // seriesBoost defines how much the results for each
@@ -58,30 +49,76 @@ var deprecatedSeries = map[string]bool{
 	"saucy":   true,
 }
 
-// put inserts an entity into elasticsearch if elasticsearch
-// is configured. The entity with id r is extracted from mongodb
-// and written into elasticsearch.
-func (ses *storeElasticSearch) put(r *charm.Reference) error {
-	if ses == nil || ses.SearchIndex == nil {
+// SearchDoc is a mongodoc.Entity with additional fields useful for searching.
+// This is the document that is stored in the search index.
+type SearchDoc struct {
+	*mongodoc.Entity
+	TotalDownloads int64
+}
+
+// UpdateSearchAsync will update the search record for the entity
+// reference r in the backgroud.
+func (s *Store) UpdateSearchAsync(r *charm.Reference) {
+	go func() {
+		if err := s.UpdateSearch(r); err != nil {
+			logger.Errorf("cannot update search record for %v: %s", r, err)
+		}
+	}()
+}
+
+// UpdateSearch updates the search record for the entity reference r.
+// The search index only includes the latest revision of each entity so
+// the latest revision of the charm specified by r will be indexed.
+func (s *Store) UpdateSearch(r *charm.Reference) error {
+	if s.ES == nil || s.ES.Database == nil {
 		return nil
 	}
 	if deprecatedSeries[r.Series] {
 		return nil
 	}
 	var entity mongodoc.Entity
-	if err := ses.DB.Entities().FindId(r).One(&entity); err != nil {
+	if err := s.DB.Entities().Find(bson.M{"user": r.User, "name": r.Name, "series": r.Series}).Sort("-Revision").One(&entity); err != nil {
 		if err == mgo.ErrNotFound {
 			return errgo.WithCausef(nil, params.ErrNotFound, "entity not found %s", r)
 		}
 		return errgo.Notef(err, "cannot get %s", r)
 	}
-	err := ses.PutDocumentVersionWithType(
-		ses.Index,
+	doc, err := s.searchDocFromEntity(&entity)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	if err := s.ES.update(doc); err != nil {
+		return errgo.Notef(err, "cannot update search index")
+	}
+	return nil
+}
+
+// searchDocFromEntity performs the processing required to convert a mongodoc.Entity
+// to an esDoc for indexing.
+func (s *Store) searchDocFromEntity(e *mongodoc.Entity) (*SearchDoc, error) {
+	doc := SearchDoc{Entity: e}
+	_, allRevisions, err := s.ArchiveDownloadCounts(e.URL)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	doc.TotalDownloads = allRevisions.Total
+	return &doc, nil
+}
+
+// update inserts an entity into elasticsearch if elasticsearch
+// is configured. The entity with id r is extracted from mongodb
+// and written into elasticsearch.
+func (si *SearchIndex) update(doc *SearchDoc) error {
+	if si == nil || si.Database == nil {
+		return nil
+	}
+	err := si.PutDocumentVersionWithType(
+		si.Index,
 		typeName,
-		ses.getID(entity.URL),
-		int64(entity.URL.Revision),
+		si.getID(doc.URL),
+		int64(doc.URL.Revision),
 		elasticsearch.ExternalGTE,
-		&entity)
+		doc)
 	if err != nil && err != elasticsearch.ErrConflict {
 		return errgo.Mask(err)
 	}
@@ -91,7 +128,7 @@ func (ses *storeElasticSearch) put(r *charm.Reference) error {
 // getID returns an ID for the elasticsearch document based on the contents of the
 // mongoDB document. This is to allow elasticsearch documents to be replaced with
 // updated versions when charm data is changed.
-func (ses *storeElasticSearch) getID(r *charm.Reference) string {
+func (si *SearchIndex) getID(r *charm.Reference) string {
 	ref := *r
 	ref.Revision = -1
 	b := sha1.Sum([]byte(ref.String()))
@@ -103,13 +140,13 @@ func (ses *storeElasticSearch) getID(r *charm.Reference) string {
 // Search searches for matching entities in the configured elasticsearch index.
 // If there is no elasticsearch index configured then it will return an empty
 // SearchResult, as if no results were found.
-func (ses *storeElasticSearch) search(sp SearchParams) (SearchResult, error) {
-	if ses == nil || ses.SearchIndex == nil {
+func (si *SearchIndex) search(sp SearchParams) (SearchResult, error) {
+	if si == nil || si.Database == nil {
 		return SearchResult{}, nil
 	}
 	q := createSearchDSL(sp)
 	q.Fields = append(q.Fields, "URL")
-	esr, err := ses.Search(ses.Index, typeName, q)
+	esr, err := si.Search(si.Index, typeName, q)
 	if err != nil {
 		return SearchResult{}, errgo.Mask(err)
 	}
@@ -128,6 +165,20 @@ func (ses *storeElasticSearch) search(sp SearchParams) (SearchResult, error) {
 	return r, nil
 }
 
+// GetSearchDocument retrieves the current search record for the charm
+// reference id.
+func (si *SearchIndex) GetSearchDocument(id *charm.Reference) (*SearchDoc, error) {
+	if si == nil || si.Database == nil {
+		return &SearchDoc{}, nil
+	}
+	var s SearchDoc
+	err := si.GetDocument(si.Index, "entity", si.getID(id), &s)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot retrieve search document for %v", id)
+	}
+	return &s, nil
+}
+
 // version is a document that stores the structure information
 // in the elasticsearch database.
 type version struct {
@@ -142,7 +193,7 @@ const versionType = "version"
 // settings. If force is true then ensureIndexes will create new indexes irrespective
 // of the status of the current index.
 func (si *SearchIndex) ensureIndexes(force bool) error {
-	if si == nil {
+	if si == nil || si.Database == nil {
 		return nil
 	}
 	old, dv, err := si.getCurrentVersion()
@@ -237,19 +288,19 @@ func (si *SearchIndex) updateVersion(v version, dv int64) (bool, error) {
 	return true, nil
 }
 
-// sync populates an elasticsearch index with all the data currently stored in
-// mongodb.
-func (ses *storeElasticSearch) sync() error {
-	if ses == nil || ses.SearchIndex == nil {
+// syncSearch populates the SearchIndex with all the data currently stored in
+// mongodb. If the SearchIndex is not configured then this method returns a nil error.
+func (s *Store) syncSearch() error {
+	if s.ES == nil || s.ES.Database == nil {
 		return nil
 	}
 	var result mongodoc.Entity
-	// Only get the IDs here, put will get the full document if it is in a series that
-	// is indexed.
-	iter := ses.DB.Entities().Find(nil).Select(bson.M{"_id": 1}).Iter()
+	// Only get the IDs here, UpdateSearch will get the full document
+	// if it is in a series that is indexed.
+	iter := s.DB.Entities().Find(nil).Select(bson.M{"_id": 1}).Iter()
 	defer iter.Close() // Make sure we always close on error.
 	for iter.Next(&result) {
-		if err := ses.put(result.URL); err != nil {
+		if err := s.UpdateSearch(result.URL); err != nil {
 			return errgo.Notef(err, "cannot index %s", result.URL)
 		}
 	}

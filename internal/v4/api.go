@@ -406,75 +406,26 @@ func (h *Handler) metaTags(entity *mongodoc.Entity, id *charm.Reference, path st
 // http://tinyurl.com/lvyp2l5
 func (h *Handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
 	// Retrieve the aggregated downloads count for the specific revision.
-	counts, err := h.aggregatedStats(entityStatsKey(id, params.StatsArchiveDownload), false)
+	counts, countsAllRevisions, err := h.store.ArchiveDownloadCounts(id)
 	if err != nil {
-		return nil, errgo.Notef(err, "cannot get aggregated count for the specific revision")
+		return nil, errgo.Mask(err)
 	}
-
-	// Retrieve the aggregated downloads count for all revisions.
-	noRevisionId := *id
-	noRevisionId.Revision = -1
-	countsAllRevisions, err := h.aggregatedStats(entityStatsKey(&noRevisionId, params.StatsArchiveDownload), true)
-	if err != nil {
-		return nil, errgo.Notef(err, "cannot get aggregated count for all revisions")
-	}
-
 	// Return the response.
 	return &params.StatsResponse{
-		ArchiveDownloadCount: counts.total,
+		ArchiveDownloadCount: counts.Total,
 		ArchiveDownload: params.StatsCount{
-			Total: counts.total,
-			Day:   counts.lastDay,
-			Week:  counts.lastWeek,
-			Month: counts.lastMonth,
+			Total: counts.Total,
+			Day:   counts.LastDay,
+			Week:  counts.LastWeek,
+			Month: counts.LastMonth,
 		},
 		ArchiveDownloadAllRevisions: params.StatsCount{
-			Total: countsAllRevisions.total,
-			Day:   countsAllRevisions.lastDay,
-			Week:  countsAllRevisions.lastWeek,
-			Month: countsAllRevisions.lastMonth,
+			Total: countsAllRevisions.Total,
+			Day:   countsAllRevisions.LastDay,
+			Week:  countsAllRevisions.LastWeek,
+			Month: countsAllRevisions.LastMonth,
 		},
 	}, nil
-}
-
-// aggregatedStats returns the aggregated downloads counts for the given stats
-// key.
-func (h *Handler) aggregatedStats(key []string, prefix bool) (aggregatedCounts, error) {
-	var counts aggregatedCounts
-
-	req := charmstore.CounterRequest{
-		Key:    key,
-		By:     charmstore.ByDay,
-		Prefix: prefix,
-	}
-	results, err := h.store.Counters(&req)
-	if err != nil {
-		return counts, errgo.Notef(err, "cannot retrieve stats")
-	}
-
-	today := time.Now()
-	lastDay := today.AddDate(0, 0, -1)
-	lastWeek := today.AddDate(0, 0, -7)
-	lastMonth := today.AddDate(0, -1, 0)
-
-	// Aggregate the results.
-	for _, result := range results {
-		if result.Time.After(lastMonth) {
-			counts.lastMonth += result.Count
-			if result.Time.After(lastWeek) {
-				counts.lastWeek += result.Count
-				if result.Time.After(lastDay) {
-					counts.lastDay += result.Count
-				}
-			}
-		}
-		counts.total += result.Count
-	}
-	return counts, nil
-}
-
-type aggregatedCounts struct {
-	lastDay, lastWeek, lastMonth, total int64
 }
 
 // GET id/meta/revision-info

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	gc "gopkg.in/check.v1"
+	"gopkg.in/juju/charm.v4"
 
 	"github.com/juju/charmstore/internal/charmstore"
 )
@@ -31,4 +32,23 @@ func CheckCounterSum(c *gc.C, store *charmstore.Store, key []string, prefix bool
 		}
 	}
 	c.Errorf("counter sum for %#v is %d, want %d", key, sum, expected)
+}
+
+// CheckSearchTotalDownloads checks that the search index is properly updated.
+// It retries a few times as they are generally updated in background.
+func CheckSearchTotalDownloads(c *gc.C, store *charmstore.Store, id *charm.Reference, expected int64) {
+	var doc *charmstore.SearchDoc
+	for retry := 0; retry < 10; retry++ {
+		var err error
+		time.Sleep(100 * time.Millisecond)
+		doc, err = store.ES.GetSearchDocument(id)
+		c.Assert(err, gc.IsNil)
+		if doc.TotalDownloads == expected {
+			if expected == 0 && retry < 2 {
+				continue // Wait a bit to make sure.
+			}
+			return
+		}
+	}
+	c.Errorf("total downloads for %#v is %d, want %d", id, doc.TotalDownloads, expected)
 }

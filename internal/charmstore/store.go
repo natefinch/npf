@@ -28,7 +28,7 @@ var logger = loggo.GetLogger("charmstore.internal.charmstore")
 type Store struct {
 	DB        StoreDatabase
 	BlobStore *blobstore.Store
-	ES        *storeElasticSearch
+	ES        *SearchIndex
 
 	// Cache for statistics key words (two generations).
 	cacheMu       sync.RWMutex
@@ -43,22 +43,16 @@ func NewStore(db *mgo.Database, si *SearchIndex) (*Store, error) {
 	s := &Store{
 		DB:        StoreDatabase{db},
 		BlobStore: blobstore.New(db, "entitystore"),
+		ES:        si,
 	}
 	if err := s.ensureIndexes(); err != nil {
 		return nil, errgo.Notef(err, "cannot ensure indexes")
 	}
-	if si == nil {
-		return s, nil
-	}
-	s.ES = &storeElasticSearch{
-		SearchIndex: si,
-		DB:          s.DB,
-	}
-	if err := si.ensureIndexes(false); err != nil {
+	if err := s.ES.ensureIndexes(false); err != nil {
 		return nil, errgo.Notef(err, "cannot ensure elasticsearch indexes")
 	}
 	go func() {
-		if err := s.ES.sync(); err != nil {
+		if err := s.syncSearch(); err != nil {
 			logger.Errorf("Cannot populate elasticsearch: %v", err)
 		}
 	}()
@@ -235,7 +229,7 @@ func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 		}
 	}()
 	// Add entity to ElasticSearch.
-	if err := s.ES.put(entity.URL); err != nil {
+	if err := s.UpdateSearch(entity.URL); err != nil {
 		return errgo.Notef(err, "cannot index %s to ElasticSearch", entity.URL)
 	}
 	return nil
@@ -704,12 +698,12 @@ func (store *Store) Search(sp SearchParams) (SearchResult, error) {
 }
 
 // SynchroniseElasticsearch creates new indexes in elasticsearch
-// and populetes them with the current data from the mongodb database.
+// and populates them with the current data from the mongodb database.
 func (s *Store) SynchroniseElasticsearch() error {
 	if err := s.ES.ensureIndexes(true); err != nil {
 		return errgo.Notef(err, "cannot create indexes")
 	}
-	if err := s.ES.sync(); err != nil {
+	if err := s.syncSearch(); err != nil {
 		return errgo.Notef(err, "cannot synchronise indexes")
 	}
 	return nil

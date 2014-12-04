@@ -53,7 +53,8 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 		var actual json.RawMessage
 		err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL), &actual)
 		c.Assert(err, gc.IsNil)
-		c.Assert(string(actual), jc.JSONEquals, entity)
+		doc := SearchDoc{Entity: entity}
+		c.Assert(string(actual), jc.JSONEquals, doc)
 	}
 }
 
@@ -90,7 +91,21 @@ func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(old.URL), &actual)
 	c.Assert(err, gc.IsNil)
-	c.Assert(string(actual), jc.JSONEquals, expected)
+	doc := SearchDoc{Entity: expected}
+	c.Assert(string(actual), jc.JSONEquals, doc)
+}
+
+func (s *StoreSearchSuite) TestExportSearchDocument(c *gc.C) {
+	var entity *mongodoc.Entity
+	var actual json.RawMessage
+	err := s.store.DB.Entities().FindId("cs:precise/wordpress-23").One(&entity)
+	c.Assert(err, gc.IsNil)
+	doc := SearchDoc{Entity: entity, TotalDownloads: 4000}
+	err = s.store.ES.update(&doc)
+	c.Assert(err, gc.IsNil)
+	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL), &actual)
+	c.Assert(err, gc.IsNil)
+	c.Assert(string(actual), jc.JSONEquals, doc)
 }
 
 func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {

@@ -1147,3 +1147,42 @@ func assertCacheControl(c *gc.C, h http.Header, idFullySpecified bool) {
 	}
 	c.Assert(h.Get("Cache-Control"), gc.Equals, fmt.Sprintf("public, max-age=%d", seconds))
 }
+
+type ArchiveSearchSuite struct {
+	storetesting.IsolatedMgoESSuite
+	srv   http.Handler
+	store *charmstore.Store
+}
+
+var _ = gc.Suite(&ArchiveSearchSuite{})
+
+func (s *ArchiveSearchSuite) SetUpTest(c *gc.C) {
+	s.IsolatedMgoESSuite.SetUpTest(c)
+	si := charmstore.SearchIndex{s.ES, s.TestIndex}
+	s.srv, s.store = newServer(c, s.Session, &si, serverParams)
+}
+
+func (s *ArchiveSearchSuite) TestGetSearchUpdate(c *gc.C) {
+	if !storetesting.MongoJSEnabled() {
+		c.Skip("MongoDB JavaScript not available")
+	}
+
+	for i, id := range []string{"utopic/mysql-42", "~who/utopic/mysql-42"} {
+		c.Logf("test %d: %s", i, id)
+		url := charm.MustParseReference(id)
+
+		// Add a charm to the database (including the archive).
+		err := s.store.AddCharmWithArchive(url, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
+		c.Assert(err, gc.IsNil)
+
+		// Download the charm archive using the API.
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+			Handler: s.srv,
+			URL:     storeURL(id + "/archive"),
+		})
+		c.Assert(rec.Code, gc.Equals, http.StatusOK)
+
+		// Check that the search record for the entity has been updated.
+		stats.CheckSearchTotalDownloads(c, s.store, url, 1)
+	}
+}
