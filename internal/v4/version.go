@@ -4,8 +4,8 @@
 package v4
 
 import (
-	"net/http"
 	"github.com/juju/charmstore/version"
+	"net/http"
 )
 
 // GET /debug/info .

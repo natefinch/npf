@@ -1,12 +1,12 @@
 package version
 
 type Version struct {
-	GitSHA string
+	GitSHA  string
 	Version string
 }
 
 var VersionInfo = Version{
-	GitSHA: gitSha,
+	GitSHA:  gitSha,
 	Version: version,
 }
 
