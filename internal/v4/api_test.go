@@ -1539,7 +1539,7 @@ func (s *APISuite) TestStatus(c *gc.C) {
 }
 
 func (s *APISuite) TestStatusWithElasticSearch(c *gc.C) {
-	rec := storetesting.DoRequest(c, storetesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv_es,
 		URL:     storeURL("debug/status"),
 	})
