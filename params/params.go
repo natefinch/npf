@@ -106,12 +106,6 @@ type DebugStatus struct {
 	Passed bool
 }
 
-// DebugInfo holds the result of the version info read
-type DebugInfo struct {
-	Version string
-	Id      string
-}
-
 // SearchResult holds a single result from a search operation
 type SearchResult struct {
 	Id *charm.Reference
