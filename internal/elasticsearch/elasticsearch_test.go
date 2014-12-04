@@ -4,6 +4,7 @@
 package elasticsearch_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -220,6 +221,21 @@ func (s *Suite) TestIndexesCreatedAutomatically(c *gc.C) {
 	c.Assert(found, gc.Equals, true)
 }
 
+func (s *Suite) TestHealthIsWorking(c *gc.C) {
+	result, err := s.ES.Health()
+	c.Assert(err, gc.IsNil)
+	c.Assert(result.ClusterName, gc.NotNil)
+	c.Assert(result.ActivePrimaryShards, gc.NotNil)
+	c.Assert(result.ActiveShards, gc.NotNil)
+	c.Assert(result.InitializingShards, gc.NotNil)
+	c.Assert(result.NumberOfDataNodes, gc.NotNil)
+	c.Assert(result.NumberOfNodes, gc.NotNil)
+	c.Assert(result.RelocatingShards, gc.NotNil)
+	c.Assert(result.Status, gc.NotNil)
+	c.Assert(result.TimedOut, gc.NotNil)
+	c.Assert(result.UnassignedShards, gc.NotNil)
+}
+
 func (s *Suite) TestSearch(c *gc.C) {
 	doc := map[string]string{"foo": "bar"}
 	_, err := s.ES.PostDocument(s.TestIndex, "testtype", doc)
@@ -395,4 +411,33 @@ func (s *Suite) TestAlias(c *gc.C) {
 	c.Assert(err, gc.Equals, nil)
 	c.Assert(indexes, gc.HasLen, 1)
 	c.Assert(indexes[0], gc.Equals, index2)
+}
+
+func (S *Suite) TestDecodingHealthStatus(c *gc.C) {
+	const health_message = `{
+		"cluster_name":"elasticsearch",
+		"status": "green",
+		"timed_out": true,
+		"number_of_nodes": 2,
+		"number_of_data_nodes": 2,
+		"active_primary_shards": 14,
+		"active_shards": 28,
+		"relocating_shards": 2,
+		"initializing_shards": 2,
+		"unassigned_shards": 2
+	}`
+
+	var h es.ClusterHealth
+	err := json.Unmarshal([]byte(health_message), &h)
+	c.Assert(err, gc.IsNil)
+	c.Assert(h.ClusterName, gc.Equals, "elasticsearch")
+	c.Assert(h.Status, gc.Equals, "green")
+	c.Assert(h.TimedOut, gc.Equals, true)
+	c.Assert(h.NumberOfNodes, gc.Equals, int64(2))
+	c.Assert(h.NumberOfDataNodes, gc.Equals, int64(2))
+	c.Assert(h.ActivePrimaryShards, gc.Equals, int64(14))
+	c.Assert(h.ActiveShards, gc.Equals, int64(28))
+	c.Assert(h.RelocatingShards, gc.Equals, int64(2))
+	c.Assert(h.InitializingShards, gc.Equals, int64(2))
+	c.Assert(h.UnassignedShards, gc.Equals, int64(2))
 }

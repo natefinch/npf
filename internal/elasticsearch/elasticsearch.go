@@ -67,6 +67,33 @@ type Document struct {
 	Source  json.RawMessage `json:"_source"`
 }
 
+// Represents the response from _cluster/health on elastic search
+// http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/cluster-health.html
+type ClusterHealth struct {
+	ClusterName         string `json:"cluster_name"`
+	Status              string `json:"status"`
+	TimedOut            bool   `json:"timed_out"`
+	NumberOfNodes       int64  `json:"number_of_nodes"`
+	NumberOfDataNodes   int64  `json:"number_of_data_nodes"`
+	ActivePrimaryShards int64  `json:"active_primary_shards"`
+	ActiveShards        int64  `json:"active_shards"`
+	RelocatingShards    int64  `json:"relocating_shards"`
+	InitializingShards  int64  `json:"initializing_shards"`
+	UnassignedShards    int64  `json:"unassigned_shards"`
+}
+
+func (h *ClusterHealth) String() string {
+	return fmt.Sprintf("cluster_name: %s, status: %s, timed_out: %t"+
+		", number_of_nodes: %d, number_of_data_nodes: %d"+
+		", active_primary_shards: %d, active_shards: %d"+
+		", relocating_shards: %d, initializing_shards: %d"+
+		", unassigned_shards:%d", h.ClusterName, h.Status,
+		h.TimedOut, h.NumberOfNodes, h.NumberOfDataNodes,
+		h.ActivePrimaryShards, h.ActiveShards,
+		h.RelocatingShards, h.InitializingShards,
+		h.UnassignedShards)
+}
+
 // Alias creates or updates an index alias. An alias a is created,
 // or modified if it already exists, to point to i. See
 // http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/indices-aliases.html#indices-aliases
@@ -165,6 +192,17 @@ func (db *Database) HasDocument(index, type_, id string) (bool, error) {
 		return false, getError(err)
 	}
 	return d.Found, nil
+}
+
+// Check the health status of Elastic search and retrieve general data from it.
+// Calling get on /_cluster/health to retrieve status.
+func (db *Database) Health() (ClusterHealth, error) {
+	var result ClusterHealth
+	if err := db.get(db.url("_cluster", "health"), nil, &result); err != nil {
+		return ClusterHealth{}, getError(err)
+	}
+
+	return result, nil
 }
 
 // ListAllIndexes retreieves the list of all user indexes in the elasticsearch database.

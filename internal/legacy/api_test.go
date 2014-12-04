@@ -485,7 +485,7 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 		about: "valid digest",
 		query: "?charms=cs:trusty/mysql",
 		expect: map[string]*charm.EventResponse{
-			"cs:trusty/mysql": &charm.EventResponse{
+			"cs:trusty/mysql": {
 				Kind:     "published",
 				Revision: mysql.Revision,
 				Time:     mysql.UploadTime.UTC().Format(time.RFC3339),
@@ -496,7 +496,7 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 		about: "invalid digest",
 		query: "?charms=cs:utopic/riak",
 		expect: map[string]*charm.EventResponse{
-			"cs:utopic/riak": &charm.EventResponse{
+			"cs:utopic/riak": {
 				Kind:     "published",
 				Revision: riak.Revision,
 				Time:     riak.UploadTime.UTC().Format(time.RFC3339),
@@ -507,7 +507,7 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 		about: "partial charm URL",
 		query: "?charms=cs:mysql",
 		expect: map[string]*charm.EventResponse{
-			"cs:mysql": &charm.EventResponse{
+			"cs:mysql": {
 				Kind:     "published",
 				Revision: mysql.Revision,
 				Time:     mysql.UploadTime.UTC().Format(time.RFC3339),
@@ -518,7 +518,7 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 		about: "digest in request",
 		query: "?charms=cs:trusty/mysql@my-digest",
 		expect: map[string]*charm.EventResponse{
-			"cs:trusty/mysql": &charm.EventResponse{
+			"cs:trusty/mysql": {
 				Kind:     "published",
 				Revision: mysql.Revision,
 				Time:     mysql.UploadTime.UTC().Format(time.RFC3339),
@@ -529,13 +529,13 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 		about: "multiple charms",
 		query: "?charms=cs:mysql&charms=utopic/riak",
 		expect: map[string]*charm.EventResponse{
-			"cs:mysql": &charm.EventResponse{
+			"cs:mysql": {
 				Kind:     "published",
 				Revision: mysql.Revision,
 				Time:     mysql.UploadTime.UTC().Format(time.RFC3339),
 				Digest:   "who@canonical.com-bzr-digest",
 			},
-			"utopic/riak": &charm.EventResponse{
+			"utopic/riak": {
 				Kind:     "published",
 				Revision: riak.Revision,
 				Time:     riak.UploadTime.UTC().Format(time.RFC3339),
@@ -606,7 +606,7 @@ func (s *APISuite) TestServeCharmEventLastRevision(c *gc.C) {
 		URL:          "/charm-event?charms=wordpress",
 		ExpectStatus: http.StatusOK,
 		ExpectBody: map[string]*charm.EventResponse{
-			"wordpress": &charm.EventResponse{
+			"wordpress": {
 				Kind:     "published",
 				Revision: 2,
 				Time:     entity.UploadTime.UTC().Format(time.RFC3339),

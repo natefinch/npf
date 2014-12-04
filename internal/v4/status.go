@@ -24,6 +24,10 @@ var statusChecks = map[string]struct {
 		name:  "MongoDB is connected",
 		check: (*Handler).checkMongoConnected,
 	},
+	"elasticsearch": {
+		name:  "Elastic search is running",
+		check: (*Handler).checkElasticSearch,
+	},
 	"mongo_collections": {
 		name:  "MongoDB collections",
 		check: (*Handler).checkCollections,
@@ -63,6 +67,18 @@ func (h *Handler) checkMongoConnected() (string, bool) {
 		return "Connected", true
 	}
 	return "Ping error: " + err.Error(), false
+}
+
+func (h *Handler) checkElasticSearch() (string, bool) {
+	if h.store.ES == nil || h.store.ES.Database == nil {
+		return "Elastic search is not configured", true
+	}
+	health, err := h.store.ES.Health()
+	if err != nil {
+		return "Connection issues to Elastic Search: " + err.Error(), false
+	}
+
+	return health.String(), health.Status == "green"
 }
 
 func (h *Handler) checkCollections() (string, bool) {

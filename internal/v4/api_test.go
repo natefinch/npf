@@ -26,6 +26,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/charmstore"
+	"github.com/juju/charmstore/internal/elasticsearch"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
 	"github.com/juju/charmstore/internal/v4"
@@ -37,10 +38,18 @@ var serverParams = charmstore.ServerParams{
 	AuthPassword: "test-password",
 }
 
+var es *elasticsearch.Database = &elasticsearch.Database{"localhost:9200"}
+var si *charmstore.SearchIndex = &charmstore.SearchIndex{
+	Database: es,
+	Index:    "cs",
+}
+
 type APISuite struct {
 	storetesting.IsolatedMgoSuite
-	srv   http.Handler
-	store *charmstore.Store
+	srv      http.Handler
+	store    *charmstore.Store
+	srv_es   http.Handler
+	store_es *charmstore.Store
 }
 
 var _ = gc.Suite(&APISuite{})
@@ -48,6 +57,7 @@ var _ = gc.Suite(&APISuite{})
 func (s *APISuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
 	s.srv, s.store = newServer(c, s.Session, nil, serverParams)
+	s.srv_es, s.store_es = newServer(c, s.Session, si, serverParams)
 }
 
 func newServer(c *gc.C, session *mgo.Session, si *charmstore.SearchIndex, config charmstore.ServerParams) (http.Handler, *charmstore.Store) {
@@ -1504,6 +1514,11 @@ func (s *APISuite) TestStatus(c *gc.C) {
 				Value:  "All required collections exist",
 				Passed: true,
 			},
+			"elasticsearch": {
+				Name:   "Elastic search is running",
+				Value:  "Elastic search is not configured",
+				Passed: true,
+			},
 			"entities": {
 				Name:   "Entities in charm store",
 				Value:  "4 charms; 2 bundles; 3 promulgated",
@@ -1521,6 +1536,18 @@ func (s *APISuite) TestStatus(c *gc.C) {
 			},
 		},
 	})
+}
+
+func (s *APISuite) TestStatusWithElasticSearch(c *gc.C) {
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv_es,
+		URL:     storeURL("debug/status"),
+	})
+	var i map[string]params.DebugStatus
+	json.Unmarshal(rec.Body.Bytes(), &i)
+
+	c.Assert(i["elasticsearch"].Name, gc.Equals, "Elastic search is running")
+	c.Assert(i["elasticsearch"].Value, jc.Contains, "cluster_name:")
 }
 
 func (s *APISuite) TestStatusWithoutCorrectCollections(c *gc.C) {
@@ -1555,6 +1582,11 @@ func (s *APISuite) TestStatusWithoutCorrectCollections(c *gc.C) {
 				Name:   "MongoDB collections",
 				Value:  "Missing collections: [" + s.store.DB.Entities().Name + "]",
 				Passed: false,
+			},
+			"elasticsearch": {
+				Name:   "Elastic search is running",
+				Value:  "Elastic search is not configured",
+				Passed: true,
 			},
 			"entities": {
 				Name:   "Entities in charm store",
@@ -1607,6 +1639,11 @@ func (s *APISuite) TestStatusWithoutIngestion(c *gc.C) {
 			"mongo_collections": {
 				Name:   "MongoDB collections",
 				Value:  "All required collections exist",
+				Passed: true,
+			},
+			"elasticsearch": {
+				Name:   "Elastic search is running",
+				Value:  "Elastic search is not configured",
 				Passed: true,
 			},
 			"entities": {
@@ -1666,6 +1703,11 @@ func (s *APISuite) TestStatusIngestionStarted(c *gc.C) {
 			"mongo_collections": {
 				Name:   "MongoDB collections",
 				Value:  "All required collections exist",
+				Passed: true,
+			},
+			"elasticsearch": {
+				Name:   "Elastic search is running",
+				Value:  "Elastic search is not configured",
 				Passed: true,
 			},
 			"entities": {
