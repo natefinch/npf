@@ -5,12 +5,14 @@ package v4
 
 import (
 	"archive/zip"
+	"fmt"
 	"io"
 	"net/http"
 	"path"
 	"strings"
 
 	"github.com/juju/jujusvg"
+	"github.com/juju/xml"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 
@@ -115,6 +117,80 @@ func (h *Handler) serveIcon(id *charm.Reference, fullySpecified bool, w http.Res
 	defer r.Close()
 	w.Header().Set("Content-Type", "image/svg+xml")
 	setArchiveCacheControl(w.Header(), fullySpecified)
-	io.Copy(w, r)
+	if err := processIcon(w, r); err != nil {
+		return errgo.Mask(err)
+	}
 	return nil
+}
+
+const svgNamespace = "http://www.w3.org/2000/svg"
+
+// processIcon reads an icon SVG from r and writes
+// it to w, making any changes that need to be made.
+// Currently it adds a viewBox attribute to the <svg>
+// element if necessary.
+func processIcon(w io.Writer, r io.Reader) error {
+	dec := xml.NewDecoder(r)
+	dec.DefaultSpace = svgNamespace
+	enc := xml.NewEncoder(w)
+	ensured := false
+	// This could be slightly more efficient, because
+	// for large icons which already have a viewbox,
+	// we are doing more marshaling/unmarshaling work
+	// than we need to. But icons will be cached, and the
+	// extra overhead isn't that big, so we go with the
+	// simple approach, trusting that the icon still works
+	// after being processed through the xml package.
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read token: %v", err)
+		}
+		if !ensured {
+			tok, ensured = ensureViewbox(tok)
+		}
+		if err := enc.EncodeToken(tok); err != nil {
+			return fmt.Errorf("cannot encode token %#v: %v", tok, err)
+		}
+	}
+	if err := enc.Flush(); err != nil {
+		return fmt.Errorf("cannot flush output: %v", err)
+	}
+	return nil
+}
+
+func ensureViewbox(tok0 xml.Token) (_ xml.Token, found bool) {
+	tok, ok := tok0.(xml.StartElement)
+	if !ok || tok.Name.Space != svgNamespace || tok.Name.Local != "svg" {
+		return tok0, false
+	}
+	var width, height string
+	for _, attr := range tok.Attr {
+		if attr.Name.Space != "" {
+			continue
+		}
+		switch attr.Name.Local {
+		case "width":
+			width = attr.Value
+		case "height":
+			height = attr.Value
+		case "viewBox":
+			return tok, true
+		}
+	}
+	if width == "" || height == "" {
+		// Width and/or height have not been specified,
+		// so leave viewbox unspecified too.
+		return tok, true
+	}
+	tok.Attr = append(tok.Attr, xml.Attr{
+		Name: xml.Name{
+			Local: "viewBox",
+		},
+		Value: fmt.Sprintf("0 0 %s %s", width, height),
+	})
+	return tok, true
 }

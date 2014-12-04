@@ -12,6 +12,7 @@ github.com/juju/schema	git	27a52be50766490a6fd3531865095fda6c0eeb6d	2014-07-23T0
 github.com/juju/testing	git	d0fb1a32e1702bda28711881f27c3a255e46ed0d	2014-12-03T16:55:57Z
 github.com/juju/txn	git	e02f26c56cfb81c7c1236df499deebb0369bd97c	2014-09-25T11:49:22Z
 github.com/juju/utils	git	a2a4ba970472d7f55382941ab1d38cc270ae4a0e	2014-11-13T04:39:48Z
+github.com/juju/xml	git	91535ba18a6afd756e38a40c91fea0ed8e5dbaa6	2014-12-04T14:59:31Z
 gopkg.in/check.v1	git	64131543e7896d5bcc6bd5a76287eb75ea96c673	2014-10-24T13:38:53Z
 gopkg.in/errgo.v1	git	81357a83344ddd9f7772884874e5622c2a3da21c	2014-10-13T17:33:38Z
 gopkg.in/juju/charm.v4	git	7ef31c485ccfd7f1f9571d42ef4395bd04dc1006	2014-11-17T17:46:04Z

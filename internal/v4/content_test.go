@@ -4,13 +4,17 @@
 package v4_test
 
 import (
-	"encoding/xml"
+	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	jc "github.com/juju/testing/checkers"
+	"github.com/juju/xml"
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
@@ -229,7 +233,8 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 	patchArchiveCacheAges(s)
 	url := charm.MustParseReference("cs:precise/wordpress-0")
 	wordpress := storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
-	content := "<xml>an icon, really</xml>"
+	content := `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">an icon, really</svg>`
+	expected := `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1" viewBox="0 0 1 1">an icon, really</svg>`
 	err := ioutil.WriteFile(filepath.Join(wordpress.Path, "icon.svg"), []byte(content), 0666)
 	c.Assert(err, gc.IsNil)
 
@@ -241,19 +246,37 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 		URL:     storeURL(url.Path() + "/icon.svg"),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	c.Assert(rec.Body.String(), gc.Equals, content)
+	c.Assert(rec.Body.String(), gc.Equals, expected)
 	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
 	assertCacheControl(c, rec.Header(), true)
 
+	// Test with revision -1
 	url.Revision = -1
 	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL(url.Path() + "/icon.svg"),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	c.Assert(rec.Body.String(), gc.Equals, content)
+	c.Assert(rec.Body.String(), gc.Equals, expected)
 	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
 	assertCacheControl(c, rec.Header(), false)
+
+	// Reload the charm with an icon that already has viewBox.
+	wordpress = storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
+	err = ioutil.WriteFile(filepath.Join(wordpress.Path, "icon.svg"), []byte(expected), 0666)
+	c.Assert(err, gc.IsNil)
+
+	err = s.store.AddCharmWithArchive(url, wordpress)
+	c.Assert(err, gc.IsNil)
+
+	// Check that we still get expected svg.
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL(url.Path() + "/icon.svg"),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	c.Assert(rec.Body.String(), gc.Equals, expected)
+	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
 }
 
 func (s *APISuite) TestServeBundleIcon(c *gc.C) {
@@ -284,4 +307,127 @@ func (s *APISuite) TestServeDefaultIcon(c *gc.C) {
 	c.Assert(rec.Body.String(), gc.Equals, v4.DefaultIcon)
 	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
 	assertCacheControl(c, rec.Header(), true)
+}
+
+func (s *APISuite) TestProcessIconWorksOnDefaultIcon(c *gc.C) {
+	var buf bytes.Buffer
+	err := v4.ProcessIcon(&buf, strings.NewReader(v4.DefaultIcon))
+	c.Assert(err, gc.IsNil)
+	assertXMLEqual(c, buf.Bytes(), []byte(v4.DefaultIcon))
+}
+
+func (s *APISuite) TestProcessIconDoesNotQuoteNewlines(c *gc.C) {
+	// Note: this is important because Chrome does not like
+	// to see &#xA; before the opening <svg> tag.
+	icon := `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+  <svg></svg>
+`
+	var buf bytes.Buffer
+	err := v4.ProcessIcon(&buf, strings.NewReader(icon))
+	c.Assert(err, gc.IsNil)
+	if strings.Contains(buf.String(), "&#x") {
+		c.Errorf("newlines were quoted in processed icon output")
+	}
+}
+
+// assertXMLEqual assers that the xml contained in the
+// two slices is equal, without caring about namespace
+// declarations or attribute ordering.
+func assertXMLEqual(c *gc.C, body []byte, expect []byte) {
+	decBody := xml.NewDecoder(bytes.NewReader(body))
+	decExpect := xml.NewDecoder(bytes.NewReader(expect))
+	for i := 0; ; i++ {
+		tok0, err0 := decBody.Token()
+		tok1, err1 := decExpect.Token()
+		if err1 != nil {
+			c.Assert(err0, gc.NotNil)
+			c.Assert(err0.Error(), gc.Equals, err1.Error())
+			break
+		}
+		ok, err := tokenEqual(tok0, tok1)
+		if !ok {
+			c.Logf("got %#v", tok0)
+			c.Logf("want %#v", tok1)
+			c.Fatalf("mismatch at token %d: %v", i, err)
+		}
+	}
+}
+
+func tokenEqual(tok0, tok1 xml.Token) (bool, error) {
+	tok0 = canonicalXMLToken(tok0)
+	tok1 = canonicalXMLToken(tok1)
+	return jc.DeepEqual(tok0, tok1)
+}
+
+func canonicalXMLToken(tok xml.Token) xml.Token {
+	start, ok := tok.(xml.StartElement)
+	if !ok {
+		return tok
+	}
+	// Remove all namespace-defining attributes.
+	j := 0
+	for _, attr := range start.Attr {
+		if attr.Name.Local == "xmlns" && attr.Name.Space == "" ||
+			attr.Name.Space == "xmlns" {
+			continue
+		}
+		start.Attr[j] = attr
+		j++
+	}
+	start.Attr = start.Attr[0:j]
+	sort.Sort(attrByName(start.Attr))
+	return start
+}
+
+type attrByName []xml.Attr
+
+func (a attrByName) Len() int      { return len(a) }
+func (a attrByName) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a attrByName) Less(i, j int) bool {
+	if a[i].Name.Space != a[j].Name.Space {
+		return a[i].Name.Space < a[j].Name.Space
+	}
+	return a[i].Name.Local < a[j].Name.Local
+}
+
+// assertXMLContains asserts that the XML in body is well formed, and
+// contains at least one token that satisfies each of the functions in need.
+func assertXMLContains(c *gc.C, body []byte, need map[string]func(xml.Token) bool) {
+	dec := xml.NewDecoder(bytes.NewReader(body))
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		c.Assert(err, gc.IsNil)
+		for what, f := range need {
+			if f(tok) {
+				delete(need, what)
+			}
+		}
+	}
+	c.Assert(need, gc.HasLen, 0, gc.Commentf("body:\n%s", body))
+}
+
+func isStartElementWithName(name string) func(xml.Token) bool {
+	return func(tok xml.Token) bool {
+		startElem, ok := tok.(xml.StartElement)
+		return ok && startElem.Name.Local == name
+	}
+}
+
+func isStartElementWithAttr(name, attr, val string) func(xml.Token) bool {
+	return func(tok xml.Token) bool {
+		startElem, ok := tok.(xml.StartElement)
+		if !ok {
+			return false
+		}
+		for _, a := range startElem.Attr {
+			if a.Name.Local == attr && a.Value == val {
+				return true
+			}
+		}
+		return false
+	}
 }
