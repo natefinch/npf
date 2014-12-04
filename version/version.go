@@ -1,14 +1,14 @@
 package version
 
 type Version struct {
-	GitCommit string
+	GitSHA string
 	Version string
 }
 
 var VersionInfo = Version{
-	GitCommit: gitCommit,
+	GitSHA: gitSha,
 	Version: version,
 }
 
-const gitCommit = "unknown"
+const gitSha = "unknown"
 const version = "0.1"
