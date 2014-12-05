@@ -73,17 +73,7 @@ func (h *Handler) serveArchive(id *charm.Reference, fullySpecified bool, w http.
 	header.Set(params.EntityIdHeader, id.String())
 
 	if req.URL.Query().Get("stats") != "0" {
-		go func() {
-			key := charmstore.EntityStatsKey(id, params.StatsArchiveDownload)
-			if err := h.store.IncCounter(key); err != nil {
-				logger.Errorf("cannot increase stats counter for %v: %v", key, err)
-				return
-			}
-			if err := h.store.UpdateSearch(id); err != nil {
-				logger.Errorf("cannot update search record for %v: %v", id, err)
-				return
-			}
-		}()
+		h.store.IncrementDownloadCountsAsync(id)
 	}
 	// TODO(rog) should we set connection=close here?
 	// See https://codereview.appspot.com/5958045

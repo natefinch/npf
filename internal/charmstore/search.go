@@ -77,7 +77,7 @@ func (s *Store) UpdateSearch(r *charm.Reference) error {
 		return nil
 	}
 	var entity mongodoc.Entity
-	if err := s.DB.Entities().Find(bson.M{"user": r.User, "name": r.Name, "series": r.Series}).Sort("-Revision").One(&entity); err != nil {
+	if err := s.DB.Entities().Find(bson.M{"user": r.User, "name": r.Name, "series": r.Series}).Sort("-revision").One(&entity); err != nil {
 		if err == mgo.ErrNotFound {
 			return errgo.WithCausef(nil, params.ErrNotFound, "entity not found %s", r)
 		}
@@ -364,9 +364,10 @@ type sortParam struct {
 
 // sortFields contains a mapping from api fieldnames to the entity fields to search.
 var sortFields = map[string]string{
-	"name":   "Name",
-	"owner":  "User",
-	"series": "Series",
+	"name":      "Name",
+	"owner":     "User",
+	"series":    "Series",
+	"downloads": "TotalDownloads",
 }
 
 // SearchResult represents the result of performing a search.
