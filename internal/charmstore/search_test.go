@@ -27,6 +27,17 @@ var _ = gc.Suite(&StoreSearchSuite{})
 
 func (s *StoreSearchSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoESSuite.SetUpTest(c)
+
+	// Temporarily set LegacyDownloadCountsEnabled to false, so that the real
+	// code path can be reached by tests in this suite.
+	// TODO (frankban): remove this block when removing the legacy counts
+	// logic.
+	original := LegacyDownloadCountsEnabled
+	LegacyDownloadCountsEnabled = false
+	s.AddCleanup(func(*gc.C) {
+		LegacyDownloadCountsEnabled = original
+	})
+
 	s.index = SearchIndex{s.ES, s.TestIndex}
 	s.ES.RefreshIndex(".versions")
 	store, err := NewStore(s.Session.DB("foo"), &s.index)

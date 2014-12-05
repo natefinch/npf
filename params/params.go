@@ -158,8 +158,17 @@ type IdResponse struct {
 	Revision int
 }
 
-// BzrDigestKey is the extra-info key used to store the Bazaar digest
-const BzrDigestKey = "bzr-digest"
+const (
+	// BzrDigestKey is the extra-info key used to store the Bazaar digest
+	BzrDigestKey = "bzr-digest"
+
+	// LegacyDownloadStats is the extra-info key used to store the legacy
+	// download counts, and to retrieve them when
+	// charmstore.LegacyDownloadCountsEnabled is set to true.
+	// TODO (frankban): remove this constant when removing the legacy counts
+	// logic.
+	LegacyDownloadStats = "legacy-download-stats"
+)
 
 // Log holds the representation of a log message.
 // This is used by clients to store log events in the charm store.

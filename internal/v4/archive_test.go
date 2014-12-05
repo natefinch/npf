@@ -1158,6 +1158,9 @@ var _ = gc.Suite(&ArchiveSearchSuite{})
 
 func (s *ArchiveSearchSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoESSuite.SetUpTest(c)
+	// TODO (frankban): remove this call when removing the legacy counts logic.
+	patchLegacyDownloadCountsEnabled(s.AddCleanup, false)
+
 	si := charmstore.SearchIndex{s.ES, s.TestIndex}
 	s.srv, s.store = newServer(c, s.Session, &si, serverParams)
 }
