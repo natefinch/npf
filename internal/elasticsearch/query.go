@@ -130,6 +130,18 @@ type BoostFactorFunction struct {
 	BoostFactor float64 `json:"boost_factor"`
 }
 
+// FieldValueFactorFunction boosts the results by the value of a field in the document.
+type FieldValueFactorFunction struct {
+	Field    string  `json:"field"`
+	Factor   float64 `json:"factor,omitempty"`
+	Modifier string  `json:"modifier,omitempty"`
+}
+
+func (f FieldValueFactorFunction) MarshalJSON() ([]byte, error) {
+	type ffvf FieldValueFactorFunction
+	return marshalNamedObject("field_value_factor", ffvf(f))
+}
+
 // AndFilter provides a filter that matches if all of the internal
 // filters match.
 type AndFilter []Filter
