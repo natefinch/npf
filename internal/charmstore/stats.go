@@ -560,3 +560,29 @@ func (s *Store) aggregateStats(key []string, prefix bool) (AggregatedCounts, err
 	}
 	return counts, nil
 }
+
+// IncrementDownloadCounts updates the download statistics for entity id in both
+// the statistics database and the search database. The action is done in the
+// background using a separate goroutine.
+func (s *Store) IncrementDownloadCountsAsync(id *charm.Reference) {
+	go func() {
+		if err := s.IncrementDownloadCounts(id); err != nil {
+			logger.Errorf("cannot increase download counter for %v: %s", id, err)
+		}
+	}()
+}
+
+// IncrementDownloadCounts updates the download statistics for entity id in both
+// the statistics database and the search database.
+func (s *Store) IncrementDownloadCounts(id *charm.Reference) error {
+	key := EntityStatsKey(id, params.StatsArchiveDownload)
+	if err := s.IncCounter(key); err != nil {
+		return errgo.Notef(err, "cannot increase stats counter for %v", key)
+	}
+	// TODO(mhilton) when this charmstore is being used by juju, find a more
+	// efficient way to update the download statistics for search.
+	if err := s.UpdateSearch(id); err != nil {
+		return errgo.Notef(err, "cannot update search record for %v", id)
+	}
+	return nil
+}

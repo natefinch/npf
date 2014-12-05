@@ -56,15 +56,22 @@ var exportTestBundles = map[string]string{
 	"wordpress-simple": "cs:bundle/wordpress-simple-4",
 }
 
+var charmDownloadCounts = map[string]int{
+	"wordpress":        0,
+	"wordpress-simple": 1,
+	"mysql":            3,
+	"varnish":          5,
+}
+
 func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
-	for _, ref := range exportTestCharms {
+	for name, ref := range exportTestCharms {
 		var entity *mongodoc.Entity
 		err := s.store.DB.Entities().FindId(ref).One(&entity)
 		c.Assert(err, gc.IsNil)
 		var actual json.RawMessage
 		err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL), &actual)
 		c.Assert(err, gc.IsNil)
-		doc := SearchDoc{Entity: entity}
+		doc := SearchDoc{Entity: entity, TotalDownloads: int64(charmDownloadCounts[name])}
 		c.Assert(string(actual), jc.JSONEquals, doc)
 	}
 }
@@ -91,14 +98,14 @@ func (s *StoreSearchSuite) TestNoExportDeprecated(c *gc.C) {
 
 func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("wordpress")
-	url := charm.MustParseReference("cs:precise/wordpress-22")
+	url := charm.MustParseReference("cs:precise/wordpress-24")
 	err := s.store.AddCharmWithArchive(url, charmArchive)
 	c.Assert(err, gc.IsNil)
 	var expected, old *mongodoc.Entity
 	var actual json.RawMessage
-	err = s.store.DB.Entities().FindId("cs:precise/wordpress-22").One(&old)
+	err = s.store.DB.Entities().FindId("cs:precise/wordpress-23").One(&old)
 	c.Assert(err, gc.IsNil)
-	err = s.store.DB.Entities().FindId("cs:precise/wordpress-23").One(&expected)
+	err = s.store.DB.Entities().FindId("cs:precise/wordpress-24").One(&expected)
 	c.Assert(err, gc.IsNil)
 	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(old.URL), &actual)
 	c.Assert(err, gc.IsNil)
@@ -126,6 +133,10 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 		charmArchive.Meta().Categories = strings.Split(name, "-")
 		err := store.AddCharmWithArchive(url, charmArchive)
 		c.Assert(err, gc.IsNil)
+		for i := 0; i < charmDownloadCounts[name]; i++ {
+			err := store.IncrementDownloadCounts(url)
+			c.Assert(err, gc.IsNil)
+		}
 	}
 	for name, ref := range exportTestBundles {
 		bundleArchive := storetesting.Charms.BundleDir(name)
@@ -133,6 +144,10 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 		bundleArchive.Data().Tags = strings.Split(name, "-")
 		err := store.AddBundleWithArchive(url, bundleArchive)
 		c.Assert(err, gc.IsNil)
+		for i := 0; i < charmDownloadCounts[name]; i++ {
+			err := store.IncrementDownloadCounts(url)
+			c.Assert(err, gc.IsNil)
+		}
 	}
 }
 
@@ -451,6 +466,24 @@ func (s *StoreSearchSuite) TestSorting(c *gc.C) {
 			exportTestCharms["mysql"],
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
+		},
+	}, {
+		about:     "downloads ascending",
+		sortQuery: "downloads",
+		results: []string{
+			exportTestCharms["wordpress"],
+			exportTestBundles["wordpress-simple"],
+			exportTestCharms["mysql"],
+			exportTestCharms["varnish"],
+		},
+	}, {
+		about:     "downloads descending",
+		sortQuery: "-downloads",
+		results: []string{
+			exportTestCharms["varnish"],
+			exportTestCharms["mysql"],
+			exportTestBundles["wordpress-simple"],
+			exportTestCharms["wordpress"],
 		},
 	}}
 	for i, test := range tests {
