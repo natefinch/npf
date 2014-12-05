@@ -73,7 +73,17 @@ func (h *Handler) serveArchive(id *charm.Reference, fullySpecified bool, w http.
 	header.Set(params.EntityIdHeader, id.String())
 
 	if req.URL.Query().Get("stats") != "0" {
-		h.store.IncCounterAsync(entityStatsKey(id, params.StatsArchiveDownload))
+		go func() {
+			key := charmstore.EntityStatsKey(id, params.StatsArchiveDownload)
+			if err := h.store.IncCounter(key); err != nil {
+				logger.Errorf("cannot increase stats counter for %v: %v", key, err)
+				return
+			}
+			if err := h.store.UpdateSearch(id); err != nil {
+				logger.Errorf("cannot update search record for %v: %v", id, err)
+				return
+			}
+		}()
 	}
 	// TODO(rog) should we set connection=close here?
 	// See https://codereview.appspot.com/5958045
@@ -95,7 +105,7 @@ func (h *Handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter,
 	if err := h.store.BlobStore.Remove(blobName); err != nil {
 		return errgo.Notef(err, "cannot remove blob %s", blobName)
 	}
-	h.store.IncCounterAsync(entityStatsKey(id, params.StatsArchiveDelete))
+	h.store.IncCounterAsync(charmstore.EntityStatsKey(id, params.StatsArchiveDelete))
 	return nil
 }
 
@@ -107,7 +117,7 @@ func (h *Handler) updateStatsArchiveUpload(id *charm.Reference, err *error) {
 	if *err != nil {
 		kind = params.StatsArchiveFailedUpload
 	}
-	h.store.IncCounterAsync(entityStatsKey(id, kind))
+	h.store.IncCounterAsync(charmstore.EntityStatsKey(id, kind))
 }
 
 func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {

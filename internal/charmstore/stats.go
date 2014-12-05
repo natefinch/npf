@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gopkg.in/errgo.v1"
+	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -436,4 +437,86 @@ func (s sortableCounters) Less(i, j int) bool {
 	}
 	// Then full keys first.
 	return !s[i].Prefix && s[j].Prefix
+}
+
+// EntityStatsKey returns a stats key for the given charm or bundle
+// reference and the given kind.
+// Entity stats keys are generated using the following schema:
+//   kind:series:name:user:revision
+// where user can be empty (for promulgated charms/bundles) and revision is
+// optional (e.g. when uploading an entity the revision is not specified).
+// For instance, entities' stats can then be retrieved like the following:
+//   - kind:utopic:* -> all charms of a specific series;
+//   - kind:trusty:django:* -> all revisions and user variations of a charm;
+//   - kind:trusty:django::* -> all revisions of a promulgated charm;
+//   - kind:trusty:django::42 -> a specific promulgated charm;
+//   - kind:trusty:django:who:* -> all revisions of a user owned charm;
+//   - kind:trusty:django:who:42 -> a specific user owned charm;
+// The above also applies to bundles (where the series is "bundle").
+func EntityStatsKey(url *charm.Reference, kind string) []string {
+	key := []string{kind, url.Series, url.Name, url.User}
+	if url.Revision != -1 {
+		key = append(key, strconv.Itoa(url.Revision))
+	}
+	return key
+}
+
+// AggregatedCounts contains counts for a statistic aggregated over the
+// lastDay, lastWeek, lastMonth and all time.
+type AggregatedCounts struct {
+	LastDay, LastWeek, LastMonth, Total int64
+}
+
+// ArchiveDownloadCounts calculates the aggregated download counts for
+// a charm or bundle.
+func (s *Store) ArchiveDownloadCounts(id *charm.Reference) (thisRevision, allRevisions AggregatedCounts, err error) {
+	thisRevision, err = s.aggregateStats(EntityStatsKey(id, params.StatsArchiveDownload), false)
+	if err != nil {
+		err = errgo.Notef(err, "cannot get aggregated count for the specific revision")
+		return
+	}
+	noRevisionId := *id
+	noRevisionId.Revision = -1
+	allRevisions, err = s.aggregateStats(EntityStatsKey(&noRevisionId, params.StatsArchiveDownload), true)
+	if err != nil {
+		err = errgo.Notef(err, "cannot get aggregated count for all revisions")
+		return
+	}
+	return
+}
+
+// aggregatedStats returns the aggregated downloads counts for the given stats
+// key.
+func (s *Store) aggregateStats(key []string, prefix bool) (AggregatedCounts, error) {
+	var counts AggregatedCounts
+
+	req := CounterRequest{
+		Key:    key,
+		By:     ByDay,
+		Prefix: prefix,
+	}
+	results, err := s.Counters(&req)
+	if err != nil {
+		return counts, errgo.Notef(err, "cannot retrieve stats")
+	}
+
+	today := time.Now()
+	lastDay := today.AddDate(0, 0, -1)
+	lastWeek := today.AddDate(0, 0, -7)
+	lastMonth := today.AddDate(0, -1, 0)
+
+	// Aggregate the results.
+	for _, result := range results {
+		if result.Time.After(lastMonth) {
+			counts.LastMonth += result.Count
+			if result.Time.After(lastWeek) {
+				counts.LastWeek += result.Count
+				if result.Time.After(lastDay) {
+					counts.LastDay += result.Count
+				}
+			}
+		}
+		counts.Total += result.Count
+	}
+	return counts, nil
 }

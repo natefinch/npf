@@ -341,10 +341,7 @@ func (s *StoreSuite) TestAddCharmWithFailedESInsert(c *gc.C) {
 	}
 
 	store, err := NewStore(s.Session.DB("juju_test"), nil)
-	es := &storeElasticSearch{
-		SearchIndex: &SearchIndex{esdb, "no-index"},
-		DB:          store.DB,
-	}
+	es := &SearchIndex{esdb, "no-index"}
 	store.ES = es
 	c.Assert(err, gc.IsNil)
 
@@ -1268,7 +1265,7 @@ func (s *StoreSuite) TestSESPutDoesNotErrorWithNoESConfigured(c *gc.C) {
 	store, err := NewStore(s.Session.DB("mongodoctoelasticsearch"), nil)
 	c.Assert(err, gc.IsNil)
 	var entity mongodoc.Entity
-	err = store.ES.put(entity.URL)
+	err = store.UpdateSearch(entity.URL)
 	c.Assert(err, gc.IsNil)
 }
 
