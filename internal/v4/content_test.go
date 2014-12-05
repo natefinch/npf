@@ -14,8 +14,8 @@ import (
 	"strings"
 
 	jc "github.com/juju/testing/checkers"
-	"github.com/juju/xml"
 	"github.com/juju/testing/httptesting"
+	"github.com/juju/xml"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 

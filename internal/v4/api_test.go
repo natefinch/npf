@@ -1697,15 +1697,56 @@ func (s *APISuite) publishCharmsAtKnownTimes(c *gc.C, charms []publishSpec) {
 	}
 }
 
-func assertNotImplemented(c *gc.C, h http.Handler, path string) {
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:      h,
-		URL:          storeURL(path),
-		ExpectStatus: http.StatusInternalServerError,
-		ExpectBody: params.Error{
-			Message: "method not implemented",
-		},
-	})
+var debugPprofTests = []struct {
+	path  string
+	match string
+}{{
+	path:  "debug/pprof/",
+	match: `(?s).*profiles:.*heap.*`,
+}, {
+	path:  "debug/pprof/goroutine?debug=2",
+	match: "(?s)goroutine [0-9]+.*",
+}, {
+	path:  "debug/pprof/cmdline",
+	match: ".+charmstore.+",
+}}
+
+func (s *APISuite) TestDebugPprof(c *gc.C) {
+	for i, test := range debugPprofTests {
+		c.Logf("test %d: %s", i, test.path)
+
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+			Handler: s.srv,
+			Header:  basicAuthHeader(serverParams.AuthUsername, serverParams.AuthPassword),
+			URL:     storeURL(test.path),
+		})
+		c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %s", rec.Body.String()))
+		c.Assert(rec.Body.String(), gc.Matches, test.match)
+	}
+}
+
+func (s *APISuite) TestDebugPprofFailsWithoutAuth(c *gc.C) {
+	for i, test := range debugPprofTests {
+		c.Logf("test %d: %s", i, test.path)
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler:      s.srv,
+			URL:          storeURL(test.path),
+			ExpectStatus: http.StatusUnauthorized,
+			ExpectBody: params.Error{
+				Message: "authentication failed: invalid or missing HTTP auth header",
+				Code:    params.ErrUnauthorized,
+			},
+		})
+	}
+}
+
+func basicAuthHeader(username, password string) http.Header {
+	// It's a pity we have to jump through this hoop.
+	req := &http.Request{
+		Header: make(http.Header),
+	}
+	req.SetBasicAuth(username, password)
+	return req.Header
 }
 
 func entityFieldGetter(fieldName string) metaEndpointExpectedValueGetter {
