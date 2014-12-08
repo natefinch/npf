@@ -43,6 +43,7 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 		Global: map[string]http.Handler{
 			"changes/published":  router.HandleJSON(h.serveChangesPublished),
 			"debug":              http.HandlerFunc(h.serveDebug),
+			"debug/pprof/":       newPprofHandler(h),
 			"debug/status":       router.HandleJSON(h.serveDebugStatus),
 			"debug/info":         router.HandleJSON(h.serveDebugInfo),
 			"log":                router.HandleErrors(h.serveLog),
