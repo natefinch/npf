@@ -653,3 +653,41 @@ func (s *SearchSuite) TestSortUnsupportedField(c *gc.C) {
 	c.Assert(e.Code, gc.Equals, params.ErrBadRequest)
 	c.Assert(e.Message, gc.Equals, "invalid sort field: foo")
 }
+
+func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
+	// TODO (frankban): remove this call when removing the legacy counts logic.
+	patchLegacyDownloadCountsEnabled(s.AddCleanup, false)
+	charmDownloads := map[string]int{
+		"mysql":     0,
+		"wordpress": 1,
+		"varnish":   8,
+	}
+	for n, cnt := range charmDownloads {
+		ref := &charm.Reference{
+			Schema:   "cs",
+			User:     "downloads-test",
+			Name:     n,
+			Revision: 1,
+			Series:   "trusty",
+		}
+		err := s.store.AddCharmWithArchive(ref, getCharm(n))
+		c.Assert(err, gc.IsNil)
+		for i := 0; i < cnt; i++ {
+			err := s.store.IncrementDownloadCounts(ref)
+			c.Assert(err, gc.IsNil)
+		}
+	}
+	err := s.ES.RefreshIndex(s.TestIndex)
+	c.Assert(err, gc.IsNil)
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("search?owner=downloads-test"),
+	})
+	var sr params.SearchResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &sr)
+	c.Assert(err, gc.IsNil)
+	c.Assert(sr.Results, gc.HasLen, 3)
+	c.Assert(sr.Results[0].Id.Name, gc.Equals, "varnish")
+	c.Assert(sr.Results[1].Id.Name, gc.Equals, "wordpress")
+	c.Assert(sr.Results[2].Id.Name, gc.Equals, "mysql")
+}

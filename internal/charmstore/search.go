@@ -428,6 +428,13 @@ func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 
 	// Boosting
 	f := []elasticsearch.Function{
+		// TODO(mhilton) review this function in future if downloads get sufficiently
+		// large that the order becomes undesirable.
+		elasticsearch.FieldValueFactorFunction{
+			Field:    "TotalDownloads",
+			Factor:   0.000001,
+			Modifier: "ln2p",
+		},
 		elasticsearch.BoostFactorFunction{
 			Filter:      ownerFilter(""),
 			BoostFactor: 1.25,

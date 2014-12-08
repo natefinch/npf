@@ -131,6 +131,14 @@ func (s *QuerySuite) TestJSONEncodings(c *gc.C) {
 			From:   10,
 		},
 		json: `{"fields": ["foo", "bar"], "size": 10, "query": {"term": {"baz": "quz"}}, "sort": [{"foo": { "order": "desc"}}], "from": 10}`,
+	}, {
+		about: "field value factor",
+		query: FieldValueFactorFunction{
+			Field:    "foo",
+			Factor:   1.2,
+			Modifier: "bar",
+		},
+		json: `{"field_value_factor": {"field": "foo", "factor": 1.2, "modifier": "bar"}}`,
 	}}
 	for i, test := range tests {
 		c.Logf("%d: %s", i, test.about)
