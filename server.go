@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 
+	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/internal/charmstore"
@@ -39,8 +40,18 @@ func Versions() []string {
 
 // ServerParams holds configuration for a new API server.
 type ServerParams struct {
+	// AuthUsername and AuthPassword hold the credentials
+	// used for HTTP basic authentication.
 	AuthUsername string
 	AuthPassword string
+
+	// AuthLocation holds the location of the third party authorization
+	// service to use when creating third party caveats.
+	AuthLocation string
+
+	// PublicKeyLocator holds a public key store.
+	// It may be nil.
+	PublicKeyLocator bakery.PublicKeyLocator
 }
 
 // NewServer returns a new handler that handles charm store requests and stores

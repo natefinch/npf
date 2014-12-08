@@ -7,6 +7,8 @@ import (
 	"strings"
 	"text/template"
 
+	"gopkg.in/juju/charm.v4"
+
 	"github.com/juju/charmstore/internal/router"
 )
 
@@ -16,7 +18,7 @@ type pprofHandler struct {
 }
 
 type authenticator interface {
-	authenticate(w http.ResponseWriter, req *http.Request) error
+	authenticate(w http.ResponseWriter, req *http.Request, id *charm.Reference, op operation) error
 }
 
 func newPprofHandler(auth authenticator) http.Handler {
@@ -32,7 +34,7 @@ func newPprofHandler(auth authenticator) http.Handler {
 }
 
 func (h *pprofHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if err := h.auth.authenticate(w, req); err != nil {
+	if err := h.auth.authenticate(w, req, nil, ""); err != nil {
 		router.WriteError(w, err)
 		return
 	}

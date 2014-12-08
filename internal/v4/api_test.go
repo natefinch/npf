@@ -72,7 +72,7 @@ func (s *APISuite) SetUpTest(c *gc.C) {
 
 func newServer(c *gc.C, session *mgo.Session, si *charmstore.SearchIndex, config charmstore.ServerParams) (http.Handler, *charmstore.Store) {
 	db := session.DB("charmstore")
-	store, err := charmstore.NewStore(db, si)
+	store, err := charmstore.NewStore(db, si, nil)
 	c.Assert(err, gc.IsNil)
 	srv, err := charmstore.NewServer(db, si, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v4.NewAPIHandler})
 	c.Assert(err, gc.IsNil)
@@ -1560,7 +1560,7 @@ func (s *APISuite) TestDebugPprofFailsWithoutAuth(c *gc.C) {
 			URL:          storeURL(test.path),
 			ExpectStatus: http.StatusUnauthorized,
 			ExpectBody: params.Error{
-				Message: "authentication failed: invalid or missing HTTP auth header",
+				Message: "authentication failed: missing HTTP auth header",
 				Code:    params.ErrUnauthorized,
 			},
 		})

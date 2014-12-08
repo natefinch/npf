@@ -14,6 +14,8 @@ import (
 	"github.com/juju/loggo"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
+	"gopkg.in/macaroon-bakery.v0/bakery"
+	"gopkg.in/macaroon-bakery.v0/bakery/mgostorage"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -29,6 +31,7 @@ type Store struct {
 	DB        StoreDatabase
 	BlobStore *blobstore.Store
 	ES        *SearchIndex
+	Bakery    *bakery.Service
 
 	// Cache for statistics key words (two generations).
 	cacheMu       sync.RWMutex
@@ -38,8 +41,11 @@ type Store struct {
 	statsTokenOld map[int]string
 }
 
-// NewStore returns a Store that uses the given database.
-func NewStore(db *mgo.Database, si *SearchIndex) (*Store, error) {
+// NewStore returns a Store that uses the given database
+// and search index. If bakeryParams is not nil,
+// the Bakery field in the resulting Store will be set
+// to a new Service that stores macaroons in mongo.
+func NewStore(db *mgo.Database, si *SearchIndex, bakeryParams *bakery.NewServiceParams) (*Store, error) {
 	s := &Store{
 		DB:        StoreDatabase{db},
 		BlobStore: blobstore.New(db, "entitystore"),
@@ -50,6 +56,19 @@ func NewStore(db *mgo.Database, si *SearchIndex) (*Store, error) {
 	}
 	if err := s.ES.ensureIndexes(false); err != nil {
 		return nil, errgo.Notef(err, "cannot ensure elasticsearch indexes")
+	}
+	if bakeryParams != nil {
+		macStore, err := mgostorage.New(s.DB.Macaroons())
+		if err != nil {
+			return nil, errgo.Notef(err, "cannot create macaroon store")
+		}
+		p := *bakeryParams
+		p.Store = macStore
+		bsvc, err := bakery.NewService(p)
+		if err != nil {
+			return nil, errgo.Notef(err, "cannot make bakery service")
+		}
+		s.Bakery = bsvc
 	}
 	go func() {
 		if err := s.syncSearch(); err != nil {
@@ -649,6 +668,10 @@ func (s StoreDatabase) Migrations() *mgo.Collection {
 	return s.C("migrations")
 }
 
+func (s StoreDatabase) Macaroons() *mgo.Collection {
+	return s.C("macaroons")
+}
+
 // allCollections holds for each collection used by the charm store a
 // function returns that collection.
 var allCollections = []func(StoreDatabase) *mgo.Collection{
@@ -657,6 +680,7 @@ var allCollections = []func(StoreDatabase) *mgo.Collection{
 	StoreDatabase.Entities,
 	StoreDatabase.Logs,
 	StoreDatabase.Migrations,
+	StoreDatabase.Macaroons,
 }
 
 // Collections returns a slice of all the collections used

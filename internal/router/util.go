@@ -10,17 +10,23 @@ import (
 
 	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
+	"gopkg.in/macaroon-bakery.v0/httpbakery"
 
 	"github.com/juju/charmstore/params"
 )
 
 var (
-	HandleErrors = jsonhttp.HandleErrors(errToResp)
-	HandleJSON   = jsonhttp.HandleJSON(errToResp)
-	WriteError   = jsonhttp.WriteError(errToResp)
+	HandleErrors = jsonhttp.HandleErrors(errorToResp)
+	HandleJSON   = jsonhttp.HandleJSON(errorToResp)
+	WriteError   = jsonhttp.WriteError(errorToResp)
 )
 
-func errToResp(err error) (int, interface{}) {
+func errorToResp(err error) (int, interface{}) {
+	// Allow bakery errors to be returned as the bakery would
+	// like them, so that httpbakery.Client.Do will work.
+	if err, ok := errgo.Cause(err).(*httpbakery.Error); ok {
+		return httpbakery.ErrorToResponse(err)
+	}
 	errorBody := errorResponseBody(err)
 	status := http.StatusInternalServerError
 	switch errorBody.Code {

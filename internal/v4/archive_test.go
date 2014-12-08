@@ -1023,7 +1023,7 @@ var archiveAuthErrorsTests = []struct {
 	expectMessage string
 }{{
 	about:         "no credentials",
-	expectMessage: "authentication failed: invalid or missing HTTP auth header",
+	expectMessage: "authentication failed: missing HTTP auth header",
 }, {
 	about: "invalid encoding",
 	header: http.Header{
