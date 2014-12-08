@@ -168,6 +168,7 @@ type LogType int
 const (
 	_ LogType = iota
 	IngestionType
+	LegacyStatisticsType
 )
 
 // Migration holds information about the database migration.

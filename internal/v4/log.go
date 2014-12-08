@@ -176,11 +176,13 @@ var (
 	}
 	// mongodocLogTypes maps internal mongodoc log types to API ones.
 	mongodocLogTypes = map[mongodoc.LogType]params.LogType{
-		mongodoc.IngestionType: params.IngestionType,
+		mongodoc.IngestionType:        params.IngestionType,
+		mongodoc.LegacyStatisticsType: params.LegacyStatisticsType,
 	}
 	// paramsLogTypes maps API params log types to internal mongodoc ones.
 	paramsLogTypes = map[params.LogType]mongodoc.LogType{
-		params.IngestionType: mongodoc.IngestionType,
+		params.IngestionType:        mongodoc.IngestionType,
+		params.LegacyStatisticsType: mongodoc.LegacyStatisticsType,
 	}
 )
 

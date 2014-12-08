@@ -220,4 +220,7 @@ const (
 // responses.
 type LogType string
 
-const IngestionType LogType = "ingestion"
+const (
+	IngestionType        LogType = "ingestion"
+	LegacyStatisticsType LogType = "legacyStatistics"
+)
