@@ -223,4 +223,10 @@ type LogType string
 const (
 	IngestionType        LogType = "ingestion"
 	LegacyStatisticsType LogType = "legacyStatistics"
+
+	IngestionStart    = "ingestion started"
+	IngestionComplete = "ingestion completed"
+
+	LegacyStatisticsImportStart    = "legacy statistics import started"
+	LegacyStatisticsImportComplete = "legacy statistics import completed"
 )

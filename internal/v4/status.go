@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/errgo.v1"
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/mongodoc"
@@ -43,6 +44,10 @@ var statusChecks = map[string]struct {
 	"ingestion": {
 		name:  "Ingestion",
 		check: (*Handler).checkIngestion,
+	},
+	"legacy_statistics": {
+		name:  "Legacy Statistics Load",
+		check: (*Handler).checkLegacyStatistics,
 	},
 }
 
@@ -126,34 +131,59 @@ func (h *Handler) checkEntities() (string, bool) {
 }
 
 func (h *Handler) checkIngestion() (string, bool) {
-	var start time.Time
-	var end time.Time
+	start, end, err := h.findTimesInLogs(
+		mongodoc.IngestionType,
+		params.IngestionStart,
+		params.IngestionComplete)
+	if err != nil {
+		return err.Error(), false
+	}
+
+	return fmt.Sprintf("started: %s, completed: %s", start.Format(time.RFC3339), end.Format(time.RFC3339)), !(start.IsZero() || end.IsZero())
+}
+
+func (h *Handler) checkLegacyStatistics() (string, bool) {
+	start, end, err := h.findTimesInLogs(
+		mongodoc.LegacyStatisticsType,
+		params.LegacyStatisticsImportStart,
+		params.LegacyStatisticsImportComplete)
+	if err != nil {
+		return err.Error(), false
+	}
+
+	return fmt.Sprintf("started: %s, completed: %s", start.Format(time.RFC3339), end.Format(time.RFC3339)), !(start.IsZero() || end.IsZero())
+}
+
+// findTimesInLogs goes through logs in reverse order finding when the start and
+// end messages were last added.
+func (h *Handler) findTimesInLogs(typ mongodoc.LogType, startPrefix, endPrefix string) (start, end time.Time, err error) {
 	var log mongodoc.Log
 	iter := h.store.DB.Logs().
 		Find(bson.D{
 		{"level", mongodoc.InfoLevel},
-		{"type", mongodoc.IngestionType},
-	}).Sort("-time").Iter()
+		{"type", typ},
+	}).Sort("-time,-id").Iter()
 	for iter.Next(&log) {
 		var msg string
 		if err := json.Unmarshal(log.Data, &msg); err != nil {
 			// an error here probably means the log isn't in the form we are looking for.
 			continue
 		}
-		if start.IsZero() && strings.HasPrefix(msg, "ingestion started") {
+		if start.IsZero() && strings.HasPrefix(msg, startPrefix) {
 			start = log.Time
 		}
-		if end.IsZero() && strings.HasPrefix(msg, "ingestion completed") {
+		if end.IsZero() && strings.HasPrefix(msg, endPrefix) {
 			end = log.Time
 		}
 		if !start.IsZero() && !end.IsZero() {
 			break
 		}
 	}
-	if err := iter.Close(); err != nil {
-		return "Cannot query ingestion logs: " + err.Error(), false
+	if err = iter.Close(); err != nil {
+		return time.Time{}, time.Time{}, errgo.Notef(err, "Cannot query logs")
 	}
-	return fmt.Sprintf("started: %s, completed: %s", start.Format(time.RFC3339), end.Format(time.RFC3339)), !(start.IsZero() || end.IsZero())
+
+	return
 }
 
 // startTime holds the time that the code started running.
