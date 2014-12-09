@@ -93,6 +93,12 @@ var logResponses = map[string]*params.LogResponse{
 			charm.MustParseReference("django"),
 		},
 	},
+	"stats": {
+		Data:  rawMessage("statistics info data"),
+		Level: params.InfoLevel,
+		Type:  params.LegacyStatisticsType,
+		URLs:  nil,
+	},
 }
 
 var getLogsTests = []struct {
@@ -102,6 +108,7 @@ var getLogsTests = []struct {
 }{{
 	about: "retrieve logs",
 	expectBody: []*params.LogResponse{
+		logResponses["stats"],
 		logResponses["error3"],
 		logResponses["info3"],
 		logResponses["error2"],
@@ -114,13 +121,14 @@ var getLogsTests = []struct {
 	about:       "use limit",
 	querystring: "?limit=2",
 	expectBody: []*params.LogResponse{
+		logResponses["stats"],
 		logResponses["error3"],
-		logResponses["info3"],
 	},
 }, {
 	about:       "use offset",
 	querystring: "?skip=3",
 	expectBody: []*params.LogResponse{
+		logResponses["error2"],
 		logResponses["warning1"],
 		logResponses["info2"],
 		logResponses["error1"],
@@ -130,6 +138,7 @@ var getLogsTests = []struct {
 	about:       "zero offset",
 	querystring: "?skip=0",
 	expectBody: []*params.LogResponse{
+		logResponses["stats"],
 		logResponses["error3"],
 		logResponses["info3"],
 		logResponses["error2"],
@@ -142,14 +151,15 @@ var getLogsTests = []struct {
 	about:       "use both limit and offset",
 	querystring: "?limit=3&skip=1",
 	expectBody: []*params.LogResponse{
+		logResponses["error3"],
 		logResponses["info3"],
 		logResponses["error2"],
-		logResponses["warning1"],
 	},
 }, {
 	about:       "filter by level",
 	querystring: "?level=info",
 	expectBody: []*params.LogResponse{
+		logResponses["stats"],
 		logResponses["info3"],
 		logResponses["info2"],
 		logResponses["info1"],
@@ -195,12 +205,18 @@ var getLogsTests = []struct {
 }, {
 	about:       "empty response level",
 	querystring: "?id=trusty/rails&level=error",
+}, {
+	about:       "filter by type - legacyStatistics",
+	querystring: "?type=legacyStatistics",
+	expectBody: []*params.LogResponse{
+		logResponses["stats"],
+	},
 }}
 
 func (s *logSuite) TestGetLogs(c *gc.C) {
 	// Add logs to the database.
 	beforeAdding := time.Now().Add(-time.Second)
-	for _, key := range []string{"info1", "error1", "info2", "warning1", "error2", "info3", "error3"} {
+	for _, key := range []string{"info1", "error1", "info2", "warning1", "error2", "info3", "error3", "stats"} {
 		resp := logResponses[key]
 		err := s.store.AddLog(&resp.Data, v4.ParamsLogLevels[resp.Level], v4.ParamsLogTypes[resp.Type], resp.URLs)
 		c.Assert(err, gc.IsNil)
