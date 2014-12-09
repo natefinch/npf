@@ -162,7 +162,7 @@ func (h *Handler) findTimesInLogs(typ mongodoc.LogType, startPrefix, endPrefix s
 		Find(bson.D{
 		{"level", mongodoc.InfoLevel},
 		{"type", typ},
-	}).Sort("-time,-id").Iter()
+	}).Sort("-time", "-id").Iter()
 	for iter.Next(&log) {
 		var msg string
 		if err := json.Unmarshal(log.Data, &msg); err != nil {
