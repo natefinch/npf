@@ -93,6 +93,28 @@ func (s *Store) UpdateSearch(r *charm.Reference) error {
 	return nil
 }
 
+// UpdateSearchFields updates the search record for the entity reference r
+// with the updated values in fields.
+func (s *Store) UpdateSearchFields(r *charm.Reference, fields map[string]interface{}) error {
+	if s.ES == nil || s.ES.Database == nil {
+		return nil
+	}
+	var needUpdate bool
+	for k := range fields {
+		// Add any additional fields here that should update the search index.
+		if k == "extrainfo.legacy-download-stats" {
+			needUpdate = true
+		}
+	}
+	if !needUpdate {
+		return nil
+	}
+	if err := s.UpdateSearch(r); err != nil {
+		return errgo.Mask(err)
+	}
+	return nil
+}
+
 // searchDocFromEntity performs the processing required to convert a mongodoc.Entity
 // to an esDoc for indexing.
 func (s *Store) searchDocFromEntity(e *mongodoc.Entity) (*SearchDoc, error) {

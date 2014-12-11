@@ -4,6 +4,7 @@
 package v4_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -690,4 +691,33 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 	c.Assert(sr.Results[0].Id.Name, gc.Equals, "varnish")
 	c.Assert(sr.Results[1].Id.Name, gc.Equals, "wordpress")
 	c.Assert(sr.Results[2].Id.Name, gc.Equals, "mysql")
+}
+
+// TODO(mhilton) remove this test when removing legacy counts logic.
+func (s *SearchSuite) TestLegacyStatsUpdatesSearch(c *gc.C) {
+	patchLegacyDownloadCountsEnabled(s.AddCleanup, true)
+	doc, err := s.store.ES.GetSearchDocument(charm.MustParseReference(exportTestCharms["mysql"]))
+	c.Assert(err, gc.IsNil)
+	c.Assert(doc.TotalDownloads, gc.Equals, int64(0))
+	s.assertPut(c, "trusty/mysql-7/meta/extra-info/"+params.LegacyDownloadStats, 57)
+	doc, err = s.store.ES.GetSearchDocument(charm.MustParseReference(exportTestCharms["mysql"]))
+	c.Assert(err, gc.IsNil)
+	c.Assert(doc.TotalDownloads, gc.Equals, int64(57))
+
+}
+
+func (s *SearchSuite) assertPut(c *gc.C, url string, val interface{}) {
+	body, err := json.Marshal(val)
+	c.Assert(err, gc.IsNil)
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL(url),
+		Method:  "PUT",
+		Header: http.Header{
+			"Content-Type": {"application/json"},
+		},
+		Body: bytes.NewReader(body),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("headers: %v, body: %s", rec.HeaderMap, rec.Body.String()))
+	c.Assert(rec.Body.String(), gc.HasLen, 0)
 }

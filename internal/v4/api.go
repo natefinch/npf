@@ -171,6 +171,10 @@ func (h *Handler) updateEntity(id *charm.Reference, fields map[string]interface{
 	if err != nil {
 		return errgo.Notef(err, "cannot update %q", id)
 	}
+	err = h.store.UpdateSearchFields(id, fields)
+	if err != nil {
+		return errgo.Notef(err, "cannot update %q", id)
+	}
 	return nil
 }
 
