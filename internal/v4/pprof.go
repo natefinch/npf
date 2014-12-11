@@ -53,21 +53,23 @@ func pprofIndex(w http.ResponseWriter, req *http.Request) {
 	pprof.Handler(name).ServeHTTP(w, req)
 }
 
-var indexTmpl = template.Must(template.New("index").Parse(`<html>
+var indexTmpl = template.Must(template.New("index").Parse(`<!DOCTYPE html>
+<html>
 <head>
-<title>pprof</title>
+  <title>pprof</title>
 </head>
-pprof<br>
-<br>
 <body>
-profiles:<br>
-<table>
-{{range .}}
-<tr><td align=right>{{.Count}}<td><a href="{{.Name}}?debug=1">{{.Name}}</a>
-{{end}}
-</table>
-<br>
-<a href="goroutine?debug=2">full goroutine stack dump</a><br>
+  <h1>pprof</h1>
+  <h2>profiles:</h2>
+  <table>
+    {{range .}}
+    <tr>
+      <td style="text-align: right;">{{.Count}}</td>
+      <td><a href="{{.Name}}?debug=1">{{.Name}}</a></td>
+    </tr>
+    {{end}}
+  </table>
+  <p><a href="goroutine?debug=2">full goroutine stack dump</a></p>
 </body>
 </html>
 `))
