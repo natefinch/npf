@@ -17,33 +17,6 @@ import (
 	"github.com/juju/charmstore/internal/mongodoc"
 )
 
-func assertStatusCall(c *gc.C, p httptesting.JSONCallParams) {
-	// Perform the request.
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: p.Handler,
-		URL:     p.URL,
-	})
-
-	// Ensure the request succeeded and returned a JSON response.
-	c.Assert(rec.Code, gc.Equals, p.ExpectStatus)
-	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "application/json")
-
-	// Check the response is valid JSON.
-	var results map[string]debugstatus.CheckResult
-	err := json.Unmarshal(rec.Body.Bytes(), &results)
-	c.Assert(err, gc.IsNil)
-
-	// Handle the server_started part of the response body.
-	started := results["server_started"]
-	c.Assert(started.Name, gc.Equals, "Server started")
-	c.Assert(started.Value, gc.Not(gc.Equals), time.Time{})
-	c.Assert(started.Passed, jc.IsTrue)
-	delete(results, "server_started")
-
-	// Ensure the remaining part of the response body is what we expected.
-	c.Assert(results, jc.DeepEquals, p.ExpectBody)
-}
-
 func (s *APISuite) TestStatus(c *gc.C) {
 	for _, id := range []string{
 		"cs:precise/wordpress-2",
@@ -60,6 +33,7 @@ func (s *APISuite) TestStatus(c *gc.C) {
 		}
 	}
 	now := time.Now()
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := now.Add(-2 * time.Hour)
 	s.addLog(c, &mongodoc.Log{
 		Data:  []byte(`"ingestion started"`),
@@ -88,11 +62,16 @@ func (s *APISuite) TestStatus(c *gc.C) {
 		Type:  mongodoc.LegacyStatisticsType,
 		Time:  statisticsEnd,
 	})
-	assertStatusCall(c, httptesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("debug/status"),
 		ExpectStatus: http.StatusOK,
 		ExpectBody: map[string]debugstatus.CheckResult{
+			"server_started": {
+				Name:   "Server started",
+				Value:  now.String(),
+				Passed: true,
+			},
 			"mongo_connected": {
 				Name:   "MongoDB is connected",
 				Value:  "Connected",
@@ -142,6 +121,7 @@ func (s *APISuite) TestStatusWithElasticSearch(c *gc.C) {
 func (s *APISuite) TestStatusWithoutCorrectCollections(c *gc.C) {
 	s.store.DB.Entities().DropCollection()
 	now := time.Now()
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := now.Add(-2 * time.Hour)
 	s.addLog(c, &mongodoc.Log{
 		Data:  []byte(`"ingestion started"`),
@@ -170,11 +150,16 @@ func (s *APISuite) TestStatusWithoutCorrectCollections(c *gc.C) {
 		Type:  mongodoc.LegacyStatisticsType,
 		Time:  statisticsEnd,
 	})
-	assertStatusCall(c, httptesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("debug/status"),
 		ExpectStatus: http.StatusOK,
 		ExpectBody: map[string]debugstatus.CheckResult{
+			"server_started": {
+				Name:   "Server started",
+				Value:  now.String(),
+				Passed: true,
+			},
 			"mongo_connected": {
 				Name:   "MongoDB is connected",
 				Value:  "Connected",
@@ -225,6 +210,7 @@ func (s *APISuite) TestStatusWithoutIngestion(c *gc.C) {
 		}
 	}
 	now := time.Now()
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := time.Time{}
 	end := time.Time{}
 	statisticsStart := now.Add(-1*time.Hour - 30*time.Minute)
@@ -241,11 +227,16 @@ func (s *APISuite) TestStatusWithoutIngestion(c *gc.C) {
 		Type:  mongodoc.LegacyStatisticsType,
 		Time:  statisticsEnd,
 	})
-	assertStatusCall(c, httptesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("debug/status"),
 		ExpectStatus: http.StatusOK,
 		ExpectBody: map[string]debugstatus.CheckResult{
+			"server_started": {
+				Name:   "Server started",
+				Value:  now.String(),
+				Passed: true,
+			},
 			"mongo_connected": {
 				Name:   "MongoDB is connected",
 				Value:  "Connected",
@@ -296,6 +287,7 @@ func (s *APISuite) TestStatusIngestionStarted(c *gc.C) {
 		}
 	}
 	now := time.Now()
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := now.Add(-1 * time.Hour)
 	s.addLog(c, &mongodoc.Log{
 		Data:  []byte(`"ingestion started"`),
@@ -318,11 +310,16 @@ func (s *APISuite) TestStatusIngestionStarted(c *gc.C) {
 		Type:  mongodoc.LegacyStatisticsType,
 		Time:  statisticsEnd,
 	})
-	assertStatusCall(c, httptesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("debug/status"),
 		ExpectStatus: http.StatusOK,
 		ExpectBody: map[string]debugstatus.CheckResult{
+			"server_started": {
+				Name:   "Server started",
+				Value:  now.String(),
+				Passed: true,
+			},
 			"mongo_connected": {
 				Name:   "MongoDB is connected",
 				Value:  "Connected",
@@ -373,6 +370,7 @@ func (s *APISuite) TestStatusWithoutLegacyStatistics(c *gc.C) {
 		}
 	}
 	now := time.Now()
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := now.Add(-2 * time.Hour)
 	s.addLog(c, &mongodoc.Log{
 		Data:  []byte(`"ingestion started"`),
@@ -389,11 +387,16 @@ func (s *APISuite) TestStatusWithoutLegacyStatistics(c *gc.C) {
 	})
 	statisticsStart := time.Time{}
 	statisticsEnd := time.Time{}
-	assertStatusCall(c, httptesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("debug/status"),
 		ExpectStatus: http.StatusOK,
 		ExpectBody: map[string]debugstatus.CheckResult{
+			"server_started": {
+				Name:   "Server started",
+				Value:  now.String(),
+				Passed: true,
+			},
 			"mongo_connected": {
 				Name:   "MongoDB is connected",
 				Value:  "Connected",
@@ -444,6 +447,7 @@ func (s *APISuite) TestStatusLegacyStatisticsStarted(c *gc.C) {
 		}
 	}
 	now := time.Now()
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := now.Add(-2 * time.Hour)
 	s.addLog(c, &mongodoc.Log{
 		Data:  []byte(`"ingestion started"`),
@@ -466,11 +470,16 @@ func (s *APISuite) TestStatusLegacyStatisticsStarted(c *gc.C) {
 		Time:  statisticsStart,
 	})
 	statisticsEnd := time.Time{}
-	assertStatusCall(c, httptesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("debug/status"),
 		ExpectStatus: http.StatusOK,
 		ExpectBody: map[string]debugstatus.CheckResult{
+			"server_started": {
+				Name:   "Server started",
+				Value:  now.String(),
+				Passed: true,
+			},
 			"mongo_connected": {
 				Name:   "MongoDB is connected",
 				Value:  "Connected",
@@ -521,6 +530,7 @@ func (s *APISuite) TestStatusLegacyStatisticsMultipleLogs(c *gc.C) {
 		}
 	}
 	now := time.Now()
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := now.Add(-2 * time.Hour)
 	s.addLog(c, &mongodoc.Log{
 		Data:  []byte(`"ingestion started"`),
@@ -561,11 +571,16 @@ func (s *APISuite) TestStatusLegacyStatisticsMultipleLogs(c *gc.C) {
 		Type:  mongodoc.LegacyStatisticsType,
 		Time:  statisticsEnd,
 	})
-	assertStatusCall(c, httptesting.JSONCallParams{
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("debug/status"),
 		ExpectStatus: http.StatusOK,
 		ExpectBody: map[string]debugstatus.CheckResult{
+			"server_started": {
+				Name:   "Server started",
+				Value:  now.String(),
+				Passed: true,
+			},
 			"mongo_connected": {
 				Name:   "MongoDB is connected",
 				Value:  "Connected",
