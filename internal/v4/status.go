@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/juju/utils/debugstatus"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/mgo.v2/bson"
 
@@ -17,100 +18,44 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
-var statusChecks = map[string]struct {
-	name  string
-	check func(*Handler) (string, bool)
-}{
-	"mongo_connected": {
-		name:  "MongoDB is connected",
-		check: (*Handler).checkMongoConnected,
-	},
-	"elasticsearch": {
-		name:  "Elastic search is running",
-		check: (*Handler).checkElasticSearch,
-	},
-	"mongo_collections": {
-		name:  "MongoDB collections",
-		check: (*Handler).checkCollections,
-	},
-	"entities": {
-		name:  "Entities in charm store",
-		check: (*Handler).checkEntities,
-	},
-	"server_started": {
-		name:  "Server started",
-		check: (*Handler).checkServerStarted,
-	},
-	"ingestion": {
-		name:  "Ingestion",
-		check: (*Handler).checkIngestion,
-	},
-	"legacy_statistics": {
-		name:  "Legacy Statistics Load",
-		check: (*Handler).checkLegacyStatistics,
-	},
-}
-
 // GET /debug/status
 // http://tinyurl.com/qdm5yg7
 func (h *Handler) serveDebugStatus(_ http.Header, req *http.Request) (interface{}, error) {
-	status := make(map[string]params.DebugStatus)
-	for key, check := range statusChecks {
-		value, ok := check.check(h)
-		status[key] = params.DebugStatus{
-			Name:   check.name,
-			Value:  value,
-			Passed: ok,
-		}
-	}
-	return status, nil
+	return debugstatus.Check(
+		debugstatus.ServerStartTime,
+		debugstatus.Connection(h.store.DB.Session),
+		debugstatus.MongoCollections(h.store.DB),
+		h.checkElasticSearch,
+		h.checkEntities,
+		h.checkLogs(
+			"ingestion", "Ingestion",
+			mongodoc.IngestionType, params.IngestionStart, params.IngestionComplete),
+		h.checkLogs(
+			"legacy_statistics", "Legacy Statistics Load",
+			mongodoc.LegacyStatisticsType, params.LegacyStatisticsImportStart, params.LegacyStatisticsImportComplete),
+	), nil
 }
 
-func (h *Handler) checkMongoConnected() (string, bool) {
-	err := h.store.DB.Session.Ping()
-	if err == nil {
-		return "Connected", true
-	}
-	return "Ping error: " + err.Error(), false
-}
-
-func (h *Handler) checkElasticSearch() (string, bool) {
+func (h *Handler) checkElasticSearch() (key string, result debugstatus.CheckResult) {
+	key = "elasticsearch"
+	result.Name = "Elastic search is running"
 	if h.store.ES == nil || h.store.ES.Database == nil {
-		return "Elastic search is not configured", true
+		result.Value = "Elastic search is not configured"
+		result.Passed = true
+		return key, result
 	}
 	health, err := h.store.ES.Health()
 	if err != nil {
-		return "Connection issues to Elastic Search: " + err.Error(), false
+		result.Value = "Connection issues to Elastic Search: " + err.Error()
+		return key, result
 	}
-
-	return health.String(), health.Status == "green"
+	result.Value = health.String()
+	result.Passed = health.Status == "green"
+	return key, result
 }
 
-func (h *Handler) checkCollections() (string, bool) {
-	names, err := h.store.DB.CollectionNames()
-	if err != nil {
-		return "Cannot get collections: " + err.Error(), false
-	}
-	var missing []string
-	for _, coll := range h.store.DB.Collections() {
-		found := false
-		for _, name := range names {
-			if name == coll.Name {
-				found = true
-				break
-			}
-		}
-		if !found {
-			missing = append(missing, coll.Name)
-		}
-	}
-	if len(missing) == 0 {
-		return "All required collections exist", true
-	}
-	return fmt.Sprintf("Missing collections: %s", missing), false
-}
-
-func (h *Handler) checkEntities() (string, bool) {
+func (h *Handler) checkEntities() (key string, result debugstatus.CheckResult) {
+	result.Name = "Entities in charm store"
 	iter := h.store.DB.Entities().Find(nil).Select(bson.D{{"_id", 1}}).Iter()
 	charms, bundles, promulgated := 0, 0, 0
 	var entity mongodoc.Entity
@@ -125,43 +70,36 @@ func (h *Handler) checkEntities() (string, bool) {
 		}
 	}
 	if err := iter.Close(); err != nil {
-		return "Cannot count entities: " + err.Error(), false
+		result.Value = "Cannot count entities: " + err.Error()
+		return "entities", result
 	}
-	return fmt.Sprintf("%d charms; %d bundles; %d promulgated", charms, bundles, promulgated), true
+	result.Value = fmt.Sprintf("%d charms; %d bundles; %d promulgated", charms, bundles, promulgated)
+	result.Passed = true
+	return "entities", result
 }
 
-func (h *Handler) checkIngestion() (string, bool) {
-	start, end, err := h.findTimesInLogs(
-		mongodoc.IngestionType,
-		params.IngestionStart,
-		params.IngestionComplete)
-	if err != nil {
-		return err.Error(), false
+func (h *Handler) checkLogs(resultKey, resultName string, logType mongodoc.LogType, startPrefix, endPrefix string) debugstatus.CheckerFunc {
+	return func() (key string, result debugstatus.CheckResult) {
+		result.Name = resultName
+		start, end, err := h.findTimesInLogs(logType, startPrefix, endPrefix)
+		if err != nil {
+			result.Value = err.Error()
+			return resultKey, result
+		}
+		result.Value = fmt.Sprintf("started: %s, completed: %s", start.Format(time.RFC3339), end.Format(time.RFC3339))
+		result.Passed = !(start.IsZero() || end.IsZero())
+		return resultKey, result
 	}
-
-	return fmt.Sprintf("started: %s, completed: %s", start.Format(time.RFC3339), end.Format(time.RFC3339)), !(start.IsZero() || end.IsZero())
-}
-
-func (h *Handler) checkLegacyStatistics() (string, bool) {
-	start, end, err := h.findTimesInLogs(
-		mongodoc.LegacyStatisticsType,
-		params.LegacyStatisticsImportStart,
-		params.LegacyStatisticsImportComplete)
-	if err != nil {
-		return err.Error(), false
-	}
-
-	return fmt.Sprintf("started: %s, completed: %s", start.Format(time.RFC3339), end.Format(time.RFC3339)), !(start.IsZero() || end.IsZero())
 }
 
 // findTimesInLogs goes through logs in reverse order finding when the start and
 // end messages were last added.
-func (h *Handler) findTimesInLogs(typ mongodoc.LogType, startPrefix, endPrefix string) (start, end time.Time, err error) {
+func (h *Handler) findTimesInLogs(logType mongodoc.LogType, startPrefix, endPrefix string) (start, end time.Time, err error) {
 	var log mongodoc.Log
 	iter := h.store.DB.Logs().
 		Find(bson.D{
 		{"level", mongodoc.InfoLevel},
-		{"type", typ},
+		{"type", logType},
 	}).Sort("-time", "-id").Iter()
 	for iter.Next(&log) {
 		var msg string
@@ -182,13 +120,5 @@ func (h *Handler) findTimesInLogs(typ mongodoc.LogType, startPrefix, endPrefix s
 	if err = iter.Close(); err != nil {
 		return time.Time{}, time.Time{}, errgo.Notef(err, "Cannot query logs")
 	}
-
 	return
-}
-
-// startTime holds the time that the code started running.
-var startTime = time.Now()
-
-func (h *Handler) checkServerStarted() (string, bool) {
-	return startTime.String(), true
 }

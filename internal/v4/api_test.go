@@ -18,6 +18,7 @@ import (
 	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
+	"github.com/juju/utils/debugstatus"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
@@ -1529,7 +1530,7 @@ func (s *APISuite) TestStatus(c *gc.C) {
 		}
 	}
 	now := time.Now()
-	s.PatchValue(v4.StartTime, now)
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := now.Add(-2 * time.Hour)
 	s.addLog(c, &mongodoc.Log{
 		Data:  []byte(`"ingestion started"`),
@@ -1617,7 +1618,7 @@ func (s *APISuite) TestStatusWithElasticSearch(c *gc.C) {
 func (s *APISuite) TestStatusWithoutCorrectCollections(c *gc.C) {
 	s.store.DB.Entities().DropCollection()
 	now := time.Now()
-	s.PatchValue(v4.StartTime, now)
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := now.Add(-2 * time.Hour)
 	s.addLog(c, &mongodoc.Log{
 		Data:  []byte(`"ingestion started"`),
@@ -1706,7 +1707,7 @@ func (s *APISuite) TestStatusWithoutIngestion(c *gc.C) {
 		}
 	}
 	now := time.Now()
-	s.PatchValue(v4.StartTime, now)
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := time.Time{}
 	end := time.Time{}
 	statisticsStart := now.Add(-1*time.Hour - 30*time.Minute)
@@ -1783,7 +1784,7 @@ func (s *APISuite) TestStatusIngestionStarted(c *gc.C) {
 		}
 	}
 	now := time.Now()
-	s.PatchValue(v4.StartTime, now)
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := now.Add(-1 * time.Hour)
 	s.addLog(c, &mongodoc.Log{
 		Data:  []byte(`"ingestion started"`),
@@ -1866,7 +1867,7 @@ func (s *APISuite) TestStatusWithoutLegacyStatistics(c *gc.C) {
 		}
 	}
 	now := time.Now()
-	s.PatchValue(v4.StartTime, now)
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := now.Add(-2 * time.Hour)
 	s.addLog(c, &mongodoc.Log{
 		Data:  []byte(`"ingestion started"`),
@@ -1943,7 +1944,7 @@ func (s *APISuite) TestStatusLegacyStatisticsStarted(c *gc.C) {
 		}
 	}
 	now := time.Now()
-	s.PatchValue(v4.StartTime, now)
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := now.Add(-2 * time.Hour)
 	s.addLog(c, &mongodoc.Log{
 		Data:  []byte(`"ingestion started"`),
@@ -2026,7 +2027,7 @@ func (s *APISuite) TestStatusLegacyStatisticsMultipleLogs(c *gc.C) {
 		}
 	}
 	now := time.Now()
-	s.PatchValue(v4.StartTime, now)
+	s.PatchValue(&debugstatus.StartTime, now)
 	start := now.Add(-2 * time.Hour)
 	s.addLog(c, &mongodoc.Log{
 		Data:  []byte(`"ingestion started"`),
