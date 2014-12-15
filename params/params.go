@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/juju/utils/debugstatus"
 	"gopkg.in/juju/charm.v4"
 )
 
@@ -99,14 +100,12 @@ type Published struct {
 	PublishTime time.Time
 }
 
-// DebugStatus holds the result of the status checks
-type DebugStatus struct {
-	Name   string
-	Value  string
-	Passed bool
-}
+// DebugStatus holds the result of the status checks.
+// This is defined for backward compatibility: new clients should use
+// debugstatus.CheckResult directly.
+type DebugStatus debugstatus.CheckResult
 
-// SearchResult holds a single result from a search operation
+// SearchResult holds a single result from a search operation.
 type SearchResult struct {
 	Id *charm.Reference
 	// Meta holds at most one entry for each meta value

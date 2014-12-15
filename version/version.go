@@ -12,5 +12,5 @@ var VersionInfo = unknownVersion
 
 var unknownVersion = Version{
 	GitCommit: "unknown git commit",
-	Version: "unknown version",
+	Version:   "unknown version",
 }
