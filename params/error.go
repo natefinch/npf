@@ -29,6 +29,11 @@ const (
 	ErrMultipleErrors   ErrorCode = "multiple errors"
 	ErrUnauthorized     ErrorCode = "unauthorized"
 	ErrMethodNotAllowed ErrorCode = "method not allowed"
+
+	// Note that these error codes sit in the same name space
+	// as the bakery error codes defined in gopkg.in/macaroon-bakery.v0/httpbakery .
+	// In particular, ErrBadRequest is a shared error code
+	// which needs to share the message too.
 )
 
 // Error represents an error - it is returned for any response

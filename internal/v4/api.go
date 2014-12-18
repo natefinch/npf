@@ -16,6 +16,7 @@ import (
 	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
+	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -29,16 +30,19 @@ var logger = loggo.GetLogger("charmstore.internal.v4")
 
 type Handler struct {
 	*router.Router
-	store  *charmstore.Store
-	config charmstore.ServerParams
+	store   *charmstore.Store
+	config  charmstore.ServerParams
+	locator *bakery.PublicKeyRing
 }
 
 // New returns a new instance of the v4 API handler.
 func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 	h := &Handler{
-		store:  store,
-		config: config,
+		store:   store,
+		config:  config,
+		locator: bakery.NewPublicKeyRing(),
 	}
+
 	h.Router = router.New(&router.Handlers{
 		Global: map[string]http.Handler{
 			"changes/published":  router.HandleJSON(h.serveChangesPublished),

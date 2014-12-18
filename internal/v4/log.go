@@ -23,7 +23,7 @@ import (
 // POST /log
 // http://tinyurl.com/o27hqxe
 func (h *Handler) serveLog(w http.ResponseWriter, req *http.Request) error {
-	if err := h.authenticate(w, req); err != nil {
+	if err := h.authenticate(w, req, nil, ""); err != nil {
 		return err
 	}
 	switch req.Method {

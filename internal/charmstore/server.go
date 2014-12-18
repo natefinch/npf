@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"gopkg.in/errgo.v1"
+	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/internal/router"
@@ -21,8 +22,18 @@ type NewAPIHandlerFunc func(*Store, ServerParams) http.Handler
 
 // ServerParams holds configuration for a new internal API server.
 type ServerParams struct {
+	// AuthUsername and AuthPassword hold the credentials
+	// used for HTTP basic authentication.
 	AuthUsername string
 	AuthPassword string
+
+	// AuthLocation holds the location of the third party authorization
+	// service to use when creating third party caveats.
+	AuthLocation string
+
+	// PublicKeyLocator holds a public key store.
+	// It may be nil.
+	PublicKeyLocator bakery.PublicKeyLocator
 }
 
 // NewServer returns a handler that serves the given charm store API
@@ -35,7 +46,16 @@ func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions 
 	if len(versions) == 0 {
 		return nil, errgo.Newf("charm store server must serve at least one version of the API")
 	}
-	store, err := NewStore(db, si)
+	bparams := bakery.NewServiceParams{
+		// TODO The location is attached to any macaroons that we
+		// mint. Currently we don't know the location of the current
+		// service. We potentially provide a way to configure this,
+		// but it probably doesn't matter, as nothing currently uses
+		// the macaroon location for anything.
+		Location: "charmstore",
+		Locator:  config.PublicKeyLocator,
+	}
+	store, err := NewStore(db, si, &bparams)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot make store")
 	}

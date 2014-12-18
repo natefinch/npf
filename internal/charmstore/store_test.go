@@ -41,7 +41,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
 	if addToES {
 		es = s.ES
 	}
-	store, err := NewStore(s.Session.DB("juju_test"), &SearchIndex{s.ES, s.TestIndex})
+	store, err := NewStore(s.Session.DB("juju_test"), &SearchIndex{s.ES, s.TestIndex}, nil)
 	c.Assert(err, gc.IsNil)
 	url := charm.MustParseReference("cs:precise/wordpress-23")
 
@@ -120,7 +120,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 	if addToES {
 		es = s.ES
 	}
-	store, err := NewStore(s.Session.DB("juju_test"), &SearchIndex{s.ES, s.TestIndex})
+	store, err := NewStore(s.Session.DB("juju_test"), &SearchIndex{s.ES, s.TestIndex}, nil)
 	c.Assert(err, gc.IsNil)
 	url := charm.MustParseReference("cs:bundle/wordpress-simple-42")
 
@@ -265,7 +265,7 @@ func (s *StoreSuite) testURLFinding(c *gc.C, check func(store *Store, expand *ch
 	wordpress := storetesting.Charms.CharmDir("wordpress")
 	for i, test := range urlFindingTests {
 		c.Logf("test %d: %q from %q", i, test.expand, test.inStore)
-		store, err := NewStore(s.Session.DB("foo"), nil)
+		store, err := NewStore(s.Session.DB("foo"), nil, nil)
 		c.Assert(err, gc.IsNil)
 		_, err = store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
@@ -340,7 +340,7 @@ func (s *StoreSuite) TestAddCharmWithFailedESInsert(c *gc.C) {
 		Addr: "0.1.2.3:0123",
 	}
 
-	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	store, err := NewStore(s.Session.DB("juju_test"), nil, nil)
 	es := &SearchIndex{esdb, "no-index"}
 	store.ES = es
 	c.Assert(err, gc.IsNil)
@@ -420,7 +420,7 @@ var bundleUnitCountTests = []struct {
 }}
 
 func (s *StoreSuite) TestBundleUnitCount(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"), nil)
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	entities := store.DB.Entities()
 	for i, test := range bundleUnitCountTests {
@@ -748,7 +748,7 @@ var bundleMachineCountTests = []struct {
 }}
 
 func (s *StoreSuite) TestBundleMachineCount(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"), nil)
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	entities := store.DB.Entities()
 	for i, test := range bundleMachineCountTests {
@@ -808,7 +808,7 @@ func (s *StoreSuite) TestAddCharmArchive(c *gc.C) {
 }
 
 func (s *StoreSuite) TestAddUserOwnedCharm(c *gc.C) {
-	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	store, err := NewStore(s.Session.DB("juju_test"), nil, nil)
 	c.Assert(err, gc.IsNil)
 
 	// Add the charm to the store.
@@ -828,7 +828,7 @@ func (s *StoreSuite) TestAddUserOwnedCharm(c *gc.C) {
 }
 
 func (s *StoreSuite) TestAddUserOwnedBundle(c *gc.C) {
-	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	store, err := NewStore(s.Session.DB("juju_test"), nil, nil)
 	c.Assert(err, gc.IsNil)
 
 	// Add the charm to the store.
@@ -861,7 +861,7 @@ func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
 }
 
 func (s *StoreSuite) TestAddCharmWithBundleSeries(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"), nil)
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	err = store.AddCharm(ch, AddParams{
@@ -871,7 +871,7 @@ func (s *StoreSuite) TestAddCharmWithBundleSeries(c *gc.C) {
 }
 
 func (s *StoreSuite) TestAddBundleWithCharmSeries(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"), nil)
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	b := storetesting.Charms.BundleDir("wordpress-simple")
 	err = store.AddBundle(b, AddParams{
@@ -881,7 +881,7 @@ func (s *StoreSuite) TestAddBundleWithCharmSeries(c *gc.C) {
 }
 
 func (s *StoreSuite) TestAddBundleDuplicatingCharm(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"), nil)
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	ch := storetesting.Charms.CharmDir("wordpress")
 	err = store.AddCharmWithArchive(charm.MustParseReference("precise/wordpress-2"), ch)
@@ -893,7 +893,7 @@ func (s *StoreSuite) TestAddBundleDuplicatingCharm(c *gc.C) {
 }
 
 func (s *StoreSuite) TestAddCharmDuplicatingBundle(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"), nil)
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 
 	b := storetesting.Charms.BundleDir("wordpress-simple")
@@ -908,7 +908,7 @@ func (s *StoreSuite) TestAddCharmDuplicatingBundle(c *gc.C) {
 func (s *StoreSuite) TestOpenBlob(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 
-	store, err := NewStore(s.Session.DB("foo"), nil)
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	url := charm.MustParseReference("cs:precise/wordpress-23")
 
@@ -935,7 +935,7 @@ func (s *StoreSuite) TestOpenBlob(c *gc.C) {
 func (s *StoreSuite) TestBlobNameAndHash(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 
-	store, err := NewStore(s.Session.DB("foo"), nil)
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	url := charm.MustParseReference("cs:precise/wordpress-23")
 
@@ -959,7 +959,7 @@ func (s *StoreSuite) TestBlobNameAndHash(c *gc.C) {
 }
 
 func (s *StoreSuite) TestAddLog(c *gc.C) {
-	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	store, err := NewStore(s.Session.DB("juju_test"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	urls := []*charm.Reference{
 		charm.MustParseReference("cs:django"),
@@ -1003,7 +1003,7 @@ func (s *StoreSuite) TestAddLog(c *gc.C) {
 }
 
 func (s *StoreSuite) TestAddLogDataError(c *gc.C) {
-	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	store, err := NewStore(s.Session.DB("juju_test"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	data := json.RawMessage([]byte("!"))
 
@@ -1013,7 +1013,7 @@ func (s *StoreSuite) TestAddLogDataError(c *gc.C) {
 }
 
 func (s *StoreSuite) TestAddLogBaseURLs(c *gc.C) {
-	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	store, err := NewStore(s.Session.DB("juju_test"), nil, nil)
 	c.Assert(err, gc.IsNil)
 
 	// Add the log to the store with associated URLs.
@@ -1039,7 +1039,7 @@ func (s *StoreSuite) TestAddLogBaseURLs(c *gc.C) {
 }
 
 func (s *StoreSuite) TestAddLogDuplicateURLs(c *gc.C) {
-	store, err := NewStore(s.Session.DB("juju_test"), nil)
+	store, err := NewStore(s.Session.DB("juju_test"), nil, nil)
 	c.Assert(err, gc.IsNil)
 
 	// Add the log to the store with associated URLs.
@@ -1065,7 +1065,7 @@ func (s *StoreSuite) TestAddLogDuplicateURLs(c *gc.C) {
 }
 
 func (s *StoreSuite) TestCollections(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"), nil)
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	colls := store.DB.Collections()
 	names, err := store.DB.CollectionNames()
@@ -1073,6 +1073,7 @@ func (s *StoreSuite) TestCollections(c *gc.C) {
 	// Some collections don't have indexes so they are created only when used.
 	createdOnUse := map[string]bool{
 		"migrations": true,
+		"macaroons":  true,
 	}
 	// Check that all collections mentioned by Collections are actually created.
 	for _, coll := range colls {
@@ -1105,7 +1106,7 @@ func (s *StoreSuite) TestCollections(c *gc.C) {
 }
 
 func (s *StoreSuite) TestOpenCachedBlobFileWithInvalidEntity(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"), nil)
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
@@ -1121,7 +1122,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithInvalidEntity(c *gc.C) {
 }
 
 func (s *StoreSuite) TestOpenCachedBlobFileWithFoundContent(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"), nil)
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
@@ -1166,7 +1167,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithFoundContent(c *gc.C) {
 }
 
 func (s *StoreSuite) TestOpenCachedBlobFileWithNotFoundContent(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"), nil)
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
@@ -1262,7 +1263,7 @@ var fakeBlobSize, fakeBlobHash = func() (int64, string) {
 }()
 
 func (s *StoreSuite) TestSESPutDoesNotErrorWithNoESConfigured(c *gc.C) {
-	store, err := NewStore(s.Session.DB("mongodoctoelasticsearch"), nil)
+	store, err := NewStore(s.Session.DB("mongodoctoelasticsearch"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	var entity mongodoc.Entity
 	err = store.UpdateSearch(entity.URL)

@@ -356,19 +356,6 @@ func (s *logSuite) TestGetLogsErrorInvalidLog(c *gc.C) {
 	})
 }
 
-func (s *logSuite) TestGetLogsUnauthorizedError(c *gc.C) {
-	// Add a non-parsable log message to the db.
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:      s.srv,
-		URL:          storeURL("log"),
-		ExpectStatus: http.StatusUnauthorized,
-		ExpectBody: params.Error{
-			Message: "authentication failed: invalid or missing HTTP auth header",
-			Code:    params.ErrUnauthorized,
-		},
-	})
-}
-
 func (s *logSuite) TestPostLogs(c *gc.C) {
 	// Prepare the request body.
 	body := makeByteLogs(rawMessage("info data"), params.InfoLevel, params.IngestionType, []*charm.Reference{
@@ -505,6 +492,14 @@ func (s *logSuite) TestPostLogsErrors(c *gc.C) {
 	}
 }
 
+func (s *logSuite) TestGetLogsUnauthorizedError(c *gc.C) {
+	AssertEndpointAuth(c, s.Session, httptesting.JSONCallParams{
+		URL:          storeURL("log"),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   []params.LogResponse{},
+	})
+}
+
 func (s *logSuite) TestPostLogsUnauthorizedError(c *gc.C) {
 	// Add a non-parsable log message to the db.
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
@@ -516,7 +511,7 @@ func (s *logSuite) TestPostLogsUnauthorizedError(c *gc.C) {
 		},
 		ExpectStatus: http.StatusUnauthorized,
 		ExpectBody: params.Error{
-			Message: "authentication failed: invalid or missing HTTP auth header",
+			Message: "authentication failed: missing HTTP auth header",
 			Code:    params.ErrUnauthorized,
 		},
 	})

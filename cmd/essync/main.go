@@ -70,7 +70,7 @@ func populate(confPath string) error {
 	}
 	defer session.Close()
 	db := session.DB("juju")
-	s, err := charmstore.NewStore(db, si)
+	s, err := charmstore.NewStore(db, si, nil)
 	if err != nil {
 		return errgo.Notef(err, "cannot create store")
 	}

@@ -40,7 +40,7 @@ func (s *StoreSearchSuite) SetUpTest(c *gc.C) {
 
 	s.index = SearchIndex{s.ES, s.TestIndex}
 	s.ES.RefreshIndex(".versions")
-	store, err := NewStore(s.Session.DB("foo"), &s.index)
+	store, err := NewStore(s.Session.DB("foo"), &s.index, nil)
 	s.addCharmsToStore(c, store)
 	c.Assert(err, gc.IsNil)
 	s.store = store
