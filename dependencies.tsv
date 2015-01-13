@@ -5,7 +5,7 @@ github.com/juju/errors	git	7a748941731116a391d328fd2ba9744f57efb51b	2014-12-11T1
 github.com/juju/gojsonpointer	git	0154bf5a168b672d8c97d8dd83a54cb60cd088e8	2014-07-18T03:59:30Z
 github.com/juju/gojsonreference	git	0673d58f64bacac2db34c7d1e87a599d58923981	2014-07-18T03:57:39Z
 github.com/juju/gojsonschema	git	33fa79718fa9b24e2a04122f91a75496c0f77098	2014-07-17T16:12:25Z
-github.com/juju/jujusvg	git	805fd9aa842cc6fdf283edd3ef55ce581708c1e7	2014-11-13T19:06:04Z
+github.com/juju/jujusvg	git	29a343c3d4bcd44e3a83ab4baab1893c9e1c7c93	2015-01-13T09:11:58Z
 github.com/juju/loggo	git	dc8e19f7c70a62a59c69c40f85b8df09ff20742c	2014-11-17T04:05:26Z
 github.com/juju/names	git	4bd61d19a7fce663e2821fe05ddf69f774d444da	2014-11-21T15:38:57Z
 github.com/juju/schema	git	27a52be50766490a6fd3531865095fda6c0eeb6d	2014-07-23T04:23:18Z
