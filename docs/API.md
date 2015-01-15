@@ -1,5 +1,7 @@
 # Charm store API
 
+The current live api lives at https://api.jujucharms.com/charmstore/v4
+
 ## Intro
 The charm store stores and indexes charms and bundles. A charm or bundle is referred to by a charm store id which can take one of the following two forms:
 
