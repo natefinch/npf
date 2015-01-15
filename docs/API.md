@@ -1,4 +1,4 @@
-# Charm store API proposal
+# Charm store API
 
 ## Intro
 The charm store stores and indexes charms and bundles. A charm or bundle is referred to by a charm store id which can take one of the following two forms:
