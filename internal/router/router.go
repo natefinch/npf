@@ -70,7 +70,7 @@ type BulkIncludeHandler interface {
 	// and flags holds all the URL query values.
 	//
 	// TODO(rog) document indexed errors.
-	HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error)
+	HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values, req *http.Request) ([]interface{}, error)
 
 	// HandlePut invokes a PUT request on all the given handlers on
 	// the given charm or bundle id. If there is an error, the
@@ -82,7 +82,7 @@ type BulkIncludeHandler interface {
 	// for the handler in the corresponding position
 	// in hs after the prefix in Handlers.Meta has been stripped,
 	// and flags holds all the url query values.
-	HandlePut(hs []BulkIncludeHandler, id *charm.Reference, paths []string, values []*json.RawMessage) []error
+	HandlePut(hs []BulkIncludeHandler, id *charm.Reference, paths []string, values []*json.RawMessage, req *http.Request) []error
 }
 
 // IdHandler handles a charm store request rooted at the given id.
@@ -131,7 +131,7 @@ type Router struct {
 	handlers   *Handlers
 	handler    http.Handler
 	resolveURL func(ref *charm.Reference) error
-	exists     func(id *charm.Reference) (bool, error)
+	exists     func(id *charm.Reference, req *http.Request) (bool, error)
 }
 
 // New returns a charm store router that will route requests to
@@ -149,7 +149,7 @@ type Router struct {
 func New(
 	handlers *Handlers,
 	resolveURL func(url *charm.Reference) error,
-	exists func(url *charm.Reference) (bool, error),
+	exists func(url *charm.Reference, req *http.Request) (bool, error),
 ) *Router {
 	r := &Router{
 		handlers:   handlers,
@@ -300,7 +300,7 @@ func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface
 		// a "not found" error when the id doesn't exist, so we need
 		// to check explicitly.
 		if len(includes) == 0 {
-			exists, err := r.exists(id)
+			exists, err := r.exists(id, req)
 			if err != nil {
 				return nil, errgo.Notef(err, "cannot determine existence of %q", id)
 			}
@@ -309,7 +309,7 @@ func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface
 			}
 			return params.MetaAnyResponse{Id: id}, nil
 		}
-		meta, err := r.GetMetadata(id, includes)
+		meta, err := r.GetMetadata(id, includes, req)
 		if err != nil {
 			// Note: preserve error cause from handlers.
 			return nil, errgo.Mask(err, errgo.Any)
@@ -320,7 +320,7 @@ func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface
 		}, nil
 	}
 	if handler := r.handlers.Meta[key]; handler != nil {
-		results, err := handler.HandleGet([]BulkIncludeHandler{handler}, id, []string{path}, req.Form)
+		results, err := handler.HandleGet([]BulkIncludeHandler{handler}, id, []string{path}, req.Form, req)
 		if err != nil {
 			// Note: preserve error cause from handlers.
 			return nil, errgo.Mask(err, errgo.Any)
@@ -375,7 +375,7 @@ func (r *Router) serveMetaPutBody(id *charm.Reference, req *http.Request, body *
 		if err := json.Unmarshal(*body, &bodyMeta); err != nil {
 			return errgo.Notef(err, "cannot unmarshal body")
 		}
-		if err := r.PutMetadata(id, bodyMeta.Meta); err != nil {
+		if err := r.PutMetadata(id, bodyMeta.Meta, req); err != nil {
 			return errgo.Mask(err, errgo.Any)
 		}
 		return nil
@@ -386,6 +386,7 @@ func (r *Router) serveMetaPutBody(id *charm.Reference, req *http.Request, body *
 			id,
 			[]string{path},
 			[]*json.RawMessage{body},
+			req,
 		)
 		if len(errs) > 0 && errs[0] != nil {
 			// Note: preserve error cause from handlers.
@@ -540,7 +541,7 @@ const maxMetadataConcurrency = 5
 
 // GetMetadata retrieves metadata for the given charm or bundle id,
 // including information as specified by the includes slice.
-func (r *Router) GetMetadata(id *charm.Reference, includes []string) (map[string]interface{}, error) {
+func (r *Router) GetMetadata(id *charm.Reference, includes []string, req *http.Request) (map[string]interface{}, error) {
 	groups := make(map[interface{}][]BulkIncludeHandler)
 	includesByGroup := make(map[interface{}][]string)
 	for _, include := range includes {
@@ -581,7 +582,7 @@ func (r *Router) GetMetadata(id *charm.Reference, includes []string) (map[string
 			for i, include := range groupIncludes {
 				_, paths[i] = handlerKey(include)
 			}
-			groupResults, err := g[0].HandleGet(g, id, paths, nil)
+			groupResults, err := g[0].HandleGet(g, id, paths, nil, req)
 			if err != nil {
 				// TODO(rog) if it's a BulkError, attach
 				// the original include path to error (the BulkError
@@ -612,7 +613,7 @@ func (r *Router) GetMetadata(id *charm.Reference, includes []string) (map[string
 // PutMetadata puts metadata for the given id. Each key in data holds
 // the name of a metadata endpoint; its associated value
 // holds the value to be written.
-func (r *Router) PutMetadata(id *charm.Reference, data map[string]*json.RawMessage) error {
+func (r *Router) PutMetadata(id *charm.Reference, data map[string]*json.RawMessage, req *http.Request) error {
 	groups := make(map[interface{}][]BulkIncludeHandler)
 	valuesByGroup := make(map[interface{}][]*json.RawMessage)
 	pathsByGroup := make(map[interface{}][]string)
@@ -651,7 +652,7 @@ func (r *Router) PutMetadata(id *charm.Reference, data map[string]*json.RawMessa
 			_, strippedPaths[i] = handlerKey(path)
 		}
 
-		errs := g[0].HandlePut(g, id, strippedPaths, valuesByGroup[key])
+		errs := g[0].HandlePut(g, id, strippedPaths, valuesByGroup[key], req)
 		if len(errs) > 0 {
 			if multiErr == nil {
 				multiErr = make(multiError)

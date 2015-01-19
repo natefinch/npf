@@ -40,7 +40,7 @@ var routerGetTests = []struct {
 	expectBody       interface{}
 	expectQueryCount int32
 	resolveURL       func(*charm.Reference) error
-	exists           func(*charm.Reference) (bool, error)
+	exists           func(*charm.Reference, *http.Request) (bool, error)
 }{{
 	about: "global handler",
 	handlers: Handlers{
@@ -442,7 +442,7 @@ var routerGetTests = []struct {
 }, {
 	about:  "meta/any, no includes, id exists",
 	urlStr: "/precise/wordpress-42/meta/any",
-	exists: func(id *charm.Reference) (bool, error) {
+	exists: func(id *charm.Reference, req *http.Request) (bool, error) {
 		return true, nil
 	},
 	expectStatus: http.StatusOK,
@@ -452,7 +452,7 @@ var routerGetTests = []struct {
 }, {
 	about:  "meta/any, no includes, id does not exist",
 	urlStr: "/precise/wordpress/meta/any",
-	exists: func(id *charm.Reference) (bool, error) {
+	exists: func(id *charm.Reference, req *http.Request) (bool, error) {
 		return false, nil
 	},
 	expectStatus: http.StatusNotFound,
@@ -748,7 +748,7 @@ var routerGetTests = []struct {
 	urlStr: "/meta/foo?id=bundle/something-24&id=precise/wordpress-23",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": SingleIncludeHandler(func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+			"foo": SingleIncludeHandler(func(id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 				if id.Revision == 23 {
 					return nil, errgo.WithCausef(nil, params.ErrNotFound, "")
 				}
@@ -825,6 +825,63 @@ func (s *RouterSuite) TestCORSHeaders(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Header().Get("Access-Control-Allow-Origin"), gc.Equals, "*")
 	c.Assert(rec.Header().Get("Access-Control-Allow-Headers"), gc.Equals, "X-Requested-With")
+}
+
+func (s *RouterSuite) TestHTTPRequestPassedThroughToMeta(c *gc.C) {
+	testReq, err := http.NewRequest("GET", "/wordpress/meta/foo", nil)
+	c.Assert(err, gc.IsNil)
+	doneQuery := false
+	query := func(id *charm.Reference, selector map[string]int, req *http.Request) (interface{}, error) {
+		if req != testReq {
+			return nil, fmt.Errorf("unexpected request found in Query")
+		}
+		doneQuery = true
+		return 0, nil
+	}
+	doneGet := false
+	handleGet := func(doc interface{}, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+		if req != testReq {
+			return nil, fmt.Errorf("unexpected request found in HandleGet")
+		}
+		doneGet = true
+		return 0, nil
+	}
+	donePut := false
+	handlePut := func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
+		if req != testReq {
+			return fmt.Errorf("unexpected request found in HandlePut")
+		}
+		donePut = true
+		return nil
+	}
+	update := func(id *charm.Reference, fields map[string]interface{}) error {
+		return nil
+	}
+	h := New(&Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": FieldIncludeHandler(FieldIncludeHandlerParams{
+				Key:       0,
+				Query:     query,
+				Fields:    []string{"foo"},
+				HandleGet: handleGet,
+				HandlePut: handlePut,
+				Update:    update,
+			}),
+		},
+	}, noResolveURL, alwaysExists)
+	resp := httptest.NewRecorder()
+	h.ServeHTTP(resp, testReq)
+	c.Assert(resp.Code, gc.Equals, http.StatusOK, gc.Commentf("response body: %s", resp.Body))
+	c.Assert(doneGet, jc.IsTrue)
+	c.Assert(doneQuery, jc.IsTrue)
+
+	testReq, err = http.NewRequest("PUT", "/wordpress/meta/foo", strings.NewReader(`"hello"`))
+	testReq.Header.Set("Content-Type", "application/json")
+	c.Assert(err, gc.IsNil)
+	resp = httptest.NewRecorder()
+	h.ServeHTTP(resp, testReq)
+	c.Assert(resp.Code, gc.Equals, http.StatusOK, gc.Commentf("response body: %s", resp.Body))
+	c.Assert(donePut, jc.IsTrue)
 }
 
 func (s *RouterSuite) TestOptionsHTTPMethod(c *gc.C) {
@@ -1121,7 +1178,7 @@ var routerPutTests = []struct {
 		Meta: map[string]BulkIncludeHandler{
 			"foo": FieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
-				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return errgo.WithCausef(nil, params.ErrNotFound, "message")
 				},
 			}),
@@ -1140,21 +1197,21 @@ var routerPutTests = []struct {
 		Meta: map[string]BulkIncludeHandler{
 			"foo": FieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
-				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return errgo.WithCausef(nil, params.ErrNotFound, "foo error")
 				},
 				Update: nopUpdate,
 			}),
 			"bar": FieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
-				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return errgo.New("bar error")
 				},
 				Update: nopUpdate,
 			}),
 			"baz": FieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
-				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return nil
 				},
 				Update: nopUpdate,
@@ -1189,7 +1246,7 @@ var routerPutTests = []struct {
 		Meta: map[string]BulkIncludeHandler{
 			"foo/": FieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
-				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					if path == "/bad" {
 						return fmt.Errorf("foo/bad error")
 					}
@@ -1201,7 +1258,7 @@ var routerPutTests = []struct {
 			}),
 			"bar": FieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 1,
-				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return fmt.Errorf("bar error")
 				},
 			}),
@@ -1247,14 +1304,14 @@ var routerPutTests = []struct {
 		Meta: map[string]BulkIncludeHandler{
 			"foo": FieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
-				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return nil
 				},
 				Update: nopUpdate,
 			}),
 			"bar": FieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
-				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+				HandlePut: func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return errgo.WithCausef(nil, params.ErrNotFound, "bar error")
 				},
 				Update: nopUpdate,
@@ -1502,7 +1559,7 @@ func (s *RouterSuite) TestMethodsThatPassThroughUnresolvedId(c *gc.C) {
 	}
 }
 
-func alwaysExists(*charm.Reference) (bool, error) {
+func alwaysExists(id *charm.Reference, req *http.Request) (bool, error) {
 	return true, nil
 }
 
@@ -1556,7 +1613,7 @@ func (s *RouterSuite) TestGetMetadata(c *gc.C) {
 			},
 		}, noResolveURL, alwaysExists)
 		id := charm.MustParseReference(test.id)
-		result, err := router.GetMetadata(id, test.includes)
+		result, err := router.GetMetadata(id, test.includes, nil)
 		if test.expectError != "" {
 			c.Assert(err, gc.ErrorMatches, test.expectError)
 			c.Assert(result, gc.IsNil)
@@ -1897,7 +1954,7 @@ type metaHandlerTestResp struct {
 }
 
 var testMetaGetHandler = SingleIncludeHandler(
-	func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	func(id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 		if len(flags) == 0 {
 			flags = nil
 		}
@@ -1916,7 +1973,7 @@ func (testMetaHandler) Key() interface{} {
 	return testMetaHandlerKey{}
 }
 
-func (testMetaHandler) HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error) {
+func (testMetaHandler) HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values, req *http.Request) ([]interface{}, error) {
 	results := make([]interface{}, len(hs))
 	for i, h := range hs {
 		_ = h.(testMetaHandler)
@@ -1939,7 +1996,7 @@ type metaHandlerTestPutParams struct {
 	Values      []interface{}
 }
 
-func (testMetaHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Reference, paths []string, rawValues []*json.RawMessage) []error {
+func (testMetaHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Reference, paths []string, rawValues []*json.RawMessage, req *http.Request) []error {
 	// Handlers are provided in arbitrary order,
 	// so we order them (and their associated paths
 	// and values) to enable easier testing.
@@ -1978,7 +2035,7 @@ func (testMetaHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Reference, p
 // value.
 func constMetaHandler(val interface{}) BulkIncludeHandler {
 	return SingleIncludeHandler(
-		func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+		func(id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 			return val, nil
 		},
 	)
@@ -1986,7 +2043,7 @@ func constMetaHandler(val interface{}) BulkIncludeHandler {
 
 func errorMetaHandler(err error) BulkIncludeHandler {
 	return SingleIncludeHandler(
-		func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+		func(id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 			return nil, err
 		},
 	)
@@ -2086,14 +2143,14 @@ func (b byJSON) Len() int {
 // a fieldSelectHandlePutInfo value holding the parameters that were
 // provided.
 func fieldSelectHandler(handlerId string, key interface{}, fields ...string) BulkIncludeHandler {
-	query := func(id *charm.Reference, selector map[string]int) (interface{}, error) {
+	query := func(id *charm.Reference, selector map[string]int, req *http.Request) (interface{}, error) {
 		atomic.AddInt32(&queryCount, 1)
 		return fieldSelectQueryInfo{
 			Id:       id,
 			Selector: selector,
 		}, nil
 	}
-	handleGet := func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	handleGet := func(doc interface{}, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 		if len(flags) == 0 {
 			flags = nil
 		}
@@ -2106,7 +2163,7 @@ func fieldSelectHandler(handlerId string, key interface{}, fields ...string) Bul
 		}, nil
 	}
 
-	handlePut := func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error {
+	handlePut := func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 		var vali interface{}
 		err := json.Unmarshal(*val, &vali)
 		if err != nil {
@@ -2154,7 +2211,7 @@ func fieldSelectHandler(handlerId string, key interface{}, fields ...string) Bul
 // selectiveIdHandler handles metadata by returning the
 // data found in the map for the requested id.
 func selectiveIdHandler(m map[string]interface{}) BulkIncludeHandler {
-	return SingleIncludeHandler(func(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	return SingleIncludeHandler(func(id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 		return m[id.String()], nil
 	})
 }

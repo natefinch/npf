@@ -4,6 +4,7 @@
 package v4
 
 import (
+	"net/http"
 	"net/url"
 
 	"gopkg.in/errgo.v1"
@@ -16,7 +17,7 @@ import (
 
 // GET id/meta/charm-related[?include=meta[&include=meta…]]
 // http://tinyurl.com/q7vdmzl
-func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	if id.Series == "bundle" {
 		return nil, nil
 	}
@@ -63,13 +64,13 @@ func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *charm.Reference,
 	includes := flags["include"]
 	requires, err := h.getRelatedCharmsResponse(entity.CharmProvidedInterfaces, entities, func(e mongodoc.Entity) []string {
 		return e.CharmRequiredInterfaces
-	}, includes)
+	}, includes, req)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the charm requires")
 	}
 	provides, err := h.getRelatedCharmsResponse(entity.CharmRequiredInterfaces, entities, func(e mongodoc.Entity) []string {
 		return e.CharmProvidedInterfaces
-	}, includes)
+	}, includes, req)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the charm provides")
 	}
@@ -98,10 +99,12 @@ func (h *Handler) getRelatedCharmsResponse(
 	ifaces []string,
 	entities []mongodoc.Entity,
 	getInterfaces entityRelatedInterfacesGetter,
-	includes []string) (map[string][]params.MetaAnyResponse, error) {
+	includes []string,
+	req *http.Request,
+) (map[string][]params.MetaAnyResponse, error) {
 	results := make(map[string][]params.MetaAnyResponse, len(ifaces))
 	for _, iface := range ifaces {
-		responses, err := h.getRelatedIfaceResponses(iface, entities, getInterfaces, includes)
+		responses, err := h.getRelatedIfaceResponses(iface, entities, getInterfaces, includes, req)
 		if err != nil {
 			return nil, err
 		}
@@ -116,7 +119,9 @@ func (h *Handler) getRelatedIfaceResponses(
 	iface string,
 	entities []mongodoc.Entity,
 	getInterfaces entityRelatedInterfacesGetter,
-	includes []string) ([]params.MetaAnyResponse, error) {
+	includes []string,
+	req *http.Request,
+) ([]params.MetaAnyResponse, error) {
 	// Build a list of responses including entities which are related
 	// to the given interface.
 	responses := make([]params.MetaAnyResponse, 0, len(entities))
@@ -124,7 +129,7 @@ func (h *Handler) getRelatedIfaceResponses(
 		for _, entityIface := range getInterfaces(entity) {
 			if entityIface == iface {
 				// Retrieve the requested metadata for the entity.
-				meta, err := h.GetMetadata(entity.URL, includes)
+				meta, err := h.GetMetadata(entity.URL, includes, req)
 				if err != nil {
 					return nil, err
 				}
@@ -141,7 +146,7 @@ func (h *Handler) getRelatedIfaceResponses(
 
 // GET id/meta/bundles-containing[?include=meta[&include=meta…]][&any-series=1][&any-revision=1][&all-results=1]
 // http://tinyurl.com/oqc386r
-func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	if id.Series == "bundle" {
 		return nil, nil
 	}
@@ -213,7 +218,7 @@ func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 	response := make([]*params.MetaAnyResponse, 0, len(entities))
 	includes := flags["include"]
 	for _, e := range entities {
-		meta, err := h.GetMetadata(e.URL, includes)
+		meta, err := h.GetMetadata(e.URL, includes, req)
 		if err != nil {
 			return nil, errgo.Notef(err, "cannot retrieve bundle metadata")
 		}
