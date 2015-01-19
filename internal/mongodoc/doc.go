@@ -10,7 +10,12 @@ import (
 )
 
 // Entity holds the in-database representation of charm or bundle's
-// document in the charms collection.
+// document in the charms collection. It holds information
+// on one specific revision and series of the charm or bundle - see
+// also BaseEntity.
+//
+// We ensure that there is always a single BaseEntity for any
+// set of entities which share the same base URL.
 type Entity struct {
 	// URL holds the fully specified URL of the charm or bundle.
 	// e.g. cs:precise/wordpress-34, cs:~user/trusty/foo-2
@@ -93,6 +98,40 @@ type Entity struct {
 	// the need to linearly read the zip file's manifest
 	// every time we access one of these files.
 	Contents map[FileId]ZipFile `json:",omitempty" bson:",omitempty"`
+}
+
+// BaseEntity holds metadata for a charm or bundle
+// independent of any specific uploaded revision or series.
+type BaseEntity struct {
+	// URL holds the reference URL of of charm on bundle
+	// regardless of its revision, series or promulgation status
+	// (this omits the revision and series from URL).
+	// e.g., cs:~user/collection/foo
+	URL *charm.Reference `bson:"_id"`
+
+	// User holds the user part of the entity URL (for instance, "joe").
+	User string
+
+	// Name holds the name of the entity (for instance "wordpress").
+	Name string
+
+	// Public specifies whether the charm or bundle
+	// is available to all users. If this is true, the ACLs will
+	// be ignored when reading a charm.
+	Public bool
+
+	// ACLs holds permission information relevant to
+	// the base entity. The permissions apply to all
+	// revisions.
+	ACLs *ACL `bson:",omitempty"`
+}
+
+// ACL holds lists of users and groups that are
+// allowed to perform specific actions.
+type ACL struct {
+	// Read holds users and groups that are allowed to read the charm
+	// or bundle.
+	Read []string
 }
 
 type FileId string

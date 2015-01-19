@@ -95,6 +95,9 @@ func (s *Store) ensureIndexes() error {
 		s.DB.Entities(),
 		mgo.Index{Key: []string{"uploadtime"}},
 	}, {
+		s.DB.BaseEntities(),
+		mgo.Index{Key: []string{"public"}},
+	}, {
 		s.DB.Logs(),
 		mgo.Index{Key: []string{"urls"}},
 	}}
@@ -230,6 +233,19 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 }
 
 func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
+	// Add the base entity to the database.
+	baseEntity := &mongodoc.BaseEntity{
+		URL:    entity.BaseURL,
+		User:   entity.User,
+		Name:   entity.Name,
+		Public: true,
+	}
+	err = s.DB.BaseEntities().Insert(baseEntity)
+	if err != nil && !mgo.IsDup(err) {
+		return errgo.Mask(err)
+	}
+
+	// Add the entity to the database.
 	err = s.DB.Entities().Insert(entity)
 	if mgo.IsDup(err) {
 		return params.ErrDuplicateUpload
@@ -658,6 +674,11 @@ func (s StoreDatabase) Entities() *mgo.Collection {
 	return s.C("entities")
 }
 
+// BaseEntities returns the mongo collection where base entities are stored.
+func (s StoreDatabase) BaseEntities() *mgo.Collection {
+	return s.C("base_entities")
+}
+
 // Logs returns the Mongo collection where charm store logs are stored.
 func (s StoreDatabase) Logs() *mgo.Collection {
 	return s.C("logs")
@@ -678,6 +699,7 @@ var allCollections = []func(StoreDatabase) *mgo.Collection{
 	StoreDatabase.StatCounters,
 	StoreDatabase.StatTokens,
 	StoreDatabase.Entities,
+	StoreDatabase.BaseEntities,
 	StoreDatabase.Logs,
 	StoreDatabase.Migrations,
 	StoreDatabase.Macaroons,

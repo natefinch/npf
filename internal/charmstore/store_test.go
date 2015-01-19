@@ -108,6 +108,9 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
 	c.Assert(charmArchive.Actions(), jc.DeepEquals, ch.Actions())
 	c.Assert(charmArchive.Revision(), jc.DeepEquals, ch.Revision())
 
+	// Check that the base entity has been properly created.
+	checkBaseEntity(c, store, baseURL(url))
+
 	// Try inserting the charm again - it should fail because the charm is
 	// already there.
 	err = store.AddCharmWithArchive(url, ch)
@@ -185,10 +188,25 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 	c.Assert(bundleArchive.Data(), jc.DeepEquals, bundle.Data())
 	c.Assert(bundleArchive.ReadMe(), jc.DeepEquals, bundle.ReadMe())
 
+	// Check that the base entity has been properly created.
+	checkBaseEntity(c, store, baseURL(url))
+
 	// Try inserting the bundle again - it should fail because the bundle is
 	// already there.
 	err = store.AddBundleWithArchive(url, bundle)
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrDuplicateUpload)
+}
+
+func checkBaseEntity(c *gc.C, store *Store, url *charm.Reference) {
+	var baseEntity mongodoc.BaseEntity
+	err := store.DB.BaseEntities().FindId(url).One(&baseEntity)
+	c.Assert(err, gc.IsNil)
+	c.Assert(baseEntity, jc.DeepEquals, mongodoc.BaseEntity{
+		URL:    url,
+		User:   url.User,
+		Name:   url.Name,
+		Public: true,
+	})
 }
 
 type orderedURLs []*charm.Reference
@@ -352,6 +370,26 @@ func (s *StoreSuite) TestAddCharmWithFailedESInsert(c *gc.C) {
 	// Check that the entity has been correctly removed.
 	_, err = store.FindEntity(url)
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
+}
+
+func (s *StoreSuite) TestAddCharmsWithTheSameBaseEntity(c *gc.C) {
+	store, err := NewStore(s.Session.DB("juju_test"), nil, nil)
+
+	// Add a charm to the database.
+	ch := storetesting.Charms.CharmDir("wordpress")
+	url := charm.MustParseReference("trusty/wordpress-12")
+	err = store.AddCharmWithArchive(url, ch)
+	c.Assert(err, gc.IsNil)
+
+	// Add a second charm to the database, shring the same base URL.
+	err = store.AddCharmWithArchive(charm.MustParseReference("utopic/wordpress-13"), ch)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure a single base entity has been created.
+	num, err := store.DB.BaseEntities().Count()
+	c.Assert(err, gc.IsNil)
+	c.Assert(num, gc.Equals, 1)
+	checkBaseEntity(c, store, baseURL(url))
 }
 
 type entitiesByURL []*mongodoc.Entity
