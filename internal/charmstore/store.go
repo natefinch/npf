@@ -235,9 +235,10 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 	// Add the base entity to the database.
 	baseEntity := &mongodoc.BaseEntity{
-		URL:    entity.BaseURL,
-		User:   entity.User,
-		Name:   entity.Name,
+		URL:  entity.BaseURL,
+		User: entity.User,
+		Name: entity.Name,
+		// TODO frankban: allow specifying non-public charms on initial upload.
 		Public: true,
 	}
 	err = s.DB.BaseEntities().Insert(baseEntity)

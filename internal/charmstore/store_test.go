@@ -109,7 +109,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
 	c.Assert(charmArchive.Revision(), jc.DeepEquals, ch.Revision())
 
 	// Check that the base entity has been properly created.
-	checkBaseEntity(c, store, baseURL(url))
+	assertBaseEntity(c, store, baseURL(url))
 
 	// Try inserting the charm again - it should fail because the charm is
 	// already there.
@@ -189,7 +189,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 	c.Assert(bundleArchive.ReadMe(), jc.DeepEquals, bundle.ReadMe())
 
 	// Check that the base entity has been properly created.
-	checkBaseEntity(c, store, baseURL(url))
+	assertBaseEntity(c, store, baseURL(url))
 
 	// Try inserting the bundle again - it should fail because the bundle is
 	// already there.
@@ -197,7 +197,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrDuplicateUpload)
 }
 
-func checkBaseEntity(c *gc.C, store *Store, url *charm.Reference) {
+func assertBaseEntity(c *gc.C, store *Store, url *charm.Reference) {
 	var baseEntity mongodoc.BaseEntity
 	err := store.DB.BaseEntities().FindId(url).One(&baseEntity)
 	c.Assert(err, gc.IsNil)
@@ -389,7 +389,7 @@ func (s *StoreSuite) TestAddCharmsWithTheSameBaseEntity(c *gc.C) {
 	num, err := store.DB.BaseEntities().Count()
 	c.Assert(err, gc.IsNil)
 	c.Assert(num, gc.Equals, 1)
-	checkBaseEntity(c, store, baseURL(url))
+	assertBaseEntity(c, store, baseURL(url))
 }
 
 type entitiesByURL []*mongodoc.Entity
