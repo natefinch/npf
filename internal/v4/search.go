@@ -40,7 +40,7 @@ func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, er
 	for i, ref := range results.Results {
 		i, ref := i, ref
 		run.Do(func() error {
-			meta, err := h.Router.GetMetadata(ref, sp.Include)
+			meta, err := h.Router.GetMetadata(ref, sp.Include, req)
 			if err != nil {
 				// Unfortunately it is possible to get errors here due to
 				// internal inconsistency, so rather than throwing away

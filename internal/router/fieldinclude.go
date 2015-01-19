@@ -5,6 +5,7 @@ package router
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/url"
 
 	"gopkg.in/errgo.v1"
@@ -13,7 +14,7 @@ import (
 
 // A FieldQueryFunc is used to retrieve a metadata document for the given URL,
 // selecting only those fields specified in keys of the given selector.
-type FieldQueryFunc func(id *charm.Reference, selector map[string]int) (interface{}, error)
+type FieldQueryFunc func(id *charm.Reference, selector map[string]int, req *http.Request) (interface{}, error)
 
 // FieldUpdater records field changes made by a FieldUpdateFunc.
 type FieldUpdater struct {
@@ -34,12 +35,12 @@ type FieldUpdateFunc func(id *charm.Reference, fields map[string]interface{}) er
 // A FieldGetFunc returns some data from the given document. The
 // document will have been returned from an earlier call to the
 // associated QueryFunc.
-type FieldGetFunc func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error)
+type FieldGetFunc func(doc interface{}, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error)
 
 // FieldPutFunc sets using the given FieldUpdater corresponding to fields to be set
 // in the metadata document for the given id. The path holds the metadata path
 // after the initial prefix has been removed.
-type FieldPutFunc func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater) error
+type FieldPutFunc func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error
 
 // FieldIncludeHandlerParams specifies the parameters for NewFieldIncludeHandler.
 type FieldIncludeHandlerParams struct {
@@ -86,7 +87,7 @@ func (h *fieldIncludeHandler) Key() interface{} {
 	return h.p.Key
 }
 
-func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Reference, paths []string, values []*json.RawMessage) []error {
+func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Reference, paths []string, values []*json.RawMessage, req *http.Request) []error {
 	updater := &FieldUpdater{
 		fields: make(map[string]interface{}),
 	}
@@ -107,7 +108,7 @@ func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Refer
 			setError(i, errgo.New("PUT not supported"))
 			continue
 		}
-		if err := h.p.HandlePut(id, paths[i], values[i], updater); err != nil {
+		if err := h.p.HandlePut(id, paths[i], values[i], updater, req); err != nil {
 			setError(i, errgo.Mask(err, errgo.Any))
 		}
 	}
@@ -124,7 +125,7 @@ func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Refer
 	return errs
 }
 
-func (h *fieldIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values) ([]interface{}, error) {
+func (h *fieldIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values, req *http.Request) ([]interface{}, error) {
 	funcs := make([]FieldGetFunc, len(hs))
 	selector := make(map[string]int)
 	// Extract the handler functions and union all the fields.
@@ -136,7 +137,7 @@ func (h *fieldIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *charm.Refer
 		}
 	}
 	// Make the single query.
-	doc, err := h.p.Query(id, selector)
+	doc, err := h.p.Query(id, selector, req)
 	if err != nil {
 		// Note: preserve error cause from handlers.
 		return nil, errgo.Mask(err, errgo.Any)
@@ -146,7 +147,7 @@ func (h *fieldIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *charm.Refer
 	results := make([]interface{}, len(hs))
 	for i, f := range funcs {
 		var err error
-		results[i], err = f(doc, id, paths[i], flags)
+		results[i], err = f(doc, id, paths[i], flags, req)
 		if err != nil {
 			// TODO correlate error with handler (perhaps return
 			// an error that identifies the slice position of the handler that

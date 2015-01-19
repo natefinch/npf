@@ -145,7 +145,7 @@ func (h *Handler) resolveURL(url *charm.Reference) error {
 	return ResolveURL(h.store, url)
 }
 
-type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error)
+type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error)
 
 // entityHandler returns a Handler that calls f with a *mongodoc.Entity that
 // contains at least the given fields. It allows only GET requests.
@@ -154,9 +154,9 @@ func (h *Handler) entityHandler(f entityHandlerFunc, fields ...string) router.Bu
 }
 
 func (h *Handler) puttableEntityHandler(get entityHandlerFunc, handlePut router.FieldPutFunc, fields ...string) router.BulkIncludeHandler {
-	handleGet := func(doc interface{}, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+	handleGet := func(doc interface{}, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 		edoc := doc.(*mongodoc.Entity)
-		val, err := get(edoc, id, path, flags)
+		val, err := get(edoc, id, path, flags, req)
 		return val, errgo.Mask(err, errgo.Any)
 	}
 	type entityHandlerKey struct{}
@@ -182,8 +182,9 @@ func (h *Handler) updateEntity(id *charm.Reference, fields map[string]interface{
 	return nil
 }
 
-func (h *Handler) entityExists(id *charm.Reference) (bool, error) {
-	_, err := h.entityQuery(id, nil)
+func (h *Handler) entityExists(id *charm.Reference, req *http.Request) (bool, error) {
+	// TODO add http.Request to entityExists params
+	_, err := h.entityQuery(id, nil, req)
 	if errgo.Cause(err) == params.ErrNotFound {
 		return false, nil
 	}
@@ -193,7 +194,7 @@ func (h *Handler) entityExists(id *charm.Reference) (bool, error) {
 	return true, nil
 }
 
-func (h *Handler) entityQuery(id *charm.Reference, selector map[string]int) (interface{}, error) {
+func (h *Handler) entityQuery(id *charm.Reference, selector map[string]int, req *http.Request) (interface{}, error) {
 	var val mongodoc.Entity
 	err := h.store.DB.Entities().
 		Find(bson.D{{"_id", id}}).
@@ -310,25 +311,25 @@ func badRequestf(underlying error, f string, a ...interface{}) error {
 
 // GET id/meta/charm-metadata
 // http://tinyurl.com/poeoulw
-func (h *Handler) metaCharmMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaCharmMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return entity.CharmMeta, nil
 }
 
 // GET id/meta/bundle-metadata
 // http://tinyurl.com/ozshbtb
-func (h *Handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return entity.BundleData, nil
 }
 
 // GET id/meta/bundle-unit-count
 // http://tinyurl.com/mkvowub
-func (h *Handler) metaBundleUnitCount(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaBundleUnitCount(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return bundleCount(entity.BundleUnitCount), nil
 }
 
 // GET id/meta/bundle-machine-count
 // http://tinyurl.com/qfuubrv
-func (h *Handler) metaBundleMachineCount(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaBundleMachineCount(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return bundleCount(entity.BundleMachineCount), nil
 }
 
@@ -343,7 +344,7 @@ func bundleCount(x *int) interface{} {
 
 // GET id/meta/manifest
 // http://tinyurl.com/p3xdcto
-func (h *Handler) metaManifest(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaManifest(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	r, size, err := h.store.BlobStore.Open(entity.BlobName)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot open archive data for %s", id)
@@ -370,25 +371,25 @@ func (h *Handler) metaManifest(entity *mongodoc.Entity, id *charm.Reference, pat
 
 // GET id/meta/charm-actions
 // http://tinyurl.com/kfd2h34
-func (h *Handler) metaCharmActions(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaCharmActions(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return entity.CharmActions, nil
 }
 
 // GET id/meta/charm-config
 // http://tinyurl.com/oxxyujx
-func (h *Handler) metaCharmConfig(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaCharmConfig(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return entity.CharmConfig, nil
 }
 
 // GET id/meta/color
 // http://tinyurl.com/o2t3j4p
-func (h *Handler) metaColor(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaColor(id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/archive-size
 // http://tinyurl.com/m8b9geq
-func (h *Handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return &params.ArchiveSizeResponse{
 		Size: entity.Size,
 	}, nil
@@ -396,7 +397,7 @@ func (h *Handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, 
 
 // GET id/meta/tags
 // http://tinyurl.com/njyqwj2
-func (h *Handler) metaTags(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaTags(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	var tags []string
 	switch {
 	case id.Series == "bundle":
@@ -414,7 +415,7 @@ func (h *Handler) metaTags(entity *mongodoc.Entity, id *charm.Reference, path st
 
 // GET id/meta/stats/
 // http://tinyurl.com/lvyp2l5
-func (h *Handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	// Retrieve the aggregated downloads count for the specific revision.
 	counts, countsAllRevisions, err := h.store.ArchiveDownloadCounts(id)
 	if err != nil {
@@ -440,7 +441,7 @@ func (h *Handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path s
 
 // GET id/meta/revision-info
 // http://tinyurl.com/q6xos7f
-func (h *Handler) metaRevisionInfo(id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaRevisionInfo(id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	baseURL := *id
 	baseURL.Revision = -1
 	baseURL.Series = ""
@@ -469,7 +470,7 @@ func (h *Handler) metaRevisionInfo(id *charm.Reference, path string, flags url.V
 
 // GET id/meta/id-user
 // http://tinyurl.com/o7xmhz2
-func (h *Handler) metaIdUser(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaIdUser(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.IdUserResponse{
 		User: id.User,
 	}, nil
@@ -477,7 +478,7 @@ func (h *Handler) metaIdUser(entity *mongodoc.Entity, id *charm.Reference, path 
 
 // GET id/meta/id-series
 // http://tinyurl.com/pnwmr6j
-func (h *Handler) metaIdSeries(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaIdSeries(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.IdSeriesResponse{
 		Series: id.Series,
 	}, nil
@@ -485,7 +486,7 @@ func (h *Handler) metaIdSeries(entity *mongodoc.Entity, id *charm.Reference, pat
 
 // GET id/meta/id-name
 // http://tinyurl.com/lnqwbsp
-func (h *Handler) metaId(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaId(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.IdResponse{
 		Id:       id,
 		User:     id.User,
@@ -497,7 +498,7 @@ func (h *Handler) metaId(entity *mongodoc.Entity, id *charm.Reference, path stri
 
 // GET id/meta/id-name
 // http://tinyurl.com/m5q8gcy
-func (h *Handler) metaIdName(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaIdName(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.IdNameResponse{
 		Name: id.Name,
 	}, nil
@@ -505,7 +506,7 @@ func (h *Handler) metaIdName(entity *mongodoc.Entity, id *charm.Reference, path 
 
 // GET id/meta/id-revision
 // http://tinyurl.com/ntd3coz
-func (h *Handler) metaIdRevision(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaIdRevision(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.IdRevisionResponse{
 		Revision: id.Revision,
 	}, nil
@@ -513,7 +514,7 @@ func (h *Handler) metaIdRevision(entity *mongodoc.Entity, id *charm.Reference, p
 
 // GET id/meta/extra-info
 // http://tinyurl.com/keos7wd
-func (h *Handler) metaExtraInfo(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaExtraInfo(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	// The extra-info is stored in mongo as simple byte
 	// slices, so convert the values to json.RawMessages
 	// so that the client will see the original JSON.
@@ -527,7 +528,7 @@ func (h *Handler) metaExtraInfo(entity *mongodoc.Entity, id *charm.Reference, pa
 
 // GET id/meta/extra-info/key
 // http://tinyurl.com/polrbn7
-func (h *Handler) metaExtraInfoWithKey(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaExtraInfoWithKey(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	path = strings.TrimPrefix(path, "/")
 	var data json.RawMessage = entity.ExtraInfo[path]
 	if len(data) == 0 {
@@ -536,7 +537,7 @@ func (h *Handler) metaExtraInfoWithKey(entity *mongodoc.Entity, id *charm.Refere
 	return &data, nil
 }
 
-func (h *Handler) putMetaExtraInfo(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater) error {
+func (h *Handler) putMetaExtraInfo(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
 	var fields map[string]*json.RawMessage
 	if err := json.Unmarshal(*val, &fields); err != nil {
 		return errgo.Notef(err, "cannot unmarshal extra info body")
@@ -553,7 +554,7 @@ func (h *Handler) putMetaExtraInfo(id *charm.Reference, path string, val *json.R
 	return nil
 }
 
-func (h *Handler) putMetaExtraInfoWithKey(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater) error {
+func (h *Handler) putMetaExtraInfoWithKey(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
 	key := strings.TrimPrefix(path, "/")
 	if err := checkExtraInfoKey(key); err != nil {
 		return err
@@ -571,7 +572,7 @@ func checkExtraInfoKey(key string) error {
 
 // GET id/meta/archive-upload-time
 // http://tinyurl.com/nmujuqk
-func (h *Handler) metaArchiveUploadTime(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values) (interface{}, error) {
+func (h *Handler) metaArchiveUploadTime(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return &params.ArchiveUploadTimeResponse{
 		UploadTime: entity.UploadTime.UTC(),
 	}, nil
