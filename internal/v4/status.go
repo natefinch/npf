@@ -27,6 +27,7 @@ func (h *Handler) serveDebugStatus(_ http.Header, req *http.Request) (interface{
 		debugstatus.MongoCollections(h.store.DB),
 		h.checkElasticSearch,
 		h.checkEntities,
+		h.checkBaseEntities,
 		h.checkLogs(
 			"ingestion", "Ingestion",
 			mongodoc.IngestionType, params.IngestionStart, params.IngestionComplete),
@@ -76,6 +77,29 @@ func (h *Handler) checkEntities() (key string, result debugstatus.CheckResult) {
 	result.Value = fmt.Sprintf("%d charms; %d bundles; %d promulgated", charms, bundles, promulgated)
 	result.Passed = true
 	return "entities", result
+}
+
+func (h *Handler) checkBaseEntities() (key string, result debugstatus.CheckResult) {
+	resultKey := "base_entities"
+	result.Name = "Base entities in charm store"
+
+	// Retrieve the number of base entities.
+	baseNum, err := h.store.DB.BaseEntities().Count()
+	if err != nil {
+		result.Value = "Cannot count base entities: " + err.Error()
+		return resultKey, result
+	}
+
+	// Retrieve the number of entities.
+	num, err := h.store.DB.Entities().Count()
+	if err != nil {
+		result.Value = "Cannot count entities: " + err.Error()
+		return resultKey, result
+	}
+
+	result.Value = fmt.Sprintf("count: %d", baseNum)
+	result.Passed = num >= baseNum
+	return resultKey, result
 }
 
 func (h *Handler) checkLogs(resultKey, resultName string, logType mongodoc.LogType, startPrefix, endPrefix string) debugstatus.CheckerFunc {
