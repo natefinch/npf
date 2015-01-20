@@ -93,7 +93,7 @@ func (h *Handler) checkBaseEntities() (key string, result debugstatus.CheckResul
 	// Retrieve the number of entities.
 	num, err := h.store.DB.Entities().Count()
 	if err != nil {
-		result.Value = "Cannot count entities: " + err.Error()
+		result.Value = "Cannot count entities for consistency check: " + err.Error()
 		return resultKey, result
 	}
 
