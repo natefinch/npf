@@ -21,6 +21,9 @@ import (
 var migrations = []migration{{
 	name:    "entity ids denormalization",
 	migrate: denormalizeEntityIds,
+}, {
+	name:    "base entities creation",
+	migrate: createBaseEntities,
 }}
 
 // migration holds a migration function with its corresponding name.
@@ -118,5 +121,36 @@ func denormalizeEntityIds(db StoreDatabase) error {
 	if err := iter.Close(); err != nil {
 		return errgo.Notef(err, "cannot denormalize entity ids")
 	}
+	return nil
+}
+
+// createBaseEntities creates base entities for each entity in the database.
+func createBaseEntities(db StoreDatabase) error {
+	baseEntities := db.BaseEntities()
+	counter := 0
+
+	var entity mongodoc.Entity
+	iter := db.Entities().Find(nil).Select(bson.D{{"baseurl", 1}}).Iter()
+	defer iter.Close()
+
+	for iter.Next(&entity) {
+		baseEntity := &mongodoc.BaseEntity{
+			URL:    entity.BaseURL,
+			Name:   entity.BaseURL.Name,
+			User:   entity.BaseURL.User,
+			Public: true,
+		}
+		err := baseEntities.Insert(baseEntity)
+		if err == nil {
+			counter++
+		} else if !mgo.IsDup(err) {
+			return errgo.Notef(err, "cannot create base entity %s", entity.BaseURL)
+		}
+
+	}
+	if err := iter.Close(); err != nil {
+		return errgo.Notef(err, "cannot create base entities")
+	}
+	logger.Infof("%d base entities created", counter)
 	return nil
 }
