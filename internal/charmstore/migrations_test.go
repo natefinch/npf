@@ -182,6 +182,7 @@ func (s *migrationsSuite) TestMigrateMigrationList(c *gc.C) {
 	// migrations.
 	existing := []string{
 		"entity ids denormalization",
+		"base entities creation",
 	}
 	for i, name := range existing {
 		m := migrations[i]
@@ -219,9 +220,10 @@ func (s *migrationsSuite) TestMigrateParallelMigration(c *gc.C) {
 	}
 
 	// Ensure entities have been updated correctly by denormalizeEntityIds.
-	s.checkCount(c, 2)
+	s.checkCount(c, s.db.Entities(), 2)
 	s.checkEntity(c, &mongodoc.Entity{
 		URL:      id1,
+		BaseURL:  baseURL(id1),
 		User:     "",
 		Name:     "django",
 		Revision: 42,
@@ -230,6 +232,7 @@ func (s *migrationsSuite) TestMigrateParallelMigration(c *gc.C) {
 	})
 	s.checkEntity(c, &mongodoc.Entity{
 		URL:      id2,
+		BaseURL:  baseURL(id2),
 		User:     "who",
 		Name:     "rails",
 		Revision: 47,
@@ -262,9 +265,10 @@ func (s *migrationsSuite) TestDenormalizeEntityIds(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Ensure entities have been updated correctly.
-	s.checkCount(c, 2)
+	s.checkCount(c, s.db.Entities(), 2)
 	s.checkEntity(c, &mongodoc.Entity{
 		URL:      id1,
+		BaseURL:  baseURL(id1),
 		User:     "",
 		Name:     "django",
 		Revision: 42,
@@ -273,6 +277,7 @@ func (s *migrationsSuite) TestDenormalizeEntityIds(c *gc.C) {
 	})
 	s.checkEntity(c, &mongodoc.Entity{
 		URL:      id2,
+		BaseURL:  baseURL(id2),
 		User:     "who",
 		Name:     "rails",
 		Revision: 47,
@@ -287,7 +292,7 @@ func (s *migrationsSuite) TestDenormalizeEntityIdsNoEntities(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Ensure no new entities are added in the process.
-	s.checkCount(c, 0)
+	s.checkCount(c, s.db.Entities(), 0)
 }
 
 func (s *migrationsSuite) TestDenormalizeEntityIdsNoUpdates(c *gc.C) {
@@ -302,17 +307,19 @@ func (s *migrationsSuite) TestDenormalizeEntityIdsNoUpdates(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Ensure entities have been updated correctly.
-	s.checkCount(c, 2)
+	s.checkCount(c, s.db.Entities(), 2)
 	s.checkEntity(c, &mongodoc.Entity{
-		URL:  id1,
-		User: "",
-		Name: "django",
+		URL:     id1,
+		BaseURL: baseURL(id1),
+		User:    "",
+		Name:    "django",
 		// Since the name field already existed, the Revision and Series fields
 		// have not been populated.
 		Size: 21,
 	})
 	s.checkEntity(c, &mongodoc.Entity{
-		URL: id2,
+		URL:     id2,
+		BaseURL: baseURL(id2),
 		// The name is left untouched (even if it's obviously wrong).
 		Name: "rails2",
 		// Since the name field already existed, the User, Revision and Series
@@ -335,9 +342,10 @@ func (s *migrationsSuite) TestDenormalizeEntityIdsSomeUpdates(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Ensure entities have been updated correctly.
-	s.checkCount(c, 3)
+	s.checkCount(c, s.db.Entities(), 3)
 	s.checkEntity(c, &mongodoc.Entity{
 		URL:      id1,
+		BaseURL:  baseURL(id1),
 		User:     "dalek",
 		Name:     "django",
 		Revision: 42,
@@ -345,17 +353,103 @@ func (s *migrationsSuite) TestDenormalizeEntityIdsSomeUpdates(c *gc.C) {
 		Size:     1,
 	})
 	s.checkEntity(c, &mongodoc.Entity{
-		URL:  id2,
-		Name: "django",
-		Size: 2,
+		URL:     id2,
+		BaseURL: baseURL(id2),
+		Name:    "django",
+		Size:    2,
 	})
 	s.checkEntity(c, &mongodoc.Entity{
 		URL:      id3,
+		BaseURL:  baseURL(id3),
 		User:     "",
 		Name:     "postgres",
 		Revision: 0,
 		Series:   "precise",
 		Size:     3,
+	})
+}
+
+func (s *migrationsSuite) TestCreateBaseEntities(c *gc.C) {
+	// Store entities with missing base in the db.
+	id1 := charm.MustParseReference("trusty/django-42")
+	id2 := charm.MustParseReference("trusty/django-47")
+	id3 := charm.MustParseReference("~who/utopic/rails-47")
+	s.insertEntity(c, id1, "django", 12)
+	s.insertEntity(c, id2, "django", 12)
+	s.insertEntity(c, id3, "rails", 13)
+
+	// Start the server.
+	err := s.newServer(c)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure base entities have been created correctly.
+	s.checkCount(c, s.db.BaseEntities(), 2)
+	s.checkBaseEntity(c, &mongodoc.BaseEntity{
+		URL:    baseURL(id1),
+		Name:   "django",
+		Public: true,
+	})
+	s.checkBaseEntity(c, &mongodoc.BaseEntity{
+		URL:    baseURL(id3),
+		User:   "who",
+		Name:   "rails",
+		Public: true,
+	})
+}
+
+func (s *migrationsSuite) TestCreateBaseEntitiesNoEntities(c *gc.C) {
+	// Start the server.
+	err := s.newServer(c)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure no new base entities are added in the process.
+	s.checkCount(c, s.db.BaseEntities(), 0)
+}
+
+func (s *migrationsSuite) TestCreateBaseEntitiesNoUpdates(c *gc.C) {
+	// Store entities with their corresponding base in the db.
+	id1 := charm.MustParseReference("trusty/django-42")
+	id2 := charm.MustParseReference("~who/utopic/rails-47")
+	s.insertEntity(c, id1, "django", 21)
+	s.insertEntity(c, id2, "rails2", 22)
+	s.insertBaseEntity(c, baseURL(id1))
+	s.insertBaseEntity(c, baseURL(id2))
+
+	// Start the server.
+	err := s.newServer(c)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure no new base entities are added in the process.
+	s.checkCount(c, s.db.BaseEntities(), 2)
+
+}
+
+func (s *migrationsSuite) TestCreateBaseEntitiesSomeUpdates(c *gc.C) {
+	// Store entities with and without bases in the db
+	id1 := charm.MustParseReference("~dalek/utopic/django-42")
+	id2 := charm.MustParseReference("~dalek/utopic/django-47")
+	id3 := charm.MustParseReference("precise/postgres-0")
+	s.insertEntity(c, id1, "django", 1)
+	s.insertEntity(c, id2, "django", 2)
+	s.insertEntity(c, id3, "postgres", 3)
+	s.insertBaseEntity(c, baseURL(id2))
+
+	// Start the server.
+	err := s.newServer(c)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure missing base entities have been created correctly.
+	s.checkCount(c, s.db.BaseEntities(), 2)
+	s.checkBaseEntity(c, &mongodoc.BaseEntity{
+		URL:    baseURL(id1),
+		User:   "dalek",
+		Name:   "django",
+		Public: true,
+	})
+	s.checkBaseEntity(c, &mongodoc.BaseEntity{
+		URL:    baseURL(id3),
+		Name:   "postgres",
+		Public: true,
 	})
 }
 
@@ -369,7 +463,20 @@ func (s *migrationsSuite) checkEntity(c *gc.C, expectEntity *mongodoc.Entity) {
 	c.Assert(&entity, jc.DeepEquals, expectEntity)
 }
 
-func (s *migrationsSuite) checkCount(c *gc.C, expectCount int) {
+func (s *migrationsSuite) checkCount(c *gc.C, coll *mgo.Collection, expectCount int) {
+	count, err := coll.Count()
+	c.Assert(err, gc.IsNil)
+	c.Assert(count, gc.Equals, expectCount)
+}
+
+func (s *migrationsSuite) checkBaseEntity(c *gc.C, expectEntity *mongodoc.BaseEntity) {
+	var entity mongodoc.BaseEntity
+	err := s.db.BaseEntities().FindId(expectEntity.URL).One(&entity)
+	c.Assert(err, gc.IsNil)
+	c.Assert(&entity, jc.DeepEquals, expectEntity)
+}
+
+func (s *migrationsSuite) checkBaseEntitiesCount(c *gc.C, expectCount int) {
 	count, err := s.db.Entities().Count()
 	c.Assert(err, gc.IsNil)
 	c.Assert(count, gc.Equals, expectCount)
@@ -377,9 +484,10 @@ func (s *migrationsSuite) checkCount(c *gc.C, expectCount int) {
 
 func (s *migrationsSuite) insertEntity(c *gc.C, id *charm.Reference, name string, size int64) {
 	entity := &mongodoc.Entity{
-		URL:  id,
-		Name: name,
-		Size: size,
+		URL:     id,
+		BaseURL: baseURL(id),
+		Name:    name,
+		Size:    size,
 	}
 	err := s.db.Entities().Insert(entity)
 	c.Assert(err, gc.IsNil)
@@ -396,5 +504,16 @@ func (s *migrationsSuite) insertEntity(c *gc.C, id *charm.Reference, name string
 			{"series", true},
 		},
 	}})
+	c.Assert(err, gc.IsNil)
+}
+
+func (s *migrationsSuite) insertBaseEntity(c *gc.C, id *charm.Reference) {
+	entity := &mongodoc.BaseEntity{
+		URL:    id,
+		Name:   id.Name,
+		User:   id.User,
+		Public: true,
+	}
+	err := s.db.BaseEntities().Insert(entity)
 	c.Assert(err, gc.IsNil)
 }
