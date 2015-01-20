@@ -55,6 +55,7 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 			"search/interesting": http.HandlerFunc(h.serveSearchInteresting),
 			"stats/":             router.NotFoundHandler(),
 			"stats/counter/":     router.HandleJSON(h.serveStatsCounter),
+			"macaroon":           router.HandleJSON(h.serveMacaroon),
 		},
 		Id: map[string]router.IdHandler{
 			"archive":     h.serveArchive,
@@ -632,4 +633,8 @@ func (h *Handler) serveChangesPublished(_ http.Header, r *http.Request) (interfa
 		})
 	}
 	return results, nil
+}
+
+func (h *Handler) serveMacaroon(_ http.Header, _ *http.Request) (interface{}, error) {
+	return h.newMacaroon()
 }

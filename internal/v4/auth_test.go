@@ -93,7 +93,7 @@ func testMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParam
 	})
 	p.Handler = srv
 
-	client1 := *httpbakery.DefaultHTTPClient
+	client1 := *httpbakery.NewHTTPClient()
 	client1.Jar = nil
 	p.Do = func(req *http.Request) (*http.Response, error) {
 		return httpbakery.Do(&client1, req, noInteraction)

@@ -11,8 +11,10 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	jujutesting "github.com/juju/testing"
@@ -21,6 +23,10 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
+	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
+	"gopkg.in/macaroon-bakery.v0/bakerytest"
+	"gopkg.in/macaroon-bakery.v0/httpbakery"
+	"gopkg.in/macaroon.v1"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -1679,4 +1685,57 @@ func mustMarshalJSON(val interface{}) string {
 		panic(fmt.Errorf("cannot marshal %#v: %v", val, err))
 	}
 	return string(data)
+}
+
+func (s *APISuite) TestMacaroon(c *gc.C) {
+	var checkedCaveats []string
+	var mu sync.Mutex
+	var dischargeError error
+	discharger := bakerytest.NewDischarger(nil, func(cond string, arg string) ([]checkers.Caveat, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		checkedCaveats = append(checkedCaveats, cond+" "+arg)
+		return nil, dischargeError
+	})
+	defer discharger.Close()
+	// Create a charmstore server that will use the test third party for
+	// its third party caveat.
+	srv, _ := newServer(c, s.store.DB.Session, nil, charmstore.ServerParams{
+		AuthLocation:     discharger.Location(),
+		PublicKeyLocator: discharger,
+	})
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: srv,
+		URL:     storeURL("macaroon"),
+		Method:  "GET",
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %s", rec.Body.String()))
+	var m macaroon.Macaroon
+	err := json.Unmarshal(rec.Body.Bytes(), &m)
+	c.Assert(err, gc.IsNil)
+	c.Assert(m.Location(), gc.Equals, "charmstore")
+	ms, err := httpbakery.DischargeAll(&m, httpbakery.NewHTTPClient(), noInteraction)
+	c.Assert(err, gc.IsNil)
+	sort.Strings(checkedCaveats)
+	c.Assert(checkedCaveats, jc.DeepEquals, []string{
+		"is-authenticated-user ",
+	})
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("log"),
+		ExpectStatus: http.StatusUnauthorized,
+		ExpectBody: params.Error{
+			Message: "authentication failed: missing HTTP auth header",
+			Code:    params.ErrUnauthorized,
+		},
+	})
+	macaroonCookie, err := httpbakery.NewCookie(ms)
+	c.Assert(err, gc.IsNil)
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      srv,
+		URL:          storeURL("log"),
+		Cookies:      []*http.Cookie{macaroonCookie},
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   []params.LogResponse{},
+	})
 }

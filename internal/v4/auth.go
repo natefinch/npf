@@ -13,6 +13,7 @@ import (
 	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
+	"gopkg.in/macaroon.v1"
 
 	"github.com/juju/charmstore/params"
 )
@@ -53,18 +54,22 @@ func (h *Handler) authenticate(w http.ResponseWriter, req *http.Request, id *cha
 	if _, ok := errgo.Cause(verr).(*bakery.VerificationError); !ok {
 		return errgo.Mask(verr)
 	}
-	// TODO generate different caveats depending on the requested operation
-	// and whether there's a charm id or not.
-	// Mint an appropriate macaroon and send it back to the client.
-	m, err := h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{{
-		Location: h.config.AuthLocation,
-		// TODO needs-declared user is-authenticated-user
-		Condition: "is-authenticated-user",
-	}})
+	m, err := h.newMacaroon()
 	if err != nil {
 		return errgo.Notef(err, "cannot mint macaroon")
 	}
 	return httpbakery.NewDischargeRequiredError(m, verr)
+}
+
+func (h *Handler) newMacaroon() (*macaroon.Macaroon, error) {
+	// TODO generate different caveats depending on the requested operation
+	// and whether there's a charm id or not.
+	// Mint an appropriate macaroon and send it back to the client.
+	return h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{{
+		Location: h.config.AuthLocation,
+		// TODO needs-declared user is-authenticated-user
+		Condition: "is-authenticated-user",
+	}})
 }
 
 var errNoCreds = errgo.New("missing HTTP auth header")
