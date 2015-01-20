@@ -232,7 +232,13 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	return nil
 }
 
+var everyonePerm = []string{params.Everyone}
+
 func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
+	readPerm := everyonePerm
+	if entity.User != "" {
+		readPerm = []string{params.Everyone, entity.User}
+	}
 	// Add the base entity to the database.
 	baseEntity := &mongodoc.BaseEntity{
 		URL:  entity.BaseURL,
@@ -240,6 +246,9 @@ func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 		Name: entity.Name,
 		// TODO frankban: allow specifying non-public charms on initial upload.
 		Public: true,
+		ACLs: mongodoc.ACL{
+			Read: readPerm,
+		},
 	}
 	err = s.DB.BaseEntities().Insert(baseEntity)
 	if err != nil && !mgo.IsDup(err) {

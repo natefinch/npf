@@ -94,6 +94,8 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 			"id-revision":   h.entityHandler(h.metaIdRevision, "_id"),
 			"id-series":     h.entityHandler(h.metaIdSeries, "_id"),
 			"manifest":      h.entityHandler(h.metaManifest, "blobname"),
+			"perm":          h.baseEntityHandler(h.metaPerm, "acls"),
+			"perm/":         h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "acls"),
 			"revision-info": router.SingleIncludeHandler(h.metaRevisionInfo),
 			"stats":         h.entityHandler(h.metaStats),
 			"tags":          h.entityHandler(h.metaTags, "charmmeta", "bundledata"),
@@ -149,6 +151,8 @@ func (h *Handler) resolveURL(url *charm.Reference) error {
 
 type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error)
 
+type baseEntityHandlerFunc func(entity *mongodoc.BaseEntity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error)
+
 // entityHandler returns a Handler that calls f with a *mongodoc.Entity that
 // contains at least the given fields. It allows only GET requests.
 func (h *Handler) entityHandler(f entityHandlerFunc, fields ...string) router.BulkIncludeHandler {
@@ -170,6 +174,41 @@ func (h *Handler) puttableEntityHandler(get entityHandlerFunc, handlePut router.
 		HandlePut: handlePut,
 		Update:    h.updateEntity,
 	})
+}
+
+// baseEntityHandler returns a Handler that calls f with a *mongodoc.Entity that
+// contains at least the given fields. It allows only GET requests.
+func (h *Handler) baseEntityHandler(f baseEntityHandlerFunc, fields ...string) router.BulkIncludeHandler {
+	return h.puttableBaseEntityHandler(f, nil, fields...)
+}
+
+func (h *Handler) puttableBaseEntityHandler(get baseEntityHandlerFunc, handlePut router.FieldPutFunc, fields ...string) router.BulkIncludeHandler {
+	handleGet := func(doc interface{}, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+		edoc := doc.(*mongodoc.BaseEntity)
+		val, err := get(edoc, id, path, flags, req)
+		return val, errgo.Mask(err, errgo.Any)
+	}
+	type baseEntityHandlerKey struct{}
+	return router.FieldIncludeHandler(router.FieldIncludeHandlerParams{
+		Key:       baseEntityHandlerKey{},
+		Query:     h.baseEntityQuery,
+		Fields:    fields,
+		HandleGet: handleGet,
+		HandlePut: handlePut,
+		Update:    h.updateBaseEntity,
+	})
+}
+
+func (h *Handler) updateBaseEntity(id *charm.Reference, fields map[string]interface{}) error {
+	id1 := *id
+	id1.Revision = -1
+	id1.Series = ""
+	err := h.store.DB.BaseEntities().UpdateId(&id1, bson.D{{"$set", fields}})
+	if err != nil {
+		return errgo.Notef(err, "cannot update %q", &id1)
+	}
+	// TODO update search fields
+	return nil
 }
 
 func (h *Handler) updateEntity(id *charm.Reference, fields map[string]interface{}) error {
@@ -194,6 +233,24 @@ func (h *Handler) entityExists(id *charm.Reference, req *http.Request) (bool, er
 		return false, errgo.Mask(err)
 	}
 	return true, nil
+}
+
+func (h *Handler) baseEntityQuery(id *charm.Reference, selector map[string]int, req *http.Request) (interface{}, error) {
+	var val mongodoc.BaseEntity
+	id1 := *id
+	id1.Series = ""
+	id1.Revision = -1
+	err := h.store.DB.BaseEntities().
+		Find(bson.D{{"_id", &id1}}).
+		Select(selector).
+		One(&val)
+	if err == mgo.ErrNotFound {
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
+	}
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	return &val, nil
 }
 
 func (h *Handler) entityQuery(id *charm.Reference, selector map[string]int, req *http.Request) (interface{}, error) {
@@ -570,6 +627,40 @@ func checkExtraInfoKey(key string) error {
 		return errgo.WithCausef(nil, params.ErrBadRequest, "bad key for extra-info")
 	}
 	return nil
+}
+
+func (h *Handler) metaPerm(entity *mongodoc.BaseEntity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	return params.PermResponse{
+		Read: entity.ACLs.Read,
+	}, nil
+}
+
+func (h *Handler) metaPermWithKey(entity *mongodoc.BaseEntity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	switch path {
+	case "/read":
+		return entity.ACLs.Read, nil
+	}
+	return nil, errgo.WithCausef(nil, params.ErrNotFound, "unknown permission")
+}
+
+func (h *Handler) putMetaPermWithKey(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+	var perms []string
+	if err := json.Unmarshal(*val, &perms); err != nil {
+		return errgo.Mask(err)
+	}
+	isPublic := false
+	for _, p := range perms {
+		if p == params.Everyone {
+			isPublic = true
+		}
+	}
+	switch path {
+	case "/read":
+		updater.UpdateField("acls.read", perms)
+		updater.UpdateField("public", isPublic)
+		return nil
+	}
+	return errgo.WithCausef(nil, params.ErrNotFound, "unknown permission")
 }
 
 // GET id/meta/archive-upload-time

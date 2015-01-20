@@ -24,6 +24,12 @@ const (
 	EntityIdHeader = "Entity-Id"
 )
 
+// Special user/group names.
+const (
+	Everyone = "everyone"
+	Admin = "admin"
+)
+
 // MetaAnyResponse holds the result of a meta/any
 // request. See http://tinyurl.com/q5vcjpk
 type MetaAnyResponse struct {
@@ -155,6 +161,12 @@ type IdResponse struct {
 	Series   string `json:",omitempty"`
 	Name     string
 	Revision int
+}
+
+// PermResponse holds the result of an id/meta/perm GET
+// request. See tinyurl TODO.
+type PermResponse struct {
+	Read []string
 }
 
 const (

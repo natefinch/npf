@@ -201,11 +201,18 @@ func assertBaseEntity(c *gc.C, store *Store, url *charm.Reference) {
 	var baseEntity mongodoc.BaseEntity
 	err := store.DB.BaseEntities().FindId(url).One(&baseEntity)
 	c.Assert(err, gc.IsNil)
+	expectACLs := mongodoc.ACL{
+		Read: []string{params.Everyone},
+	}
+	if url.User != "" {
+		expectACLs.Read = append(expectACLs.Read, url.User)
+	}
 	c.Assert(baseEntity, jc.DeepEquals, mongodoc.BaseEntity{
 		URL:    url,
 		User:   url.User,
 		Name:   url.Name,
 		Public: true,
+		ACLs:   expectACLs,
 	})
 }
 
@@ -381,7 +388,7 @@ func (s *StoreSuite) TestAddCharmsWithTheSameBaseEntity(c *gc.C) {
 	err = store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
 
-	// Add a second charm to the database, shring the same base URL.
+	// Add a second charm to the database, sharing the same base URL.
 	err = store.AddCharmWithArchive(charm.MustParseReference("utopic/wordpress-13"), ch)
 	c.Assert(err, gc.IsNil)
 
@@ -389,7 +396,6 @@ func (s *StoreSuite) TestAddCharmsWithTheSameBaseEntity(c *gc.C) {
 	num, err := store.DB.BaseEntities().Count()
 	c.Assert(err, gc.IsNil)
 	c.Assert(num, gc.Equals, 1)
-	assertBaseEntity(c, store, baseURL(url))
 }
 
 type entitiesByURL []*mongodoc.Entity
@@ -1202,6 +1208,17 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithFoundContent(c *gc.C) {
 	data, err = ioutil.ReadAll(r)
 	c.Assert(err, gc.IsNil)
 	c.Assert(string(data), gc.Equals, expectContent)
+}
+
+func (s *StoreSuite) TestAddCharmWithUser(c *gc.C) {
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
+	c.Assert(err, gc.IsNil)
+
+	wordpress := storetesting.Charms.CharmDir("wordpress")
+	url := charm.MustParseReference("cs:~bob/precise/wordpress-23")
+	err = store.AddCharmWithArchive(url, wordpress)
+	c.Assert(err, gc.IsNil)
+	assertBaseEntity(c, store, baseURL(url))
 }
 
 func (s *StoreSuite) TestOpenCachedBlobFileWithNotFoundContent(c *gc.C) {

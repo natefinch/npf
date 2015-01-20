@@ -123,7 +123,7 @@ type BaseEntity struct {
 	// ACLs holds permission information relevant to
 	// the base entity. The permissions apply to all
 	// revisions.
-	ACLs *ACL `bson:",omitempty"`
+	ACLs ACL
 }
 
 // ACL holds lists of users and groups that are
