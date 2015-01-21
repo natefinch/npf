@@ -17,11 +17,12 @@ import (
 
 type Config struct {
 	// TODO(rog) rename this to MongoAddr - it's not a URL.
-	MongoURL     string `yaml:"mongo-url"`
-	APIAddr      string `yaml:"api-addr"`
-	AuthUsername string `yaml:"auth-username"`
-	AuthPassword string `yaml:"auth-password"`
-	ESAddr       string `yaml:"elasticsearch-addr"` // elasticsearch is optional
+	MongoURL          string `yaml:"mongo-url"`
+	APIAddr           string `yaml:"api-addr"`
+	AuthUsername      string `yaml:"auth-username"`
+	AuthPassword      string `yaml:"auth-password"`
+	ESAddr            string `yaml:"elasticsearch-addr"` // elasticsearch is optional
+	IdentityPublicKey string `yaml:"identity-public-key"`
 }
 
 func (c *Config) validate() error {

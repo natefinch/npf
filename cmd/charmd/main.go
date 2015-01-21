@@ -12,6 +12,7 @@ import (
 
 	"github.com/juju/loggo"
 	"gopkg.in/errgo.v1"
+	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore"
@@ -73,7 +74,16 @@ func serve(confPath string) error {
 	cfg := charmstore.ServerParams{
 		AuthUsername: conf.AuthUsername,
 		AuthPassword: conf.AuthPassword,
+		AuthLocation: "identity",
 	}
+	var identityPublicKey bakery.PublicKey
+	err = identityPublicKey.UnmarshalText([]byte(conf.IdentityPublicKey))
+	if err != nil {
+		return errgo.Notef(err, "cannot create new server at %q", conf.APIAddr)
+	}
+	ring := bakery.NewPublicKeyRing()
+	ring.AddPublicKeyForLocation(cfg.AuthLocation, false, &identityPublicKey)
+	cfg.PublicKeyLocator = ring
 	server, err := charmstore.NewServer(db, es, "cs", cfg, charmstore.Legacy, charmstore.V4)
 	if err != nil {
 		return errgo.Notef(err, "cannot create new server at %q", conf.APIAddr)

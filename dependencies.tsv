@@ -9,7 +9,7 @@ github.com/juju/jujusvg	git	29a343c3d4bcd44e3a83ab4baab1893c9e1c7c93	2015-01-13T
 github.com/juju/loggo	git	dc8e19f7c70a62a59c69c40f85b8df09ff20742c	2014-11-17T04:05:26Z
 github.com/juju/names	git	4bd61d19a7fce663e2821fe05ddf69f774d444da	2014-11-21T15:38:57Z
 github.com/juju/schema	git	27a52be50766490a6fd3531865095fda6c0eeb6d	2014-07-23T04:23:18Z
-github.com/juju/testing	git	fbcf9014de22b44f08fdd09dc37f0b7e22e708f2	2014-12-17T18:11:59Z
+github.com/juju/testing	git	006244fdb8dc686679d221bc720562a0155ebb5f	2015-01-20T14:33:09Z
 github.com/juju/txn	git	e02f26c56cfb81c7c1236df499deebb0369bd97c	2014-09-25T11:49:22Z
 github.com/juju/utils	git	cef4ac6468a08abd48e9e373bf866eb149124ec2	2014-12-15T14:40:07Z
 github.com/juju/xml	git	91535ba18a6afd756e38a40c91fea0ed8e5dbaa6	2014-12-04T14:59:31Z
@@ -17,7 +17,7 @@ golang.org/x/crypto	git	1fbbd62cfec66bd39d91e97749579579d4d3037e	2014-12-09T23:2
 gopkg.in/check.v1	git	64131543e7896d5bcc6bd5a76287eb75ea96c673	2014-10-24T13:38:53Z
 gopkg.in/errgo.v1	git	81357a83344ddd9f7772884874e5622c2a3da21c	2014-10-13T17:33:38Z
 gopkg.in/juju/charm.v4	git	7ef31c485ccfd7f1f9571d42ef4395bd04dc1006	2014-11-17T17:46:04Z
-gopkg.in/macaroon-bakery.v0	git	3bc25884a2cd6ed58ac8da2686a8cd4e4183f0b4	2014-12-17T18:17:54Z
+gopkg.in/macaroon-bakery.v0	git	266c21683e72b95c70b67bbfe7ba382e293be2c9	2015-01-06T16:10:26Z
 gopkg.in/macaroon.v1	git	f68090857cf54fb96d5775bab3c8907ec1cbcaea	2014-12-15T08:32:10Z
 gopkg.in/mgo.v2	git	e2e914857713db7497cca2bd7fc0b030fc9cb22d	2014-11-07T14:25:03Z
 gopkg.in/yaml.v1	git	9f9df34309c04878acc86042b16630b0f696e1de	2014-09-24T16:16:07Z

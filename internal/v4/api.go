@@ -17,6 +17,7 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/macaroon-bakery.v0/bakery"
+	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -55,6 +56,7 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 			"search/interesting": http.HandlerFunc(h.serveSearchInteresting),
 			"stats/":             router.NotFoundHandler(),
 			"stats/counter/":     router.HandleJSON(h.serveStatsCounter),
+			"macaroon":           router.HandleJSON(h.serveMacaroon),
 		},
 		Id: map[string]router.IdHandler{
 			"archive":     h.serveArchive,
@@ -632,4 +634,12 @@ func (h *Handler) serveChangesPublished(_ http.Header, r *http.Request) (interfa
 		})
 	}
 	return results, nil
+}
+
+func (h *Handler) serveMacaroon(_ http.Header, _ *http.Request) (interface{}, error) {
+	return h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{{
+		Location: h.config.AuthLocation,
+		// TODO needs-declared user is-authenticated-user
+		Condition: "is-authenticated-user",
+	}})
 }
