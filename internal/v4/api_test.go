@@ -294,6 +294,36 @@ var metaEndpoints = []metaEndpoint{{
 		c.Assert(data, gc.Equals, "value cs:precise/wordpress-23")
 	},
 }, {
+	name: "perm",
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		e, err := getBaseEntity(store, url)
+		if err != nil {
+			return nil, err
+		}
+		return params.PermResponse{
+			Read: e.ACLs.Read,
+		}, nil
+	},
+	checkURL: "cs:~bob/utopic/wordpress-2",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.DeepEquals, params.PermResponse{
+			Read: []string{params.Everyone, "bob"},
+		})
+	},
+}, {
+	name: "perm/read",
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		e, err := getBaseEntity(store, url)
+		if err != nil {
+			return nil, err
+		}
+		return e.ACLs.Read, nil
+	},
+	checkURL: "cs:~bob/utopic/wordpress-2",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.DeepEquals, []string{params.Everyone, "bob"})
+	},
+}, {
 	name: "tags",
 	get: entityGetter(func(entity *mongodoc.Entity) interface{} {
 		if entity.URL.Series == "bundle" {
@@ -467,6 +497,68 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 			c.Errorf("endpoint %q is null for all endpoints, so is not properly tested", ep.name)
 		}
 	}
+}
+
+func (s *APISuite) TestMetaPerm(c *gc.C) {
+	s.addCharm(c, "wordpress", "precise/wordpress-23")
+	s.addCharm(c, "wordpress", "precise/wordpress-24")
+	s.addCharm(c, "wordpress", "trusty/wordpress-1")
+	s.assertGet(c, "wordpress/meta/perm", params.PermResponse{
+		Read: []string{params.Everyone},
+	})
+	e, err := getBaseEntity(s.store, charm.MustParseReference("precise/wordpress-23"))
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.Public, jc.IsTrue)
+	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{params.Everyone})
+
+	// check that PUT on wordpress/meta/perm returns error.
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL("precise/wordpress-23/meta/perm"),
+		Method:  "PUT",
+		Header: http.Header{
+			"Content-Type": {"application/json"},
+		},
+		Body:         strings.NewReader(`"something"`),
+		ExpectStatus: http.StatusInternalServerError,
+		ExpectBody: params.Error{
+			Message: "PUT not supported",
+		},
+	})
+
+	s.assertPut(c, "precise/wordpress-23/meta/perm/read", []string{"bob"})
+	// Check that the perms have changed for all revisions and series.
+	for _, u := range []string{"precise/wordpress-23", "precise/wordpress-24", "trusty/wordpress-1"} {
+		s.assertGet(c, u+"/meta/perm", params.PermResponse{
+			Read: []string{"bob"},
+		})
+	}
+	e, err = getBaseEntity(s.store, charm.MustParseReference("precise/wordpress-23"))
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.Public, jc.IsFalse)
+	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{"bob"})
+
+	// Check that
+
+	s.assertPut(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
+	s.assertGet(c, "wordpress/meta/perm", params.PermResponse{
+		Read: []string{"bob", params.Everyone},
+	})
+	s.assertGet(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
+	e, err = getBaseEntity(s.store, charm.MustParseReference("precise/wordpress-23"))
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.Public, jc.IsTrue)
+	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{"bob", params.Everyone})
+
+	// Try deleting all permissions.
+	s.assertPut(c, "wordpress/meta/perm/read", []string{})
+	s.assertGet(c, "wordpress/meta/perm", params.PermResponse{
+		Read: []string{},
+	})
+	e, err = getBaseEntity(s.store, charm.MustParseReference("precise/wordpress-23"))
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.Public, jc.IsFalse)
+	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{})
 }
 
 func (s *APISuite) TestExtraInfo(c *gc.C) {
@@ -1738,4 +1830,16 @@ func (s *APISuite) TestMacaroon(c *gc.C) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   []params.LogResponse{},
 	})
+}
+
+func getBaseEntity(store *charmstore.Store, url *charm.Reference) (*mongodoc.BaseEntity, error) {
+	url1 := *url
+	url1.Revision = -1
+	url1.Series = ""
+	var e mongodoc.BaseEntity
+	err := store.DB.BaseEntities().FindId(&url1).One(&e)
+	if err != nil {
+		return nil, err
+	}
+	return &e, nil
 }
