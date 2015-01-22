@@ -94,7 +94,7 @@ func testMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParam
 	srv, _ := newServer(c, session, nil, charmstore.ServerParams{
 		AuthUsername:     "test-user",
 		AuthPassword:     "test-password",
-		AuthLocation:     discharger.Location(),
+		IdentityLocation: discharger.Location(),
 		PublicKeyLocator: discharger,
 	})
 	p.Handler = srv
@@ -161,7 +161,7 @@ func newServerWithDischarger(c *gc.C, session *mgo.Session, username string) (ht
 	srv, store := newServer(c, session, nil, charmstore.ServerParams{
 		AuthUsername:     serverParams.AuthUsername,
 		AuthPassword:     serverParams.AuthPassword,
-		AuthLocation:     discharger.Location(),
+		IdentityLocation: discharger.Location(),
 		PublicKeyLocator: discharger,
 	})
 	return srv, store, discharger

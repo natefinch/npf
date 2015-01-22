@@ -23,6 +23,7 @@ type Config struct {
 	AuthPassword      string `yaml:"auth-password"`
 	ESAddr            string `yaml:"elasticsearch-addr"` // elasticsearch is optional
 	IdentityPublicKey string `yaml:"identity-public-key"`
+	IdentityLocation  string `yaml:"identity-location"`
 }
 
 func (c *Config) validate() error {
