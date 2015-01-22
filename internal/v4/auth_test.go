@@ -24,6 +24,7 @@ import (
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/storetesting"
+	"github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
 )
 
@@ -153,7 +154,7 @@ func newServerWithDischarger(c *gc.C, session *mgo.Session, username string) (ht
 		if username == "" {
 			return nil, nil
 		}
-		return []checkers.Caveat{checkers.DeclaredCaveat("username", username)}, nil
+		return []checkers.Caveat{checkers.DeclaredCaveat(v4.UsernameAttr, username)}, nil
 	})
 	// Create a charm store server that will use the test third party for
 	// its third party caveat.

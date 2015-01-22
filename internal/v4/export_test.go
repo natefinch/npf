@@ -12,4 +12,5 @@ var (
 	ParamsLogLevels                = paramsLogLevels
 	ParamsLogTypes                 = paramsLogTypes
 	ProcessIcon                    = processIcon
+	UsernameAttr                   = usernameAttr
 )
