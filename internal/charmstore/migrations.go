@@ -9,6 +9,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/mongodoc"
+	"github.com/juju/charmstore/params"
 )
 
 // migrations holds all the migration functions that are executed in the order
@@ -24,6 +25,9 @@ var migrations = []migration{{
 }, {
 	name:    "base entities creation",
 	migrate: createBaseEntities,
+}, {
+	name:    "read acl creation",
+	migrate: populateReadACL,
 }}
 
 // migration holds a migration function with its corresponding name.
@@ -152,5 +156,34 @@ func createBaseEntities(db StoreDatabase) error {
 		return errgo.Notef(err, "cannot create base entities")
 	}
 	logger.Infof("%d base entities created", counter)
+	return nil
+}
+
+// populateReadACL adds the read ACL to base entities not having it.
+func populateReadACL(db StoreDatabase) error {
+	baseEntities := db.BaseEntities()
+	var entity mongodoc.BaseEntity
+	iter := baseEntities.Find(bson.D{{
+		"acls.read", bson.D{{"$size", 0}},
+	}}).Select(bson.D{{"_id", 1}}).Iter()
+	defer iter.Close()
+
+	counter := 0
+	for iter.Next(&entity) {
+		readPerm := everyonePerm
+		if entity.URL.User != "" {
+			readPerm = []string{params.Everyone, entity.URL.User}
+		}
+		if err := baseEntities.UpdateId(entity.URL, bson.D{{
+			"$set", bson.D{{"acls.read", readPerm}},
+		}}); err != nil {
+			return errgo.Notef(err, "cannot populate ACL for base entity %s", entity.URL)
+		}
+		counter++
+	}
+	if err := iter.Close(); err != nil {
+		return errgo.Notef(err, "cannot populate ACLs for base entities")
+	}
+	logger.Infof("%d base entities updated", counter)
 	return nil
 }
