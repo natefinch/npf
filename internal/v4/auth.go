@@ -129,10 +129,10 @@ func (h *Handler) newMacaroon() (*macaroon.Macaroon, error) {
 	// TODO generate different caveats depending on the requested operation
 	// and whether there's a charm id or not.
 	// Mint an appropriate macaroon and send it back to the client.
-	return h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{{
+	return h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
 		Location:  h.config.AuthLocation,
-		Condition: "need-declared " + usernameAttr + " is-authenticated-user",
-	}})
+		Condition: "is-authenticated-user",
+	}, usernameAttr)})
 }
 
 var errNoCreds = errgo.New("missing HTTP auth header")
