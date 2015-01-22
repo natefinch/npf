@@ -17,7 +17,6 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/macaroon-bakery.v0/bakery"
-	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -103,7 +102,7 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 			// endpoints not yet implemented:
 			// "color": router.SingleIncludeHandler(h.metaColor),
 		},
-	}, h.resolveURL, h.entityExists)
+	}, h.resolveURL, h.authorizeEntity, h.entityExists)
 	return h
 }
 
@@ -728,9 +727,5 @@ func (h *Handler) serveChangesPublished(_ http.Header, r *http.Request) (interfa
 }
 
 func (h *Handler) serveMacaroon(_ http.Header, _ *http.Request) (interface{}, error) {
-	return h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{{
-		Location: h.config.AuthLocation,
-		// TODO needs-declared user is-authenticated-user
-		Condition: "is-authenticated-user",
-	}})
+	return h.newMacaroon()
 }

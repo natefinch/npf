@@ -27,7 +27,7 @@ const (
 // Special user/group names.
 const (
 	Everyone = "everyone"
-	Admin = "admin"
+	Admin    = "admin"
 )
 
 // MetaAnyResponse holds the result of a meta/any

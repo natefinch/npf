@@ -130,7 +130,8 @@ type Handlers struct {
 type Router struct {
 	handlers   *Handlers
 	handler    http.Handler
-	resolveURL func(ref *charm.Reference) error
+	resolveURL func(id *charm.Reference) error
+	authorize  func(id *charm.Reference, req *http.Request) error
 	exists     func(id *charm.Reference, req *http.Request) (bool, error)
 }
 
@@ -148,12 +149,14 @@ type Router struct {
 // but has no appropriate handler to call.
 func New(
 	handlers *Handlers,
-	resolveURL func(url *charm.Reference) error,
-	exists func(url *charm.Reference, req *http.Request) (bool, error),
+	resolveURL func(id *charm.Reference) error,
+	authorize func(id *charm.Reference, req *http.Request) error,
+	exists func(id *charm.Reference, req *http.Request) (bool, error),
 ) *Router {
 	r := &Router{
 		handlers:   handlers,
 		resolveURL: resolveURL,
+		authorize:  authorize,
 		exists:     exists,
 	}
 	mux := NewServeMux()
@@ -234,6 +237,9 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	}
 	if handler != nil {
 		req.URL.Path = path
+		if err := r.authorize(url, req); err != nil {
+			return errgo.Mask(err, errgo.Any)
+		}
 		err := handler(url, fullySpecified, w, req)
 		// Note: preserve error cause from handlers.
 		return errgo.Mask(err, errgo.Any)
@@ -286,6 +292,9 @@ func (r *Router) serveMeta(id *charm.Reference, w http.ResponseWriter, req *http
 }
 
 func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface{}, error) {
+	if err := r.authorize(id, req); err != nil {
+		return nil, errgo.Mask(err, errgo.Any)
+	}
 	key, path := handlerKey(req.URL.Path)
 	if key == "" {
 		// GET id/meta
@@ -351,6 +360,9 @@ func unmarshalJSONBody(req *http.Request, val interface{}) error {
 // The metadata to be put is in the request body.
 // PUT /$id/meta/...
 func (r *Router) serveMetaPut(id *charm.Reference, req *http.Request) error {
+	if err := r.authorize(id, req); err != nil {
+		return errgo.Mask(err, errgo.Any)
+	}
 	var body json.RawMessage
 	if err := unmarshalJSONBody(req, &body); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrBadRequest))
@@ -525,6 +537,9 @@ func (r *Router) serveBulkMetaPutOne(req *http.Request, id string, val *json.Raw
 	}
 	if err := r.resolveURL(url); err != nil {
 		// Note: preserve error cause from resolveURL.
+		return errgo.Mask(err, errgo.Any)
+	}
+	if err := r.authorize(url, req); err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
 	if err := r.serveMetaPutBody(url, req, val); err != nil {
