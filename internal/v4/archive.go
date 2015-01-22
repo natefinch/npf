@@ -46,24 +46,12 @@ func (h *Handler) serveArchive(id *charm.Reference, fullySpecified bool, w http.
 		// TODO(rog) params.ErrMethodNotAllowed
 		return errgo.Newf("method not allowed")
 	case "DELETE":
-		if err := h.authenticate(w, req, id, opChange); err != nil {
-			return err
-		}
 		return h.serveDeleteArchive(id, w, req)
 	case "POST":
-		if err := h.authenticate(w, req, id, opChange); err != nil {
-			return err
-		}
 		return h.servePostArchive(id, w, req)
 	case "PUT":
-		if err := h.authenticate(w, req, id, opChange); err != nil {
-			return err
-		}
 		return h.servePutArchive(id, w, req)
 	case "GET":
-		// TODO authenticate on get
-		if err := h.authenticate(w, req, id, opGet); err != nil {
-		}
 	}
 	r, size, hash, err := h.store.OpenBlob(id)
 	if err != nil {

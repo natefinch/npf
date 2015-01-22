@@ -40,6 +40,7 @@ var routerGetTests = []struct {
 	expectBody       interface{}
 	expectQueryCount int32
 	resolveURL       func(*charm.Reference) error
+	authorize        func(id *charm.Reference, req *http.Request) error
 	exists           func(*charm.Reference, *http.Request) (bool, error)
 }{{
 	about: "global handler",
@@ -284,6 +285,20 @@ var routerGetTests = []struct {
 		Code:    params.ErrNotFound,
 	},
 }, {
+	about:  "unauthorized id handler",
+	urlStr: "/precise/wordpress-42/foo",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	authorize:    neverAuthorize,
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: "bad wolf",
+	},
+}, {
 	about: "meta list",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
@@ -438,6 +453,20 @@ var routerGetTests = []struct {
 	expectBody: params.Error{
 		Code:    "arble",
 		Message: "a message",
+	},
+}, {
+	about:  "unauthorized meta handler",
+	urlStr: "/precise/wordpress-42/meta/foo",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	authorize:    neverAuthorize,
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: "bad wolf",
 	},
 }, {
 	about:  "meta/any, no includes, id exists",
@@ -794,11 +823,15 @@ func (s *RouterSuite) TestRouterGet(c *gc.C) {
 		if test.resolveURL != nil {
 			resolve = test.resolveURL
 		}
+		authorize := alwaysAuthorize
+		if test.authorize != nil {
+			authorize = test.authorize
+		}
 		exists := alwaysExists
 		if test.exists != nil {
 			exists = test.exists
 		}
-		router := New(&test.handlers, resolve, exists)
+		router := New(&test.handlers, resolve, authorize, exists)
 		// Note that fieldSelectHandler increments queryCount each time
 		// a query is made.
 		queryCount = 0
@@ -817,7 +850,7 @@ func (s *RouterSuite) TestCORSHeaders(c *gc.C) {
 		Global: map[string]http.Handler{
 			"foo": http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {}),
 		},
-	}, noResolveURL, alwaysExists)
+	}, noResolveURL, alwaysAuthorize, alwaysExists)
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: h,
 		URL:     "/foo",
@@ -868,7 +901,7 @@ func (s *RouterSuite) TestHTTPRequestPassedThroughToMeta(c *gc.C) {
 				Update:    update,
 			}),
 		},
-	}, noResolveURL, alwaysExists)
+	}, noResolveURL, alwaysAuthorize, alwaysExists)
 	resp := httptest.NewRecorder()
 	h.ServeHTTP(resp, testReq)
 	c.Assert(resp.Code, gc.Equals, http.StatusOK, gc.Commentf("response body: %s", resp.Body))
@@ -885,7 +918,7 @@ func (s *RouterSuite) TestHTTPRequestPassedThroughToMeta(c *gc.C) {
 }
 
 func (s *RouterSuite) TestOptionsHTTPMethod(c *gc.C) {
-	h := New(&Handlers{}, noResolveURL, alwaysExists)
+	h := New(&Handlers{}, noResolveURL, alwaysAuthorize, alwaysExists)
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: h,
 		Method:  "OPTIONS",
@@ -1428,7 +1461,7 @@ func (s *RouterSuite) TestRouterPut(c *gc.C) {
 		}
 		bodyVal, err := json.Marshal(test.body)
 		c.Assert(err, gc.IsNil)
-		router := New(&test.handlers, resolve, alwaysExists)
+		router := New(&test.handlers, resolve, alwaysAuthorize, alwaysExists)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: router,
 			URL:     test.urlStr,
@@ -1497,7 +1530,7 @@ func (s *RouterSuite) TestRouterPutWithInvalidContent(c *gc.C) {
 				"foo": testMetaHandler(0),
 			},
 		}
-		router := New(handlers, noResolveURL, alwaysExists)
+		router := New(handlers, noResolveURL, alwaysAuthorize, alwaysExists)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: router,
 			URL:     test.urlStr,
@@ -1547,7 +1580,7 @@ func (s *RouterSuite) TestMethodsThatPassThroughUnresolvedId(c *gc.C) {
 		} else {
 			resp.CharmURL = "cs:wordpress"
 		}
-		router := New(&handlers, newResolveURL("series", 1234), alwaysExists)
+		router := New(&handlers, newResolveURL("series", 1234), alwaysAuthorize, alwaysExists)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:    router,
 			Body:       strings.NewReader(""),
@@ -1561,6 +1594,14 @@ func (s *RouterSuite) TestMethodsThatPassThroughUnresolvedId(c *gc.C) {
 
 func alwaysExists(id *charm.Reference, req *http.Request) (bool, error) {
 	return true, nil
+}
+
+func alwaysAuthorize(id *charm.Reference, req *http.Request) error {
+	return nil
+}
+
+func neverAuthorize(id *charm.Reference, req *http.Request) error {
+	return errgo.WithCausef(nil, params.ErrUnauthorized, "bad wolf")
 }
 
 var getMetadataTests = []struct {
@@ -1611,7 +1652,7 @@ func (s *RouterSuite) TestGetMetadata(c *gc.C) {
 				"item2": fieldSelectHandler("handler2", 0, "item2"),
 				"test":  testMetaHandler(0),
 			},
-		}, noResolveURL, alwaysExists)
+		}, noResolveURL, alwaysAuthorize, alwaysExists)
 		id := charm.MustParseReference(test.id)
 		result, err := router.GetMetadata(id, test.includes, nil)
 		if test.expectError != "" {

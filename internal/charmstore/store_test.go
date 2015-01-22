@@ -198,8 +198,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 }
 
 func assertBaseEntity(c *gc.C, store *Store, url *charm.Reference) {
-	var baseEntity mongodoc.BaseEntity
-	err := store.DB.BaseEntities().FindId(url).One(&baseEntity)
+	baseEntity, err := store.FindBaseEntity(url)
 	c.Assert(err, gc.IsNil)
 	expectACLs := mongodoc.ACL{
 		Read: []string{params.Everyone},
@@ -207,7 +206,7 @@ func assertBaseEntity(c *gc.C, store *Store, url *charm.Reference) {
 	if url.User != "" {
 		expectACLs.Read = append(expectACLs.Read, url.User)
 	}
-	c.Assert(baseEntity, jc.DeepEquals, mongodoc.BaseEntity{
+	c.Assert(baseEntity, jc.DeepEquals, &mongodoc.BaseEntity{
 		URL:    url,
 		User:   url.User,
 		Name:   url.Name,
@@ -356,6 +355,89 @@ func (s *StoreSuite) TestFindEntity(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		c.Assert(entity.BlobName, gc.Not(gc.Equals), "")
 	})
+}
+
+var findBaseEntityTests = []struct {
+	about  string
+	stored []string
+	url    string
+	fields []string
+	expect *mongodoc.BaseEntity
+}{{
+	about:  "entity found, base url, all fields",
+	stored: []string{"utopic/django-42"},
+	url:    "django",
+	expect: &mongodoc.BaseEntity{
+		URL:    charm.MustParseReference("django"),
+		Name:   "django",
+		Public: true,
+		ACLs: mongodoc.ACL{
+			Read: []string{"everyone"},
+		},
+	},
+}, {
+	about:  "entity found, fully qualified url, few fields",
+	stored: []string{"utopic/django-42", "~who/precise/django-47"},
+	url:    "~who/precise/django-0",
+	fields: []string{"public", "user"},
+	expect: &mongodoc.BaseEntity{
+		URL:    charm.MustParseReference("~who/django"),
+		User:   "who",
+		Public: true,
+	},
+}, {
+	about:  "entity found, partial url, only the ACLs",
+	stored: []string{"utopic/django-42", "~who/trusty/django-47"},
+	url:    "~who/django-42",
+	fields: []string{"acls"},
+	expect: &mongodoc.BaseEntity{
+		URL: charm.MustParseReference("~who/django"),
+		ACLs: mongodoc.ACL{
+			Read: []string{"everyone", "who"},
+		},
+	},
+}, {
+	about:  "entity not found, charm name",
+	stored: []string{"utopic/django-42", "~who/trusty/django-47"},
+	url:    "rails",
+}, {
+	about:  "entity not found, user",
+	stored: []string{"utopic/django-42", "~who/trusty/django-47"},
+	url:    "~dalek/django",
+	fields: []string{"acls"},
+}}
+
+func (s *StoreSuite) TestFindBaseEntity(c *gc.C) {
+	ch := storetesting.Charms.CharmDir("wordpress")
+	store, err := NewStore(s.Session.DB("testing"), nil, nil)
+	c.Assert(err, gc.IsNil)
+	for i, test := range findBaseEntityTests {
+		c.Logf("test %d: %s", i, test.about)
+
+		// Add initial charms to the store.
+		for _, url := range mustParseReferences(test.stored) {
+			err := store.AddCharmWithArchive(url, ch)
+			c.Assert(err, gc.IsNil)
+		}
+
+		// Find the entity.
+		id := charm.MustParseReference(test.url)
+		baseEntity, err := store.FindBaseEntity(id, test.fields...)
+		if test.expect == nil {
+			// We don't expect the entity to be found.
+			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
+			c.Assert(baseEntity, gc.IsNil)
+		} else {
+			c.Assert(err, gc.IsNil)
+			c.Assert(baseEntity, jc.DeepEquals, test.expect)
+		}
+
+		// Remove all the entities from the store.
+		_, err = store.DB.Entities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+		_, err = store.DB.BaseEntities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+	}
 }
 
 func (s *StoreSuite) TestAddCharmWithFailedESInsert(c *gc.C) {

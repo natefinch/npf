@@ -20,40 +20,57 @@ import (
 
 const basicRealm = "CharmStore4"
 
-type operation string
+// authorize checks that the current user is authorized based on the provided
+// ACL. If an authenticated user is required, authorize tries to retrieve the
+// current user in the following ways:
+// - by checking that the request's headers HTTP basic auth credentials match
+//   the superuser credentials stored in the API handler;
+// - by checking that there is a valid macaroon in the request's cookies.
+// A params.ErrUnauthorized error is returned if superuser credentials fail;
+// otherwise a macaroon is minted and a httpbakery discharge-required
+// error is returned holding the macaroon.
+func (h *Handler) authorize(req *http.Request, acl []string) error {
+	logger.Infof(
+		"authorize, bakery %p, auth location %q, acl %q, path: %q, method: %q",
+		h.store.Bakery,
+		h.config.AuthLocation,
+		acl,
+		req.URL.Path,
+		req.Method)
 
-const (
-	opChange operation = "change"
-	opGet    operation = "get"
-)
+	// No need to authenticate if the ACL is open to everyone.
+	for _, name := range acl {
+		if name == params.Everyone {
+			return nil
+		}
+	}
 
-// authenticate checks that the request's headers HTTP basic auth credentials
-// match the superuser credentials stored in the API handler.
-// A params.ErrUnauthorized is returned if the authentication fails.
-func (h *Handler) authenticate(w http.ResponseWriter, req *http.Request, id *charm.Reference, op operation) error {
-	logger.Infof("authenticate, bakery %p, auth location %q", h.store.Bakery, h.config.AuthLocation)
-
-	// If basic auth credentials are presented, use them,
-	// otherwise use macaroon third-party caveat verification.
-
+	// If basic auth credentials are presented, use them.
 	user, passwd, err := parseCredentials(req)
 	if err == nil {
 		if user != h.config.AuthUsername || passwd != h.config.AuthPassword {
-			return unauthorizedBasic(w, "invalid user name or password", nil)
+			return errgo.WithCausef(nil, params.ErrUnauthorized, "invalid user name or password")
 		}
 		return nil
 	}
 	if err != errNoCreds || h.store.Bakery == nil || h.config.AuthLocation == "" {
-		return unauthorizedBasic(w, "authentication failed", err)
+		return errgo.WithCausef(err, params.ErrUnauthorized, "authentication failed")
 	}
+
+	// No basic auth presented: use macaroon third-party caveat verification.
 	attrs, verr := httpbakery.CheckRequest(h.store.Bakery, req, nil, checkers.New())
 	if verr == nil {
 		logger.Infof("authenticated with attrs %q", attrs)
+		if err := h.checkACLMembership(attrs, acl); err != nil {
+			return errgo.WithCausef(err, params.ErrUnauthorized, "")
+		}
 		return nil
 	}
 	if _, ok := errgo.Cause(verr).(*bakery.VerificationError); !ok {
 		return errgo.Mask(verr)
 	}
+
+	// Macaroon verification failed: mint a new macaroon.
 	m, err := h.newMacaroon()
 	if err != nil {
 		return errgo.Notef(err, "cannot mint macaroon")
@@ -61,15 +78,61 @@ func (h *Handler) authenticate(w http.ResponseWriter, req *http.Request, id *cha
 	return httpbakery.NewDischargeRequiredError(m, verr)
 }
 
+func (h *Handler) authorizeEntity(id *charm.Reference, req *http.Request) error {
+	// TThe first time a new charm is published, its corresponding base entity
+	// is not yet present in the database. For this reason, the check below
+	// must still allow specific users to proceed with the request, even in the
+	// case ACL cannot be retrieved from the base entity.
+	baseEntity, err := h.store.FindBaseEntity(id, "acls")
+	if err != nil {
+		if errgo.Cause(err) == params.ErrNotFound {
+			// Cannot get the ACL from the entity.
+			// TODO frankban: just assume read permissions for everyone and
+			// no write permissions for now. Let the endpoint deal with not
+			// found errors.
+			return h.authorizeWithPerms(req, []string{params.Everyone}, nil)
+		}
+		return errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
+	}
+	// TODO frankban: replace with baseEntity.ACL.Write.
+	// For the time being only rely on basic HTTP auth.
+	return h.authorizeWithPerms(req, baseEntity.ACLs.Read, nil)
+}
+
+func (h *Handler) authorizeWithPerms(req *http.Request, read, write []string) error {
+	var acl []string
+	switch req.Method {
+	case "DELETE", "PATCH", "POST", "PUT":
+		acl = write
+	default:
+		acl = read
+	}
+	return h.authorize(req, acl)
+}
+
+const usernameAttr = "username"
+
+func (h *Handler) checkACLMembership(attrs map[string]string, acl []string) error {
+	user := attrs[usernameAttr]
+	if user == "" {
+		return errgo.New("no username declared")
+	}
+	for _, name := range acl {
+		if name == params.Everyone || name == user {
+			return nil
+		}
+	}
+	return errgo.Newf("access denied for user %q", user)
+}
+
 func (h *Handler) newMacaroon() (*macaroon.Macaroon, error) {
 	// TODO generate different caveats depending on the requested operation
 	// and whether there's a charm id or not.
 	// Mint an appropriate macaroon and send it back to the client.
-	return h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{{
-		Location: h.config.AuthLocation,
-		// TODO needs-declared user is-authenticated-user
+	return h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
+		Location:  h.config.AuthLocation,
 		Condition: "is-authenticated-user",
-	}})
+	}, usernameAttr)})
 }
 
 var errNoCreds = errgo.New("missing HTTP auth header")
@@ -96,9 +159,4 @@ func parseCredentials(req *http.Request) (username, password string, err error) 
 		return "", "", errgo.New("invalid HTTP auth contents")
 	}
 	return tokens[0], tokens[1], nil
-}
-
-func unauthorizedBasic(w http.ResponseWriter, message string, underlying error) error {
-	w.Header().Set("WWW-Authenticate", `Basic realm="`+basicRealm+`"`)
-	return errgo.WithCausef(underlying, params.ErrUnauthorized, message)
 }

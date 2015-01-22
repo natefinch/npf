@@ -7,21 +7,19 @@ import (
 	"strings"
 	"text/template"
 
-	"gopkg.in/juju/charm.v4"
-
 	"github.com/juju/charmstore/internal/router"
 )
 
 type pprofHandler struct {
 	mux  *http.ServeMux
-	auth authenticator
+	auth authorizer
 }
 
-type authenticator interface {
-	authenticate(w http.ResponseWriter, req *http.Request, id *charm.Reference, op operation) error
+type authorizer interface {
+	authorize(req *http.Request, acl []string) error
 }
 
-func newPprofHandler(auth authenticator) http.Handler {
+func newPprofHandler(auth authorizer) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/cmdline", pprof.Cmdline)
 	mux.HandleFunc("/profile", pprof.Profile)
@@ -34,7 +32,7 @@ func newPprofHandler(auth authenticator) http.Handler {
 }
 
 func (h *pprofHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if err := h.auth.authenticate(w, req, nil, ""); err != nil {
+	if err := h.auth.authorize(req, nil); err != nil {
 		router.WriteError(w, err)
 		return
 	}

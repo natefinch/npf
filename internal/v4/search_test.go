@@ -716,7 +716,9 @@ func (s *SearchSuite) assertPut(c *gc.C, url string, val interface{}) {
 		Header: http.Header{
 			"Content-Type": {"application/json"},
 		},
-		Body: bytes.NewReader(body),
+		Username: serverParams.AuthUsername,
+		Password: serverParams.AuthPassword,
+		Body:     bytes.NewReader(body),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("headers: %v, body: %s", rec.HeaderMap, rec.Body.String()))
 	c.Assert(rec.Body.String(), gc.HasLen, 0)

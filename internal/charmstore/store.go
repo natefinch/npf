@@ -312,14 +312,7 @@ func (s *Store) FindEntities(url *charm.Reference, fields ...string) ([]*mongodo
 		q = bson.D{{"_id", url}}
 	}
 
-	query := s.DB.Entities().Find(q)
-	if len(fields) > 0 {
-		sel := make(bson.D, len(fields))
-		for i, field := range fields {
-			sel[i] = bson.DocElem{field, 1}
-		}
-		query = query.Select(sel)
-	}
+	query := selectFields(s.DB.Entities().Find(q), fields)
 	var docs []*mongodoc.Entity
 	err := query.All(&docs)
 	if err != nil {
@@ -333,6 +326,34 @@ func (s *Store) FindEntities(url *charm.Reference, fields ...string) ([]*mongodo
 		}
 	}
 	return docs[0:last], nil
+}
+
+// FindBaseEntity finds the base entity in the store using the given URL,
+// which can either represent a fully qualified entity or a base id.
+// If any fields are specified, only those fields will be populated in the
+// returned base entity.
+func (s *Store) FindBaseEntity(url *charm.Reference, fields ...string) (*mongodoc.BaseEntity, error) {
+	query := s.DB.BaseEntities().FindId(baseURL(url))
+	query = selectFields(query, fields)
+	var baseEntity mongodoc.BaseEntity
+	if err := query.One(&baseEntity); err != nil {
+		if err == mgo.ErrNotFound {
+			return nil, errgo.WithCausef(nil, params.ErrNotFound, "base entity not found")
+		}
+		return nil, errgo.Mask(err)
+	}
+	return &baseEntity, nil
+}
+
+func selectFields(query *mgo.Query, fields []string) *mgo.Query {
+	if len(fields) > 0 {
+		sel := make(bson.D, len(fields))
+		for i, field := range fields {
+			sel[i] = bson.DocElem{field, 1}
+		}
+		query = query.Select(sel)
+	}
+	return query
 }
 
 // ExpandURL returns all the URLs that the given URL may refer to.
