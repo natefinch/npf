@@ -296,6 +296,8 @@ func (r *Router) serveMeta(id *charm.Reference, w http.ResponseWriter, req *http
 }
 
 func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface{}, error) {
+	// TODO: consider whether we might want the capability to
+	// have different permissions for different meta endpoints.
 	if err := r.authorize(id, req); err != nil {
 		return nil, errgo.Mask(err, errgo.Any)
 	}
