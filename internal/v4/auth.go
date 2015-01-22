@@ -79,11 +79,10 @@ func (h *Handler) authorize(req *http.Request, acl []string) error {
 }
 
 func (h *Handler) authorizeEntity(id *charm.Reference, req *http.Request) error {
-	// TODO frankban: the first time a new charm is published, its
-	// corresponding base entity is not yet present in the database.
-	// For this reason, the check below must still allow specific users to
-	// proceed with the request, even in the case ACL cannot be retrieved
-	// from the base entity.
+	// TThe first time a new charm is published, its corresponding base entity
+	// is not yet present in the database. For this reason, the check below
+	// must still allow specific users to proceed with the request, even in the
+	// case ACL cannot be retrieved from the base entity.
 	baseEntity, err := h.store.FindBaseEntity(id, "acls")
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
@@ -111,10 +110,10 @@ func (h *Handler) authorizeWithPerms(req *http.Request, read, write []string) er
 	return h.authorize(req, acl)
 }
 
-const userNameAttr = "username"
+const usernameAttr = "username"
 
 func (h *Handler) checkACLMembership(attrs map[string]string, acl []string) error {
-	user := attrs[userNameAttr]
+	user := attrs[usernameAttr]
 	if user == "" {
 		return errgo.New("no username declared")
 	}
@@ -132,7 +131,7 @@ func (h *Handler) newMacaroon() (*macaroon.Macaroon, error) {
 	// Mint an appropriate macaroon and send it back to the client.
 	return h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{{
 		Location:  h.config.AuthLocation,
-		Condition: "need-declared " + userNameAttr + " is-authenticated-user",
+		Condition: "need-declared " + usernameAttr + " is-authenticated-user",
 	}})
 }
 
