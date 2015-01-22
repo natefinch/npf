@@ -163,9 +163,14 @@ func createBaseEntities(db StoreDatabase) error {
 func populateReadACL(db StoreDatabase) error {
 	baseEntities := db.BaseEntities()
 	var entity mongodoc.BaseEntity
+	//  {$or: [{"acls": {$exists: false}}, {"acls.read": {$size: 0}}]}
 	iter := baseEntities.Find(bson.D{{
-		"acls.read", bson.D{{"$size", 0}},
+		"$or", []bson.D{
+			bson.D{{"acls", bson.D{{"$exists", false}}}},
+			bson.D{{"acls.read", bson.D{{"$size", 0}}}},
+		},
 	}}).Select(bson.D{{"_id", 1}}).Iter()
+
 	defer iter.Close()
 
 	counter := 0
