@@ -123,7 +123,7 @@ func denormalizeEntityIds(db StoreDatabase) error {
 		}
 	}
 	if err := iter.Close(); err != nil {
-		return errgo.Notef(err, "cannot denormalize entity ids")
+		return errgo.Notef(err, "cannot iterate entities")
 	}
 	return nil
 }
@@ -153,7 +153,7 @@ func createBaseEntities(db StoreDatabase) error {
 
 	}
 	if err := iter.Close(); err != nil {
-		return errgo.Notef(err, "cannot create base entities")
+		return errgo.Notef(err, "cannot iterate base entities")
 	}
 	logger.Infof("%d base entities created", counter)
 	return nil
@@ -182,7 +182,7 @@ func populateReadACL(db StoreDatabase) error {
 		counter++
 	}
 	if err := iter.Close(); err != nil {
-		return errgo.Notef(err, "cannot populate ACLs for base entities")
+		return errgo.Notef(err, "cannot iterate base entities")
 	}
 	logger.Infof("%d base entities updated", counter)
 	return nil
