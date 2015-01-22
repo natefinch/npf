@@ -4,3 +4,4 @@ auth-username: admin
 auth-password: example-passwd
 #elasticsearch-addr: localhost:9200
 identity-public-key: 4b1SZalbCKoq7etKnwKGkNomfJuN+VljegpRNnhP23c=
+identity-location: localhost:8082

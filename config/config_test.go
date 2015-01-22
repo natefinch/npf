@@ -32,6 +32,8 @@ foo: 1
 bar: false
 auth-username: myuser
 auth-password: mypasswd
+identity-location: localhost:18082
+identity-public-key: 0000
 `
 
 func (s *ConfigSuite) readConfig(c *gc.C, content string) (*config.Config, error) {
@@ -48,10 +50,12 @@ func (s *ConfigSuite) TestRead(c *gc.C) {
 	conf, err := s.readConfig(c, testConfig)
 	c.Assert(err, gc.IsNil)
 	c.Assert(conf, jc.DeepEquals, &config.Config{
-		MongoURL:     "localhost:23456",
-		APIAddr:      "blah:2324",
-		AuthUsername: "myuser",
-		AuthPassword: "mypasswd",
+		MongoURL:          "localhost:23456",
+		APIAddr:           "blah:2324",
+		AuthUsername:      "myuser",
+		AuthPassword:      "mypasswd",
+		IdentityLocation:  "localhost:18082",
+		IdentityPublicKey: "0000",
 	})
 }
 

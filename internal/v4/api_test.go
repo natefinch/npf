@@ -1863,7 +1863,7 @@ func (s *APISuite) TestMacaroon(c *gc.C) {
 	// Create a charmstore server that will use the test third party for
 	// its third party caveat.
 	srv, _ := newServer(c, s.store.DB.Session, nil, charmstore.ServerParams{
-		AuthLocation:     discharger.Location(),
+		IdentityLocation: discharger.Location(),
 		PublicKeyLocator: discharger,
 	})
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{

@@ -45,9 +45,9 @@ type ServerParams struct {
 	AuthUsername string
 	AuthPassword string
 
-	// AuthLocation holds the location of the third party authorization
+	// IdentityLocation holds the location of the third party authorization
 	// service to use when creating third party caveats.
-	AuthLocation string
+	IdentityLocation string
 
 	// PublicKeyLocator holds a public key store.
 	// It may be nil.

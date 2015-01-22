@@ -33,7 +33,7 @@ func (h *Handler) authorize(req *http.Request, acl []string) error {
 	logger.Infof(
 		"authorize, bakery %p, auth location %q, acl %q, path: %q, method: %q",
 		h.store.Bakery,
-		h.config.AuthLocation,
+		h.config.IdentityLocation,
 		acl,
 		req.URL.Path,
 		req.Method)
@@ -53,7 +53,7 @@ func (h *Handler) authorize(req *http.Request, acl []string) error {
 		}
 		return nil
 	}
-	if err != errNoCreds || h.store.Bakery == nil || h.config.AuthLocation == "" {
+	if err != errNoCreds || h.store.Bakery == nil || h.config.IdentityLocation == "" {
 		return errgo.WithCausef(err, params.ErrUnauthorized, "authentication failed")
 	}
 
@@ -130,7 +130,7 @@ func (h *Handler) newMacaroon() (*macaroon.Macaroon, error) {
 	// and whether there's a charm id or not.
 	// Mint an appropriate macaroon and send it back to the client.
 	return h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
-		Location:  h.config.AuthLocation,
+		Location:  h.config.IdentityLocation,
 		Condition: "is-authenticated-user",
 	}, usernameAttr)})
 }
