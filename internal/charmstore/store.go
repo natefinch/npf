@@ -313,13 +313,6 @@ func (s *Store) FindEntities(url *charm.Reference, fields ...string) ([]*mongodo
 	}
 
 	query := selectFields(s.DB.Entities().Find(q), fields)
-	if len(fields) > 0 {
-		sel := make(bson.D, len(fields))
-		for i, field := range fields {
-			sel[i] = bson.DocElem{field, 1}
-		}
-		query = query.Select(sel)
-	}
 	var docs []*mongodoc.Entity
 	err := query.All(&docs)
 	if err != nil {
