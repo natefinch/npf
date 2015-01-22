@@ -509,7 +509,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	})
 	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob")
 	defer discharger.Close()
-	cookies := []*http.Cookie{macaroonCookie(c, srv)}
+	cookies := []*http.Cookie{dischargedAuthCookie(c, srv)}
 	s.srv, s.store = srv, store
 
 	s.addCharm(c, "wordpress", "precise/wordpress-23")

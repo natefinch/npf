@@ -20,7 +20,7 @@ import (
 
 const basicRealm = "CharmStore4"
 
-// authorize check that the current user is authorized based on the provided
+// authorize checks that the current user is authorized based on the provided
 // ACL. If an authenticated user is required, authorize tries to retrieve the
 // current user in the following ways:
 // - by checking that the request's headers HTTP basic auth credentials match

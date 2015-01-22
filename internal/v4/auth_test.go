@@ -167,8 +167,8 @@ func newServerWithDischarger(c *gc.C, session *mgo.Session, username string) (ht
 	return srv, store, discharger
 }
 
-// macaroonCookie retrieves and discharges an authentication macaroon cookie.
-func macaroonCookie(c *gc.C, srv http.Handler) *http.Cookie {
+// dischargedAuthCookie retrieves and discharges an authentication macaroon cookie.
+func dischargedAuthCookie(c *gc.C, srv http.Handler) *http.Cookie {
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: srv,
 		URL:     storeURL("macaroon"),
@@ -255,7 +255,7 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		defer discharger.Close()
 
 		// Retrieve the macaroon cookie.
-		cookies := []*http.Cookie{macaroonCookie(c, srv)}
+		cookies := []*http.Cookie{dischargedAuthCookie(c, srv)}
 
 		// Add a charm to the store, used for testing.
 		err := store.AddCharmWithArchive(
