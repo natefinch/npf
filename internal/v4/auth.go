@@ -30,7 +30,13 @@ const basicRealm = "CharmStore4"
 // otherwise a macaroon is minted and a httpbakery discharge-required
 // error is returned holding the macaroon.
 func (h *Handler) authorize(req *http.Request, acl []string) error {
-	logger.Infof("authorize, bakery %p, auth location %q, acl %q", h.store.Bakery, h.config.AuthLocation, acl)
+	logger.Infof(
+		"authorize, bakery %p, auth location %q, acl %q, path: %q, method: %q",
+		h.store.Bakery,
+		h.config.AuthLocation,
+		acl,
+		req.URL.Path,
+		req.Method)
 
 	// No need to authenticate if the ACL is open to everyone.
 	for _, name := range acl {
