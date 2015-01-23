@@ -120,15 +120,16 @@ func (h *Handler) checkACLMembership(attrs map[string]string, acl []string) erro
 	if user == "" {
 		return errgo.New("no username declared")
 	}
-	groups := strings.Fields(attrs[groupsAttr])
+	members := map[string]bool{
+		params.Everyone: true,
+		user:            true,
+	}
+	for _, name := range strings.Fields(attrs[groupsAttr]) {
+		members[name] = true
+	}
 	for _, name := range acl {
-		if name == params.Everyone || name == user {
+		if members[name] {
 			return nil
-		}
-		for _, group := range groups {
-			if name == group {
-				return nil
-			}
 		}
 	}
 	return errgo.Newf("access denied for user %q", user)

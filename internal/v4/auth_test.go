@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 	"sync"
 
 	jc "github.com/juju/testing/checkers"
@@ -149,14 +150,14 @@ func noInteraction(*url.URL) error {
 	return fmt.Errorf("unexpected interaction required")
 }
 
-func newServerWithDischarger(c *gc.C, session *mgo.Session, username string, groups string) (http.Handler, *charmstore.Store, *bakerytest.Discharger) {
+func newServerWithDischarger(c *gc.C, session *mgo.Session, username string, groups []string) (http.Handler, *charmstore.Store, *bakerytest.Discharger) {
 	discharger := bakerytest.NewDischarger(nil, func(cond string, arg string) ([]checkers.Caveat, error) {
 		if username == "" {
 			return nil, nil
 		}
 		return []checkers.Caveat{
 			checkers.DeclaredCaveat(v4.UsernameAttr, username),
-			checkers.DeclaredCaveat(v4.GroupsAttr, groups),
+			checkers.DeclaredCaveat(v4.GroupsAttr, strings.Join(groups, " ")),
 		}, nil
 	})
 	// Create a charm store server that will use the test third party for
@@ -199,9 +200,9 @@ var readAuthorizationTests = []struct {
 	// username holds the authenticated user name returned by the discharger.
 	// If empty, an anonymous user is returned.
 	username string
-	// groups holds space separated group names the user is member of, as
-	// returned by the discharger.
-	groups string
+	// groups holds group names the user is member of, as returned by the
+	// discharger.
+	groups []string
 	// readPerm stores a list of users with read permissions.
 	readPerm []string
 	// expectStatus is the expected HTTP response status.
@@ -249,27 +250,27 @@ var readAuthorizationTests = []struct {
 }, {
 	about:    "everyone is authorized (user is member of groups)",
 	username: "dalek",
-	groups:   "group1 group2",
+	groups:   []string{"group1", "group2"},
 	readPerm: []string{params.Everyone},
 }, {
 	about:    "everyone and a specific group",
 	username: "dalek",
-	groups:   "group2 group3",
+	groups:   []string{"group2", "group3"},
 	readPerm: []string{params.Everyone, "group1"},
 }, {
 	about:    "specific group authorized",
 	username: "who",
-	groups:   "group1 group42 group2",
+	groups:   []string{"group1", "group42", "group2"},
 	readPerm: []string{"group42"},
 }, {
 	about:    "multiple specific groups authorized",
 	username: "picard",
-	groups:   "group2",
+	groups:   []string{"group2"},
 	readPerm: []string{"kirk", "group0", "group2"},
 }, {
 	about:        "no group authorized",
 	username:     "picard",
-	groups:       "group1 group2",
+	groups:       []string{"group1", "group2"},
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
@@ -278,7 +279,7 @@ var readAuthorizationTests = []struct {
 }, {
 	about:        "access denied for group",
 	username:     "kirk",
-	groups:       "group1 group2 group3",
+	groups:       []string{"group1", "group2", "group3"},
 	readPerm:     []string{"picard", "sisko", "group42", "group47"},
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{

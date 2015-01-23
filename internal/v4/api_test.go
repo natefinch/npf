@@ -507,7 +507,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	discharger := bakerytest.NewDischarger(nil, func(cond string, arg string) ([]checkers.Caveat, error) {
 		return []checkers.Caveat{checkers.DeclaredCaveat("username", "bob")}, nil
 	})
-	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob", "")
+	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
 	defer discharger.Close()
 	cookies := []*http.Cookie{dischargedAuthCookie(c, srv)}
 	s.srv, s.store = srv, store
