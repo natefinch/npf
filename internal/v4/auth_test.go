@@ -149,12 +149,15 @@ func noInteraction(*url.URL) error {
 	return fmt.Errorf("unexpected interaction required")
 }
 
-func newServerWithDischarger(c *gc.C, session *mgo.Session, username string) (http.Handler, *charmstore.Store, *bakerytest.Discharger) {
+func newServerWithDischarger(c *gc.C, session *mgo.Session, username string, groups string) (http.Handler, *charmstore.Store, *bakerytest.Discharger) {
 	discharger := bakerytest.NewDischarger(nil, func(cond string, arg string) ([]checkers.Caveat, error) {
 		if username == "" {
 			return nil, nil
 		}
-		return []checkers.Caveat{checkers.DeclaredCaveat(v4.UsernameAttr, username)}, nil
+		return []checkers.Caveat{
+			checkers.DeclaredCaveat(v4.UsernameAttr, username),
+			checkers.DeclaredCaveat(v4.GroupsAttr, groups),
+		}, nil
 	})
 	// Create a charm store server that will use the test third party for
 	// its third party caveat.
@@ -184,12 +187,21 @@ func dischargedAuthCookie(c *gc.C, srv http.Handler) *http.Cookie {
 	return macaroonCookie
 }
 
+type authSuite struct {
+	storetesting.IsolatedMgoSuite
+}
+
+var _ = gc.Suite(&authSuite{})
+
 var readAuthorizationTests = []struct {
 	// about holds the test description.
 	about string
 	// username holds the authenticated user name returned by the discharger.
 	// If empty, an anonymous user is returned.
 	username string
+	// groups holds space separated group names the user is member of, as
+	// returned by the discharger.
+	groups string
 	// readPerm stores a list of users with read permissions.
 	readPerm []string
 	// expectStatus is the expected HTTP response status.
@@ -218,10 +230,6 @@ var readAuthorizationTests = []struct {
 	username: "picard",
 	readPerm: []string{"kirk", "picard", "sisko"},
 }, {
-	about:    "multiple specific users authorized",
-	username: "picard",
-	readPerm: []string{"kirk", "picard", "sisko"},
-}, {
 	about:        "nobody authorized",
 	username:     "picard",
 	expectStatus: http.StatusUnauthorized,
@@ -238,20 +246,53 @@ var readAuthorizationTests = []struct {
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
+}, {
+	about:    "everyone is authorized (user is member of groups)",
+	username: "dalek",
+	groups:   "group1 group2",
+	readPerm: []string{params.Everyone},
+}, {
+	about:    "everyone and a specific group",
+	username: "dalek",
+	groups:   "group2 group3",
+	readPerm: []string{params.Everyone, "group1"},
+}, {
+	about:    "specific group authorized",
+	username: "who",
+	groups:   "group1 group42 group2",
+	readPerm: []string{"group42"},
+}, {
+	about:    "multiple specific groups authorized",
+	username: "picard",
+	groups:   "group2",
+	readPerm: []string{"kirk", "group0", "group2"},
+}, {
+	about:        "no group authorized",
+	username:     "picard",
+	groups:       "group1 group2",
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "picard"`,
+	},
+}, {
+	about:        "access denied for group",
+	username:     "kirk",
+	groups:       "group1 group2 group3",
+	readPerm:     []string{"picard", "sisko", "group42", "group47"},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
 }}
-
-type authSuite struct {
-	storetesting.IsolatedMgoSuite
-}
-
-var _ = gc.Suite(&authSuite{})
 
 func (s *authSuite) TestReadAuthorization(c *gc.C) {
 	for i, test := range readAuthorizationTests {
 		c.Logf("test %d: %s", i, test.about)
 
 		// Create a new server with a third party discharger.
-		srv, store, discharger := newServerWithDischarger(c, s.Session, test.username)
+		srv, store, discharger := newServerWithDischarger(c, s.Session, test.username, test.groups)
 		defer discharger.Close()
 
 		// Retrieve the macaroon cookie.
