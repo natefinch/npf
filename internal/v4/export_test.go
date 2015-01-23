@@ -13,4 +13,5 @@ var (
 	ParamsLogTypes                 = paramsLogTypes
 	ProcessIcon                    = processIcon
 	UsernameAttr                   = usernameAttr
+	GroupsAttr                     = groupsAttr
 )

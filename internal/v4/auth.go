@@ -110,15 +110,25 @@ func (h *Handler) authorizeWithPerms(req *http.Request, read, write []string) er
 	return h.authorize(req, acl)
 }
 
-const usernameAttr = "username"
+const (
+	usernameAttr = "username"
+	groupsAttr   = "groups"
+)
 
 func (h *Handler) checkACLMembership(attrs map[string]string, acl []string) error {
 	user := attrs[usernameAttr]
 	if user == "" {
 		return errgo.New("no username declared")
 	}
+	members := map[string]bool{
+		params.Everyone: true,
+		user:            true,
+	}
+	for _, name := range strings.Fields(attrs[groupsAttr]) {
+		members[name] = true
+	}
 	for _, name := range acl {
-		if name == params.Everyone || name == user {
+		if members[name] {
 			return nil
 		}
 	}
@@ -132,7 +142,7 @@ func (h *Handler) newMacaroon() (*macaroon.Macaroon, error) {
 	return h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
 		Location:  h.config.IdentityLocation,
 		Condition: "is-authenticated-user",
-	}, usernameAttr)})
+	}, usernameAttr, groupsAttr)})
 }
 
 var errNoCreds = errgo.New("missing HTTP auth header")
