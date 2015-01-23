@@ -54,6 +54,7 @@ var deprecatedSeries = map[string]bool{
 type SearchDoc struct {
 	*mongodoc.Entity
 	TotalDownloads int64
+	ReadACLs       []string
 }
 
 // UpdateSearchAsync will update the search record for the entity
@@ -83,7 +84,11 @@ func (s *Store) UpdateSearch(r *charm.Reference) error {
 		}
 		return errgo.Notef(err, "cannot get %s", r)
 	}
-	doc, err := s.searchDocFromEntity(&entity)
+	baseEntity, err := s.FindBaseEntity(entity.BaseURL, "acls")
+	if err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	doc, err := s.searchDocFromEntity(&entity, baseEntity)
 	if err != nil {
 		return errgo.Mask(err)
 	}
@@ -117,8 +122,9 @@ func (s *Store) UpdateSearchFields(r *charm.Reference, fields map[string]interfa
 
 // searchDocFromEntity performs the processing required to convert a mongodoc.Entity
 // to an esDoc for indexing.
-func (s *Store) searchDocFromEntity(e *mongodoc.Entity) (*SearchDoc, error) {
+func (s *Store) searchDocFromEntity(e *mongodoc.Entity, be *mongodoc.BaseEntity) (*SearchDoc, error) {
 	doc := SearchDoc{Entity: e}
+	doc.ReadACLs = be.ACLs.Read
 	_, allRevisions, err := s.ArchiveDownloadCounts(e.URL)
 	if err != nil {
 		return nil, errgo.Mask(err)
@@ -347,6 +353,9 @@ type SearchParams struct {
 	Include []string
 	// Start the the returned items at a specific offset.
 	Skip int
+	// ACL values to search in addition to everyone. ACL values may represent user names
+	// or group names.
+	Groups []string
 	// Sort the returned items.
 	sort []sortParam
 }
@@ -476,7 +485,7 @@ func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 	// Filters
 	qdsl.Query = elasticsearch.FilteredQuery{
 		Query:  q,
-		Filter: createFilters(sp.Filters),
+		Filter: createFilters(sp.Filters, sp.Groups),
 	}
 
 	// Sorting
@@ -494,8 +503,8 @@ func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 // The created filter will only match when at least one of the requested values
 // matches for all of the requested keys. Any filter names that are not defined
 // in the filters map will be silently skipped.
-func createFilters(f map[string][]string) elasticsearch.Filter {
-	af := make(elasticsearch.AndFilter, 0, len(f))
+func createFilters(f map[string][]string, groups []string) elasticsearch.Filter {
+	af := make(elasticsearch.AndFilter, 0, len(f)+1)
 	for k, vals := range f {
 		filter, ok := filters[k]
 		if !ok {
@@ -507,6 +516,18 @@ func createFilters(f map[string][]string) elasticsearch.Filter {
 		}
 		af = append(af, of)
 	}
+	gf := make(elasticsearch.OrFilter, 0, len(groups)+1)
+	gf = append(gf, elasticsearch.TermFilter{
+		Field: "ReadACLs",
+		Value: params.Everyone,
+	})
+	for _, g := range groups {
+		gf = append(gf, elasticsearch.TermFilter{
+			Field: "ReadACLs",
+			Value: g,
+		})
+	}
+	af = append(af, gf)
 	return af
 }
 

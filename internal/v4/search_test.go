@@ -9,12 +9,17 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/juju/loggo"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
+	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
+	"gopkg.in/macaroon-bakery.v0/bakerytest"
+	"gopkg.in/macaroon-bakery.v0/httpbakery"
+	"gopkg.in/macaroon.v1"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/storetesting"
@@ -24,8 +29,10 @@ import (
 
 type SearchSuite struct {
 	storetesting.IsolatedMgoESSuite
-	srv   http.Handler
-	store *charmstore.Store
+	srv        http.Handler
+	store      *charmstore.Store
+	discharger *bakerytest.Discharger
+	Caveats    map[string]string
 }
 
 var _ = gc.Suite(&SearchSuite{})
@@ -34,6 +41,7 @@ var exportTestCharms = map[string]string{
 	"wordpress": "cs:precise/wordpress-23",
 	"mysql":     "cs:trusty/mysql-7",
 	"varnish":   "cs:~foo/trusty/varnish-1",
+	"riak":      "cs:trusty/riak-67",
 }
 
 var exportTestBundles = map[string]string{
@@ -43,10 +51,40 @@ var exportTestBundles = map[string]string{
 func (s *SearchSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoESSuite.SetUpTest(c)
 	si := &charmstore.SearchIndex{s.ES, s.TestIndex}
-	s.srv, s.store = newServer(c, s.Session, si, serverParams)
+	var mu sync.Mutex
+	s.discharger = bakerytest.NewDischarger(nil, func(cond string, arg string) ([]checkers.Caveat, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		var caveats []checkers.Caveat
+		for k, v := range s.Caveats {
+			caveats = append(caveats, checkers.DeclaredCaveat(k, v))
+		}
+		return caveats, nil
+	})
+	var sp charmstore.ServerParams
+	sp = serverParams
+	sp.IdentityLocation = s.discharger.Location()
+	sp.PublicKeyLocator = s.discharger
+	s.srv, s.store = newServer(c, s.Session, si, sp)
 	s.addCharmsToStore(c, s.store)
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: s.srv,
+		Method:  "PUT",
+		Body:    strings.NewReader(`["test-user"]`),
+		Header: http.Header{
+			"Content-Type": {"application/json"},
+		},
+		URL:      storeURL("trusty/riak-67/meta/perm/read"),
+		Username: serverParams.AuthUsername,
+		Password: serverParams.AuthPassword,
+	})
 	err := s.ES.RefreshIndex(s.TestIndex)
 	c.Assert(err, gc.IsNil)
+}
+
+func (s *SearchSuite) TearDownTest(c *gc.C) {
+	s.discharger.Close()
+	s.IsolatedMgoESSuite.TearDownTest(c)
 }
 
 func (s *SearchSuite) addCharmsToStore(c *gc.C, store *charmstore.Store) {
@@ -385,16 +423,7 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		c.Assert(sr.Results, gc.HasLen, len(test.results))
 		c.Logf("results: %s", rec.Body.Bytes())
-	OUTER:
-		for _, res := range sr.Results {
-			for i, r := range test.results {
-				if res.Id.String() == r {
-					test.results[i] = ""
-					continue OUTER
-				}
-			}
-			c.Errorf("%s:Unexpected result received %q", test.about, res.Id.String())
-		}
+		assertResultSet(c, sr, test.results)
 	}
 }
 
@@ -536,7 +565,8 @@ func (s *SearchSuite) TestSearchIncludeError(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	var resp params.SearchResponse
 	err := json.Unmarshal(rec.Body.Bytes(), &resp)
-	c.Assert(resp.Results, gc.HasLen, len(exportTestCharms))
+	// cs:riak will not be found because it is not visible to "everyone".
+	c.Assert(resp.Results, gc.HasLen, len(exportTestCharms)-1)
 
 	// Now remove one of the blobs. The search should still
 	// work, but only return a single result.
@@ -562,7 +592,9 @@ func (s *SearchSuite) TestSearchIncludeError(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	resp = params.SearchResponse{}
 	err = json.Unmarshal(rec.Body.Bytes(), &resp)
-	c.Assert(resp.Results, gc.HasLen, len(exportTestCharms)-1)
+	// cs:riak will not be found because it is not visible to "everyone".
+	// cs:wordpress will not be found because it has no manifest.
+	c.Assert(resp.Results, gc.HasLen, len(exportTestCharms)-2)
 
 	c.Assert(tw.Log(), jc.LogMatches, []string{"cannot retrieve metadata for cs:precise/wordpress-23: cannot open archive data for cs:precise/wordpress-23: .*"})
 }
@@ -722,4 +754,91 @@ func (s *SearchSuite) assertPut(c *gc.C, url string, val interface{}) {
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("headers: %v, body: %s", rec.HeaderMap, rec.Body.String()))
 	c.Assert(rec.Body.String(), gc.HasLen, 0)
+}
+
+func (s *SearchSuite) TestSearchWithUserMacaroon(c *gc.C) {
+	s.Caveats = map[string]string{
+		"username": "test-user",
+	}
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("macaroon"),
+		Method:  "GET",
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %s", rec.Body.String()))
+	var m macaroon.Macaroon
+	err := json.Unmarshal(rec.Body.Bytes(), &m)
+	c.Assert(err, gc.IsNil)
+	c.Assert(m.Location(), gc.Equals, "charmstore")
+	ms, err := httpbakery.DischargeAll(&m, httpbakery.NewHTTPClient(), noInteraction)
+	c.Assert(err, gc.IsNil)
+	macaroonCookie, err := httpbakery.NewCookie(ms)
+	c.Assert(err, gc.IsNil)
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("search"),
+		Cookies: []*http.Cookie{macaroonCookie},
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	expected := []string{
+		exportTestCharms["mysql"],
+		exportTestCharms["wordpress"],
+		exportTestCharms["riak"],
+		exportTestCharms["varnish"],
+		exportTestBundles["wordpress-simple"],
+	}
+	var sr params.SearchResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &sr)
+	c.Assert(err, gc.IsNil)
+	assertResultSet(c, sr, expected)
+}
+
+func (s *SearchSuite) TestSearchWithGroupMacaroon(c *gc.C) {
+	s.Caveats = map[string]string{
+		"groups": "test-user group2",
+	}
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("macaroon"),
+		Method:  "GET",
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %s", rec.Body.String()))
+	var m macaroon.Macaroon
+	err := json.Unmarshal(rec.Body.Bytes(), &m)
+	c.Assert(err, gc.IsNil)
+	c.Assert(m.Location(), gc.Equals, "charmstore")
+	ms, err := httpbakery.DischargeAll(&m, httpbakery.NewHTTPClient(), noInteraction)
+	c.Assert(err, gc.IsNil)
+	macaroonCookie, err := httpbakery.NewCookie(ms)
+	c.Assert(err, gc.IsNil)
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("search"),
+		Cookies: []*http.Cookie{macaroonCookie},
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	expected := []string{
+		exportTestCharms["mysql"],
+		exportTestCharms["wordpress"],
+		exportTestCharms["riak"],
+		exportTestCharms["varnish"],
+		exportTestBundles["wordpress-simple"],
+	}
+	var sr params.SearchResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &sr)
+	c.Assert(err, gc.IsNil)
+	assertResultSet(c, sr, expected)
+}
+func assertResultSet(c *gc.C, sr params.SearchResponse, expected []string) {
+	c.Assert(sr.Results, gc.HasLen, len(expected))
+OUTER:
+	for _, res := range sr.Results {
+		for i, r := range expected {
+			if res.Id.String() == r {
+				expected[i] = ""
+				continue OUTER
+			}
+		}
+		c.Errorf("Unexpected result received %q", res.Id.String())
+	}
 }

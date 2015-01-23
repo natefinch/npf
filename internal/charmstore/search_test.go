@@ -15,6 +15,7 @@ import (
 
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
+	"github.com/juju/charmstore/params"
 )
 
 type StoreSearchSuite struct {
@@ -50,6 +51,7 @@ var exportTestCharms = map[string]string{
 	"wordpress": "cs:precise/wordpress-23",
 	"mysql":     "cs:trusty/mysql-7",
 	"varnish":   "cs:~foo/trusty/varnish-1",
+	"riak":      "cs:trusty/riak-67",
 }
 
 var exportTestBundles = map[string]string{
@@ -71,7 +73,19 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 		var actual json.RawMessage
 		err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL), &actual)
 		c.Assert(err, gc.IsNil)
-		doc := SearchDoc{Entity: entity, TotalDownloads: int64(charmDownloadCounts[name])}
+		r := charm.MustParseReference(ref)
+		readACLs := []string{params.Everyone}
+		if r.User != "" {
+			readACLs = append(readACLs, r.User)
+		}
+		if r.Name == "riak" {
+			readACLs = []string{"quux"}
+		}
+		doc := SearchDoc{
+			Entity:         entity,
+			TotalDownloads: int64(charmDownloadCounts[name]),
+			ReadACLs:       readACLs,
+		}
 		c.Assert(string(actual), jc.JSONEquals, doc)
 	}
 }
@@ -109,7 +123,7 @@ func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(old.URL), &actual)
 	c.Assert(err, gc.IsNil)
-	doc := SearchDoc{Entity: expected}
+	doc := SearchDoc{Entity: expected, ReadACLs: []string{params.Everyone}}
 	c.Assert(string(actual), jc.JSONEquals, doc)
 }
 
@@ -149,6 +163,12 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 			c.Assert(err, gc.IsNil)
 		}
 	}
+	baseEntity, err := store.FindBaseEntity(charm.MustParseReference("cs:riak"))
+	c.Assert(err, gc.IsNil)
+	baseEntity.ACLs.Read = []string{"quux"}
+	err = store.DB.BaseEntities().UpdateId("cs:riak", baseEntity)
+	c.Assert(err, gc.IsNil)
+	store.UpdateSearch(charm.MustParseReference(exportTestCharms["riak"]))
 }
 
 var searchTests = []struct {
@@ -352,6 +372,18 @@ var searchTests = []struct {
 			Skip: 1,
 		},
 		results: []string{},
+	}, {
+		about: "additional groups",
+		sp: SearchParams{
+			Groups: []string{"quux"},
+		},
+		results: []string{
+			exportTestCharms["riak"],
+			exportTestCharms["wordpress"],
+			exportTestCharms["mysql"],
+			exportTestCharms["varnish"],
+			exportTestBundles["wordpress-simple"],
+		},
 	},
 }
 
