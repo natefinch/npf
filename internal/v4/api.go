@@ -166,12 +166,13 @@ func (h *Handler) puttableEntityHandler(get entityHandlerFunc, handlePut router.
 	}
 	type entityHandlerKey struct{}
 	return router.FieldIncludeHandler(router.FieldIncludeHandlerParams{
-		Key:       entityHandlerKey{},
-		Query:     h.entityQuery,
-		Fields:    fields,
-		HandleGet: handleGet,
-		HandlePut: handlePut,
-		Update:    h.updateEntity,
+		Key:          entityHandlerKey{},
+		Query:        h.entityQuery,
+		Fields:       fields,
+		HandleGet:    handleGet,
+		HandlePut:    handlePut,
+		Update:       h.updateEntity,
+		UpdateSearch: h.updateSearch,
 	})
 }
 
@@ -189,12 +190,13 @@ func (h *Handler) puttableBaseEntityHandler(get baseEntityHandlerFunc, handlePut
 	}
 	type baseEntityHandlerKey struct{}
 	return router.FieldIncludeHandler(router.FieldIncludeHandlerParams{
-		Key:       baseEntityHandlerKey{},
-		Query:     h.baseEntityQuery,
-		Fields:    fields,
-		HandleGet: handleGet,
-		HandlePut: handlePut,
-		Update:    h.updateBaseEntity,
+		Key:          baseEntityHandlerKey{},
+		Query:        h.baseEntityQuery,
+		Fields:       fields,
+		HandleGet:    handleGet,
+		HandlePut:    handlePut,
+		Update:       h.updateBaseEntity,
+		UpdateSearch: h.updateSearchBase,
 	})
 }
 
@@ -206,7 +208,6 @@ func (h *Handler) updateBaseEntity(id *charm.Reference, fields map[string]interf
 	if err != nil {
 		return errgo.Notef(err, "cannot update %q", &id1)
 	}
-	// TODO update search fields
 	return nil
 }
 
@@ -220,6 +221,34 @@ func (h *Handler) updateEntity(id *charm.Reference, fields map[string]interface{
 		return errgo.Notef(err, "cannot update %q", id)
 	}
 	return nil
+}
+
+func (h *Handler) updateSearch(id *charm.Reference, fields map[string]interface{}) error {
+	return h.store.UpdateSearch(id)
+}
+
+func (h *Handler) updateSearchBase(id *charm.Reference, fields map[string]interface{}) error {
+	iter := h.store.DB.Entities().Find(bson.M{
+		"name": id.Name,
+		"user": id.User,
+	}).Iter()
+	defer iter.Close()
+	updated := make(map[string]bool)
+	var entity mongodoc.Entity
+	for iter.Next(&entity) {
+		// Search records only contain the latest revision, so only update any given
+		// search record once.
+		url := *entity.URL
+		url.Revision = -1
+		if updated[url.String()] {
+			continue
+		}
+		if err := h.store.UpdateSearch(&url); err != nil {
+			return errgo.Notef(err, "cannot update %q", url)
+		}
+		updated[url.String()] = true
+	}
+	return errgo.Mask(iter.Close())
 }
 
 func (h *Handler) entityExists(id *charm.Reference, req *http.Request) (bool, error) {
@@ -657,6 +686,7 @@ func (h *Handler) putMetaPermWithKey(id *charm.Reference, path string, val *json
 	case "/read":
 		updater.UpdateField("acls.read", perms)
 		updater.UpdateField("public", isPublic)
+		updater.UpdateSearch()
 		return nil
 	}
 	return errgo.WithCausef(nil, params.ErrNotFound, "unknown permission")

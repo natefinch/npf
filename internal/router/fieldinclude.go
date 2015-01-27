@@ -19,6 +19,7 @@ type FieldQueryFunc func(id *charm.Reference, selector map[string]int, req *http
 // FieldUpdater records field changes made by a FieldUpdateFunc.
 type FieldUpdater struct {
 	fields map[string]interface{}
+	search bool
 }
 
 // UpdateField requests that the provided field is updated with
@@ -27,10 +28,20 @@ func (u *FieldUpdater) UpdateField(fieldName string, val interface{}) {
 	u.fields[fieldName] = val
 }
 
+// UpdateSearch requests that search records are updated.
+func (u *FieldUpdater) UpdateSearch() {
+	u.search = true
+}
+
 // A FieldUpdateFunc is used to update a metadata document for the
 // given id. For each field in fields, it should set that field to
 // its corresponding value in the metadata document.
 type FieldUpdateFunc func(id *charm.Reference, fields map[string]interface{}) error
+
+// A FieldUpdateSearchFunc is used to update a search document for the
+// given id. For each field in fields, it should set that field to
+// its corresponding value in the search document.
+type FieldUpdateSearchFunc func(id *charm.Reference, fields map[string]interface{}) error
 
 // A FieldGetFunc returns some data from the given document. The
 // document will have been returned from an earlier call to the
@@ -68,6 +79,10 @@ type FieldIncludeHandlerParams struct {
 	// Update is used to update the document in the database for
 	// PUT requests.
 	Update FieldUpdateFunc
+
+	// UpdateSearch is used to update the document in the search
+	// database for PUT requests.
+	UpdateSearch FieldUpdateSearchFunc
 }
 
 type fieldIncludeHandler struct {
@@ -120,6 +135,13 @@ func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Refer
 	if err := h.p.Update(id, updater.fields); err != nil {
 		for i := range hs {
 			setError(i, err)
+		}
+	}
+	if updater.search {
+		if err := h.p.UpdateSearch(id, updater.fields); err != nil {
+			for i := range hs {
+				setError(i, err)
+			}
 		}
 	}
 	return errs
