@@ -45,29 +45,16 @@ func (h *Handler) authorize(req *http.Request, acl []string) error {
 		}
 	}
 
-	// If basic auth credentials are presented, use them.
-	user, passwd, err := parseCredentials(req)
-	if err == nil {
-		if user != h.config.AuthUsername || passwd != h.config.AuthPassword {
-			return errgo.WithCausef(nil, params.ErrUnauthorized, "invalid user name or password")
-		}
-		return nil
-	}
-	if err != errNoCreds || h.store.Bakery == nil || h.config.IdentityLocation == "" {
-		return errgo.WithCausef(err, params.ErrUnauthorized, "authentication failed")
-	}
-
-	// No basic auth presented: use macaroon third-party caveat verification.
-	attrs, verr := httpbakery.CheckRequest(h.store.Bakery, req, nil, checkers.New())
+	auth, verr := h.checkRequest(req)
 	if verr == nil {
-		logger.Infof("authenticated with attrs %q", attrs)
-		if err := h.checkACLMembership(attrs, acl); err != nil {
+		logger.Infof("authenticated with auth: %q", auth)
+		if err := h.checkACLMembership(auth, acl); err != nil {
 			return errgo.WithCausef(err, params.ErrUnauthorized, "")
 		}
 		return nil
 	}
 	if _, ok := errgo.Cause(verr).(*bakery.VerificationError); !ok {
-		return errgo.Mask(verr)
+		return errgo.Mask(verr, errgo.Is(params.ErrUnauthorized))
 	}
 
 	// Macaroon verification failed: mint a new macaroon.
@@ -80,6 +67,31 @@ func (h *Handler) authorize(req *http.Request, acl []string) error {
 	// TODO use a relative URL here: router.RelativeURLPath(req.RequestURI, "/")
 	cookiePath := "/"
 	return httpbakery.NewDischargeRequiredError(m, cookiePath, verr)
+}
+
+// checkRequest checks for any authorization tokens in the request and returns any
+// found as an authorization. If no suitable credentials are found, or an error occurs,
+// then a zero valued authorization is returned.
+func (h *Handler) checkRequest(req *http.Request) (authorization, error) {
+	user, passwd, err := parseCredentials(req)
+	if err == nil {
+		if user != h.config.AuthUsername || passwd != h.config.AuthPassword {
+			return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "invalid user name or password")
+		}
+		return authorization{Admin: true}, nil
+	}
+	if errgo.Cause(err) != errNoCreds || h.store.Bakery == nil || h.config.IdentityLocation == "" {
+		return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "authentication failed")
+	}
+	attrMap, err := httpbakery.CheckRequest(h.store.Bakery, req, nil, checkers.New())
+	if err != nil {
+		return authorization{}, errgo.Mask(err, errgo.Any)
+	}
+	return authorization{
+		Admin:    false,
+		Username: attrMap[usernameAttr],
+		Groups:   strings.Fields(attrMap[groupsAttr]),
+	}, nil
 }
 
 func (h *Handler) authorizeEntity(id *charm.Reference, req *http.Request) error {
@@ -119,16 +131,26 @@ const (
 	groupsAttr   = "groups"
 )
 
-func (h *Handler) checkACLMembership(attrs map[string]string, acl []string) error {
-	user := attrs[usernameAttr]
-	if user == "" {
+// authorization conatains authorization information extracted from an HTTP request.
+// The zero value for a authorization contains no privileges.
+type authorization struct {
+	Admin    bool
+	Username string
+	Groups   []string
+}
+
+func (h *Handler) checkACLMembership(auth authorization, acl []string) error {
+	if auth.Admin {
+		return nil
+	}
+	if auth.Username == "" {
 		return errgo.New("no username declared")
 	}
 	members := map[string]bool{
 		params.Everyone: true,
-		user:            true,
+		auth.Username:   true,
 	}
-	for _, name := range strings.Fields(attrs[groupsAttr]) {
+	for _, name := range auth.Groups {
 		members[name] = true
 	}
 	for _, name := range acl {
@@ -136,7 +158,7 @@ func (h *Handler) checkACLMembership(attrs map[string]string, acl []string) erro
 			return nil
 		}
 	}
-	return errgo.Newf("access denied for user %q", user)
+	return errgo.Newf("access denied for user %q", auth.Username)
 }
 
 func (h *Handler) newMacaroon() (*macaroon.Macaroon, error) {

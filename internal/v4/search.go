@@ -6,13 +6,10 @@ package v4
 import (
 	"net/http"
 	"strconv"
-	"strings"
 	"sync/atomic"
 
 	"github.com/juju/utils/parallel"
 	"gopkg.in/errgo.v1"
-	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
-	"gopkg.in/macaroon-bakery.v0/httpbakery"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/router"
@@ -28,7 +25,15 @@ func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, er
 	if err != nil {
 		return "", err
 	}
-	h.groupsFromRequest(&sp, req)
+	auth, err := h.checkRequest(req)
+	if err != nil {
+		logger.Infof("authorization failed on search request, granting no privileges: %v", err)
+	}
+	sp.Admin = auth.Admin
+	if auth.Username != "" {
+		sp.Groups = append(sp.Groups, auth.Username)
+	}
+	sp.Groups = append(sp.Groups, auth.Groups...)
 	// perform query
 	results, err := h.store.Search(sp)
 	if err != nil {
@@ -135,19 +140,4 @@ func parseSearchParams(req *http.Request) (charmstore.SearchParams, error) {
 		}
 	}
 	return sp, nil
-}
-
-func (h *Handler) groupsFromRequest(sp *charmstore.SearchParams, req *http.Request) {
-	ms := httpbakery.RequestMacaroons(req)
-	if len(ms) == 0 {
-		return
-	}
-	dec, err := httpbakery.CheckRequest(h.store.Bakery, req, nil, checkers.New())
-	if err != nil {
-		return
-	}
-	if dec["username"] != "" {
-		sp.Groups = append(sp.Groups, dec["username"])
-	}
-	sp.Groups = append(sp.Groups, strings.Fields(dec["groups"])...)
 }

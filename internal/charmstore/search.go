@@ -356,6 +356,9 @@ type SearchParams struct {
 	// ACL values to search in addition to everyone. ACL values may represent user names
 	// or group names.
 	Groups []string
+	// Admin searches will not filter on the ACL and will show results for all matching
+	// charms.
+	Admin bool
 	// Sort the returned items.
 	sort []sortParam
 }
@@ -485,7 +488,7 @@ func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 	// Filters
 	qdsl.Query = elasticsearch.FilteredQuery{
 		Query:  q,
-		Filter: createFilters(sp.Filters, sp.Groups),
+		Filter: createFilters(sp.Filters, sp.Admin, sp.Groups),
 	}
 
 	// Sorting
@@ -503,7 +506,7 @@ func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 // The created filter will only match when at least one of the requested values
 // matches for all of the requested keys. Any filter names that are not defined
 // in the filters map will be silently skipped.
-func createFilters(f map[string][]string, groups []string) elasticsearch.Filter {
+func createFilters(f map[string][]string, admin bool, groups []string) elasticsearch.Filter {
 	af := make(elasticsearch.AndFilter, 0, len(f)+1)
 	for k, vals := range f {
 		filter, ok := filters[k]
@@ -515,6 +518,9 @@ func createFilters(f map[string][]string, groups []string) elasticsearch.Filter 
 			of = append(of, filter(v))
 		}
 		af = append(af, of)
+	}
+	if admin {
+		return af
 	}
 	gf := make(elasticsearch.OrFilter, 0, len(groups)+1)
 	gf = append(gf, elasticsearch.TermFilter{
