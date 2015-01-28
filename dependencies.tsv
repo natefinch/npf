@@ -7,7 +7,7 @@ github.com/juju/gojsonreference	git	0673d58f64bacac2db34c7d1e87a599d58923981	201
 github.com/juju/gojsonschema	git	33fa79718fa9b24e2a04122f91a75496c0f77098	2014-07-17T16:12:25Z
 github.com/juju/jujusvg	git	0390bca3e396d087ef3a26c0d4a00887e8e5c525	2015-01-14T18:27:48Z
 github.com/juju/loggo	git	dc8e19f7c70a62a59c69c40f85b8df09ff20742c	2014-11-17T04:05:26Z
-github.com/juju/names	git	f2761fa05db34fb5b4ceb44721a067ffd22d5956	2015-01-20T11:23:30Z
+github.com/juju/names	git	e7394f4ce9389fb57cfb7cbe9fa30790d01a8875	2014-12-17T04:05:00Z
 github.com/juju/schema	git	27a52be50766490a6fd3531865095fda6c0eeb6d	2014-07-23T04:23:18Z
 github.com/juju/testing	git	006244fdb8dc686679d221bc720562a0155ebb5f	2015-01-20T14:33:09Z
 github.com/juju/txn	git	e02f26c56cfb81c7c1236df499deebb0369bd97c	2014-09-25T11:49:22Z
