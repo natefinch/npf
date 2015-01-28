@@ -86,7 +86,12 @@ func testMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParam
 		mu.Lock()
 		defer mu.Unlock()
 		checkedCaveats = append(checkedCaveats, cond+" "+arg)
-		return nil, dischargeError
+		if dischargeError != nil {
+			return nil, dischargeError
+		}
+		return []checkers.Caveat{
+			checkers.DeclaredCaveat("username", "bob"),
+		}, nil
 	})
 	defer discharger.Close()
 
@@ -100,10 +105,11 @@ func testMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParam
 	})
 	p.Handler = srv
 
-	client1 := *httpbakery.NewHTTPClient()
-	client1.Jar = nil
+	client := httpbakery.NewHTTPClient()
+	cookieJar := &cookieJar{CookieJar: client.Jar}
+	client.Jar = cookieJar
 	p.Do = func(req *http.Request) (*http.Response, error) {
-		return httpbakery.Do(&client1, req, noInteraction)
+		return httpbakery.Do(client, req, noInteraction)
 	}
 
 	// Check that the call succeeds with simple auth.
@@ -112,14 +118,20 @@ func testMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParam
 	p.Password = "test-password"
 	httptesting.AssertJSONCall(c, p)
 	c.Assert(checkedCaveats, gc.HasLen, 0)
+	c.Assert(cookieJar.cookieURLs, gc.HasLen, 0)
 
-	// Check that the call succeeds and uses the third party checker.
+	// Check that the call gives us the correct
+	// "authentication denied response" without simple auth
+	// and uses the third party checker
+	// and that a cookie is stored at the correct location.
+	// TODO when we allow admin access via macaroon creds,
+	// change this test to expect success.
 	c.Log("macaroon unauthorized error")
 	p.Username, p.Password = "", ""
 	p.ExpectStatus = http.StatusUnauthorized
 	p.ExpectBody = params.Error{
+		Message: `unauthorized: access denied for user "bob"`,
 		Code:    params.ErrUnauthorized,
-		Message: "unauthorized: no username declared",
 	}
 	httptesting.AssertJSONCall(c, p)
 	sort.Strings(checkedCaveats)
@@ -127,8 +139,9 @@ func testMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParam
 		"is-authenticated-user ",
 	})
 	checkedCaveats = nil
+	c.Assert(cookieJar.cookieURLs, gc.DeepEquals, []string{"http://somehost/"})
 
-	// Check that the call fails with simple auth that's bad.
+	// Check that the call fails with incorrect simple auth info.
 	c.Log("simple auth error")
 	p.Password = "bad-password"
 	p.ExpectStatus = http.StatusUnauthorized
@@ -139,11 +152,24 @@ func testMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParam
 
 	// Check that it fails when the discharger refuses the discharge.
 	c.Log("macaroon discharge error")
+	client = httpbakery.NewHTTPClient()
 	dischargeError = fmt.Errorf("go away")
 	p.Password = ""
 	p.Username = ""
 	p.ExpectError = `cannot get discharge from "http://[^"]*": cannot discharge: go away`
 	httptesting.AssertJSONCall(c, p)
+}
+
+type cookieJar struct {
+	cookieURLs []string
+	http.CookieJar
+}
+
+func (j *cookieJar) SetCookies(url *url.URL, cookies []*http.Cookie) {
+	url1 := *url
+	url1.Host = "somehost"
+	j.cookieURLs = append(j.cookieURLs, url1.String())
+	j.CookieJar.SetCookies(url, cookies)
 }
 
 func noInteraction(*url.URL) error {

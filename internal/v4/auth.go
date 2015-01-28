@@ -75,7 +75,11 @@ func (h *Handler) authorize(req *http.Request, acl []string) error {
 	if err != nil {
 		return errgo.Notef(err, "cannot mint macaroon")
 	}
-	return httpbakery.NewDischargeRequiredError(m, verr)
+	// Request that this macaroon be supplied for all requests
+	// to the whole handler.
+	// TODO use a relative URL here: router.RelativeURLPath(req.RequestURI, "/")
+	cookiePath := "/"
+	return httpbakery.NewDischargeRequiredError(m, cookiePath, verr)
 }
 
 func (h *Handler) authorizeEntity(id *charm.Reference, req *http.Request) error {
