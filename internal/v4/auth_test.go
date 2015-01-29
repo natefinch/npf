@@ -6,8 +6,10 @@ package v4_test
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -366,4 +368,278 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		_, err = store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 	}
+}
+
+var writeAuthorizationTests = []struct {
+	// about holds the test description.
+	about string
+	// username holds the authenticated user name returned by the discharger.
+	// If empty, an anonymous user is returned.
+	username string
+	// groups holds group names the user is member of, as returned by the
+	// discharger.
+	groups []string
+	// writePerm stores a list of users with write permissions.
+	writePerm []string
+	// expectStatus is the expected HTTP response status.
+	// Defaults to 200 status OK.
+	expectStatus int
+	// expectBody holds the expected body of the HTTP response. If nil,
+	// the body is not checked and the response is assumed to be ok.
+	expectBody interface{}
+}{{
+	about:        "anonymous users are not authorized",
+	writePerm:    []string{"who"},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: "unauthorized: no username declared",
+	},
+}, {
+	about:     "specific user authorized to write",
+	username:  "dalek",
+	writePerm: []string{"dalek"},
+}, {
+	about:     "multiple users authorized",
+	username:  "sisko",
+	writePerm: []string{"kirk", "picard", "sisko"},
+}, {
+	about:        "no users authorized",
+	username:     "who",
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "who"`,
+	},
+}, {
+	about:        "specific user unauthorized",
+	username:     "kirk",
+	writePerm:    []string{"picard", "sisko", "janeway"},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:     "access granted for group",
+	username:  "picard",
+	groups:    []string{"group1", "group2"},
+	writePerm: []string{"group2"},
+}, {
+	about:     "multiple groups authorized",
+	username:  "picard",
+	groups:    []string{"group1", "group2"},
+	writePerm: []string{"kirk", "group0", "group1", "group2"},
+}, {
+	about:        "no group authorized",
+	username:     "picard",
+	groups:       []string{"group1", "group2"},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "picard"`,
+	},
+}, {
+	about:        "access denied for group",
+	username:     "kirk",
+	groups:       []string{"group1", "group2", "group3"},
+	writePerm:    []string{"picard", "sisko", "group42", "group47"},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}}
+
+func (s *authSuite) TestWriteAuthorization(c *gc.C) {
+	for i, test := range writeAuthorizationTests {
+		c.Logf("test %d: %s", i, test.about)
+
+		// Create a new server with a third party discharger.
+		srv, store, discharger := newServerWithDischarger(c, s.Session, test.username, test.groups)
+		defer discharger.Close()
+
+		// Retrieve the macaroon cookie.
+		cookies := []*http.Cookie{dischargedAuthCookie(c, srv)}
+
+		// Add a charm to the store, used for testing.
+		err := store.AddCharmWithArchive(
+			charm.MustParseReference("utopic/wordpress-42"),
+			storetesting.Charms.CharmDir("wordpress"))
+		c.Assert(err, gc.IsNil)
+		baseUrl := charm.MustParseReference("wordpress")
+
+		// Change the ACLs for the testing charm.
+		store.DB.BaseEntities().UpdateId(baseUrl, bson.D{{"$set",
+			bson.D{{"acls.write", test.writePerm}},
+		}})
+
+		// Prepare the expected status.
+		expectStatus := test.expectStatus
+		if expectStatus == 0 {
+			expectStatus = http.StatusOK
+		}
+
+		// Perform a meta PUT request.
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+			Handler: srv,
+			URL:     storeURL("wordpress/meta/extra-info/key"),
+			Method:  "PUT",
+			Header: http.Header{
+				"Content-Type": {"application/json"},
+			},
+			Cookies: cookies,
+			Body:    strings.NewReader("42"),
+		})
+		c.Assert(rec.Code, gc.Equals, expectStatus, gc.Commentf("body: %s", rec.Body))
+		if test.expectBody != nil {
+			c.Assert(rec.Body.String(), jc.JSONEquals, test.expectBody)
+		}
+
+		// Remove all entities from the store.
+		_, err = store.DB.Entities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+	}
+}
+
+var uploadEntityAuthorizationTests = []struct {
+	// about holds the test description.
+	about string
+	// username holds the authenticated user name returned by the discharger.
+	// If empty, an anonymous user is returned.
+	username string
+	// groups holds group names the user is member of, as returned by the
+	// discharger.
+	groups []string
+	// id holds the id of the entity to be uploaded.
+	id string
+	// expectStatus is the expected HTTP response status.
+	// Defaults to 200 status OK.
+	expectStatus int
+	// expectBody holds the expected body of the HTTP response. If nil,
+	// the body is not checked and the response is assumed to be ok.
+	expectBody interface{}
+}{{
+	about:    "user owned entity",
+	username: "who",
+	id:       "~who/utopic/django",
+}, {
+	about:    "group owned entity",
+	username: "dalek",
+	groups:   []string{"group1", "group2"},
+	id:       "~group1/utopic/django",
+}, {
+	about:    "specific group",
+	username: "dalek",
+	groups:   []string{"group42"},
+	id:       "~group42/utopic/django",
+}, {
+	about:        "promulgated entity",
+	username:     "sisko",
+	groups:       []string{"group1", "group2"},
+	id:           "utopic/django",
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "sisko"`,
+	},
+}, {
+	about:        "anonymous user",
+	id:           "~who/utopic/django",
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: "unauthorized: no username declared",
+	},
+}, {
+	about:        "anonymous user and promulgated entity",
+	id:           "utopic/django",
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: "unauthorized: no username declared",
+	},
+}, {
+	about:        "user does not match",
+	username:     "kirk",
+	id:           "~picard/utopic/django",
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:        "group does not match",
+	username:     "kirk",
+	groups:       []string{"group1", "group2", "group3"},
+	id:           "~group0/utopic/django",
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:        "specific group and promulgated entity",
+	username:     "janeway",
+	groups:       []string{"group1"},
+	id:           "utopic/django",
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "janeway"`,
+	},
+}}
+
+func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
+	for i, test := range uploadEntityAuthorizationTests {
+		c.Logf("test %d: %s", i, test.about)
+
+		// Create a new server with a third party discharger.
+		srv, store, discharger := newServerWithDischarger(c, s.Session, test.username, test.groups)
+		defer discharger.Close()
+
+		// Retrieve the macaroon cookie.
+		cookies := []*http.Cookie{dischargedAuthCookie(c, srv)}
+
+		// Prepare the expected status.
+		expectStatus := test.expectStatus
+		if expectStatus == 0 {
+			expectStatus = http.StatusOK
+		}
+
+		// Try to upload the entity.
+		body, hash, size := s.archiveInfo(c)
+		defer body.Close()
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+			Handler:       srv,
+			URL:           storeURL(test.id + "/archive?hash=" + hash),
+			Method:        "POST",
+			ContentLength: size,
+			Header: http.Header{
+				"Content-Type": {"application/zip"},
+			},
+			Body:    body,
+			Cookies: cookies,
+		})
+		c.Assert(rec.Code, gc.Equals, expectStatus, gc.Commentf("body: %s", rec.Body))
+		if test.expectBody != nil {
+			c.Assert(rec.Body.String(), jc.JSONEquals, test.expectBody)
+		}
+
+		// Remove all entities from the store.
+		_, err := store.DB.Entities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+	}
+}
+
+// archiveInfo prepares a zip archive of an entity and return a reader for the
+// archive, its blob hash and size.
+func (s *authSuite) archiveInfo(c *gc.C) (r io.ReadCloser, hashSum string, size int64) {
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
+	f, err := os.Open(ch.Path)
+	c.Assert(err, gc.IsNil)
+	hash, size := hashOf(f)
+	_, err = f.Seek(0, 0)
+	c.Assert(err, gc.IsNil)
+	return f, hash, size
 }
