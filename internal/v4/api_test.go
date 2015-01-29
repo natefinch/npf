@@ -23,6 +23,7 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
+	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v0/bakerytest"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
@@ -78,7 +79,7 @@ func (s *APISuite) SetUpTest(c *gc.C) {
 
 func newServer(c *gc.C, session *mgo.Session, si *charmstore.SearchIndex, config charmstore.ServerParams) (http.Handler, *charmstore.Store) {
 	db := session.DB("charmstore")
-	store, err := charmstore.NewStore(db, si, nil)
+	store, err := charmstore.NewStore(db, si, &bakery.NewServiceParams{})
 	c.Assert(err, gc.IsNil)
 	srv, err := charmstore.NewServer(db, si, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v4.NewAPIHandler})
 	c.Assert(err, gc.IsNil)

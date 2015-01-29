@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 
 	"github.com/juju/loggo"
 	jc "github.com/juju/testing/checkers"
@@ -17,11 +16,12 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
-	"gopkg.in/macaroon-bakery.v0/bakerytest"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
 	"gopkg.in/macaroon.v1"
+	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/charmstore"
+	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
 	. "github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
@@ -29,10 +29,8 @@ import (
 
 type SearchSuite struct {
 	storetesting.IsolatedMgoESSuite
-	srv        http.Handler
-	store      *charmstore.Store
-	discharger *bakerytest.Discharger
-	Caveats    map[string]string
+	srv   http.Handler
+	store *charmstore.Store
 }
 
 var _ = gc.Suite(&SearchSuite{})
@@ -51,39 +49,29 @@ var exportTestBundles = map[string]string{
 func (s *SearchSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoESSuite.SetUpTest(c)
 	si := &charmstore.SearchIndex{s.ES, s.TestIndex}
-	var mu sync.Mutex
-	s.discharger = bakerytest.NewDischarger(nil, func(cond string, arg string) ([]checkers.Caveat, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		var caveats []checkers.Caveat
-		for k, v := range s.Caveats {
-			caveats = append(caveats, checkers.DeclaredCaveat(k, v))
-		}
-		return caveats, nil
+	s.srv, s.store = newServer(c, s.Session, si, charmstore.ServerParams{
+		AuthUsername:     serverParams.AuthUsername,
+		AuthPassword:     serverParams.AuthPassword,
+		IdentityLocation: "charmstore-test",
 	})
-	var sp charmstore.ServerParams
-	sp = serverParams
-	sp.IdentityLocation = s.discharger.Location()
-	sp.PublicKeyLocator = s.discharger
-	s.srv, s.store = newServer(c, s.Session, si, sp)
 	s.addCharmsToStore(c, s.store)
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler: s.srv,
-		Method:  "PUT",
-		Body:    strings.NewReader(`["test-user"]`),
-		Header: http.Header{
-			"Content-Type": {"application/json"},
-		},
-		URL:      storeURL("trusty/riak-67/meta/perm/read"),
-		Username: serverParams.AuthUsername,
-		Password: serverParams.AuthPassword,
-	})
-	err := s.ES.RefreshIndex(s.TestIndex)
+	// hide the riak charm
+	err := s.store.DB.BaseEntities().UpdateId(
+		charm.MustParseReference("cs:riak"),
+		bson.D{{"$set", map[string]mongodoc.ACL{
+			"acls": {
+				Read: []string{"test-user"},
+			},
+		}}},
+	)
+	c.Assert(err, gc.IsNil)
+	err = s.store.UpdateSearch(charm.MustParseReference(exportTestCharms["riak"]))
+	c.Assert(err, gc.IsNil)
+	err = s.ES.RefreshIndex(s.TestIndex)
 	c.Assert(err, gc.IsNil)
 }
 
 func (s *SearchSuite) TearDownTest(c *gc.C) {
-	s.discharger.Close()
 	s.IsolatedMgoESSuite.TearDownTest(c)
 }
 
@@ -756,25 +744,35 @@ func (s *SearchSuite) assertPut(c *gc.C, url string, val interface{}) {
 	c.Assert(rec.Body.String(), gc.HasLen, 0)
 }
 
-func (s *SearchSuite) TestSearchWithUserMacaroon(c *gc.C) {
-	s.Caveats = map[string]string{
-		"username": "test-user",
-	}
+func (s *SearchSuite) TestSearchWithAdminCredentials(c *gc.C) {
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL("macaroon"),
-		Method:  "GET",
+		Handler:  s.srv,
+		URL:      storeURL("search"),
+		Username: serverParams.AuthUsername,
+		Password: serverParams.AuthPassword,
 	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %s", rec.Body.String()))
-	var m macaroon.Macaroon
-	err := json.Unmarshal(rec.Body.Bytes(), &m)
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	expected := []string{
+		exportTestCharms["mysql"],
+		exportTestCharms["wordpress"],
+		exportTestCharms["riak"],
+		exportTestCharms["varnish"],
+		exportTestBundles["wordpress-simple"],
+	}
+	var sr params.SearchResponse
+	err := json.Unmarshal(rec.Body.Bytes(), &sr)
 	c.Assert(err, gc.IsNil)
-	c.Assert(m.Location(), gc.Equals, "charmstore")
-	ms, err := httpbakery.DischargeAll(&m, httpbakery.NewHTTPClient(), noInteraction)
+	assertResultSet(c, sr, expected)
+}
+
+func (s *SearchSuite) TestSearchWithUserMacaroon(c *gc.C) {
+	m, err := s.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
+		checkers.DeclaredCaveat("username", "test-user"),
+	})
 	c.Assert(err, gc.IsNil)
-	macaroonCookie, err := httpbakery.NewCookie(ms)
+	macaroonCookie, err := httpbakery.NewCookie(macaroon.Slice{m})
 	c.Assert(err, gc.IsNil)
-	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("search"),
 		Cookies: []*http.Cookie{macaroonCookie},
@@ -794,24 +792,13 @@ func (s *SearchSuite) TestSearchWithUserMacaroon(c *gc.C) {
 }
 
 func (s *SearchSuite) TestSearchWithGroupMacaroon(c *gc.C) {
-	s.Caveats = map[string]string{
-		"groups": "test-user group2",
-	}
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL("macaroon"),
-		Method:  "GET",
+	m, err := s.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
+		checkers.DeclaredCaveat("groups", "test-user test-user2"),
 	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %s", rec.Body.String()))
-	var m macaroon.Macaroon
-	err := json.Unmarshal(rec.Body.Bytes(), &m)
 	c.Assert(err, gc.IsNil)
-	c.Assert(m.Location(), gc.Equals, "charmstore")
-	ms, err := httpbakery.DischargeAll(&m, httpbakery.NewHTTPClient(), noInteraction)
+	macaroonCookie, err := httpbakery.NewCookie(macaroon.Slice{m})
 	c.Assert(err, gc.IsNil)
-	macaroonCookie, err := httpbakery.NewCookie(ms)
-	c.Assert(err, gc.IsNil)
-	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("search"),
 		Cookies: []*http.Cookie{macaroonCookie},
@@ -829,6 +816,34 @@ func (s *SearchSuite) TestSearchWithGroupMacaroon(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	assertResultSet(c, sr, expected)
 }
+
+func (s *SearchSuite) TestSearchWithBadAdminCredentialsAndACookie(c *gc.C) {
+	m, err := s.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
+		checkers.DeclaredCaveat("username", "test-user"),
+	})
+	c.Assert(err, gc.IsNil)
+	macaroonCookie, err := httpbakery.NewCookie(macaroon.Slice{m})
+	c.Assert(err, gc.IsNil)
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler:  s.srv,
+		URL:      storeURL("search"),
+		Cookies:  []*http.Cookie{macaroonCookie},
+		Username: serverParams.AuthUsername,
+		Password: "bad-password",
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	expected := []string{
+		exportTestCharms["mysql"],
+		exportTestCharms["wordpress"],
+		exportTestCharms["varnish"],
+		exportTestBundles["wordpress-simple"],
+	}
+	var sr params.SearchResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &sr)
+	c.Assert(err, gc.IsNil)
+	assertResultSet(c, sr, expected)
+}
+
 func assertResultSet(c *gc.C, sr params.SearchResponse, expected []string) {
 	c.Assert(sr.Results, gc.HasLen, len(expected))
 OUTER:

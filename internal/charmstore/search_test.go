@@ -384,6 +384,18 @@ var searchTests = []struct {
 			exportTestCharms["varnish"],
 			exportTestBundles["wordpress-simple"],
 		},
+	}, {
+		about: "admin search",
+		sp: SearchParams{
+			Admin: true,
+		},
+		results: []string{
+			exportTestCharms["riak"],
+			exportTestCharms["wordpress"],
+			exportTestCharms["mysql"],
+			exportTestCharms["varnish"],
+			exportTestBundles["wordpress-simple"],
+		},
 	},
 }
 
