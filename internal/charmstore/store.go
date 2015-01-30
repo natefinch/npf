@@ -236,8 +236,10 @@ var everyonePerm = []string{params.Everyone}
 
 func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 	readPerm := everyonePerm
+	var writePerm []string
 	if entity.User != "" {
 		readPerm = []string{params.Everyone, entity.User}
+		writePerm = []string{entity.User}
 	}
 	// Add the base entity to the database.
 	baseEntity := &mongodoc.BaseEntity{
@@ -247,7 +249,8 @@ func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 		// TODO frankban: allow specifying non-public charms on initial upload.
 		Public: true,
 		ACLs: mongodoc.ACL{
-			Read: readPerm,
+			Read:  readPerm,
+			Write: writePerm,
 		},
 	}
 	err = s.DB.BaseEntities().Insert(baseEntity)

@@ -302,13 +302,15 @@ var metaEndpoints = []metaEndpoint{{
 			return nil, err
 		}
 		return params.PermResponse{
-			Read: e.ACLs.Read,
+			Read:  e.ACLs.Read,
+			Write: e.ACLs.Write,
 		}, nil
 	},
 	checkURL: "cs:~bob/utopic/wordpress-2",
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data, gc.DeepEquals, params.PermResponse{
-			Read: []string{params.Everyone, "bob"},
+			Read:  []string{params.Everyone, "bob"},
+			Write: []string{"bob"},
 		})
 	},
 }, {
@@ -517,7 +519,8 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	s.addCharm(c, "wordpress", "precise/wordpress-24")
 	s.addCharm(c, "wordpress", "trusty/wordpress-1")
 	s.assertGet(c, "wordpress/meta/perm", params.PermResponse{
-		Read: []string{params.Everyone},
+		Read:  []string{params.Everyone},
+		Write: []string{},
 	})
 	e, err := s.store.FindBaseEntity(charm.MustParseReference("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
@@ -541,8 +544,10 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		},
 	})
 
-	// Change the perms to only include a specific user.
+	// Change the read perms to only include a specific user and the write
+	// perms to include an "admin" user.
 	s.assertPut(c, "precise/wordpress-23/meta/perm/read", []string{"bob"})
+	s.assertPut(c, "precise/wordpress-23/meta/perm/write", []string{"admin"})
 
 	// Check that the perms have changed for all revisions and series.
 	for i, u := range []string{"precise/wordpress-23", "precise/wordpress-24", "trusty/wordpress-1"} {
@@ -552,28 +557,37 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 			URL:     storeURL(u + "/meta/perm"),
 			Cookies: cookies,
 			ExpectBody: params.PermResponse{
-				Read: []string{"bob"},
+				Read:  []string{"bob"},
+				Write: []string{"admin"},
 			},
 		})
 	}
 	e, err = s.store.FindBaseEntity(charm.MustParseReference("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsFalse)
-	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{"bob"})
+	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{
+		Read:  []string{"bob"},
+		Write: []string{"admin"},
+	})
 
-	// Try restoring everyone's permission.
+	// Try restoring everyone's read permission.
 	s.assertPut(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
 	s.assertGet(c, "wordpress/meta/perm", params.PermResponse{
-		Read: []string{"bob", params.Everyone},
+		Read:  []string{"bob", params.Everyone},
+		Write: []string{"admin"},
 	})
 	s.assertGet(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
 	e, err = s.store.FindBaseEntity(charm.MustParseReference("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsTrue)
-	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{"bob", params.Everyone})
+	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{
+		Read:  []string{"bob", params.Everyone},
+		Write: []string{"admin"},
+	})
 
 	// Try deleting all permissions.
 	s.assertPut(c, "wordpress/meta/perm/read", []string{})
+	s.assertPut(c, "wordpress/meta/perm/write", []string{})
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("wordpress/meta/perm"),
@@ -587,6 +601,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	e, err = s.store.FindBaseEntity(charm.MustParseReference("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsFalse)
+	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{})
 	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{})
 }
 

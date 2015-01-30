@@ -201,10 +201,12 @@ func assertBaseEntity(c *gc.C, store *Store, url *charm.Reference) {
 	baseEntity, err := store.FindBaseEntity(url)
 	c.Assert(err, gc.IsNil)
 	expectACLs := mongodoc.ACL{
-		Read: []string{params.Everyone},
+		Read:  []string{params.Everyone},
+		Write: []string{},
 	}
 	if url.User != "" {
 		expectACLs.Read = append(expectACLs.Read, url.User)
+		expectACLs.Write = append(expectACLs.Write, url.User)
 	}
 	c.Assert(baseEntity, jc.DeepEquals, &mongodoc.BaseEntity{
 		URL:    url,
@@ -393,7 +395,8 @@ var findBaseEntityTests = []struct {
 	expect: &mongodoc.BaseEntity{
 		URL: charm.MustParseReference("~who/django"),
 		ACLs: mongodoc.ACL{
-			Read: []string{"everyone", "who"},
+			Read:  []string{"everyone", "who"},
+			Write: []string{"who"},
 		},
 	},
 }, {

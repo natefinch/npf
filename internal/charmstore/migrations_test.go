@@ -185,6 +185,7 @@ func (s *migrationsSuite) TestMigrateMigrationList(c *gc.C) {
 		"entity ids denormalization",
 		"base entities creation",
 		"read acl creation",
+		"write acl creation",
 	}
 	for i, name := range existing {
 		m := migrations[i]
@@ -432,8 +433,8 @@ func (s *migrationsSuite) TestCreateBaseEntitiesNoUpdates(c *gc.C) {
 	id2 := charm.MustParseReference("~who/utopic/rails-47")
 	s.insertEntity(c, id1, "django", 21)
 	s.insertEntity(c, id2, "rails2", 22)
-	s.insertBaseEntity(c, baseURL(id1))
-	s.insertBaseEntity(c, baseURL(id2))
+	s.insertBaseEntity(c, baseURL(id1), nil)
+	s.insertBaseEntity(c, baseURL(id2), nil)
 
 	// Start the server.
 	err := s.newServer(c)
@@ -452,7 +453,7 @@ func (s *migrationsSuite) TestCreateBaseEntitiesSomeUpdates(c *gc.C) {
 	s.insertEntity(c, id1, "django", 1)
 	s.insertEntity(c, id2, "django", 2)
 	s.insertEntity(c, id3, "postgres", 3)
-	s.insertBaseEntity(c, baseURL(id2))
+	s.insertBaseEntity(c, baseURL(id2), nil)
 
 	// Start the server.
 	err := s.newServer(c)
@@ -485,8 +486,8 @@ func (s *migrationsSuite) TestPopulateReadACL(c *gc.C) {
 	s.insertEntity(c, id3, "rails", 13)
 	baseId1 := baseURL(id1)
 	baseId3 := baseURL(id3)
-	s.insertBaseEntity(c, baseId1)
-	s.insertBaseEntity(c, baseId3)
+	s.insertBaseEntity(c, baseId1, nil)
+	s.insertBaseEntity(c, baseId3, nil)
 
 	// Ensure read permission is empty.
 	s.checkBaseEntity(c, &mongodoc.BaseEntity{
@@ -577,8 +578,12 @@ func (s *migrationsSuite) TestPopulateReadACLNoUpdates(c *gc.C) {
 	id2 := charm.MustParseReference("~who/utopic/rails-47")
 	s.insertEntity(c, id1, "django", 21)
 	s.insertEntity(c, id2, "rails2", 22)
-	s.insertBaseEntity(c, baseURL(id1), "jean-luc")
-	s.insertBaseEntity(c, baseURL(id2), "who")
+	s.insertBaseEntity(c, baseURL(id1), &mongodoc.ACL{
+		Read: []string{"jean-luc"},
+	})
+	s.insertBaseEntity(c, baseURL(id2), &mongodoc.ACL{
+		Read: []string{"who"},
+	})
 
 	// Start the server.
 	err := s.newServer(c)
@@ -617,8 +622,10 @@ func (s *migrationsSuite) TestPopulateReadACLSomeUpdates(c *gc.C) {
 	s.insertEntity(c, id3, "postgres", 3)
 	baseId1 := baseURL(id1)
 	baseId3 := baseURL(id3)
-	s.insertBaseEntity(c, baseId1)
-	s.insertBaseEntity(c, baseId3, "benjamin")
+	s.insertBaseEntity(c, baseId1, nil)
+	s.insertBaseEntity(c, baseId3, &mongodoc.ACL{
+		Read: []string{"benjamin"},
+	})
 
 	// Start the server.
 	err := s.newServer(c)
@@ -641,6 +648,147 @@ func (s *migrationsSuite) TestPopulateReadACLSomeUpdates(c *gc.C) {
 		Public: true,
 		ACLs: mongodoc.ACL{
 			Read: []string{"benjamin"},
+		},
+	})
+}
+
+func (s *migrationsSuite) TestPopulateWriteACL(c *gc.C) {
+	s.patchMigrations(c, getMigrations("write acl creation"))
+	// Store entities with their base in the db.
+	// The base entities will not include any write permission.
+	id1 := charm.MustParseReference("~who/trusty/django-42")
+	id2 := charm.MustParseReference("~who/django-47")
+	id3 := charm.MustParseReference("~dalek/utopic/rails-47")
+	s.insertEntity(c, id1, "django", 12)
+	s.insertEntity(c, id2, "django", 12)
+	s.insertEntity(c, id3, "rails", 13)
+	baseId1 := baseURL(id1)
+	baseId3 := baseURL(id3)
+	s.insertBaseEntity(c, baseId1, nil)
+	s.insertBaseEntity(c, baseId3, nil)
+
+	// Ensure write permission is empty.
+	s.checkBaseEntity(c, &mongodoc.BaseEntity{
+		URL:    baseId1,
+		User:   "who",
+		Name:   "django",
+		Public: true,
+	})
+	s.checkBaseEntity(c, &mongodoc.BaseEntity{
+		URL:    baseId3,
+		User:   "dalek",
+		Name:   "rails",
+		Public: true,
+	})
+
+	// Start the server.
+	err := s.newServer(c)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure write permission has been correctly set.
+	s.checkBaseEntity(c, &mongodoc.BaseEntity{
+		URL:    baseId1,
+		User:   "who",
+		Name:   "django",
+		Public: true,
+		ACLs: mongodoc.ACL{
+			Write: []string{"who"},
+		},
+	})
+	s.checkBaseEntity(c, &mongodoc.BaseEntity{
+		URL:    baseId3,
+		User:   "dalek",
+		Name:   "rails",
+		Public: true,
+		ACLs: mongodoc.ACL{
+			Write: []string{"dalek"},
+		},
+	})
+}
+
+func (s *migrationsSuite) TestPopulateWriteACLNoEntities(c *gc.C) {
+	s.patchMigrations(c, getMigrations("write acl creation"))
+	// Start the server.
+	err := s.newServer(c)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure no new base entities are added in the process.
+	s.checkCount(c, s.db.BaseEntities(), 0)
+}
+
+func (s *migrationsSuite) TestPopulateWriteACLNoUpdates(c *gc.C) {
+	s.patchMigrations(c, getMigrations("write acl creation"))
+	// Store entities with their corresponding base in the db.
+	id1 := charm.MustParseReference("trusty/django-42")
+	id2 := charm.MustParseReference("~who/utopic/rails-47")
+	s.insertEntity(c, id1, "django", 21)
+	s.insertEntity(c, id2, "rails2", 22)
+	s.insertBaseEntity(c, baseURL(id1), nil)
+	s.insertBaseEntity(c, baseURL(id2), &mongodoc.ACL{
+		Write: []string{"dalek"},
+	})
+
+	// Start the server.
+	err := s.newServer(c)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure no new base entities are added in the process, and write
+	// permissions were not changed.
+	s.checkCount(c, s.db.BaseEntities(), 2)
+	s.checkBaseEntity(c, &mongodoc.BaseEntity{
+		URL:    baseURL(id1),
+		Name:   "django",
+		Public: true,
+	})
+	s.checkBaseEntity(c, &mongodoc.BaseEntity{
+		URL:    baseURL(id2),
+		User:   "who",
+		Name:   "rails",
+		Public: true,
+		ACLs: mongodoc.ACL{
+			Write: []string{"dalek"},
+		},
+	})
+}
+
+func (s *migrationsSuite) TestPopulateWriteACLSomeUpdates(c *gc.C) {
+	s.patchMigrations(c, getMigrations("write acl creation"))
+	// Store entities with and without bases in the db
+	id1 := charm.MustParseReference("~dalek/utopic/django-42")
+	id2 := charm.MustParseReference("~dalek/utopic/django-47")
+	id3 := charm.MustParseReference("~jean-luc/precise/postgres-0")
+	s.insertEntity(c, id1, "django", 1)
+	s.insertEntity(c, id2, "django", 2)
+	s.insertEntity(c, id3, "postgres", 3)
+	baseId1 := baseURL(id1)
+	baseId3 := baseURL(id3)
+	s.insertBaseEntity(c, baseId1, nil)
+	s.insertBaseEntity(c, baseId3, &mongodoc.ACL{
+		Write: []string{"benjamin"},
+	})
+
+	// Start the server.
+	err := s.newServer(c)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure missing write permissions have been populated correctly.
+	s.checkCount(c, s.db.BaseEntities(), 2)
+	s.checkBaseEntity(c, &mongodoc.BaseEntity{
+		URL:    baseId1,
+		User:   "dalek",
+		Name:   "django",
+		Public: true,
+		ACLs: mongodoc.ACL{
+			Write: []string{"dalek"},
+		},
+	})
+	s.checkBaseEntity(c, &mongodoc.BaseEntity{
+		URL:    baseId3,
+		User:   "jean-luc",
+		Name:   "postgres",
+		Public: true,
+		ACLs: mongodoc.ACL{
+			Write: []string{"benjamin"},
 		},
 	})
 }
@@ -699,18 +847,24 @@ func (s *migrationsSuite) insertEntity(c *gc.C, id *charm.Reference, name string
 	c.Assert(err, gc.IsNil)
 }
 
-func (s *migrationsSuite) insertBaseEntity(c *gc.C, id *charm.Reference, readUsers ...string) {
+func (s *migrationsSuite) insertBaseEntity(c *gc.C, id *charm.Reference, acls *mongodoc.ACL) {
 	entity := &mongodoc.BaseEntity{
 		URL:    id,
 		Name:   id.Name,
 		User:   id.User,
 		Public: true,
 	}
-	if len(readUsers) != 0 {
-		entity.ACLs = mongodoc.ACL{
-			Read: readUsers,
-		}
+	if acls != nil {
+		entity.ACLs = *acls
 	}
 	err := s.db.BaseEntities().Insert(entity)
 	c.Assert(err, gc.IsNil)
+
+	// Unset the ACL fields if required to simulate a migration.
+	if acls == nil {
+		err = s.db.BaseEntities().UpdateId(id, bson.D{{"$unset",
+			bson.D{{"acls", true}},
+		}})
+		c.Assert(err, gc.IsNil)
+	}
 }
