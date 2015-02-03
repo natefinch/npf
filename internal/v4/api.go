@@ -659,7 +659,8 @@ func checkExtraInfoKey(key string) error {
 
 func (h *Handler) metaPerm(entity *mongodoc.BaseEntity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.PermResponse{
-		Read: entity.ACLs.Read,
+		Read:  entity.ACLs.Read,
+		Write: entity.ACLs.Write,
 	}, nil
 }
 
@@ -667,6 +668,8 @@ func (h *Handler) metaPermWithKey(entity *mongodoc.BaseEntity, id *charm.Referen
 	switch path {
 	case "/read":
 		return entity.ACLs.Read, nil
+	case "/write":
+		return entity.ACLs.Write, nil
 	}
 	return nil, errgo.WithCausef(nil, params.ErrNotFound, "unknown permission")
 }
@@ -687,6 +690,9 @@ func (h *Handler) putMetaPermWithKey(id *charm.Reference, path string, val *json
 		updater.UpdateField("acls.read", perms)
 		updater.UpdateField("public", isPublic)
 		updater.UpdateSearch()
+		return nil
+	case "/write":
+		updater.UpdateField("acls.write", perms)
 		return nil
 	}
 	return errgo.WithCausef(nil, params.ErrNotFound, "unknown permission")

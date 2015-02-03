@@ -166,7 +166,8 @@ type IdResponse struct {
 // PermResponse holds the result of an id/meta/perm GET
 // request. See tinyurl TODO.
 type PermResponse struct {
-	Read []string
+	Read  []string
+	Write []string
 }
 
 const (

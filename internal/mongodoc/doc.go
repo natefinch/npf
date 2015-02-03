@@ -132,6 +132,9 @@ type ACL struct {
 	// Read holds users and groups that are allowed to read the charm
 	// or bundle.
 	Read []string
+	// Write holds users and groups that are allowed to upload/modify the charm
+	// or bundle.
+	Write []string
 }
 
 type FileId string

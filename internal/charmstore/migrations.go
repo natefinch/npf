@@ -28,6 +28,9 @@ var migrations = []migration{{
 }, {
 	name:    "read acl creation",
 	migrate: populateReadACL,
+}, {
+	name:    "write acl creation",
+	migrate: populateWriteACL,
 }}
 
 // migration holds a migration function with its corresponding name.
@@ -181,7 +184,35 @@ func populateReadACL(db StoreDatabase) error {
 		if err := baseEntities.UpdateId(entity.URL, bson.D{{
 			"$set", bson.D{{"acls.read", readPerm}},
 		}}); err != nil {
-			return errgo.Notef(err, "cannot populate ACL for base entity %s", entity.URL)
+			return errgo.Notef(err, "cannot populate read ACL for base entity %s", entity.URL)
+		}
+		counter++
+	}
+	if err := iter.Close(); err != nil {
+		return errgo.Notef(err, "cannot iterate base entities")
+	}
+	logger.Infof("%d base entities updated", counter)
+	return nil
+}
+
+// populateWriteACL adds the write ACL to base entities not having the field.
+func populateWriteACL(db StoreDatabase) error {
+	baseEntities := db.BaseEntities()
+	var entity mongodoc.BaseEntity
+	iter := baseEntities.Find(bson.D{{
+		"acls.write", bson.D{{"$exists", false}},
+	}, {
+		"user", bson.D{{"$ne", ""}},
+	}}).Select(bson.D{{"_id", 1}}).Iter()
+
+	defer iter.Close()
+
+	counter := 0
+	for iter.Next(&entity) {
+		if err := baseEntities.UpdateId(entity.URL, bson.D{{
+			"$set", bson.D{{"acls.write", []string{entity.URL.User}}},
+		}}); err != nil {
+			return errgo.Notef(err, "cannot populate write ACL for base entity %s", entity.URL)
 		}
 		counter++
 	}

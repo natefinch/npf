@@ -102,17 +102,20 @@ func (h *Handler) authorizeEntity(id *charm.Reference, req *http.Request) error 
 	baseEntity, err := h.store.FindBaseEntity(id, "acls")
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
-			// Cannot get the ACL from the entity.
-			// TODO frankban: just assume read permissions for everyone and
-			// no write permissions for now. Let the endpoint deal with not
-			// found errors.
-			return h.authorizeWithPerms(req, []string{params.Everyone}, nil)
+			// Cannot get the ACL from a non-existing entity.
+			// Assume read permissions for everyone and write permissions
+			// for the entity user. If no user is associated with the entity,
+			// than no write permission are for the time being we only grant
+			// access to the HTTP basic auth superuser.
+			var writePerm []string
+			if id.User != "" {
+				writePerm = []string{id.User}
+			}
+			return h.authorizeWithPerms(req, []string{params.Everyone}, writePerm)
 		}
 		return errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}
-	// TODO frankban: replace with baseEntity.ACL.Write.
-	// For the time being only rely on basic HTTP auth.
-	return h.authorizeWithPerms(req, baseEntity.ACLs.Read, nil)
+	return h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write)
 }
 
 func (h *Handler) authorizeWithPerms(req *http.Request, read, write []string) error {
