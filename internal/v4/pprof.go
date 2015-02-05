@@ -2,10 +2,11 @@ package v4
 
 import (
 	"net/http"
-	"net/http/pprof"
 	runtimepprof "runtime/pprof"
 	"strings"
 	"text/template"
+
+	"github.com/juju/httpprof"
 
 	"github.com/juju/charmstore/internal/router"
 )
