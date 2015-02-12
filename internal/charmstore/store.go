@@ -188,6 +188,14 @@ type AddParams struct {
 	// Contents holds references to files inside the
 	// entity's archive blob.
 	Contents map[mongodoc.FileId]mongodoc.ZipFile
+
+	// PromulgatedURL holds the promulgated URL of the entity. If the entity
+	// is not promulgated this should be set to nil.
+	PromulgatedURL *charm.Reference
+
+	// PromulgatedRevision holds the revision number from the promulgated URL.
+	// If the entity is not promulgated this should be set to -1.
+	PromulgatedRevision int
 }
 
 // AddCharm adds a charm entities collection with the given
@@ -213,6 +221,8 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 		CharmProvidedInterfaces: interfacesForRelations(c.Meta().Provides),
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
 		Contents:                p.Contents,
+		PromulgatedURL:          p.PromulgatedURL,
+		PromulgatedRevision:     p.PromulgatedRevision,
 	}
 
 	// Check that we're not going to create a charm that duplicates
@@ -252,6 +262,7 @@ func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 			Read:  readPerm,
 			Write: writePerm,
 		},
+		Promulgated: entity.PromulgatedURL != nil,
 	}
 	err = s.DB.BaseEntities().Insert(baseEntity)
 	if err != nil && !mgo.IsDup(err) {
@@ -419,22 +430,24 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 		return errgo.Mask(err)
 	}
 	entity := &mongodoc.Entity{
-		URL:                p.URL,
-		BaseURL:            baseURL(p.URL),
-		User:               p.URL.User,
-		Name:               p.URL.Name,
-		Revision:           p.URL.Revision,
-		Series:             p.URL.Series,
-		BlobHash:           p.BlobHash,
-		BlobName:           p.BlobName,
-		Size:               p.BlobSize,
-		UploadTime:         time.Now(),
-		BundleData:         bundleData,
-		BundleUnitCount:    newInt(bundleUnitCount(bundleData)),
-		BundleMachineCount: newInt(bundleMachineCount(bundleData)),
-		BundleReadMe:       b.ReadMe(),
-		BundleCharms:       urls,
-		Contents:           p.Contents,
+		URL:                 p.URL,
+		BaseURL:             baseURL(p.URL),
+		User:                p.URL.User,
+		Name:                p.URL.Name,
+		Revision:            p.URL.Revision,
+		Series:              p.URL.Series,
+		BlobHash:            p.BlobHash,
+		BlobName:            p.BlobName,
+		Size:                p.BlobSize,
+		UploadTime:          time.Now(),
+		BundleData:          bundleData,
+		BundleUnitCount:     newInt(bundleUnitCount(bundleData)),
+		BundleMachineCount:  newInt(bundleMachineCount(bundleData)),
+		BundleReadMe:        b.ReadMe(),
+		BundleCharms:        urls,
+		Contents:            p.Contents,
+		PromulgatedURL:      p.PromulgatedURL,
+		PromulgatedRevision: p.PromulgatedRevision,
 	}
 
 	// Check that we're not going to create a bundle that duplicates

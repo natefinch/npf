@@ -19,6 +19,7 @@ import (
 	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
+	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/charmstore"
@@ -443,4 +444,41 @@ func setArchiveCacheControl(h http.Header, idFullySpecified bool) {
 	}
 	seconds := int(age / time.Second)
 	h.Set("Cache-Control", "public, max-age="+strconv.Itoa(seconds))
+}
+
+// getPromulgated URL finds the promulgatedURL that should be used for
+// this newly uploaded charm, if the charm should be promulgated,
+// othewise it returns nil. An error is returned if there is a problem
+// communicating with the storage.
+func (h *Handler) getPromulgatedURL(id *charm.Reference) (*charm.Reference, error) {
+	baseURL := *id
+	baseURL.Series = ""
+	baseURL.Revision = -1
+	var baseEntity mongodoc.BaseEntity
+	err := h.store.DB.BaseEntities().FindId(&baseURL).One(&baseEntity)
+	if err != nil {
+		if err == mgo.ErrNotFound {
+			// If there is no base entity then by definition it cannot be promulgated.
+			return nil, nil
+		}
+		return nil, errgo.Mask(err)
+	}
+	if !baseEntity.Promulgated {
+		return nil, nil
+	}
+	var entity mongodoc.Entity
+	err = h.store.DB.Entities().Find(bson.D{
+		{"name", id.Name},
+		{"series", id.Series},
+		{"promulgated-url", bson.D{{"$exists", true}}},
+	}).Sort("-promulgated-revision").Select(bson.D{{"promulgated-revision", 1}}).One(&entity)
+	promulgatedURL := *id
+	promulgatedURL.User = ""
+	promulgatedURL.Revision = 0
+	if err == nil {
+		promulgatedURL.Revision = entity.PromulgatedRevision + 1
+	} else if err != mgo.ErrNotFound {
+		return nil, errgo.Mask(err)
+	}
+	return &promulgatedURL, nil
 }
