@@ -1,4 +1,4 @@
-// Copyright 2014 Canonical Ltd.
+// Copyright 2015 Canonical Ltd.
 // Licensed under the LGPLv3, see LICENCE file for details.
 
 package csclient_test
@@ -128,7 +128,7 @@ var getTests = []struct {
 }}
 
 func (s *suite) TestGet(c *gc.C) {
-	ch := storetesting.Repo.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
@@ -164,7 +164,7 @@ func (s *suite) TestGet(c *gc.C) {
 }
 
 func (s *suite) TestGetArchive(c *gc.C) {
-	ch := storetesting.Repo.CharmArchive(c.MkDir(), "wordpress")
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 
 	// Open the archive and calculate its hash and size.
 	r, expectHash, expectSize := archiveHashAndSize(c, ch.Path)
@@ -296,7 +296,7 @@ func (s *suite) TestGetArchiveWithBadResponse(c *gc.C) {
 }
 
 func (s *suite) TestUploadArchiveWithCharm(c *gc.C) {
-	path := storetesting.Repo.CharmArchivePath(c.MkDir(), "wordpress")
+	path := storetesting.Charms.CharmArchivePath(c.MkDir(), "wordpress")
 
 	// Post the archive.
 	s.checkUploadArchive(c, path, "utopic/wordpress", "cs:utopic/wordpress-0")
@@ -306,7 +306,7 @@ func (s *suite) TestUploadArchiveWithCharm(c *gc.C) {
 
 	// Posting a different archive to the same URL increases the resulting id
 	// revision.
-	path = storetesting.Repo.CharmArchivePath(c.MkDir(), "mysql")
+	path = storetesting.Charms.CharmArchivePath(c.MkDir(), "mysql")
 	s.checkUploadArchive(c, path, "utopic/wordpress", "cs:utopic/wordpress-1")
 }
 
@@ -314,17 +314,17 @@ func (s *suite) prepareBundleCharms(c *gc.C) {
 	// Add the charms required by the wordpress-simple bundle to the store.
 	err := s.store.AddCharmWithArchive(
 		charm.MustParseReference("utopic/wordpress-42"),
-		storetesting.Repo.CharmArchive(c.MkDir(), "wordpress"))
+		storetesting.Charms.CharmArchive(c.MkDir(), "wordpress"))
 	c.Assert(err, gc.IsNil)
 	err = s.store.AddCharmWithArchive(
 		charm.MustParseReference("utopic/mysql-47"),
-		storetesting.Repo.CharmArchive(c.MkDir(), "mysql"))
+		storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
 	c.Assert(err, gc.IsNil)
 }
 
 func (s *suite) TestUploadArchiveWithBundle(c *gc.C) {
 	s.prepareBundleCharms(c)
-	path := storetesting.Repo.BundleArchivePath(c.MkDir(), "wordpress-simple")
+	path := storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple")
 	// Post the archive.
 	s.checkUploadArchive(c, path, "bundle/wordpress-simple", "cs:bundle/wordpress-simple-0")
 }
@@ -398,7 +398,7 @@ func (s *suite) TestUploadArchiveWithInvalidId(c *gc.C) {
 }
 
 func (s *suite) TestUploadArchiveWithServerError(c *gc.C) {
-	path := storetesting.Repo.CharmArchivePath(c.MkDir(), "wordpress")
+	path := storetesting.Charms.CharmArchivePath(c.MkDir(), "wordpress")
 	body, hash, size := archiveHashAndSize(c, path)
 	defer body.Close()
 
@@ -440,7 +440,7 @@ func archiveHashAndSize(c *gc.C, path string) (r csclient.ReadSeekCloser, hash s
 }
 
 func (s *suite) TestUploadCharmDir(c *gc.C) {
-	ch := storetesting.Repo.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	id, err := s.client.UploadCharm(charm.MustParseReference("utopic/wordpress"), ch)
 	c.Assert(err, gc.IsNil)
 	c.Assert(id.String(), gc.Equals, "cs:utopic/wordpress-0")
@@ -448,7 +448,7 @@ func (s *suite) TestUploadCharmDir(c *gc.C) {
 }
 
 func (s *suite) TestUploadCharmArchive(c *gc.C) {
-	ch := storetesting.Repo.CharmArchive(c.MkDir(), "wordpress")
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	id, err := s.client.UploadCharm(charm.MustParseReference("trusty/wordpress"), ch)
 	c.Assert(err, gc.IsNil)
 	c.Assert(id.String(), gc.Equals, "cs:trusty/wordpress-0")
@@ -461,14 +461,14 @@ func (s *suite) TestUploadCharmErrorUploading(c *gc.C) {
 	// as part of the client.uploadArchive tests.
 	id, err := s.client.UploadCharm(
 		charm.MustParseReference("trusty/wordpress-42"),
-		storetesting.Repo.CharmDir("wordpress"),
+		storetesting.Charms.CharmDir("wordpress"),
 	)
 	c.Assert(err, gc.ErrorMatches, `revision specified in "cs:trusty/wordpress-42", but should not be specified`)
 	c.Assert(id, gc.IsNil)
 }
 
 func (s *suite) TestUploadCharmErrorUnknownType(c *gc.C) {
-	ch := storetesting.Repo.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	unknown := struct {
 		charm.Charm
 	}{ch}
@@ -480,7 +480,7 @@ func (s *suite) TestUploadCharmErrorUnknownType(c *gc.C) {
 func (s *suite) TestUploadCharmErrorOpenArchive(c *gc.C) {
 	// Since the internal code path is shared between charms and bundles, just
 	// using a charm for this test also exercises the same failure for bundles.
-	ch := storetesting.Repo.CharmArchive(c.MkDir(), "wordpress")
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	ch.Path = "no-such-file"
 	id, err := s.client.UploadCharm(charm.MustParseReference("trusty/wordpress"), ch)
 	c.Assert(err, gc.ErrorMatches, `cannot open charm archive: open no-such-file: no such file or directory`)
@@ -517,7 +517,7 @@ func (s *suite) checkUploadCharm(c *gc.C, id *charm.Reference, ch charm.Charm) {
 
 func (s *suite) TestUploadBundleDir(c *gc.C) {
 	s.prepareBundleCharms(c)
-	b := storetesting.Repo.BundleDir("wordpress-simple")
+	b := storetesting.Charms.BundleDir("wordpress-simple")
 	id, err := s.client.UploadBundle(charm.MustParseReference("bundle/wordpress-simple"), b)
 	c.Assert(err, gc.IsNil)
 	c.Assert(id.String(), gc.Equals, "cs:bundle/wordpress-simple-0")
@@ -526,7 +526,7 @@ func (s *suite) TestUploadBundleDir(c *gc.C) {
 
 func (s *suite) TestUploadBundleArchive(c *gc.C) {
 	s.prepareBundleCharms(c)
-	path := storetesting.Repo.BundleArchivePath(c.MkDir(), "wordpress-simple")
+	path := storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple")
 	b, err := charm.ReadBundleArchive(path)
 	c.Assert(err, gc.IsNil)
 	id, err := s.client.UploadBundle(charm.MustParseReference("bundle/wp"), b)
@@ -541,14 +541,14 @@ func (s *suite) TestUploadBundleErrorUploading(c *gc.C) {
 	// as part of the client.uploadArchive tests.
 	id, err := s.client.UploadBundle(
 		charm.MustParseReference("wordpress-simple"),
-		storetesting.Repo.BundleDir("wordpress-simple"),
+		storetesting.Charms.BundleDir("wordpress-simple"),
 	)
 	c.Assert(err, gc.ErrorMatches, `no series specified in "cs:wordpress-simple"`)
 	c.Assert(id, gc.IsNil)
 }
 
 func (s *suite) TestUploadBundleErrorUnknownType(c *gc.C) {
-	b := storetesting.Repo.BundleDir("wordpress-simple")
+	b := storetesting.Charms.BundleDir("wordpress-simple")
 	unknown := struct {
 		charm.Bundle
 	}{b}
@@ -571,7 +571,7 @@ func (s *suite) checkUploadBundle(c *gc.C, id *charm.Reference, b charm.Bundle) 
 
 func (s *suite) TestDoAuthorization(c *gc.C) {
 	// Add a charm to be deleted.
-	ch := storetesting.Repo.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
@@ -722,7 +722,7 @@ var hyphenateTests = []struct {
 func (s *suite) TestDo(c *gc.C) {
 	// Do is tested fairly comprehensively (but indirectly)
 	// in TestGet, so just a trivial smoke test here.
-	ch := storetesting.Repo.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
@@ -775,7 +775,7 @@ type Embed struct{}
 type embed struct{}
 
 func (s *suite) TestMeta(c *gc.C) {
-	ch := storetesting.Repo.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
@@ -885,7 +885,7 @@ func (s *suite) TestMeta(c *gc.C) {
 }
 
 func (s *suite) TestPutExtraInfo(c *gc.C) {
-	ch := storetesting.Repo.CharmDir("wordpress")
+	ch := storetesting.Charms.CharmDir("wordpress")
 	url := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
@@ -994,7 +994,7 @@ func (s *suite) TestLog(c *gc.C) {
 }
 
 func (s *suite) TestMacaroonAuthorization(c *gc.C) {
-	ch := storetesting.Repo.CharmArchive(c.MkDir(), "wordpress")
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 
 	curl := charm.MustParseReference("utopic/wordpress-42")
 	err := s.store.AddCharmWithArchive(curl, ch)
