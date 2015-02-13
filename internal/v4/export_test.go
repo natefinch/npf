@@ -14,4 +14,5 @@ var (
 	ProcessIcon                    = processIcon
 	UsernameAttr                   = usernameAttr
 	GroupsAttr                     = groupsAttr
+	GetPromulgatedURL              = (*Handler).getPromulgatedURL
 )
