@@ -16,11 +16,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/juju/charmstore"
-	"github.com/juju/charmstore/internal/blobstore"
-	internalCharmstore "github.com/juju/charmstore/internal/charmstore"
-	"github.com/juju/charmstore/internal/storetesting"
-	"github.com/juju/charmstore/params"
+	"github.com/CanonicalLtd/charmstore-client/csclient"
+	"github.com/CanonicalLtd/charmstore-client/internal/entitytesting"
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
@@ -30,8 +27,11 @@ import (
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
 	"gopkg.in/mgo.v2"
 
-	"github.com/CanonicalLtd/charmstore-client/csclient"
-	"github.com/CanonicalLtd/charmstore-client/internal/entitytesting"
+	"github.com/juju/charmstore"
+	"github.com/juju/charmstore/internal/blobstore"
+	internalCharmstore "github.com/juju/charmstore/internal/charmstore"
+	"github.com/juju/charmstore/internal/storetesting"
+	"github.com/juju/charmstore/params"
 )
 
 // Define fake attributes to be used in tests.

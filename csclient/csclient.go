@@ -17,10 +17,11 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/juju/charmstore/params"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
+
+	"github.com/juju/charmstore/params"
 )
 
 const (
