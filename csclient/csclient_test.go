@@ -16,7 +16,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/juju/charmstore/csclient"
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
@@ -27,6 +26,7 @@ import (
 	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore"
+	"github.com/juju/charmstore/csclient"
 	"github.com/juju/charmstore/internal/blobstore"
 	internalCharmstore "github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/storetesting"
