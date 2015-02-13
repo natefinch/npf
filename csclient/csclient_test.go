@@ -719,6 +719,13 @@ var hyphenateTests = []struct {
 	expect: "with_-dubious_-underscore",
 }}
 
+func (s *suite) TestHyphenate(c *gc.C) {
+	for i, test := range hyphenateTests {
+		c.Logf("test %d. %q", i, test.val)
+		c.Assert(csclient.Hyphenate(test.val), gc.Equals, test.expect)
+	}
+}
+
 func (s *suite) TestDo(c *gc.C) {
 	// Do is tested fairly comprehensively (but indirectly)
 	// in TestGet, so just a trivial smoke test here.
@@ -738,13 +745,6 @@ func (s *suite) TestDo(c *gc.C) {
 	data, err := ioutil.ReadAll(resp.Body)
 	c.Assert(err, gc.IsNil)
 	c.Assert(string(data), gc.Equals, `"bar"`)
-}
-
-func (s *suite) TestHyphenate(c *gc.C) {
-	for i, test := range hyphenateTests {
-		c.Logf("test %d. %q", i, test.val)
-		c.Assert(csclient.Hyphenate(test.val), gc.Equals, test.expect)
-	}
 }
 
 var metaBadTypeTests = []struct {
