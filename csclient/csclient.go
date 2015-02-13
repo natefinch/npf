@@ -45,7 +45,7 @@ type Client struct {
 type Params struct {
 	// URL holds the root endpoint URL of the charmstore,
 	// with no trailing slash, not including the version.
-	// For example http://charms.ubuntu.com
+	// For example https://api.jujucharms.com/charmstore
 	// TODO default this to global charm store address.
 	URL string
 
@@ -56,7 +56,7 @@ type Params struct {
 	Password string
 
 	// HTTPClient holds the HTTP client to use when making
-	// requests to the store. If nil, http.DefaultClient will
+	// requests to the store. If nil, httpbakery.NewHTTPClient will
 	// be used.
 	HTTPClient *http.Client
 
