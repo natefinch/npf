@@ -21,8 +21,8 @@ type ReadSeekCloser interface {
 }
 
 // openArchive is used to turn the current charm or bundle implementations
-// into ReadClosers for their corresponding archive.
-// It returns the corresponding archive ReadCloser, its SHA384 hash and size.
+// into ReadClosers for their corresponding archive. It returns the
+// corresponding archive ReadSeekCloser, its SHA384 hash and size.
 func openArchive(entity interface{}) (r ReadSeekCloser, hash string, size int64, err error) {
 	var path string
 	switch entity := entity.(type) {

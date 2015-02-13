@@ -33,7 +33,7 @@ const (
 	// For live testing or QAing the application, a different charm store
 	// location should be used, for instance
 	// "https://api.staging.jujucharms.com".
-	ServerURL = "https://api.jujucharms.com"
+	ServerURL = "https://api.jujucharms.com/charmstore"
 )
 
 // Client represents the client side of a charm store.
