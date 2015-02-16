@@ -94,6 +94,25 @@ func (s *suite) TearDownTest(c *gc.C) {
 	s.IsolatedMgoSuite.TearDownTest(c)
 }
 
+func (s *suite) TestDefaultServerURL(c *gc.C) {
+	// Add a charm used for tests.
+	err := s.store.AddCharmWithArchive(
+		charm.MustParseReference("vivid/testing-wordpress-42"),
+		storetesting.Charms.CharmDir("wordpress"))
+	c.Assert(err, gc.IsNil)
+
+	// Patch the default server URL.
+	s.PatchValue(&csclient.ServerURL, s.srv.URL)
+
+	// Instantiate a client using the default server URL.
+	client := csclient.New(csclient.Params{})
+	c.Assert(client.ServerURL(), gc.Equals, s.srv.URL)
+
+	// Check that the request succeeds.
+	err = client.Get("/vivid/testing-wordpress-42/expand-id", nil)
+	c.Assert(err, gc.IsNil)
+}
+
 var getTests = []struct {
 	about           string
 	method          string
@@ -986,9 +1005,6 @@ func (s *suite) TestLog(c *gc.C) {
 		err := json.Unmarshal([]byte(l.Data), &msg)
 		c.Assert(err, gc.IsNil)
 		c.Assert(msg, gc.Equals, logs[len(logs)-(1+i)].message)
-		for _, u := range l.URLs {
-			println(u.String())
-		}
 		c.Assert(l.URLs, jc.DeepEquals, logs[len(logs)-(1+i)].urls)
 	}
 }

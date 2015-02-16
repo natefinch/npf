@@ -24,17 +24,14 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
-const (
-	apiVersion = "v4"
+const apiVersion = "v4"
 
-	// ServerURL holds the default location of the global charm store.
-	// An alternate location can be configured by changing the URL
-	// field in the Params struct.
-	// For live testing or QAing the application, a different charm store
-	// location should be used, for instance
-	// "https://api.staging.jujucharms.com".
-	ServerURL = "https://api.jujucharms.com/charmstore"
-)
+// ServerURL holds the default location of the global charm store.
+// An alternate location can be configured by changing the URL field in the
+// Params struct.
+// For live testing or QAing the application, a different charm store
+// location should be used, for instance "https://api.staging.jujucharms.com".
+var ServerURL = "https://api.jujucharms.com/charmstore"
 
 // Client represents the client side of a charm store.
 type Client struct {
@@ -46,7 +43,7 @@ type Params struct {
 	// URL holds the root endpoint URL of the charmstore,
 	// with no trailing slash, not including the version.
 	// For example https://api.jujucharms.com/charmstore
-	// TODO default this to global charm store address.
+	// If empty, the default charm store client location is used.
 	URL string
 
 	// User and Password hold the authentication credentials
@@ -68,6 +65,9 @@ type Params struct {
 
 // New returns a new charm store client.
 func New(p Params) *Client {
+	if p.URL == "" {
+		p.URL = ServerURL
+	}
 	if p.VisitWebPage == nil {
 		p.VisitWebPage = noVisit
 	}
@@ -81,6 +81,11 @@ func New(p Params) *Client {
 
 func noVisit(url *url.URL) error {
 	return errgo.New("interaction required but no web browser configured")
+}
+
+// ServerURL returns the charm store URL used by the client.
+func (c *Client) ServerURL() string {
+	return c.params.URL
 }
 
 // GetArchive retrieves the archive for the given charm or bundle, returning a
