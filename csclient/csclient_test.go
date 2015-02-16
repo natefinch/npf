@@ -94,6 +94,59 @@ func (s *suite) TearDownTest(c *gc.C) {
 	s.IsolatedMgoSuite.TearDownTest(c)
 }
 
+func (s *suite) TestServerURL(c *gc.C) {
+	// The default server URL is returned.
+	c.Assert(csclient.ServerURL(), gc.Equals, *csclient.DefaultServerURL)
+
+	// It is possible to override the default value with the JUJU_CHARMSTORE
+	// environment variable.
+	s.PatchEnvironment(csclient.JujuCharmstoreEnvVar, "https://1.2.3.4")
+	c.Assert(csclient.ServerURL(), gc.Equals, "https://1.2.3.4")
+}
+
+func (s *suite) TestDefaultServerURL(c *gc.C) {
+	// Add a charm used for tests.
+	err := s.store.AddCharmWithArchive(
+		charm.MustParseReference("vivid/testing-wordpress-42"),
+		storetesting.Charms.CharmDir("wordpress"))
+	c.Assert(err, gc.IsNil)
+
+	// Patch the default server URL.
+	s.PatchValue(csclient.DefaultServerURL, s.srv.URL)
+
+	// Instantiate a client using the default server URL.
+	client := csclient.New(csclient.Params{})
+	c.Assert(client.ServerURL(), gc.Equals, s.srv.URL)
+
+	// Check that the request succeeds.
+	err = client.Get("/vivid/testing-wordpress-42/expand-id", nil)
+	c.Assert(err, gc.IsNil)
+}
+
+func (s *suite) TestServerURLFromEnvVar(c *gc.C) {
+	// Add a charm used for tests.
+	err := s.store.AddCharmWithArchive(
+		charm.MustParseReference("vivid/testing-wordpress-42"),
+		storetesting.Charms.CharmDir("wordpress"))
+	c.Assert(err, gc.IsNil)
+
+	// Point the default server URL to an invalid URL.
+	s.PatchValue(csclient.DefaultServerURL, "invalid-url")
+
+	// Check that the request returns an error.
+	client := csclient.New(csclient.Params{})
+	c.Assert(client.ServerURL(), gc.Equals, "invalid-url")
+	err = client.Get("/vivid/testing-wordpress-42/expand-id", nil)
+	c.Assert(err, gc.ErrorMatches, "Get invalid-url/v4/vivid/testing-wordpress-42/expand-id: .*")
+
+	// After setting the JUJU_CHARMSTORE variable, the call succeeds.
+	s.PatchEnvironment(csclient.JujuCharmstoreEnvVar, s.srv.URL)
+	client = csclient.New(csclient.Params{})
+	c.Assert(client.ServerURL(), gc.Equals, s.srv.URL)
+	err = client.Get("/vivid/testing-wordpress-42/expand-id", nil)
+	c.Assert(err, gc.IsNil)
+}
+
 var getTests = []struct {
 	about           string
 	method          string
@@ -986,9 +1039,6 @@ func (s *suite) TestLog(c *gc.C) {
 		err := json.Unmarshal([]byte(l.Data), &msg)
 		c.Assert(err, gc.IsNil)
 		c.Assert(msg, gc.Equals, logs[len(logs)-(1+i)].message)
-		for _, u := range l.URLs {
-			println(u.String())
-		}
 		c.Assert(l.URLs, jc.DeepEquals, logs[len(logs)-(1+i)].urls)
 	}
 }
