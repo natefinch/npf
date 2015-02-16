@@ -13,7 +13,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"reflect"
 	"strings"
 	"unicode"
@@ -25,20 +24,14 @@ import (
 	"github.com/juju/charmstore/params"
 )
 
-const (
-	apiVersion = "v4"
+const apiVersion = "v4"
 
-	// JujuCharmstoreEnvVar holds the name of the environment variable used
-	// to override the default charm store URL.
-	JujuCharmstoreEnvVar = "JUJU_CHARMSTORE"
-)
-
-// serverURL holds the default location of the global charm store.
+// ServerURL holds the default location of the global charm store.
 // An alternate location can be configured by changing the URL field in the
-// Params struct or by setting the JujuCharmstoreEnvVar environment variable.
+// Params struct.
 // For live testing or QAing the application, a different charm store
 // location should be used, for instance "https://api.staging.jujucharms.com".
-var serverURL = "https://api.jujucharms.com/charmstore"
+var ServerURL = "https://api.jujucharms.com/charmstore"
 
 // Client represents the client side of a charm store.
 type Client struct {
@@ -73,7 +66,7 @@ type Params struct {
 // New returns a new charm store client.
 func New(p Params) *Client {
 	if p.URL == "" {
-		p.URL = ServerURL()
+		p.URL = ServerURL
 	}
 	if p.VisitWebPage == nil {
 		p.VisitWebPage = noVisit
@@ -84,16 +77,6 @@ func New(p Params) *Client {
 	return &Client{
 		params: p,
 	}
-}
-
-// GetServerURL returns the charm store server URL.
-// The returned value can be overridden by setting the JujuCharmstoreEnvVar
-// environment variable.
-func ServerURL() string {
-	if url := os.Getenv(JujuCharmstoreEnvVar); url != "" {
-		return url
-	}
-	return serverURL
 }
 
 func noVisit(url *url.URL) error {

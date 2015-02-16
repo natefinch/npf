@@ -4,7 +4,6 @@
 package csclient
 
 var (
-	Hyphenate        = hyphenate
-	UploadArchive    = (*Client).uploadArchive
-	DefaultServerURL = &serverURL
+	Hyphenate     = hyphenate
+	UploadArchive = (*Client).uploadArchive
 )
