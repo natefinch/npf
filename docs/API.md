@@ -410,12 +410,12 @@ Example: `GET /meta/any?include=archive-size&include=extra-info/featured&id=word
 #### PUT meta/*endpoint*
 
 A PUT to this endpoint allows the metadata endpoint of several ids to be
-updated. The body is as specified in the result of the above GET request. The
-ids in the body specify the ids that will be updated. If there is a failure,
-the error code will be "multiple errors", and the Info field will holds one
-entry for each id in the request body that failed, holding the error for that
-id. If there are no errors, PUT endpoints usually return an empty body in the
-response.
+updated. The request body is as specified in the result of the above GET
+request. The ids in the body specify the ids that will be updated. If there is
+a failure, the error code will be "multiple errors", and the Info field will
+holds one entry for each id in the request body that failed, holding the error
+for that id. If there are no errors, PUT endpoints usually return an empty body
+in the response.
 
 Example: `PUT meta/extra-info/featured`
 
@@ -467,6 +467,9 @@ Response body (with HTTP status 500):
     }
 }
 ```
+
+If the request succeeds, a 200 OK status code is returned with an empty
+response body.
 
 #### GET *id*/meta
 
