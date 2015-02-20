@@ -28,13 +28,13 @@ import (
 )
 
 // GET id/archive
-// http://tinyurl.com/qjrwq53
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idarchive
 //
 // POST id/archive?hash=sha384hash
-// http://tinyurl.com/lzrzrgb
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#post-idarchive
 //
 // DELETE id/archive
-// http://tinyurl.com/ojmlwos
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#delete-idarchive
 //
 // PUT id/archive?hash=sha384hash
 // This is like POST except that it puts the archive to a known revision
@@ -290,8 +290,8 @@ func verifyConstraints(s string) error {
 	return nil
 }
 
-// GET id/archive/…
-// http://tinyurl.com/lampm24
+// GET id/archive/path
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idarchivepath
 func (h *Handler) serveArchiveFile(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	r, size, _, err := h.store.OpenBlob(id)
 	if err != nil {

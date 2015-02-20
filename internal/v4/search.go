@@ -19,7 +19,7 @@ import (
 const maxConcurrency = 20
 
 // GET search[?text=text][&autocomplete=1][&filter=value…][&limit=limit][&include=meta][&skip=count][&sort=field[+dir]]
-// http://tinyurl.com/qzobc69
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-search
 func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, error) {
 	sp, err := parseSearchParams(req)
 	if err != nil {
@@ -85,7 +85,7 @@ func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, er
 }
 
 // GET search/interesting[?limit=limit][&include=meta]
-// http://tinyurl.com/ntmdrg8
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-searchinteresting
 func (h *Handler) serveSearchInteresting(w http.ResponseWriter, req *http.Request) {
 	router.WriteError(w, errNotImplemented)
 }

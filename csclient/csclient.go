@@ -221,7 +221,8 @@ func (c *Client) PutExtraInfo(id *charm.Reference, info map[string]interface{}) 
 // given id. The result value provides a value
 // to be filled in with the result, which must be
 // a pointer to a struct containing members corresponding
-// to possible metadata include parameters (see http://tinyurl.com/nysdjly).
+// to possible metadata include parameters
+// (see https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmeta).
 //
 // It returns the fully qualified id of the entity.
 //
@@ -305,7 +306,7 @@ func (c *Client) Meta(id *charm.Reference, result interface{}) (*charm.Reference
 	// Note that the server is not required to send back values
 	// for all fields. "If there is no metadata for the given meta path, the
 	// element will be omitted"
-	// See http://tinyurl.com/q5vcjpk
+	// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaany
 	for name, r := range rawResult.Meta {
 		v, ok := results[name]
 		if !ok {

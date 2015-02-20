@@ -499,13 +499,14 @@ func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 	return qdsl
 }
 
-// createFilters converts the filters requested with the serch API into
-// filters in the elasticsearch query DSL. Please see http://tinyurl.com/qzobc69
-// for details of how filters are specified in the API. For each key in f a filter is
-// created that matches any one of the set of values specified for that key.
-// The created filter will only match when at least one of the requested values
-// matches for all of the requested keys. Any filter names that are not defined
-// in the filters map will be silently skipped.
+// createFilters converts the filters requested with the search API into
+// filters in the elasticsearch query DSL.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-search
+// for details of how filters are specified in the API. For each key in f a
+// filter is created that matches any one of the set of values specified for
+// that key. The created filter will only match when at least one of the
+// requested values matches for all of the requested keys. Any filter names
+// that are not defined in the filters map will be silently skipped.
 func createFilters(f map[string][]string, admin bool, groups []string) elasticsearch.Filter {
 	af := make(elasticsearch.AndFilter, 0, len(f)+1)
 	for k, vals := range f {

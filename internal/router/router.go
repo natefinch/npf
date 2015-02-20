@@ -304,12 +304,12 @@ func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface
 	key, path := handlerKey(req.URL.Path)
 	if key == "" {
 		// GET id/meta
-		// http://tinyurl.com/nysdjly
+		// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmeta
 		return r.metaNames(), nil
 	}
 	if key == "any" {
 		// GET id/meta/any?[include=meta[&include=meta...]]
-		// http://tinyurl.com/q5vcjpk
+		// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaany
 		includes := req.Form["include"]
 		// If there are no includes, we have no handlers to generate
 		// a "not found" error when the id doesn't exist, so we need
@@ -449,7 +449,7 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
 	case "GET", "HEAD":
 		// A bare meta returns all endpoints.
-		// See http://tinyurl.com/q2qd9nn
+		// See https://github.com/juju/charmstore/blob/v4/docs/API.md#bulk-requests-and-missing-metadata
 		if req.URL.Path == "/" || req.URL.Path == "" {
 			jsonhttp.WriteJSON(w, http.StatusOK, r.metaNames())
 			return nil
@@ -471,7 +471,7 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) error {
 // that can return information on several ids at once.
 //
 // GET meta/$endpoint?id=$id0[&id=$id1...][$otherflags]
-// http://tinyurl.com/kdrly9f
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-metaendpoint
 func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 	// TODO get the metadata concurrently for each id.
 	ids := req.Form["id"]
@@ -488,7 +488,7 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 		if err := r.resolveURL(url); err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				// URLs not found will be omitted from the result.
-				// http://tinyurl.com/o5ptfkk
+				// https://github.com/juju/charmstore/blob/v4/docs/API.md#bulk-requests-and-missing-metadata
 				continue
 			}
 			// Note: preserve error cause from resolveURL.
@@ -497,7 +497,7 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 		meta, err := r.serveMetaGet(url, req)
 		if cause := errgo.Cause(err); cause == params.ErrNotFound || cause == params.ErrMetadataNotFound {
 			// The relevant data does not exist.
-			// http://tinyurl.com/o5ptfkk
+			// https://github.com/juju/charmstore/blob/v4/docs/API.md#bulk-requests-and-missing-metadata
 			continue
 		}
 		if err != nil {
@@ -510,7 +510,7 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 
 // serveBulkMetaPut serves a bulk PUT request to several ids.
 // PUT /meta/$endpoint
-// http://tinyurl.com/na83nta
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#put-metaendpoint
 func (r *Router) serveBulkMetaPut(req *http.Request) error {
 	if len(req.Form["id"]) > 0 {
 		return fmt.Errorf("ids may not be specified in meta PUT request")
@@ -615,7 +615,7 @@ func (r *Router) GetMetadata(id *charm.Reference, includes []string, req *http.R
 				// Omit nil results from map. Note: omit statically typed
 				// nil results too to make it easy for handlers to return
 				// possibly nil data with a static type.
-				// http://tinyurl.com/o5ptfkk
+				// https://github.com/juju/charmstore/blob/v4/docs/API.md#bulk-requests-and-missing-metadata
 				if !isNull(result) {
 					results[groupIncludes[i]] = result
 				}

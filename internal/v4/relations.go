@@ -16,7 +16,7 @@ import (
 )
 
 // GET id/meta/charm-related[?include=meta[&include=meta…]]
-// http://tinyurl.com/q7vdmzl
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacharm-related
 func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	if id.Series == "bundle" {
 		return nil, nil
@@ -145,7 +145,7 @@ func (h *Handler) getRelatedIfaceResponses(
 }
 
 // GET id/meta/bundles-containing[?include=meta[&include=meta…]][&any-series=1][&any-revision=1][&all-results=1]
-// http://tinyurl.com/oqc386r
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetabundles-containing
 func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	if id.Series == "bundle" {
 		return nil, nil

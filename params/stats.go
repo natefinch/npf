@@ -15,8 +15,8 @@ const (
 	StatsCharmEvent   = "charm-event"
 )
 
-// Statistic holds one element of a stats/counter
-// response. See http://tinyurl.com/nkdovcf
+// Statistic holds one element of a stats/counter response.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-statscounter
 type Statistic struct {
 	Key   string `json:",omitempty"`
 	Date  string `json:",omitempty"`
@@ -24,7 +24,7 @@ type Statistic struct {
 }
 
 // StatsResponse holds the result of an id/meta/stats GET request.
-// See http://tinyurl.com/lvyp2l5
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetastats
 type StatsResponse struct {
 	// ArchiveDownloadCount is superceded by ArchiveDownload but maintained for
 	// backward compatibility.
