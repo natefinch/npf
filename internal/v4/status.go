@@ -19,7 +19,7 @@ import (
 )
 
 // GET /debug/status
-// http://tinyurl.com/qdm5yg7
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-debugstatus
 func (h *Handler) serveDebugStatus(_ http.Header, req *http.Request) (interface{}, error) {
 	return debugstatus.Check(
 		debugstatus.ServerStartTime,

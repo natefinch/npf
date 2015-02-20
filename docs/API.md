@@ -158,6 +158,12 @@ Any additional elements attached to the `/charm` path retrieve the file from
 the charm or bundle's zip file. The `Content-Sha384` header field in the
 response will hold the hash checksum of the archive.
 
+#### GET *id*/archive/*path*
+
+Retrieve a file corresponding to *path* in the charm or bundle's zip archive.
+
+Example: `GET trusty/wordpress/archive/config.yaml`
+
 #### POST *id*/archive
 
 This uploads the given charm or bundle in zip format.
@@ -1147,18 +1153,18 @@ Example: `GET trusty/juju-gui-3/meta/charm-related?include=charm-config`
 }
 ```
 
-#### GET *id*/meta/publish-time
+#### GET *id*/meta/archive-upload-time
 
-The `meta/upload-time` path returns the time the archives for the given id was
-uploaded.  The time is formatted according to RFC3339.
+The `meta/archive-upload-time` path returns the time the archives for the given
+*id* was uploaded. The time is formatted according to RFC3339.
 
 ```go
-type UploadTime struct {
-        UploadTime time.Time
+type ArchiveUploadTimeResponse struct {
+    UploadTime time.Time
 }
 ```
 
-Example: `GET trusty/wordpress-42/meta/publish-time`
+Example: `GET trusty/wordpress-42/meta/archive-upload-time`
 
 ```json
 {
@@ -1515,6 +1521,8 @@ The `limit` flag is the same as for the "search" path.
 
 #### GET /debug
 
+**Not yet implemented**
+
 This returns metadata describing the current version of the software running
 the server, and any other information deemed appropriate. The specific form of
  the returned data is deliberately left unspecified for now.
@@ -1571,6 +1579,65 @@ Example: `GET /debug/status`
         "Passed": true
     },
 }
+```
+
+### Permissions
+
+All entities in the charm store have their own access control lists. Read and
+write permissions are supported for specific users and groups. By default, all
+charms and bundles are readable by everyone, meaning that anonymous users can
+retrieve archives and metadata information without restrictions. The permission
+endpoints can be used to retrieve or change entities' permissions.
+
+#### GET *id*/meta/perm
+
+This path reports the read and write ACLs for the charm or bundle.
+
+```go
+type PermResponse struct {
+    Read  []string
+    Write []string
+}
+```
+
+If the `Read` ACL is empty, the entity and its metadata cannot be retrieved by
+anyone.
+If the `Write` ACL is empty, the entity cannot be modified by anyone.
+The special user `everyone` indicates that the corresponding operation
+(read or write) can be performed by everyone, including anonymous users.
+
+Example: `GET ~joe/wordpress/meta/perm`
+
+```json
+{
+    "Read": ["everyone"],
+    "Write": ["joe"]
+}
+```
+
+#### GET *id*/meta/perm/*key*
+
+This path returns the contents of the given permission *key* (that can be
+`read` or `write`). The result is exactly the JSON value stored as a result of
+the PUT request to `meta/perm/key`.
+
+Example: `GET wordpress/meta/perm/read`
+
+```json
+["everyone"]
+```
+
+#### PUT *id*/meta/perm/*key*
+
+This request updates the *key* permission associated with the charm or bundle,
+where *key* can be `read` or `write`.
+
+Example: `PUT precise/wordpress-32/meta/perm/read`
+
+Request body:
+
+```json
+["joe", "frank"]
 ```
 
 ### Logs

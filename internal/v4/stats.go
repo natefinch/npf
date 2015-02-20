@@ -40,7 +40,7 @@ func parseDateRange(form url.Values) (start, stop time.Time, err error) {
 }
 
 // GET stats/counter/key[:key]...?[by=unit]&start=date][&stop=date][&list=1]
-// http://tinyurl.com/nkdovcf
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-statscounter
 func (h *Handler) serveStatsCounter(_ http.Header, r *http.Request) (interface{}, error) {
 	base := strings.TrimPrefix(r.URL.Path, "/")
 	if strings.Index(base, "/") > 0 {

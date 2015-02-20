@@ -30,15 +30,15 @@ const (
 	Admin    = "admin"
 )
 
-// MetaAnyResponse holds the result of a meta/any
-// request. See http://tinyurl.com/q5vcjpk
+// MetaAnyResponse holds the result of a meta/any request.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaany
 type MetaAnyResponse struct {
 	Id   *charm.Reference
 	Meta map[string]interface{} `json:",omitempty"`
 }
 
-// ArchiveUploadResponse holds the result of
-// a post or a put to /$id/archive. See http://tinyurl.com/lzrzrgb
+// ArchiveUploadResponse holds the result of a post or a put to /id/archive.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#post-idarchive
 type ArchiveUploadResponse struct {
 	Id *charm.Reference
 }
@@ -51,27 +51,29 @@ type ExpandedId struct {
 }
 
 // ArchiveSizeResponse holds the result of an
-// id/meta/archive-size GET request. See http://tinyurl.com/m8b9geq
+// id/meta/archive-size GET request.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaarchive-size
 type ArchiveSizeResponse struct {
 	Size int64
 }
 
 // ManifestFile holds information about a charm or bundle file.
 // A slice of ManifestFile is used as response for
-// id/meta/manifest GET requests. See http://tinyurl.com/p3xdcto
+// id/meta/manifest GET requests.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetamanifest
 type ManifestFile struct {
 	Name string
 	Size int64
 }
 
-// ArchiveUploadTimeResponse holds the result of an
-// id/meta/archive-upload-time GET request. See http://tinyurl.com/nmujuqk
+// ArchiveUploadTimeResponse holds the result of an id/meta/archive-upload-time
+// GET request. See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaarchive-upload-time
 type ArchiveUploadTimeResponse struct {
 	UploadTime time.Time
 }
 
-// RelatedResponse holds the result of an
-// id/meta/charm-related GET request. See http://tinyurl.com/q7vdmzl
+// RelatedResponse holds the result of an id/meta/charm-related GET request.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacharm-related
 type RelatedResponse struct {
 	// Requires holds an entry for each interface provided by
 	// the charm, containing all charms that require that interface.
@@ -82,25 +84,28 @@ type RelatedResponse struct {
 	Provides map[string][]MetaAnyResponse `json:",omitempty"`
 }
 
-// RevisionInfoResponse holds the result of an
-// id/meta/revision-info GET request. See http://tinyurl.com/q6xos7f
+// RevisionInfoResponse holds the result of an id/meta/revision-info GET
+// request. See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetarevision-info
 type RevisionInfoResponse struct {
 	Revisions []*charm.Reference
 }
 
 // BundleCount holds the result of an id/meta/bundle-unit-count
-// or bundle-machine-count GET request. See http://tinyurl.com/mkvowub
-// and http://tinyurl.com/qfuubrv
+// or bundle-machine-count GET request.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetabundle-unit-count
+// and https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetabundle-machine-count
 type BundleCount struct {
 	Count int
 }
 
-// TagsResponse holds the result of an
-// id/meta/tags GET request. See http://tinyurl.com/njyqwj2
+// TagsResponse holds the result of an id/meta/tags GET request.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetatags
 type TagsResponse struct {
 	Tags []string
 }
 
+// Published holds the result of a changes/published GET request.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-changespublished
 type Published struct {
 	Id          *charm.Reference
 	PublishTime time.Time
@@ -130,31 +135,31 @@ type SearchResponse struct {
 }
 
 // IdUserResponse holds the result of an id/meta/id-user GET request.
-// See http://tinyurl.com/o7xmhz2
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaid-user
 type IdUserResponse struct {
 	User string
 }
 
 // IdSeriesResponse holds the result of an id/meta/id-series GET request.
-// See http://tinyurl.com/pnwmr6j
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaid-series
 type IdSeriesResponse struct {
 	Series string
 }
 
 // IdNameResponse holds the result of an id/meta/id-name GET request.
-// See http://tinyurl.com/m5q8gcy
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaid-name
 type IdNameResponse struct {
 	Name string
 }
 
 // IdRevisionResponse holds the result of an id/meta/id-revision GET request.
-// See http://tinyurl.com/ntd3coz
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaid-revision
 type IdRevisionResponse struct {
 	Revision int
 }
 
 // IdResponse holds the result of an id/meta/id GET request.
-// See http://tinyurl.com/lnqwbsp
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaid
 type IdResponse struct {
 	Id       *charm.Reference
 	User     string `json:",omitempty"`
@@ -163,8 +168,8 @@ type IdResponse struct {
 	Revision int
 }
 
-// PermResponse holds the result of an id/meta/perm GET
-// request. See tinyurl TODO.
+// PermResponse holds the result of an id/meta/perm GET request.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaperm
 type PermResponse struct {
 	Read  []string
 	Write []string
@@ -200,7 +205,7 @@ type Log struct {
 
 // LogResponse represents a single log message and is used in the responses
 // to /log GET requests.
-// See http://tinyurl.com/nj77rcr
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-log
 type LogResponse struct {
 	// Data holds the log message as a JSON-encoded value.
 	Data json.RawMessage

@@ -22,7 +22,7 @@ import (
 )
 
 // GET id/diagram.svg
-// http://tinyurl.com/nqjvxov
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-iddiagramsvg
 func (h *Handler) serveDiagram(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	if id.Series != "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "diagrams not supported for charms")
@@ -68,7 +68,7 @@ var allowedReadMe = map[string]bool{
 }
 
 // GET id/readme
-// http://tinyurl.com/kygyvot
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idreadme
 func (h *Handler) serveReadMe(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	entity, err := h.store.FindEntity(id, "_id", "contents", "blobname")
 	if err != nil {
@@ -91,7 +91,7 @@ func (h *Handler) serveReadMe(id *charm.Reference, fullySpecified bool, w http.R
 }
 
 // GET id/icon.svg
-// http://tinyurl.com/lhodocb
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idiconsvg
 func (h *Handler) serveIcon(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	if id.Series == "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "icons not supported for bundles")

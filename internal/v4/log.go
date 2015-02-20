@@ -18,10 +18,10 @@ import (
 )
 
 // GET /log
-// http://tinyurl.com/nj77rcr
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-log
 //
 // POST /log
-// http://tinyurl.com/o27hqxe
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#post-log
 func (h *Handler) serveLog(w http.ResponseWriter, req *http.Request) error {
 	if err := h.authorize(req, nil); err != nil {
 		return err

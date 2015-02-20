@@ -36,9 +36,8 @@ const (
 	// which needs to share the message too.
 )
 
-// Error represents an error - it is returned for any response
-// that fails.
-// See http://tinyurl.com/knr3csp .
+// Error represents an error - it is returned for any response that fails.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#errors
 type Error struct {
 	Message string
 	Code    ErrorCode
