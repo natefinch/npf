@@ -172,6 +172,10 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 		if err == nil && entity.BlobHash256 == "" {
 			// Lazily calculate SHA256 so that we don't burden
 			// non-legacy code with that task.
+			// TODO frankban: remove this lazy calculation after the cshash256
+			// command is run in the production db. At that point, entities
+			// always have their blobhash256 field populated, and there is no
+			// need for this lazy evaluation anymore.
 			entity.BlobHash256, err = h.updateEntitySHA256(curl)
 		}
 

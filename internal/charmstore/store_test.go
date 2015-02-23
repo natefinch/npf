@@ -6,6 +6,7 @@ package charmstore
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/json"
 	"fmt"
@@ -66,7 +67,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
 		c.Assert(exists, gc.Equals, true)
 	}
 	// The entity doc has been correctly added to the mongo collection.
-	size, hash := mustGetSizeAndHash(ch)
+	size, hash, hash256 := getSizeAndHashes(ch)
 	sort.Strings(doc.CharmProvidedInterfaces)
 	sort.Strings(doc.CharmRequiredInterfaces)
 
@@ -87,6 +88,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool) {
 		Revision:                url.Revision,
 		Series:                  url.Series,
 		BlobHash:                hash,
+		BlobHash256:             hash256,
 		Size:                    size,
 		CharmMeta:               ch.Meta(),
 		CharmActions:            ch.Actions(),
@@ -157,7 +159,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 	doc.BlobName = ""
 
 	// The entity doc has been correctly added to the mongo collection.
-	size, hash := mustGetSizeAndHash(bundle)
+	size, hash, hash256 := getSizeAndHashes(bundle)
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
 		URL:          url,
 		BaseURL:      charm.MustParseReference("cs:wordpress-simple"),
@@ -166,6 +168,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool) 
 		Revision:     url.Revision,
 		Series:       url.Series,
 		BlobHash:     hash,
+		BlobHash256:  hash256,
 		Size:         size,
 		BundleData:   bundle.Data(),
 		BundleReadMe: bundle.ReadMe(),
@@ -1353,7 +1356,7 @@ func hashOfReader(c *gc.C, r io.Reader) string {
 	return fmt.Sprintf("%x", hash.Sum(nil))
 }
 
-func mustGetSizeAndHash(c interface{}) (int64, string) {
+func getSizeAndHashes(c interface{}) (int64, string, string) {
 	var r io.ReadWriter
 	var err error
 	switch c := c.(type) {
@@ -1371,11 +1374,12 @@ func mustGetSizeAndHash(c interface{}) (int64, string) {
 		panic(err)
 	}
 	hash := blobstore.NewHash()
-	size, err := io.Copy(hash, r)
+	hash256 := sha256.New()
+	size, err := io.Copy(io.MultiWriter(hash, hash256), r)
 	if err != nil {
 		panic(err)
 	}
-	return size, fmt.Sprintf("%x", hash.Sum(nil))
+	return size, fmt.Sprintf("%x", hash.Sum(nil)), fmt.Sprintf("%x", hash256.Sum(nil))
 }
 
 // testingBundle implements charm.Bundle, allowing tests

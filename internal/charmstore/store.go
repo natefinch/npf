@@ -5,6 +5,7 @@ package charmstore
 
 import (
 	"archive/zip"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -110,21 +111,22 @@ func (s *Store) ensureIndexes() error {
 	return nil
 }
 
-func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (blobName, blobHash string, size int64, err error) {
+func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (blobName, blobHash, blobHash256 string, size int64, err error) {
 	hash := blobstore.NewHash()
-	size, err = io.Copy(hash, archive)
+	hash256 := sha256.New()
+	size, err = io.Copy(io.MultiWriter(hash, hash256), archive)
 	if err != nil {
-		return "", "", 0, errgo.Mask(err)
+		return "", "", "", 0, errgo.Mask(err)
 	}
 	if _, err = archive.Seek(0, 0); err != nil {
-		return "", "", 0, errgo.Mask(err)
+		return "", "", "", 0, errgo.Mask(err)
 	}
 	blobHash = fmt.Sprintf("%x", hash.Sum(nil))
 	blobName = bson.NewObjectId().Hex()
 	if err = s.BlobStore.PutUnchallenged(archive, blobName, size, blobHash); err != nil {
-		return "", "", 0, errgo.Mask(err)
+		return "", "", "", 0, errgo.Mask(err)
 	}
-	return blobName, blobHash, size, nil
+	return blobName, blobHash, fmt.Sprintf("%x", hash256.Sum(nil)), size, nil
 }
 
 // AddCharmWithArchive is like AddCharm but
@@ -132,15 +134,16 @@ func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (blobName, blobHash
 // This method is provided principally so that
 // tests can easily create content in the store.
 func (s *Store) AddCharmWithArchive(url *charm.Reference, ch charm.Charm) error {
-	blobName, blobHash, blobSize, err := s.uploadCharmOrBundle(ch)
+	blobName, blobHash, blobHash256, blobSize, err := s.uploadCharmOrBundle(ch)
 	if err != nil {
 		return errgo.Mask(err)
 	}
 	return s.AddCharm(ch, AddParams{
-		URL:      url,
-		BlobName: blobName,
-		BlobHash: blobHash,
-		BlobSize: blobSize,
+		URL:         url,
+		BlobName:    blobName,
+		BlobHash:    blobHash,
+		BlobHash256: blobHash256,
+		BlobSize:    blobSize,
 	})
 }
 
@@ -149,22 +152,23 @@ func (s *Store) AddCharmWithArchive(url *charm.Reference, ch charm.Charm) error 
 // This method is provided principally so that
 // tests can easily create content in the store.
 func (s *Store) AddBundleWithArchive(url *charm.Reference, b charm.Bundle) error {
-	blobName, blobHash, size, err := s.uploadCharmOrBundle(b)
+	blobName, blobHash, blobHash256, size, err := s.uploadCharmOrBundle(b)
 	if err != nil {
 		return errgo.Mask(err)
 	}
 	return s.AddBundle(b, AddParams{
-		URL:      url,
-		BlobName: blobName,
-		BlobHash: blobHash,
-		BlobSize: size,
+		URL:         url,
+		BlobName:    blobName,
+		BlobHash:    blobHash,
+		BlobHash256: blobHash256,
+		BlobSize:    size,
 	})
 }
 
-func (s *Store) uploadCharmOrBundle(c interface{}) (blobName, blobHash string, size int64, err error) {
+func (s *Store) uploadCharmOrBundle(c interface{}) (blobName, blobHash, blobHash256 string, size int64, err error) {
 	archive, err := getArchive(c)
 	if err != nil {
-		return "", "", 0, errgo.Mask(err)
+		return "", "", "", 0, errgo.Mask(err)
 	}
 	defer archive.Close()
 	return s.putArchive(archive)
@@ -181,6 +185,9 @@ type AddParams struct {
 
 	// BlobHash holds the hash of the entity's archive blob.
 	BlobHash string
+
+	// BlobHash256 holds the sha256 hash of the entity's archive blob.
+	BlobHash256 string
 
 	// BlobHash holds the size of the entity's archive blob.
 	BlobSize int64
@@ -212,6 +219,7 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 		Revision:                p.URL.Revision,
 		Series:                  p.URL.Series,
 		BlobHash:                p.BlobHash,
+		BlobHash256:             p.BlobHash256,
 		BlobName:                p.BlobName,
 		Size:                    p.BlobSize,
 		UploadTime:              time.Now(),
@@ -437,6 +445,7 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 		Revision:            p.URL.Revision,
 		Series:              p.URL.Series,
 		BlobHash:            p.BlobHash,
+		BlobHash256:         p.BlobHash256,
 		BlobName:            p.BlobName,
 		Size:                p.BlobSize,
 		UploadTime:          time.Now(),
