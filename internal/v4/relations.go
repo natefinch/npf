@@ -45,6 +45,7 @@ func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *charm.Reference,
 		{"_id", 1},
 		{"charmrequiredinterfaces", 1},
 		{"charmprovidedinterfaces", 1},
+		{"promulgated-url", 1},
 	}
 
 	// Retrieve the entities from the database.
@@ -135,7 +136,7 @@ func (h *Handler) getRelatedIfaceResponses(
 				}
 				// Build the response.
 				responses = append(responses, params.MetaAnyResponse{
-					Id:   entity.URL,
+					Id:   entity.PreferredURL(true),
 					Meta: meta,
 				})
 			}
@@ -176,8 +177,8 @@ func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 	var entities []mongodoc.Entity
 	if err := h.store.DB.Entities().
 		Find(bson.D{{"bundlecharms", &searchId}}).
-		Select(bson.D{{"_id", 1}, {"bundlecharms", 1}}).
-		Sort("baseurl", "series", "-revision").
+		Select(bson.D{{"_id", 1}, {"bundlecharms", 1}, {"promulgated-url", 1}}).
+		Sort("name", "-promulgated-revision", "-revision").
 		All(&entities); err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related bundles")
 	}
@@ -223,7 +224,7 @@ func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 			return nil, errgo.Notef(err, "cannot retrieve bundle metadata")
 		}
 		response = append(response, &params.MetaAnyResponse{
-			Id:   e.URL,
+			Id:   e.PreferredURL(true),
 			Meta: meta,
 		})
 	}

@@ -6,7 +6,9 @@ package mongodoc
 import (
 	"time"
 
+	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
+	"gopkg.in/mgo.v2/bson"
 )
 
 // Entity holds the in-database representation of charm or bundle's
@@ -101,11 +103,21 @@ type Entity struct {
 
 	// PromulgatedURL holds the promulgated URL of the entity. If the entity
 	// is not promulgated this should be set to nil.
-	PromulgatedURL *charm.Reference `bson:"promulgated-url,omitempty"`
+	PromulgatedURL *charm.Reference `json:",omitempty" bson:"promulgated-url,omitempty"`
 
 	// PromulgatedRevision holds the revision number from the promulgated URL.
 	// If the entity is not promulgated this should be set to -1.
 	PromulgatedRevision int `bson:"promulgated-revision"`
+}
+
+// PreferredURL returns the preferred way to refer to this entity. If
+// the entity has a promulgated URL and usePromulgated is true then the
+// promulgated URL will be used, otherwise the standard URL is used.
+func (e *Entity) PreferredURL(usePromulgated bool) *charm.Reference {
+	if usePromulgated && e.PromulgatedURL != nil {
+		return e.PromulgatedURL
+	}
+	return e.URL
 }
 
 // BaseEntity holds metadata for a charm or bundle
@@ -135,7 +147,7 @@ type BaseEntity struct {
 
 	// Promulgated specifies whether the charm or bundle should be
 	// promulgated.
-	Promulgated bool
+	Promulgated IntBool
 }
 
 // ACL holds lists of users and groups that are
@@ -229,4 +241,31 @@ const (
 type Migration struct {
 	// Executed holds the migration names for migrations already executed.
 	Executed []string
+}
+
+// IntBool is a bool that will be represented internally in the database as 1 for
+// true and -1 for false.
+type IntBool bool
+
+func (b IntBool) GetBSON() (interface{}, error) {
+	if b {
+		return 1, nil
+	}
+	return -1, nil
+}
+
+func (b *IntBool) SetBSON(raw bson.Raw) error {
+	var x int
+	if err := raw.Unmarshal(&x); err != nil {
+		return errgo.Notef(err, "cannot unmarshal value")
+	}
+	switch x {
+	case 1:
+		*b = IntBool(true)
+	case -1:
+		*b = IntBool(false)
+	default:
+		return errgo.Newf("invalid value %d", x)
+	}
+	return nil
 }

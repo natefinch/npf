@@ -131,14 +131,15 @@ func ResolveURL(store *charmstore.Store, url *charm.Reference) error {
 	if url.Series != "" && url.Revision != -1 {
 		return nil
 	}
-	urls, err := store.ExpandURL(url)
-	if err != nil {
-		return errgo.Notef(err, "cannot expand URL")
+	entity, err := store.FindBestEntity(url, "_id", "promulgated-url")
+	if err != nil && errgo.Cause(err) != params.ErrNotFound {
+		return errgo.Mask(err)
 	}
-	if len(urls) == 0 {
+	if errgo.Cause(err) == params.ErrNotFound {
 		return noMatchingURLError(url)
 	}
-	*url = *selectPreferredURL(urls)
+	url.Series = entity.URL.Series
+	url.Revision = entity.PreferredURL(url.User == "").Revision
 	return nil
 }
 
@@ -203,18 +204,14 @@ func (h *Handler) puttableBaseEntityHandler(get baseEntityHandlerFunc, handlePut
 }
 
 func (h *Handler) updateBaseEntity(id *charm.Reference, fields map[string]interface{}) error {
-	id1 := *id
-	id1.Revision = -1
-	id1.Series = ""
-	err := h.store.DB.BaseEntities().UpdateId(&id1, bson.D{{"$set", fields}})
-	if err != nil {
-		return errgo.Notef(err, "cannot update %q", &id1)
+	if err := h.store.UpdateBaseEntity(id, bson.D{{"$set", fields}}); err != nil {
+		return errgo.Notef(err, "cannot update base entity %q", id)
 	}
 	return nil
 }
 
 func (h *Handler) updateEntity(id *charm.Reference, fields map[string]interface{}) error {
-	err := h.store.DB.Entities().UpdateId(id, bson.D{{"$set", fields}})
+	err := h.store.UpdateEntity(id, bson.D{{"$set", fields}})
 	if err != nil {
 		return errgo.Notef(err, "cannot update %q", id)
 	}
@@ -266,36 +263,32 @@ func (h *Handler) entityExists(id *charm.Reference, req *http.Request) (bool, er
 }
 
 func (h *Handler) baseEntityQuery(id *charm.Reference, selector map[string]int, req *http.Request) (interface{}, error) {
-	var val mongodoc.BaseEntity
-	id1 := *id
-	id1.Series = ""
-	id1.Revision = -1
-	err := h.store.DB.BaseEntities().
-		Find(bson.D{{"_id", &id1}}).
-		Select(selector).
-		One(&val)
-	if err == mgo.ErrNotFound {
+	fields := make([]string, 0, len(selector))
+	for k, v := range selector {
+		if v == 0 {
+			continue
+		}
+		fields = append(fields, k)
+	}
+	val, err := h.store.FindBaseEntity(id, fields...)
+	if errgo.Cause(err) == params.ErrNotFound {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
-	return &val, nil
+	return val, nil
 }
 
 func (h *Handler) entityQuery(id *charm.Reference, selector map[string]int, req *http.Request) (interface{}, error) {
-	var val mongodoc.Entity
-	err := h.store.DB.Entities().
-		Find(bson.D{{"_id", id}}).
-		Select(selector).
-		One(&val)
-	if err == mgo.ErrNotFound {
+	val, err := h.store.FindBestEntity(id, fieldsFromSelector(selector)...)
+	if errgo.Cause(err) == params.ErrNotFound {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
-	return &val, nil
+	return val, nil
 }
 
 var ltsReleases = map[string]bool{
@@ -304,30 +297,15 @@ var ltsReleases = map[string]bool{
 	"trusty":  true,
 }
 
-func selectPreferredURL(urls []*charm.Reference) *charm.Reference {
-	best := urls[0]
-	for _, url := range urls {
-		if preferredURL(url, best) {
-			best = url
+func fieldsFromSelector(selector map[string]int) []string {
+	fields := make([]string, 0, len(selector))
+	for k, v := range selector {
+		if v == 0 {
+			continue
 		}
+		fields = append(fields, k)
 	}
-	return best
-}
-
-// preferredURL reports whether url0 is preferred over url1.
-func preferredURL(url0, url1 *charm.Reference) bool {
-	if url0.Series == url1.Series {
-		return url0.Revision > url1.Revision
-	}
-	if url0.Series == "bundle" || url1.Series == "bundle" {
-		// One of the URLs refers to a bundle. Choose
-		// a charm by preference.
-		return url0.Series != "bundle"
-	}
-	if ltsReleases[url0.Series] == ltsReleases[url1.Series] {
-		return url0.Series > url1.Series
-	}
-	return ltsReleases[url0.Series]
+	return fields
 }
 
 // parseBool returns the boolean value represented by the string.
@@ -370,9 +348,16 @@ func (h *Handler) serveExpandId(id *charm.Reference, _ bool, w http.ResponseWrit
 	id.Series = ""
 
 	// Retrieve all the entities with the same base URL.
-	var docs []mongodoc.Entity
-	if err := h.store.DB.Entities().Find(bson.D{{"baseurl", id}}).Select(bson.D{{"_id", 1}}).All(&docs); err != nil {
-		return errgo.Notef(err, "cannot get ids")
+	q := h.store.EntitiesQuery(id).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}})
+	if id.User == "" {
+		q = q.Sort("-series", "-promulgated-revision")
+	} else {
+		q = q.Sort("-series", "-revision")
+	}
+	var docs []*mongodoc.Entity
+	err := q.All(&docs)
+	if err != nil && errgo.Cause(err) != mgo.ErrNotFound {
+		return errgo.Mask(err)
 	}
 
 	// A not found error should have been already returned by the router in the
@@ -385,7 +370,8 @@ func (h *Handler) serveExpandId(id *charm.Reference, _ bool, w http.ResponseWrit
 	// Collect all the expanded identifiers for each entity.
 	response := make([]params.ExpandedId, 0, len(docs))
 	for _, doc := range docs {
-		response = append(response, params.ExpandedId{Id: doc.URL.String()})
+		url := doc.PreferredURL(id.User == "")
+		response = append(response, params.ExpandedId{Id: url.String()})
 	}
 
 	// Write the response in JSON format.
@@ -556,14 +542,17 @@ func (h *Handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path s
 // GET id/meta/revision-info
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetarevision-info
 func (h *Handler) metaRevisionInfo(id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	baseURL := *id
-	baseURL.Revision = -1
-	baseURL.Series = ""
+	searchURL := *id
+	searchURL.Revision = -1
 
-	var docs []mongodoc.Entity
-	if err := h.store.DB.Entities().Find(
-		bson.D{{"baseurl", &baseURL}, {"series", id.Series}}).Select(
-		bson.D{{"_id", 1}}).Sort("-revision").All(&docs); err != nil {
+	q := h.store.EntitiesQuery(&searchURL)
+	if id.User == "" {
+		q = q.Sort("-promulgated-revision")
+	} else {
+		q = q.Sort("-revision")
+	}
+	var docs []*mongodoc.Entity
+	if err := q.Select(bson.D{{"_id", 1}, {"promulgated-url", 1}}).All(&docs); err != nil {
 		return "", errgo.Notef(err, "cannot get ids")
 	}
 
@@ -572,10 +561,11 @@ func (h *Handler) metaRevisionInfo(id *charm.Reference, path string, flags url.V
 	}
 	response := &params.RevisionInfoResponse{}
 	for _, doc := range docs {
-		response.Revisions = append(response.Revisions, doc.URL)
-	}
-	if len(response.Revisions) == 0 {
-		return "", noMatchingURLError(&baseURL)
+		if id.User == "" {
+			response.Revisions = append(response.Revisions, doc.PromulgatedURL)
+		} else {
+			response.Revisions = append(response.Revisions, doc.URL)
+		}
 	}
 
 	// Write the response in JSON format.

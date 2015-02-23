@@ -371,14 +371,25 @@ var metaCharmRelatedTests = []struct {
 func (s *RelationsSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
 	for id, ch := range charms {
 		url := charm.MustParseReference(id)
+		var purl *charm.Reference
+		pRev := -1
+		if url.User == "" {
+			purl = url
+			url = new(charm.Reference)
+			*url = *purl
+			url.User = "charmers"
+			pRev = purl.Revision
+		}
 		// The blob related info are not used in these tests.
 		// The related charms are retrieved from the entities collection,
 		// without accessing the blob store.
 		err := s.store.AddCharm(ch, charmstore.AddParams{
-			URL:      url,
-			BlobName: "blobName",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
+			URL:                 url,
+			BlobName:            "blobName",
+			BlobHash:            fakeBlobHash,
+			BlobSize:            fakeBlobSize,
+			PromulgatedURL:      purl,
+			PromulgatedRevision: pRev,
 		})
 		c.Assert(err, gc.IsNil)
 	}
@@ -699,15 +710,25 @@ var metaBundlesContainingTests = []struct {
 func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 	// Add the bundles used for testing to the database.
 	for id, b := range metaBundlesContainingBundles {
+		var purl *charm.Reference
+		pRev := -1
 		url := charm.MustParseReference(id)
+		if url.User == "" {
+			purl = new(charm.Reference)
+			*purl = *url
+			url.User = "charmers"
+			pRev = purl.Revision
+		}
 		// The blob related info are not used in these tests.
 		// The charm-bundle relations are retrieved from the entities
 		// collection, without accessing the blob store.
 		err := s.store.AddBundle(b, charmstore.AddParams{
-			URL:      url,
-			BlobName: "blobName",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
+			URL:                 url,
+			BlobName:            "blobName",
+			BlobHash:            fakeBlobHash,
+			BlobSize:            fakeBlobSize,
+			PromulgatedURL:      purl,
+			PromulgatedRevision: pRev,
 		})
 		c.Assert(err, gc.IsNil)
 	}
@@ -717,6 +738,8 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 
 		// Expand the URL if required before adding the charm to the database,
 		// so that at least one matching charm can be resolved.
+		var purl *charm.Reference
+		pRev := -1
 		url := charm.MustParseReference(test.id)
 		if url.Series == "" {
 			url.Series = "utopic"
@@ -724,13 +747,21 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 		if url.Revision == -1 {
 			url.Revision = 0
 		}
+		if url.User == "" {
+			purl = new(charm.Reference)
+			*purl = *url
+			url.User = "charmers"
+			pRev = purl.Revision
+		}
 
 		// Add the charm we need bundle info on to the database.
 		err := s.store.AddCharm(&relationTestingCharm{}, charmstore.AddParams{
-			URL:      url,
-			BlobName: "blobName",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
+			URL:                 url,
+			BlobName:            "blobName",
+			BlobHash:            fakeBlobHash,
+			BlobSize:            fakeBlobSize,
+			PromulgatedURL:      purl,
+			PromulgatedRevision: pRev,
 		})
 		c.Assert(err, gc.IsNil)
 

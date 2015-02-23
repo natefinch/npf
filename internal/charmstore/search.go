@@ -77,8 +77,22 @@ func (s *Store) UpdateSearch(r *charm.Reference) error {
 	if deprecatedSeries[r.Series] {
 		return nil
 	}
+	var query *mgo.Query
+	if r.User == "" {
+		query = s.DB.Entities().Find(bson.D{
+			{"name", r.Name},
+			{"series", r.Series},
+			{"promulgated-url", bson.D{{"$exists", true}}},
+		}).Sort("-promulgated-revision")
+	} else {
+		query = s.DB.Entities().Find(bson.D{
+			{"user", r.User},
+			{"name", r.Name},
+			{"series", r.Series},
+		}).Sort("-revision")
+	}
 	var entity mongodoc.Entity
-	if err := s.DB.Entities().Find(bson.M{"user": r.User, "name": r.Name, "series": r.Series}).Sort("-revision").One(&entity); err != nil {
+	if err := query.One(&entity); err != nil {
 		if err == mgo.ErrNotFound {
 			return errgo.WithCausef(nil, params.ErrNotFound, "entity not found %s", r)
 		}
@@ -173,7 +187,7 @@ func (si *SearchIndex) search(sp SearchParams) (SearchResult, error) {
 		return SearchResult{}, nil
 	}
 	q := createSearchDSL(sp)
-	q.Fields = append(q.Fields, "URL")
+	q.Fields = append(q.Fields, "URL", "PromulgatedURL")
 	esr, err := si.Search(si.Index, typeName, q)
 	if err != nil {
 		return SearchResult{}, errgo.Mask(err)
@@ -184,7 +198,11 @@ func (si *SearchIndex) search(sp SearchParams) (SearchResult, error) {
 		Results:    make([]*charm.Reference, 0, len(esr.Hits.Hits)),
 	}
 	for _, h := range esr.Hits.Hits {
-		ref, err := charm.ParseReference(h.Fields.GetString("URL"))
+		url := h.Fields.GetString("PromulgatedURL")
+		if url == "" {
+			url = h.Fields.GetString("URL")
+		}
+		ref, err := charm.ParseReference(url)
 		if err != nil {
 			return SearchResult{}, errgo.Notef(err, "invalid result %q", h.Fields.GetString("URL"))
 		}
@@ -580,6 +598,9 @@ func nameFilter(value string) elasticsearch.Filter {
 // ownerFilter generates a filter that will match against the
 // owner taken from the URL.
 func ownerFilter(value string) elasticsearch.Filter {
+	if value == "" {
+		return elasticsearch.ExistsFilter("PromulgatedURL")
+	}
 	return elasticsearch.QueryFilter{
 		Query: elasticsearch.MatchQuery{
 			Field: "User",

@@ -329,10 +329,11 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 
 		// Add a charm to the store, used for testing.
 		err := store.AddCharmWithArchive(
-			charm.MustParseReference("utopic/wordpress-42"),
+			charm.MustParseReference("~charmers/utopic/wordpress-42"),
+			nil,
 			storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
-		baseUrl := charm.MustParseReference("wordpress")
+		baseUrl := charm.MustParseReference("~charmers/wordpress")
 
 		// Change the ACLs for the testing charm.
 		store.DB.BaseEntities().UpdateId(baseUrl, bson.D{{"$set",
@@ -359,10 +360,10 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		}
 
 		// Perform a meta request.
-		makeRequest("wordpress/meta/archive-size")
+		makeRequest("~charmers/wordpress/meta/archive-size")
 
 		// Perform an id request.
-		makeRequest("wordpress/expand-id")
+		makeRequest("~charmers/wordpress/expand-id")
 
 		// Remove all entities from the store.
 		_, err = store.DB.Entities().RemoveAll(nil)
@@ -464,10 +465,11 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 
 		// Add a charm to the store, used for testing.
 		err := store.AddCharmWithArchive(
-			charm.MustParseReference("utopic/wordpress-42"),
+			charm.MustParseReference("~charmers/utopic/wordpress-42"),
+			nil,
 			storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
-		baseUrl := charm.MustParseReference("wordpress")
+		baseUrl := charm.MustParseReference("~charmers/wordpress")
 
 		// Change the ACLs for the testing charm.
 		store.DB.BaseEntities().UpdateId(baseUrl, bson.D{{"$set",
@@ -483,7 +485,7 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 		// Perform a meta PUT request.
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: srv,
-			URL:     storeURL("wordpress/meta/extra-info/key"),
+			URL:     storeURL("~charmers/wordpress/meta/extra-info/key"),
 			Method:  "PUT",
 			Header: http.Header{
 				"Content-Type": {"application/json"},

@@ -74,7 +74,6 @@ import (
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
-	"gopkg.in/mgo.v2"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"
@@ -150,15 +149,14 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 	for _, url := range req.Form["charms"] {
 		c := &charm.InfoResponse{}
 		response[url] = c
-		var entity mongodoc.Entity
-		curl, _, err := h.resolveURLStr(url)
+		curl, err := charm.ParseReference(url)
 		if err != nil {
+			err = errNotFound
+		}
+		var entity *mongodoc.Entity
+		if err == nil {
+			entity, err = h.store.FindBestEntity(curl)
 			if errgo.Cause(err) == params.ErrNotFound {
-				err = errNotFound
-			}
-		} else {
-			err = h.store.DB.Entities().FindId(curl).One(&entity)
-			if err == mgo.ErrNotFound {
 				// The old API actually returned "entry not found"
 				// on *any* error, but it seems reasonable to be
 				// a little more descriptive for other errors.
@@ -174,13 +172,13 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 			// need for this lazy evaluation anymore.
 			entity.BlobHash256, err = h.store.UpdateEntitySHA256(curl)
 		}
-
 		// Prepare the response part for this charm.
 		if err == nil {
+			curl = entity.PreferredURL(curl.User == "")
 			c.CanonicalURL = curl.String()
-			c.Sha256 = entity.BlobHash256
 			c.Revision = curl.Revision
-			c.Digest, err = entityBzrDigest(&entity)
+			c.Sha256 = entity.BlobHash256
+			c.Digest, err = entityBzrDigest(entity)
 			if err != nil {
 				c.Errors = append(c.Errors, err.Error())
 			}
@@ -221,16 +219,9 @@ func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}
 			c.Errors = []string{"got charm URL with revision: " + id.String()}
 			continue
 		}
-		if err := v4.ResolveURL(h.store, id); err != nil {
-			if errgo.Cause(err) == params.ErrNotFound {
-				err = errNotFound
-			}
-			c.Errors = []string{err.Error()}
-			continue
-		}
 
 		// Retrieve the charm.
-		entity, err := h.store.FindEntity(id, "_id", "uploadtime", "extrainfo")
+		entity, err := h.store.FindBestEntity(id, "_id", "uploadtime", "extrainfo")
 		if err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				// The old API actually returned "entry not found"
@@ -267,7 +258,11 @@ func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}
 
 		// Prepare the response part for this charm.
 		c.Kind = "published"
-		c.Revision = id.Revision
+		if id.User == "" {
+			c.Revision = entity.PromulgatedRevision
+		} else {
+			c.Revision = entity.Revision
+		}
 		c.Time = entity.UploadTime.UTC().Format(time.RFC3339)
 		h.store.IncCounterAsync(charmStatsKey(id, params.StatsCharmEvent))
 	}

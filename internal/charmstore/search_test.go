@@ -67,8 +67,7 @@ var charmDownloadCounts = map[string]int{
 
 func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 	for name, ref := range exportTestCharms {
-		var entity *mongodoc.Entity
-		err := s.store.DB.Entities().FindId(ref).One(&entity)
+		entity, err := s.store.FindEntity(charm.MustParseReference(ref))
 		c.Assert(err, gc.IsNil)
 		var actual json.RawMessage
 		err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL), &actual)
@@ -77,6 +76,8 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 		readACLs := []string{params.Everyone}
 		if r.User != "" {
 			readACLs = append(readACLs, r.User)
+		} else {
+			readACLs = append(readACLs, "charmers")
 		}
 		if r.Name == "riak" {
 			readACLs = []string{"quux"}
@@ -92,18 +93,18 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 
 func (s *StoreSearchSuite) TestNoExportDeprecated(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("mysql")
-	url := charm.MustParseReference("cs:saucy/mysql-4")
-	err := s.store.AddCharmWithArchive(url, charmArchive)
+	url := charm.MustParseReference("cs:~charmers/saucy/mysql-4")
+	err := s.store.AddCharmWithArchive(url, nil, charmArchive)
 	c.Assert(err, gc.IsNil)
 
 	var entity *mongodoc.Entity
-	err = s.store.DB.Entities().FindId("cs:trusty/mysql-7").One(&entity)
+	err = s.store.DB.Entities().FindId("cs:~charmers/trusty/mysql-7").One(&entity)
 	c.Assert(err, gc.IsNil)
 	present, err := s.store.ES.HasDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL))
 	c.Assert(err, gc.IsNil)
 	c.Assert(present, gc.Equals, true)
 
-	err = s.store.DB.Entities().FindId("cs:saucy/mysql-4").One(&entity)
+	err = s.store.DB.Entities().FindId("cs:~charmers/saucy/mysql-4").One(&entity)
 	c.Assert(err, gc.IsNil)
 	present, err = s.store.ES.HasDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL))
 	c.Assert(err, gc.IsNil)
@@ -112,25 +113,25 @@ func (s *StoreSearchSuite) TestNoExportDeprecated(c *gc.C) {
 
 func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("wordpress")
-	url := charm.MustParseReference("cs:precise/wordpress-24")
-	err := s.store.AddCharmWithArchive(url, charmArchive)
+	url := charm.MustParseReference("cs:~charmers/precise/wordpress-24")
+	err := s.store.AddCharmWithArchive(url, nil, charmArchive)
 	c.Assert(err, gc.IsNil)
 	var expected, old *mongodoc.Entity
 	var actual json.RawMessage
-	err = s.store.DB.Entities().FindId("cs:precise/wordpress-23").One(&old)
+	err = s.store.DB.Entities().FindId("cs:~charmers/precise/wordpress-23").One(&old)
 	c.Assert(err, gc.IsNil)
-	err = s.store.DB.Entities().FindId("cs:precise/wordpress-24").One(&expected)
+	err = s.store.DB.Entities().FindId("cs:~charmers/precise/wordpress-24").One(&expected)
 	c.Assert(err, gc.IsNil)
 	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(old.URL), &actual)
 	c.Assert(err, gc.IsNil)
-	doc := SearchDoc{Entity: expected, ReadACLs: []string{params.Everyone}}
+	doc := SearchDoc{Entity: expected, ReadACLs: []string{params.Everyone, "charmers"}}
 	c.Assert(string(actual), jc.JSONEquals, doc)
 }
 
 func (s *StoreSearchSuite) TestExportSearchDocument(c *gc.C) {
 	var entity *mongodoc.Entity
 	var actual json.RawMessage
-	err := s.store.DB.Entities().FindId("cs:precise/wordpress-23").One(&entity)
+	err := s.store.DB.Entities().FindId("cs:~charmers/precise/wordpress-23").One(&entity)
 	c.Assert(err, gc.IsNil)
 	doc := SearchDoc{Entity: entity, TotalDownloads: 4000}
 	err = s.store.ES.update(&doc)
@@ -144,8 +145,14 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 	for name, ref := range exportTestCharms {
 		charmArchive := storetesting.Charms.CharmDir(name)
 		url := charm.MustParseReference(ref)
+		var purl *charm.Reference
+		if url.User == "" {
+			purl = new(charm.Reference)
+			*purl = *url
+			url.User = "charmers"
+		}
 		charmArchive.Meta().Categories = strings.Split(name, "-")
-		err := store.AddCharmWithArchive(url, charmArchive)
+		err := store.AddCharmWithArchive(url, purl, charmArchive)
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < charmDownloadCounts[name]; i++ {
 			err := store.IncrementDownloadCounts(url)
@@ -155,8 +162,14 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 	for name, ref := range exportTestBundles {
 		bundleArchive := storetesting.Charms.BundleDir(name)
 		url := charm.MustParseReference(ref)
+		var purl *charm.Reference
+		if url.User == "" {
+			purl = new(charm.Reference)
+			*purl = *url
+			url.User = "charmers"
+		}
 		bundleArchive.Data().Tags = strings.Split(name, "-")
-		err := store.AddBundleWithArchive(url, bundleArchive)
+		err := store.AddBundleWithArchive(url, purl, bundleArchive)
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < charmDownloadCounts[name]; i++ {
 			err := store.IncrementDownloadCounts(url)
@@ -166,9 +179,10 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 	baseEntity, err := store.FindBaseEntity(charm.MustParseReference("cs:riak"))
 	c.Assert(err, gc.IsNil)
 	baseEntity.ACLs.Read = []string{"quux"}
-	err = store.DB.BaseEntities().UpdateId("cs:riak", baseEntity)
+	err = store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
 	c.Assert(err, gc.IsNil)
-	store.UpdateSearch(charm.MustParseReference(exportTestCharms["riak"]))
+	err = store.UpdateSearch(charm.MustParseReference(exportTestCharms["riak"]))
+	c.Assert(err, gc.IsNil)
 }
 
 var searchTests = []struct {
@@ -436,8 +450,9 @@ func (s *StoreSearchSuite) TestLimitTestSearch(c *gc.C) {
 
 func (s *StoreSearchSuite) TestPromulgatedRank(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("varnish")
-	url := charm.MustParseReference("cs:trusty/varnish-1")
-	s.store.AddCharmWithArchive(url, charmArchive)
+	url := charm.MustParseReference("cs:~charmers/trusty/varnish-1")
+	purl := charm.MustParseReference("cs:trusty/varnish-1")
+	s.store.AddCharmWithArchive(url, purl, charmArchive)
 	s.store.ES.Database.RefreshIndex(s.TestIndex)
 	sp := SearchParams{
 		Filters: map[string][]string{
