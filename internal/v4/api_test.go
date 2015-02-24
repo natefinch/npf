@@ -35,6 +35,7 @@ import (
 	"github.com/juju/charmstore/internal/elasticsearch"
 	"github.com/juju/charmstore/internal/mongodoc"
 	"github.com/juju/charmstore/internal/storetesting"
+	"github.com/juju/charmstore/internal/storetesting/hashtesting"
 	"github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/params"
 )
@@ -184,6 +185,28 @@ var metaEndpoints = []metaEndpoint{{
 	}),
 	checkURL:        "cs:precise/wordpress-23",
 	assertCheckData: entitySizeChecker,
+}, {
+	name: "hash",
+	get: entityGetter(func(entity *mongodoc.Entity) interface{} {
+		return &params.HashResponse{
+			Sum: entity.BlobHash,
+		}
+	}),
+	checkURL: "cs:precise/wordpress-23",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data.(*params.HashResponse).Sum, gc.Not(gc.Equals), "")
+	},
+}, {
+	name: "hash256",
+	get: entityGetter(func(entity *mongodoc.Entity) interface{} {
+		return &params.HashResponse{
+			Sum: entity.BlobHash256,
+		}
+	}),
+	checkURL: "cs:precise/wordpress-23",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data.(*params.HashResponse).Sum, gc.Not(gc.Equals), "")
+	},
 }, {
 	name: "manifest",
 	get: zipGetter(func(r *zip.Reader) interface{} {
@@ -1747,6 +1770,29 @@ func (s *APISuite) TestDebugPprofFailsWithoutAuth(c *gc.C) {
 			},
 		})
 	}
+}
+
+func (s *APISuite) TestHash256Laziness(c *gc.C) {
+	// TODO frankban: remove this test after updating entities in the
+	// production db with their SHA256 hash value. Entities are updated by
+	// running the cshash256 command.
+	id, _ := s.addCharm(c, "wordpress", "cs:precise/wordpress-0")
+
+	// Retrieve the SHA256 hash.
+	entity, err := s.store.FindEntity(id, "blobhash256")
+	c.Assert(err, gc.IsNil)
+	c.Assert(entity.BlobHash256, gc.Not(gc.Equals), "")
+
+	hashtesting.CheckSHA256Laziness(c, s.store, id, func() {
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler:      s.srv,
+			URL:          storeURL(id.Path() + "/meta/hash256"),
+			ExpectStatus: http.StatusOK,
+			ExpectBody: params.HashResponse{
+				Sum: entity.BlobHash256,
+			},
+		})
+	})
 }
 
 func basicAuthHeader(username, password string) http.Header {

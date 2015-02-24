@@ -66,11 +66,8 @@
 package legacy
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -78,7 +75,6 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/mongodoc"
@@ -176,7 +172,7 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 			// command is run in the production db. At that point, entities
 			// always have their blobhash256 field populated, and there is no
 			// need for this lazy evaluation anymore.
-			entity.BlobHash256, err = h.updateEntitySHA256(curl)
+			entity.BlobHash256, err = h.store.UpdateEntitySHA256(curl)
 		}
 
 		// Prepare the response part for this charm.
@@ -197,34 +193,6 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 		}
 	}
 	return response, nil
-}
-
-// updateEntitySHA256 updates the BlobHash256 entry for the entity.
-// It is defined as a variable so that it can be mocked in tests.
-var updateEntitySHA256 = func(store *charmstore.Store, url *charm.Reference, sum256 string) {
-	err := store.DB.Entities().UpdateId(url, bson.D{{"$set", bson.D{{"blobhash256", sum256}}}})
-	if err != nil && err != mgo.ErrNotFound {
-		log.Printf("cannot update sha256 of archive: %v", err)
-	}
-}
-
-func (h *Handler) updateEntitySHA256(curl *charm.Reference) (string, error) {
-	r, _, _, err := h.store.OpenBlob(curl)
-	defer r.Close()
-	hash := sha256.New()
-	_, err = io.Copy(hash, r)
-	if err != nil {
-		return "", errgo.Notef(err, "cannot calculate sha256 of archive")
-	}
-	sum256 := fmt.Sprintf("%x", hash.Sum(nil))
-
-	// Update the entry asynchronously because it doesn't matter
-	// if it succeeds or fails, or if several instances of the
-	// charm store do it concurrently, and it doesn't
-	// need to be on the critical path for charm-info.
-	go updateEntitySHA256(h.store, curl, sum256)
-
-	return sum256, nil
 }
 
 // serveCharmEvent returns events related to the charms specified in the

@@ -339,6 +339,8 @@ Example: `GET /meta`
     "charm-metadata",
     "charm-related",
     "extra-info",
+    "hash",
+    "hash256",
     "id",
     "id-name",
     "id-revision",
@@ -943,6 +945,46 @@ Example: `GET wordpress/meta/archive-size`
 ```json
 {
     "Size": 4747
+}
+```
+
+#### GET *id*/meta/hash
+
+This path returns the SHA384 hash sum of the archive of the given charm or
+bundle id.
+
+```go
+type HashResponse struct {
+    Sum string
+}
+```
+
+Example: `GET wordpress/meta/hash`
+
+Response body:
+```json
+{
+    "Sum": "0a410321586d244d3981e2b23a27a7e86ebdcab8bd0ca8f818d3f4c34b2ea2791e0dbdc949f70b283a3f5efdf908abf1"
+}
+```
+
+#### GET *id*/meta/hash256
+
+This path returns the SHA256 hash sum of the archive of the given charm or
+bundle id.
+
+```go
+type HashResponse struct {
+    Sum string
+}
+```
+
+Example: `GET wordpress/meta/hash256`
+
+Response body:
+```json
+{
+    "Sum": "9ab5036cc18ba61a9d25fad389e46b3d407fc02c3eba917fe5f18fdf51ee6924"
 }
 ```
 

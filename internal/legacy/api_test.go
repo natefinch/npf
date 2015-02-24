@@ -24,6 +24,7 @@ import (
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/legacy"
 	"github.com/juju/charmstore/internal/storetesting"
+	"github.com/juju/charmstore/internal/storetesting/hashtesting"
 	"github.com/juju/charmstore/internal/storetesting/stats"
 	"github.com/juju/charmstore/params"
 )
@@ -329,61 +330,27 @@ func (s *APISuite) TestCharmPackageCharmInfo(c *gc.C) {
 }
 
 func (s *APISuite) TestSHA256Laziness(c *gc.C) {
-	updated := make(chan struct{}, 1)
-	// Patch updateEntitySHA256 so that we can know whether
-	// it has been called or not.
-	oldUpdate := *legacy.UpdateEntitySHA256
-	s.PatchValue(legacy.UpdateEntitySHA256, func(store *charmstore.Store, url *charm.Reference, sum256 string) {
-		oldUpdate(store, url, sum256)
-		updated <- struct{}{}
-	})
+	// TODO frankban: remove this test after updating entities in the
+	// production db with their SHA256 hash value. Entities are updated by
+	// running the cshash256 command.
+	id, ch := s.addCharm(c, "wordpress", "cs:precise/wordpress-0")
+	url := id.String()
+	sum256 := fileSHA256(c, ch.Path)
 
-	// Add a charm without a SHA256 hash.
-	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-0")
-	s.store.DB.Entities().UpdateId(wordpressURL, bson.D{{
-		"$set", bson.D{{"blobhash256", ""}},
-	}})
-	sum256 := fileSHA256(c, wordpress.Path)
-
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:      s.srv,
-		URL:          "/charm-info?charms=" + wordpressURL.String(),
-		ExpectStatus: http.StatusOK,
-		ExpectBody: map[string]charm.InfoResponse{
-			wordpressURL.String(): {
-				CanonicalURL: wordpressURL.String(),
-				Sha256:       sum256,
-				Revision:     0,
+	hashtesting.CheckSHA256Laziness(c, s.store, id, func() {
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler:      s.srv,
+			URL:          "/charm-info?charms=" + url,
+			ExpectStatus: http.StatusOK,
+			ExpectBody: map[string]charm.InfoResponse{
+				url: {
+					CanonicalURL: url,
+					Sha256:       sum256,
+					Revision:     0,
+				},
 			},
-		},
+		})
 	})
-
-	select {
-	case <-updated:
-	case <-time.After(5 * time.Second):
-		c.Fatalf("timed out waiting for update")
-	}
-
-	// Try again - we should not update the SHA256 the second time.
-
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:      s.srv,
-		URL:          "/charm-info?charms=" + wordpressURL.String(),
-		ExpectStatus: http.StatusOK,
-		ExpectBody: map[string]charm.InfoResponse{
-			wordpressURL.String(): {
-				CanonicalURL: wordpressURL.String(),
-				Sha256:       sum256,
-				Revision:     0,
-			},
-		},
-	})
-
-	select {
-	case <-updated:
-		c.Fatalf("update called twice")
-	case <-time.After(10 * time.Millisecond):
-	}
 }
 
 var serverStatusTests = []struct {
