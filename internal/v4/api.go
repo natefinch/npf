@@ -87,6 +87,8 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 				h.putMetaExtraInfoWithKey,
 				"extrainfo",
 			),
+			"hash":          h.entityHandler(h.metaHash, "blobhash"),
+			"hash256":       h.entityHandler(h.metaHash256, "blobhash256"),
 			"id":            h.entityHandler(h.metaId, "_id"),
 			"id-name":       h.entityHandler(h.metaIdName, "_id"),
 			"id-user":       h.entityHandler(h.metaIdUser, "_id"),
@@ -478,6 +480,32 @@ func (h *Handler) metaColor(id *charm.Reference, path string, flags url.Values, 
 func (h *Handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return &params.ArchiveSizeResponse{
 		Size: entity.Size,
+	}, nil
+}
+
+// GET id/meta/hash
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetahash
+func (h *Handler) metaHash(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	return &params.HashResponse{
+		Sum: entity.BlobHash,
+	}, nil
+}
+
+// GET id/meta/hash256
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetahash256
+func (h *Handler) metaHash256(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	// TODO frankban: remove this lazy calculation after the cshash256
+	// command is run in the production db. At that point, entities
+	// always have their blobhash256 field populated, and there is no
+	// need for this lazy evaluation anymore.
+	if entity.BlobHash256 == "" {
+		var err error
+		if entity.BlobHash256, err = h.store.UpdateEntitySHA256(entity.URL); err != nil {
+			return nil, errgo.Notef(err, "cannot retrieve the SHA256 hash for entity %s", entity.URL)
+		}
+	}
+	return &params.HashResponse{
+		Sum: entity.BlobHash256,
 	}, nil
 }
 

@@ -57,6 +57,14 @@ type ArchiveSizeResponse struct {
 	Size int64
 }
 
+// HashResponse holds the result of id/meta/hash and id/meta/hash256 GET
+// requests.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetahash
+// and https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetahash256
+type HashResponse struct {
+	Sum string
+}
+
 // ManifestFile holds information about a charm or bundle file.
 // A slice of ManifestFile is used as response for
 // id/meta/manifest GET requests.
