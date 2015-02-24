@@ -333,7 +333,7 @@ func (s *APISuite) TestSHA256Laziness(c *gc.C) {
 	// TODO frankban: remove this test after updating entities in the
 	// production db with their SHA256 hash value. Entities are updated by
 	// running the cshash256 command.
-	id, ch := s.addCharm(c, "wordpress", "cs:precise/wordpress-0")
+	id, ch := s.addCharm(c, "wordpress", "cs:~who/precise/wordpress-0")
 	url := id.String()
 	sum256 := fileSHA256(c, ch.Path)
 

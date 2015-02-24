@@ -1776,7 +1776,7 @@ func (s *APISuite) TestHash256Laziness(c *gc.C) {
 	// TODO frankban: remove this test after updating entities in the
 	// production db with their SHA256 hash value. Entities are updated by
 	// running the cshash256 command.
-	id, _ := s.addCharm(c, "wordpress", "cs:precise/wordpress-0")
+	id, _ := s.addCharm(c, "wordpress", "cs:~who/precise/wordpress-0")
 
 	// Retrieve the SHA256 hash.
 	entity, err := s.store.FindEntity(id, "blobhash256")
