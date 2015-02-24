@@ -6,6 +6,7 @@ package v4_test
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -647,7 +648,14 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *charm.Reference
 	f, err := os.Open(fileName)
 	c.Assert(err, gc.IsNil)
 	defer f.Close()
-	hash, size := hashOf(f)
+
+	// Calculate blob hashes.
+	hash := blobstore.NewHash()
+	hash256 := sha256.New()
+	size, err = io.Copy(io.MultiWriter(hash, hash256), f)
+	c.Assert(err, gc.IsNil)
+	hashSum := fmt.Sprintf("%x", hash.Sum(nil))
+	hash256Sum := fmt.Sprintf("%x", hash256.Sum(nil))
 	_, err = f.Seek(0, 0)
 	c.Assert(err, gc.IsNil)
 
@@ -656,7 +664,7 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *charm.Reference
 		uploadURL.Revision = -1
 	}
 
-	path := fmt.Sprintf("%s/archive?hash=%s", strings.TrimPrefix(uploadURL.String(), "cs:"), hash)
+	path := fmt.Sprintf("%s/archive?hash=%s", strings.TrimPrefix(uploadURL.String(), "cs:"), hashSum)
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:       s.srv,
 		URL:           storeURL(path),
@@ -676,6 +684,8 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *charm.Reference
 	var entity mongodoc.Entity
 	err = s.store.DB.Entities().FindId(url).One(&entity)
 	c.Assert(err, gc.IsNil)
+	c.Assert(entity.BlobHash, gc.Equals, hashSum)
+	c.Assert(entity.BlobHash256, gc.Equals, hash256Sum)
 	// Test that the expected entry has been created
 	// in the blob store.
 	r, _, err := s.store.BlobStore.Open(entity.BlobName)

@@ -338,7 +338,11 @@ func (s *APISuite) TestSHA256Laziness(c *gc.C) {
 		updated <- struct{}{}
 	})
 
+	// Add a charm without a SHA256 hash.
 	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-0")
+	s.store.DB.Entities().UpdateId(wordpressURL, bson.D{{
+		"$set", bson.D{{"blobhash256", ""}},
+	}})
 	sum256 := fileSHA256(c, wordpress.Path)
 
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{

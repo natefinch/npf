@@ -5,7 +5,9 @@ package v4
 
 import (
 	"archive/zip"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -174,9 +176,14 @@ func (h *Handler) servePutArchive(id *charm.Reference, w http.ResponseWriter, re
 // The hash and contentLength parameters hold
 // the content hash and the content length respectively.
 func (h *Handler) addBlobAndEntity(id *charm.Reference, body io.Reader, hash string, contentLength int64) (err error) {
+	name := bson.NewObjectId().Hex()
+
+	// Calculate the SHA256 hash while uploading the blob in the blob store.
+	hash256 := sha256.New()
+	body = io.TeeReader(body, hash256)
+
 	// Upload the actual blob, and make sure that it is removed
 	// if we fail later.
-	name := bson.NewObjectId().Hex()
 	err = h.store.BlobStore.PutUnchallenged(body, name, contentLength, hash)
 	if err != nil {
 		return errgo.Notef(err, "cannot put archive blob")
@@ -194,7 +201,8 @@ func (h *Handler) addBlobAndEntity(id *charm.Reference, body io.Reader, hash str
 	}()
 
 	// Add the entity entry to the charm store.
-	if err := h.addEntity(id, r, name, hash, contentLength); err != nil {
+	sum256 := fmt.Sprintf("%x", hash256.Sum(nil))
+	if err := h.addEntity(id, r, name, hash, sum256, contentLength); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 	}
 	return nil
@@ -202,8 +210,15 @@ func (h *Handler) addBlobAndEntity(id *charm.Reference, body io.Reader, hash str
 
 // addEntity adds the entity represented by the contents
 // of the given reader, associating it with the given id.
-func (h *Handler) addEntity(id *charm.Reference, r io.ReadSeeker, blobName string, hash string, contentLength int64) error {
+func (h *Handler) addEntity(id *charm.Reference, r io.ReadSeeker, blobName, hash, hash256 string, contentLength int64) error {
 	readerAt := charmstore.ReaderAtSeeker(r)
+	p := charmstore.AddParams{
+		URL:         id,
+		BlobName:    blobName,
+		BlobHash:    hash,
+		BlobHash256: hash256,
+		BlobSize:    contentLength,
+	}
 	if id.Series == "bundle" {
 		b, err := charm.ReadBundleArchiveFromReader(readerAt, contentLength)
 		if err != nil {
@@ -218,12 +233,7 @@ func (h *Handler) addEntity(id *charm.Reference, r io.ReadSeeker, blobName strin
 			// TODO frankban: use multiError (defined in internal/router).
 			return errgo.Notef(verificationError(err), "bundle verification failed")
 		}
-		if err := h.store.AddBundle(b, charmstore.AddParams{
-			URL:      id,
-			BlobName: blobName,
-			BlobHash: hash,
-			BlobSize: contentLength,
-		}); err != nil {
+		if err := h.store.AddBundle(b, p); err != nil {
 			return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 		}
 		return nil
@@ -235,12 +245,7 @@ func (h *Handler) addEntity(id *charm.Reference, r io.ReadSeeker, blobName strin
 	if err := checkCharmIsValid(ch); err != nil {
 		return errgo.Mask(err)
 	}
-	if err := h.store.AddCharm(ch, charmstore.AddParams{
-		URL:      id,
-		BlobName: blobName,
-		BlobHash: hash,
-		BlobSize: contentLength,
-	}); err != nil {
+	if err := h.store.AddCharm(ch, p); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 	}
 	return nil
