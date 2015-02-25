@@ -1660,6 +1660,31 @@ Example: `GET ~joe/wordpress/meta/perm`
 }
 ```
 
+#### PUT *id*/meta/perm
+
+This request updates the permissions associated with the charm or bundle.
+
+```go
+type PermResponse struct {
+    Read  []string
+    Write []string
+}
+```
+
+If the Read or Write ACL is empty or missing from the request body, that
+field will be overwritten as empty. See the *id*/meta/perm/*key* request
+to PUT only Read or Write.
+
+Example: `PUT precise/wordpress-32/meta/perm`
+
+Request body:
+```json
+{
+    "Read": ["everyone"],
+    "Write": ["joe"]
+}
+```
+
 #### GET *id*/meta/perm/*key*
 
 This path returns the contents of the given permission *key* (that can be

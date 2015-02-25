@@ -550,23 +550,6 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	c.Assert(e.Public, jc.IsTrue)
 	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{params.Everyone})
 
-	// Check that PUT on wordpress/meta/perm returns error.
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler: s.srv,
-		URL:     storeURL("precise/wordpress-23/meta/perm"),
-		Method:  "PUT",
-		Header: http.Header{
-			"Content-Type": {"application/json"},
-		},
-		Body:         strings.NewReader(`"something"`),
-		Username:     serverParams.AuthUsername,
-		Password:     serverParams.AuthPassword,
-		ExpectStatus: http.StatusInternalServerError,
-		ExpectBody: params.Error{
-			Message: "PUT not supported",
-		},
-	})
-
 	// Change the read perms to only include a specific user and the write
 	// perms to include an "admin" user.
 	s.assertPut(c, "precise/wordpress-23/meta/perm/read", []string{"bob"})
@@ -626,6 +609,32 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	c.Assert(e.Public, jc.IsFalse)
 	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{})
 	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{})
+
+	// Try setting all permissions in one request
+	s.assertPut(c, "wordpress/meta/perm", params.PermRequest{
+		Read:  []string{"bob"},
+		Write: []string{"admin"},
+	})
+	e, err = s.store.FindBaseEntity(charm.MustParseReference("precise/wordpress-23"))
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.Public, jc.IsFalse)
+	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{
+		Read:  []string{"bob"},
+		Write: []string{"admin"},
+	})
+
+	// Try only read permissions to meta/perm endpoint
+	var readRequest = struct {
+		Read []string
+	}{Read: []string{"joe"}}
+	s.assertPut(c, "wordpress/meta/perm", readRequest)
+	e, err = s.store.FindBaseEntity(charm.MustParseReference("precise/wordpress-23"))
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.Public, jc.IsFalse)
+	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{
+		Read:  []string{"joe"},
+		Write: []string{},
+	})
 }
 
 func (s *APISuite) TestMetaPermPutUnauthorized(c *gc.C) {

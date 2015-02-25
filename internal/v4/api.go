@@ -95,7 +95,7 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 			"id-revision":   h.entityHandler(h.metaIdRevision, "_id"),
 			"id-series":     h.entityHandler(h.metaIdSeries, "_id"),
 			"manifest":      h.entityHandler(h.metaManifest, "blobname"),
-			"perm":          h.baseEntityHandler(h.metaPerm, "acls"),
+			"perm":          h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "acls"),
 			"perm/":         h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "acls"),
 			"revision-info": router.SingleIncludeHandler(h.metaRevisionInfo),
 			"stats":         h.entityHandler(h.metaStats),
@@ -697,6 +697,27 @@ func (h *Handler) metaPerm(entity *mongodoc.BaseEntity, id *charm.Reference, pat
 	}, nil
 }
 
+// PUT id/meta/perm
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmeta
+func (h *Handler) putMetaPerm(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+	var perms params.PermRequest
+	if err := json.Unmarshal(*val, &perms); err != nil {
+		return errgo.Mask(err)
+	}
+	isPublic := false
+	for _, p := range perms.Read {
+		if p == params.Everyone {
+			isPublic = true
+			break
+		}
+	}
+	updater.UpdateField("acls.read", perms.Read)
+	updater.UpdateField("public", isPublic)
+	updater.UpdateField("acls.write", perms.Write)
+	updater.UpdateSearch()
+	return nil
+}
+
 // GET id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapermkey
 func (h *Handler) metaPermWithKey(entity *mongodoc.BaseEntity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
@@ -720,6 +741,7 @@ func (h *Handler) putMetaPermWithKey(id *charm.Reference, path string, val *json
 	for _, p := range perms {
 		if p == params.Everyone {
 			isPublic = true
+			break
 		}
 	}
 	switch path {
