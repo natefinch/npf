@@ -183,6 +183,13 @@ type PermResponse struct {
 	Write []string
 }
 
+// PermRequest holds the request of an id/meta/perm PUT request.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetaperm
+type PermRequest struct {
+	Read  []string
+	Write []string
+}
+
 const (
 	// BzrDigestKey is the extra-info key used to store the Bazaar digest
 	BzrDigestKey = "bzr-digest"
