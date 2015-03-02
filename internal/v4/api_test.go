@@ -1347,7 +1347,7 @@ var metaStatsTests = []struct {
 	about: "sparse downloads",
 	url:   "utopic/django-42",
 	downloads: map[string]map[int]int{
-		"utopic/django-42": {200: 3, 28: 4, 3: 5},
+		"utopic/django-42": {200: 3, 27: 4, 3: 5},
 	},
 	expectResponse: params.StatsResponse{
 		ArchiveDownloadCount: 3 + 4 + 5,
@@ -1366,7 +1366,7 @@ var metaStatsTests = []struct {
 	about: "bundle downloads",
 	url:   "bundle/django-simple-2",
 	downloads: map[string]map[int]int{
-		"bundle/django-simple-2": {200: 3, 28: 4, 3: 5},
+		"bundle/django-simple-2": {200: 3, 27: 4, 3: 5},
 	},
 	expectResponse: params.StatsResponse{
 		ArchiveDownloadCount: 3 + 4 + 5,
@@ -1385,7 +1385,7 @@ var metaStatsTests = []struct {
 	about: "different charms",
 	url:   "trusty/rails-47",
 	downloads: map[string]map[int]int{
-		"utopic/rails-47": {200: 3, 28: 4, 3: 5},
+		"utopic/rails-47": {200: 3, 27: 4, 3: 5},
 		"trusty/rails-47": {20: 2, 6: 10},
 		"trusty/mysql-0":  {200: 1, 14: 2, 1: 7},
 	},
