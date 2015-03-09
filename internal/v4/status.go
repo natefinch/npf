@@ -57,21 +57,19 @@ func (h *Handler) checkElasticSearch() (key string, result debugstatus.CheckResu
 
 func (h *Handler) checkEntities() (key string, result debugstatus.CheckResult) {
 	result.Name = "Entities in charm store"
-	iter := h.store.DB.Entities().Find(nil).Select(bson.D{{"_id", 1}}).Iter()
-	charms, bundles, promulgated := 0, 0, 0
-	var entity mongodoc.Entity
-	for iter.Next(&entity) {
-		if entity.URL.Series == "bundle" {
-			bundles++
-		} else {
-			charms++
-		}
-		if entity.URL.User == "" {
-			promulgated++
-		}
+	charms, err := h.store.DB.Entities().Find(bson.D{{"series", bson.D{{"$ne", "bundle"}}}}).Count()
+	if err != nil {
+		result.Value = "Cannot count charms for consistency check: " + err.Error()
+		return "entities", result
 	}
-	if err := iter.Close(); err != nil {
-		result.Value = "Cannot count entities: " + err.Error()
+	bundles, err := h.store.DB.Entities().Find(bson.D{{"series", "bundle"}}).Count()
+	if err != nil {
+		result.Value = "Cannot count bundles for consistency check: " + err.Error()
+		return "entities", result
+	}
+	promulgated, err := h.store.DB.Entities().Find(bson.D{{"promulgated-url", bson.D{{"$exists", true}}}}).Count()
+	if err != nil {
+		result.Value = "Cannot count promulgated for consistency check: " + err.Error()
 		return "entities", result
 	}
 	result.Value = fmt.Sprintf("%d charms; %d bundles; %d promulgated", charms, bundles, promulgated)

@@ -204,10 +204,9 @@ func (s *APISuite) TestServerCharmInfo(c *gc.C) {
 		err:   "entry not found",
 	}}
 
-	entities := s.store.DB.Entities()
 	for i, test := range tests {
 		c.Logf("test %d: %s", i, test.about)
-		err = entities.UpdateId(wordpressURL, bson.D{{
+		err = s.store.UpdateEntity(wordpressURL, bson.D{{
 			"$set", bson.D{{"extrainfo", test.extrainfo}},
 		}})
 		c.Assert(err, gc.IsNil)
@@ -377,10 +376,20 @@ func (s *APISuite) TestServerStatus(c *gc.C) {
 
 func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, *charm.CharmArchive) {
 	url := charm.MustParseReference(curl)
+	var purl *charm.Reference
+	if url.User == "" {
+		purl = new(charm.Reference)
+		*purl = *url
+		url.User = "charmers"
+	}
 	wordpress := storetesting.Charms.CharmArchive(c.MkDir(), charmName)
-	err := s.store.AddCharmWithArchive(url, wordpress)
+	err := s.store.AddCharmWithArchive(url, purl, wordpress)
 	c.Assert(err, gc.IsNil)
-	return url, wordpress
+	if purl != nil {
+		return purl, wordpress
+	} else {
+		return url, wordpress
+	}
 }
 
 var serveCharmEventErrorsTests = []struct {
@@ -435,7 +444,7 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 	s.addExtraInfoDigest(c, mysqlUrl, "who@canonical.com-bzr-digest")
 
 	// Update the riak charm with an invalid digest extra-info.
-	err := s.store.DB.Entities().UpdateId(riakUrl, bson.D{{
+	err := s.store.UpdateEntity(riakUrl, bson.D{{
 		"$set", bson.D{{"extrainfo", map[string][]byte{
 			params.BzrDigestKey: []byte(":"),
 		}}},
@@ -590,7 +599,7 @@ func (s *APISuite) TestServeCharmEventLastRevision(c *gc.C) {
 func (s *APISuite) addExtraInfoDigest(c *gc.C, id *charm.Reference, digest string) {
 	b, err := json.Marshal(digest)
 	c.Assert(err, gc.IsNil)
-	err = s.store.DB.Entities().UpdateId(id, bson.D{{
+	err = s.store.UpdateEntity(id, bson.D{{
 		"$set", bson.D{{"extrainfo", map[string][]byte{
 			params.BzrDigestKey: b,
 		}}},
@@ -599,7 +608,7 @@ func (s *APISuite) addExtraInfoDigest(c *gc.C, id *charm.Reference, digest strin
 }
 
 func (s *APISuite) updateUploadTime(c *gc.C, id *charm.Reference, uploadTime time.Time) {
-	err := s.store.DB.Entities().UpdateId(id, bson.D{{
+	err := s.store.UpdateEntity(id, bson.D{{
 		"$set", bson.D{{"uploadtime", uploadTime}},
 	}})
 	c.Assert(err, gc.IsNil)

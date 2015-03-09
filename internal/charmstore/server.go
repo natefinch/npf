@@ -62,6 +62,11 @@ func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions 
 	if err := migrate(store.DB); err != nil {
 		return nil, errgo.Notef(err, "database migration failed")
 	}
+	go func() {
+		if err := store.syncSearch(); err != nil {
+			logger.Errorf("Cannot populate elasticsearch: %v", err)
+		}
+	}()
 	mux := router.NewServeMux()
 	for vers, newAPI := range versions {
 		handle(mux, "/"+vers, newAPI(store, config))

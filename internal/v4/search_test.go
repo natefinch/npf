@@ -57,7 +57,7 @@ func (s *SearchSuite) SetUpTest(c *gc.C) {
 	s.addCharmsToStore(c, s.store)
 	// hide the riak charm
 	err := s.store.DB.BaseEntities().UpdateId(
-		charm.MustParseReference("cs:riak"),
+		charm.MustParseReference("cs:~charmers/riak"),
 		bson.D{{"$set", map[string]mongodoc.ACL{
 			"acls": {
 				Read: []string{"test-user"},
@@ -65,7 +65,7 @@ func (s *SearchSuite) SetUpTest(c *gc.C) {
 		}}},
 	)
 	c.Assert(err, gc.IsNil)
-	err = s.store.UpdateSearch(charm.MustParseReference(exportTestCharms["riak"]))
+	err = s.store.UpdateSearch(charm.MustParseReference("~charmers/trusty/riak"))
 	c.Assert(err, gc.IsNil)
 	err = s.ES.RefreshIndex(s.TestIndex)
 	c.Assert(err, gc.IsNil)
@@ -76,12 +76,26 @@ func (s *SearchSuite) TearDownTest(c *gc.C) {
 }
 
 func (s *SearchSuite) addCharmsToStore(c *gc.C, store *charmstore.Store) {
-	for name, ref := range exportTestCharms {
-		err := store.AddCharmWithArchive(charm.MustParseReference(ref), getCharm(name))
+	for name, id := range exportTestCharms {
+		url := charm.MustParseReference(id)
+		var purl *charm.Reference
+		if url.User == "" {
+			purl = new(charm.Reference)
+			*purl = *url
+			url.User = "charmers"
+		}
+		err := store.AddCharmWithArchive(url, purl, getCharm(name))
 		c.Assert(err, gc.IsNil)
 	}
-	for name, ref := range exportTestBundles {
-		err := store.AddBundleWithArchive(charm.MustParseReference(ref), getBundle(name))
+	for name, id := range exportTestBundles {
+		url := charm.MustParseReference(id)
+		var purl *charm.Reference
+		if url.User == "" {
+			purl = new(charm.Reference)
+			*purl = *url
+			url.User = "charmers"
+		}
+		err := store.AddBundleWithArchive(url, purl, getBundle(name))
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -558,7 +572,7 @@ func (s *SearchSuite) TestSearchIncludeError(c *gc.C) {
 
 	// Now remove one of the blobs. The search should still
 	// work, but only return a single result.
-	blobName, _, err := s.store.BlobNameAndHash(charm.MustParseReference(exportTestCharms["wordpress"]))
+	blobName, _, err := s.store.BlobNameAndHash(charm.MustParseReference("~charmers/precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
 	err = s.store.BlobStore.Remove(blobName)
 	c.Assert(err, gc.IsNil)
@@ -691,7 +705,7 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 			Revision: 1,
 			Series:   "trusty",
 		}
-		err := s.store.AddCharmWithArchive(ref, getCharm(n))
+		err := s.store.AddCharmWithArchive(ref, nil, getCharm(n))
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < cnt; i++ {
 			err := s.store.IncrementDownloadCounts(ref)
@@ -716,11 +730,11 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 // TODO(mhilton) remove this test when removing legacy counts logic.
 func (s *SearchSuite) TestLegacyStatsUpdatesSearch(c *gc.C) {
 	patchLegacyDownloadCountsEnabled(s.AddCleanup, true)
-	doc, err := s.store.ES.GetSearchDocument(charm.MustParseReference(exportTestCharms["mysql"]))
+	doc, err := s.store.ES.GetSearchDocument(charm.MustParseReference("~charmers/trusty/mysql-7"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(doc.TotalDownloads, gc.Equals, int64(0))
-	s.assertPut(c, "trusty/mysql-7/meta/extra-info/"+params.LegacyDownloadStats, 57)
-	doc, err = s.store.ES.GetSearchDocument(charm.MustParseReference(exportTestCharms["mysql"]))
+	s.assertPut(c, "~charmers/trusty/mysql-7/meta/extra-info/"+params.LegacyDownloadStats, 57)
+	doc, err = s.store.ES.GetSearchDocument(charm.MustParseReference("~charmers/trusty/mysql-7"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(doc.TotalDownloads, gc.Equals, int64(57))
 

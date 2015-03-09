@@ -203,6 +203,13 @@ func (t TermFilter) MarshalJSON() ([]byte, error) {
 	return marshalNamedObject("term", map[string]string{t.Field: t.Value})
 }
 
+// ExistsFilter provides a filter that requres a field to be present.
+type ExistsFilter string
+
+func (f ExistsFilter) MarshalJSON() ([]byte, error) {
+	return marshalNamedObject("exists", map[string]string{"field": string(f)})
+}
+
 // QueryDSL provides a structure to put together a query using the
 // elasticsearch DSL.
 type QueryDSL struct {

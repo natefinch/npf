@@ -417,6 +417,7 @@ var metaEndpoints = []metaEndpoint{{
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data, jc.DeepEquals, params.IdResponse{
 			Id:       charm.MustParseReference("cs:utopic/category-2"),
+			User:     "",
 			Series:   "utopic",
 			Name:     "category",
 			Revision: 2,
@@ -474,7 +475,7 @@ var testEntities = []string{
 	"cs:precise/dummy-10",
 	// A charm with some tags.
 	"cs:utopic/category-2",
-	// A charm with a user.
+	// A charm with a different user.
 	"cs:~bob/utopic/wordpress-2",
 }
 
@@ -542,13 +543,13 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	s.addCharm(c, "wordpress", "precise/wordpress-24")
 	s.addCharm(c, "wordpress", "trusty/wordpress-1")
 	s.assertGet(c, "wordpress/meta/perm", params.PermResponse{
-		Read:  []string{params.Everyone},
-		Write: []string{},
+		Read:  []string{params.Everyone, "charmers"},
+		Write: []string{"charmers"},
 	})
 	e, err := s.store.FindBaseEntity(charm.MustParseReference("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsTrue)
-	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{params.Everyone})
+	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{params.Everyone, "charmers"})
 
 	// Change the read perms to only include a specific user and the write
 	// perms to include an "admin" user.
@@ -856,7 +857,11 @@ func (s *APISuite) TestMetaEndpointsAny(c *gc.C) {
 }
 
 func (s *APISuite) TestMetaAnyWithNoIncludesAndNoEntity(c *gc.C) {
-	wordpressURL, _ := s.addCharm(c, "wordpress", "cs:precise/wordpress-23")
+	wordpressURL, _ := s.addCharm(
+		c,
+		"wordpress",
+		"cs:precise/wordpress-23",
+	)
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("precise/wordpress-1/meta/any"),
@@ -968,7 +973,7 @@ var metaCharmTagsTests = []struct {
 }}
 
 func (s *APISuite) TestMetaCharmTags(c *gc.C) {
-	url := charm.MustParseReference("precise/wordpress-0")
+	url := charm.MustParseReference("~charmers/precise/wordpress-0")
 	for i, test := range metaCharmTagsTests {
 		c.Logf("%d: %s", i, test.about)
 		wordpress := storetesting.Charms.CharmDir("wordpress")
@@ -979,10 +984,12 @@ func (s *APISuite) TestMetaCharmTags(c *gc.C) {
 			meta:  meta,
 			Charm: wordpress,
 		}, charmstore.AddParams{
-			URL:      url,
-			BlobName: "no-such-name",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
+			URL:                 url,
+			BlobName:            "no-such-name",
+			BlobHash:            fakeBlobHash,
+			BlobSize:            fakeBlobSize,
+			PromulgatedURL:      nil,
+			PromulgatedRevision: -1,
 		})
 		c.Assert(err, gc.IsNil)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
@@ -994,20 +1001,77 @@ func (s *APISuite) TestMetaCharmTags(c *gc.C) {
 	}
 }
 
+func (s *APISuite) TestPromulgatedMetaCharmTags(c *gc.C) {
+	url := charm.MustParseReference("~charmers/precise/wordpress")
+	purl := charm.MustParseReference("precise/wordpress")
+	for i, test := range metaCharmTagsTests {
+		c.Logf("%d: %s", i, test.about)
+		wordpress := storetesting.Charms.CharmDir("wordpress")
+		meta := wordpress.Meta()
+		meta.Tags, meta.Categories = test.tags, test.categories
+		url.Revision = i
+		purl.Revision = i
+		err := s.store.AddCharm(&testMetaCharm{
+			meta:  meta,
+			Charm: wordpress,
+		}, charmstore.AddParams{
+			URL:                 url,
+			BlobName:            "no-such-name",
+			BlobHash:            fakeBlobHash,
+			BlobSize:            fakeBlobSize,
+			PromulgatedURL:      purl,
+			PromulgatedRevision: purl.Revision,
+		})
+		c.Assert(err, gc.IsNil)
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler:      s.srv,
+			URL:          storeURL(purl.Path() + "/meta/tags"),
+			ExpectStatus: http.StatusOK,
+			ExpectBody:   params.TagsResponse{test.expectTags},
+		})
+	}
+}
+
 func (s *APISuite) TestBundleTags(c *gc.C) {
 	b := storetesting.Charms.BundleDir("wordpress-simple")
+	url := charm.MustParseReference("~charmers/bundle/wordpress-2")
 	data := b.Data()
 	data.Tags = []string{"foo", "bar"}
 	err := s.store.AddBundle(&testingBundle{data}, charmstore.AddParams{
-		URL:      charm.MustParseReference("bundle/wordpress-2"),
-		BlobName: "no-such-name",
-		BlobHash: fakeBlobHash,
-		BlobSize: fakeBlobSize,
+		URL:                 url,
+		BlobName:            "no-such-name",
+		BlobHash:            fakeBlobHash,
+		BlobSize:            fakeBlobSize,
+		PromulgatedURL:      nil,
+		PromulgatedRevision: -1,
 	})
 	c.Assert(err, gc.IsNil)
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
-		URL:          storeURL("bundle/wordpress-2/meta/tags"),
+		URL:          storeURL(url.Path() + "/meta/tags"),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   params.TagsResponse{[]string{"foo", "bar"}},
+	})
+}
+
+func (s *APISuite) TestPromulgatedBundleTags(c *gc.C) {
+	b := storetesting.Charms.BundleDir("wordpress-simple")
+	url := charm.MustParseReference("~charmers/bundle/wordpress-2")
+	purl := charm.MustParseReference("bundle/wordpress-2")
+	data := b.Data()
+	data.Tags = []string{"foo", "bar"}
+	err := s.store.AddBundle(&testingBundle{data}, charmstore.AddParams{
+		URL:                 url,
+		BlobName:            "no-such-name",
+		BlobHash:            fakeBlobHash,
+		BlobSize:            fakeBlobSize,
+		PromulgatedURL:      purl,
+		PromulgatedRevision: purl.Revision,
+	})
+	c.Assert(err, gc.IsNil)
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL(purl.Path() + "/meta/tags"),
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   params.TagsResponse{[]string{"foo", "bar"}},
 	})
@@ -1135,8 +1199,8 @@ var serveExpandIdTests = []struct {
 	about: "partial URL",
 	url:   "haproxy",
 	expect: []params.ExpandedId{
-		{Id: "cs:precise/haproxy-1"},
 		{Id: "cs:trusty/haproxy-1"},
+		{Id: "cs:precise/haproxy-1"},
 	},
 }, {
 	about: "single result",
@@ -1158,7 +1222,6 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 	// Add a bunch of entities in the database.
 	// Note that expand-id only cares about entity identifiers,
 	// so it is ok to reuse the same charm for all the entities.
-	// Also here we assume Mongo returns the entities in natural order.
 	s.addCharm(c, "wordpress", "cs:utopic/wordpress-42")
 	s.addCharm(c, "wordpress", "cs:trusty/wordpress-47")
 	s.addCharm(c, "wordpress", "cs:precise/haproxy-1")
@@ -1488,7 +1551,6 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 
 		for id, downloadsPerDay := range test.downloads {
 			url := charm.MustParseReference(id)
-
 			// Add the required entities to the database.
 			if url.Series == "bundle" {
 				s.addBundle(c, "wordpress-simple", id)
@@ -1554,7 +1616,7 @@ func (s *APISuite) TestMetaStatsWithLegacyDownloadCounts(c *gc.C) {
 			extraInfo := map[string][]byte{
 				params.LegacyDownloadStats: []byte(test.count),
 			}
-			err := s.store.DB.Entities().UpdateId(id, bson.D{{
+			err := s.store.UpdateEntity(id, bson.D{{
 				"$set", bson.D{{"extrainfo", extraInfo}},
 			}})
 			c.Assert(err, gc.IsNil)
@@ -1607,22 +1669,22 @@ func (p publishSpec) published() params.Published {
 }
 
 var publishedCharms = []publishSpec{{
-	id:   "cs:precise-wordpress-1",
+	id:   "cs:~charmers/precise/wordpress-1",
 	time: "5432-10-12 00:00",
 }, {
-	id:   "cs:precise-mysql-1",
+	id:   "cs:~charmers/precise/mysql-1",
 	time: "5432-10-12 13:00",
 }, {
-	id:   "cs:precise-wordpress-2",
+	id:   "cs:~charmers/precise/wordpress-2",
 	time: "5432-10-12 23:59",
 }, {
-	id:   "cs:precise-mysql-2",
+	id:   "cs:~charmers/precise/mysql-2",
 	time: "5432-10-13 00:00",
 }, {
-	id:   "cs:precise-mysql-5",
+	id:   "cs:~charmers/precise/mysql-5",
 	time: "5432-10-13 10:00",
 }, {
-	id:   "cs:precise-wordpress-3",
+	id:   "cs:~charmers/precise/wordpress-3",
 	time: "5432-10-14 01:00",
 }}
 
@@ -1731,9 +1793,9 @@ func (s *APISuite) TestChangesPublishedErrors(c *gc.C) {
 // a range of charms with known time stamps.
 func (s *APISuite) publishCharmsAtKnownTimes(c *gc.C, charms []publishSpec) {
 	for _, ch := range publishedCharms {
-		s.addCharm(c, "wordpress", ch.id)
+		id, _ := s.addCharm(c, "wordpress", ch.id)
 		t := ch.published().PublishTime
-		err := s.store.DB.Entities().UpdateId(ch.id, bson.D{{"$set", bson.D{{"uploadtime", t}}}})
+		err := s.store.UpdateEntity(id, bson.D{{"$set", bson.D{{"uploadtime", t}}}})
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -1825,22 +1887,18 @@ func entityFieldGetter(fieldName string) metaEndpointExpectedValueGetter {
 
 func entityGetter(get func(*mongodoc.Entity) interface{}) metaEndpointExpectedValueGetter {
 	return func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
-		var doc mongodoc.Entity
-		err := store.DB.Entities().FindId(url).One(&doc)
+		doc, err := store.FindEntity(url)
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}
-		return get(&doc), nil
+		return get(doc), nil
 	}
 }
 
 func zipGetter(get func(*zip.Reader) interface{}) metaEndpointExpectedValueGetter {
 	return func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
-		var doc mongodoc.Entity
-		if err := store.DB.Entities().
-			FindId(url).
-			Select(bson.D{{"blobname", 1}}).
-			One(&doc); err != nil {
+		doc, err := store.FindEntity(url, "blobname")
+		if err != nil {
 			return nil, errgo.Mask(err)
 		}
 		blob, size, err := store.BlobStore.Open(doc.BlobName)
@@ -1867,16 +1925,31 @@ func entitySizeChecker(c *gc.C, data interface{}) {
 
 func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, charm.Charm) {
 	url := charm.MustParseReference(curl)
+	var purl *charm.Reference
+	if url.User == "" {
+		purl = new(charm.Reference)
+		*purl = *url
+		url.User = "charmers"
+	}
 	wordpress := storetesting.Charms.CharmDir(charmName)
-	err := s.store.AddCharmWithArchive(url, wordpress)
+	err := s.store.AddCharmWithArchive(url, purl, wordpress)
 	c.Assert(err, gc.IsNil)
+	if purl != nil {
+		return purl, wordpress
+	}
 	return url, wordpress
 }
 
 func (s *APISuite) addBundle(c *gc.C, bundleName string, curl string) (*charm.Reference, charm.Bundle) {
 	url := charm.MustParseReference(curl)
+	var purl *charm.Reference
+	if url.User == "" {
+		purl = new(charm.Reference)
+		*purl = *url
+		url.User = "charmers"
+	}
 	bundle := storetesting.Charms.BundleDir(bundleName)
-	err := s.store.AddBundleWithArchive(url, bundle)
+	err := s.store.AddBundleWithArchive(url, purl, bundle)
 	c.Assert(err, gc.IsNil)
 	return url, bundle
 }

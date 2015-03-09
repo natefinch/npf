@@ -32,7 +32,7 @@ var serveDiagramErrorsTests = []struct {
 	expectBody   interface{}
 }{{
 	about:        "entity not found",
-	url:          "bundle/foo-23/diagram.svg",
+	url:          "~charmers/bundle/foo-23/diagram.svg",
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
@@ -40,7 +40,7 @@ var serveDiagramErrorsTests = []struct {
 	},
 }, {
 	about:        "diagram for a charm",
-	url:          "wordpress/diagram.svg",
+	url:          "~charmers/wordpress/diagram.svg",
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
@@ -48,7 +48,7 @@ var serveDiagramErrorsTests = []struct {
 	},
 }, {
 	about:        "bundle with no position info",
-	url:          "nopositionbundle/diagram.svg",
+	url:          "~charmers/nopositionbundle/diagram.svg",
 	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: `cannot create canvas: service "mysql" does not have a valid position`,
@@ -56,8 +56,8 @@ var serveDiagramErrorsTests = []struct {
 }}
 
 func (s *APISuite) TestServeDiagramErrors(c *gc.C) {
-	s.addCharm(c, "wordpress", "cs:trusty/wordpress-42")
-	s.addBundle(c, "wordpress-simple", "cs:bundle/nopositionbundle-42")
+	s.addCharm(c, "wordpress", "cs:~charmers/trusty/wordpress-42")
+	s.addBundle(c, "wordpress-simple", "cs:~charmers/bundle/nopositionbundle-42")
 	for i, test := range serveDiagramErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
@@ -93,10 +93,12 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 	}
 
 	err := s.store.AddBundle(bundle, charmstore.AddParams{
-		URL:      charm.MustParseReference("cs:bundle/wordpressbundle-42"),
-		BlobName: "blobName",
-		BlobHash: fakeBlobHash,
-		BlobSize: fakeBlobSize,
+		URL:                 charm.MustParseReference("cs:~charmers/bundle/wordpressbundle-42"),
+		BlobName:            "blobName",
+		BlobHash:            fakeBlobHash,
+		BlobSize:            fakeBlobSize,
+		PromulgatedURL:      charm.MustParseReference("cs:bundle/wordpressbundle-42"),
+		PromulgatedRevision: 42,
 	})
 	c.Assert(err, gc.IsNil)
 
@@ -173,7 +175,7 @@ var serveReadMeTests = []struct {
 
 func (s *APISuite) TestServeReadMe(c *gc.C) {
 	patchArchiveCacheAges(s)
-	url := charm.MustParseReference("cs:precise/wordpress-0")
+	url := charm.MustParseReference("cs:~charmers/precise/wordpress-0")
 	for i, test := range serveReadMeTests {
 		c.Logf("test %d: %s", i, test.name)
 		wordpress := storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
@@ -184,7 +186,7 @@ func (s *APISuite) TestServeReadMe(c *gc.C) {
 		}
 
 		url.Revision = i
-		err := s.store.AddCharmWithArchive(url, wordpress)
+		err := s.store.AddCharmWithArchive(url, nil, wordpress)
 		c.Assert(err, gc.IsNil)
 
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -231,14 +233,14 @@ func (s *APISuite) TestServeIconEntityNotFound(c *gc.C) {
 
 func (s *APISuite) TestServeIcon(c *gc.C) {
 	patchArchiveCacheAges(s)
-	url := charm.MustParseReference("cs:precise/wordpress-0")
+	url := charm.MustParseReference("cs:~charmers/precise/wordpress-0")
 	wordpress := storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
 	content := `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">an icon, really</svg>`
 	expected := `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1" viewBox="0 0 1 1">an icon, really</svg>`
 	err := ioutil.WriteFile(filepath.Join(wordpress.Path, "icon.svg"), []byte(content), 0666)
 	c.Assert(err, gc.IsNil)
 
-	err = s.store.AddCharmWithArchive(url, wordpress)
+	err = s.store.AddCharmWithArchive(url, nil, wordpress)
 	c.Assert(err, gc.IsNil)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -266,7 +268,7 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 	err = ioutil.WriteFile(filepath.Join(wordpress.Path, "icon.svg"), []byte(expected), 0666)
 	c.Assert(err, gc.IsNil)
 
-	err = s.store.AddCharmWithArchive(url, wordpress)
+	err = s.store.AddCharmWithArchive(url, nil, wordpress)
 	c.Assert(err, gc.IsNil)
 
 	// Check that we still get expected svg.
@@ -293,10 +295,11 @@ func (s *APISuite) TestServeBundleIcon(c *gc.C) {
 
 func (s *APISuite) TestServeDefaultIcon(c *gc.C) {
 	patchArchiveCacheAges(s)
-	url := charm.MustParseReference("cs:precise/wordpress-0")
+	url := charm.MustParseReference("cs:~charmers/precise/wordpress-0")
+	purl := charm.MustParseReference("cs:precise/wordpress-0")
 	wordpress := storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
 
-	err := s.store.AddCharmWithArchive(url, wordpress)
+	err := s.store.AddCharmWithArchive(url, purl, wordpress)
 	c.Assert(err, gc.IsNil)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
