@@ -66,7 +66,7 @@ func (h *Handler) serveArchive(id *charm.Reference, fullySpecified bool, w http.
 	header.Set(params.ContentHashHeader, hash)
 	header.Set(params.EntityIdHeader, id.String())
 
-	if req.URL.Query().Get("stats") != "0" {
+	if StatsEnabled(req) {
 		h.store.IncrementDownloadCountsAsync(id)
 	}
 	// TODO(rog) should we set connection=close here?

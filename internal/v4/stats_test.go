@@ -13,6 +13,7 @@ import (
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 
+	"github.com/juju/charmstore/internal/v4"
 	"github.com/juju/charmstore/internal/charmstore"
 	"github.com/juju/charmstore/internal/storetesting"
 	"github.com/juju/charmstore/params"
@@ -421,4 +422,14 @@ func (s *StatsSuite) TestStatsCounterBy(c *gc.C) {
 			ExpectBody: test.result,
 		})
 	}
+}
+
+func (s *StatsSuite) TestStatsEnabled(c *gc.C) {
+	statsEnabled := func(url string) bool {
+		req, _ := http.NewRequest("GET", url, nil)
+		return v4.StatsEnabled(req)
+	}
+	c.Assert(statsEnabled("http://foo.com"), gc.Equals, true)
+	c.Assert(statsEnabled("http://foo.com?stats=1"), gc.Equals, true)
+	c.Assert(statsEnabled("http://foo.com?stats=0"), gc.Equals, false)
 }

@@ -369,6 +369,7 @@ func (db *Database) do(method, url string, body, v interface{}) error {
 	log.Debugf("<<< %s", resp.Status)
 	log.Debugf("<<< %s", b)
 	var eserr *ElasticSearchError
+	// TODO(mhilton) don't try to parse every response as an error.
 	if err = json.Unmarshal(b, &eserr); err != nil {
 		log.Debugf("*** %s", err)
 	}

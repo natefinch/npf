@@ -182,10 +182,12 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 			if err != nil {
 				c.Errors = append(c.Errors, err.Error())
 			}
-			h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmInfo))
+			if v4.StatsEnabled(req) {
+				h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmInfo))
+			}
 		} else {
 			c.Errors = append(c.Errors, err.Error())
-			if curl != nil {
+			if curl != nil && v4.StatsEnabled(req) {
 				h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmMissing))
 			}
 		}
@@ -264,7 +266,9 @@ func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}
 			c.Revision = entity.Revision
 		}
 		c.Time = entity.UploadTime.UTC().Format(time.RFC3339)
-		h.store.IncCounterAsync(charmStatsKey(id, params.StatsCharmEvent))
+		if v4.StatsEnabled(req) {
+			h.store.IncCounterAsync(charmStatsKey(id, params.StatsCharmEvent))
+		}
 	}
 	return response, nil
 }
