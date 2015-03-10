@@ -110,3 +110,12 @@ func (h *Handler) serveStatsCounter(_ http.Header, r *http.Request) (interface{}
 
 	return items, nil
 }
+
+// StatsEnabled reports whether statistics should be gathered for
+// the given HTTP request.
+func StatsEnabled(req *http.Request) bool {
+	// It's fine to parse the form more than once, and it avoids
+	// bugs from not parsing it.
+	req.ParseForm()
+	return req.Form.Get("stats") != "0"
+}
