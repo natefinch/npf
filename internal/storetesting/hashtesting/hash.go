@@ -15,7 +15,7 @@ import (
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/internal/charmstore"
+	"gopkg.in/juju/charmstore.v4/internal/charmstore"
 )
 
 func CheckSHA256Laziness(c *gc.C, store *charmstore.Store, id *charm.Reference, check func()) {

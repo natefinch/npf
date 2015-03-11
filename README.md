@@ -7,9 +7,8 @@ Store and publish Juju charms.
 To start using the charm store, first ensure you have a valid
 Go environment, then run the following:
 
-    go get github.com/juju/charmstore
-    cd $GOPATH/github.com/juju/charmstore
-    git checkout v4
+    go get -d gopkg.in/juju/charmstore.v4
+    cd $GOPATH/gopkg.in/juju/charmstore.v4
 
 ## Go dependencies
 

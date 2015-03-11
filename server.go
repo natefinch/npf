@@ -11,10 +11,10 @@ import (
 	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/mgo.v2"
 
-	"github.com/juju/charmstore/internal/charmstore"
-	"github.com/juju/charmstore/internal/elasticsearch"
-	"github.com/juju/charmstore/internal/legacy"
-	"github.com/juju/charmstore/internal/v4"
+	"gopkg.in/juju/charmstore.v4/internal/charmstore"
+	"gopkg.in/juju/charmstore.v4/internal/elasticsearch"
+	"gopkg.in/juju/charmstore.v4/internal/legacy"
+	"gopkg.in/juju/charmstore.v4/internal/v4"
 )
 
 // Versions of the API that can be served.

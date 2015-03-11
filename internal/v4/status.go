@@ -14,8 +14,8 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/internal/mongodoc"
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 // GET /debug/status

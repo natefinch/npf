@@ -12,7 +12,7 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
 
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 var (

@@ -8,7 +8,7 @@ import (
 
 	gc "gopkg.in/check.v1"
 
-	"github.com/juju/charmstore/internal/v4"
+	"gopkg.in/juju/charmstore.v4/internal/v4"
 )
 
 type iconSuite struct{}

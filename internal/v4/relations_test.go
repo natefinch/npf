@@ -12,10 +12,10 @@ import (
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/internal/blobstore"
-	"github.com/juju/charmstore/internal/charmstore"
-	"github.com/juju/charmstore/internal/storetesting"
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/internal/blobstore"
+	"gopkg.in/juju/charmstore.v4/internal/charmstore"
+	"gopkg.in/juju/charmstore.v4/internal/storetesting"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 // Define fake blob attributes to be used in tests.

@@ -21,9 +21,9 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/config"
-	"github.com/juju/charmstore/internal/charmstore"
-	"github.com/juju/charmstore/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/config"
+	"gopkg.in/juju/charmstore.v4/internal/charmstore"
+	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
 )
 
 var (

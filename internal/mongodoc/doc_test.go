@@ -11,7 +11,7 @@ import (
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
 )
 
 func TestPackage(t *testing.T) {

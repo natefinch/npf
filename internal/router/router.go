@@ -20,7 +20,7 @@ import (
 	"gopkg.in/errgo.v1"
 	charm "gopkg.in/juju/charm.v4"
 
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 // Implementation note on error handling:
