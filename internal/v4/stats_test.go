@@ -13,9 +13,9 @@ import (
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 
-	"gopkg.in/juju/charmstore.v4/internal/v4"
 	"gopkg.in/juju/charmstore.v4/internal/charmstore"
 	"gopkg.in/juju/charmstore.v4/internal/storetesting"
+	"gopkg.in/juju/charmstore.v4/internal/v4"
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
