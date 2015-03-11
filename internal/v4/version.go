@@ -6,7 +6,7 @@ package v4
 import (
 	"net/http"
 
-	"github.com/juju/charmstore/version"
+	"gopkg.in/juju/charmstore.v4/version"
 )
 
 // GET /debug/info .

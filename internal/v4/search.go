@@ -11,9 +11,9 @@ import (
 	"github.com/juju/utils/parallel"
 	"gopkg.in/errgo.v1"
 
-	"github.com/juju/charmstore/internal/charmstore"
-	"github.com/juju/charmstore/internal/router"
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/internal/charmstore"
+	"gopkg.in/juju/charmstore.v4/internal/router"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 const maxConcurrency = 20

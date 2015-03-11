@@ -20,10 +20,10 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/internal/charmstore"
-	"github.com/juju/charmstore/internal/mongodoc"
-	"github.com/juju/charmstore/internal/router"
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/internal/charmstore"
+	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/internal/router"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 var logger = loggo.GetLogger("charmstore.internal.v4")
@@ -124,9 +124,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	h.Router.ServeHTTP(w, req)
 }
 
-// ResolveURL resolves the series and revision of the given URL
-// if either is unspecified by filling them out with information retrieved
-// from the store.
+// ResolveURL resolves the series and revision of the given URL if either is
+// unspecified by filling them out with information retrieved from the store.
 func ResolveURL(store *charmstore.Store, url *charm.Reference) error {
 	if url.Series != "" && url.Revision != -1 {
 		return nil

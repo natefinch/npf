@@ -15,8 +15,8 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 
-	"github.com/juju/charmstore/internal/mongodoc"
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 var zeroTimeStr = time.Time{}.Format(time.RFC3339)

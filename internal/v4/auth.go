@@ -15,7 +15,7 @@ import (
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
 	"gopkg.in/macaroon.v1"
 
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 const basicRealm = "CharmStore4"

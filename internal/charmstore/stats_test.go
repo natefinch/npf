@@ -12,8 +12,8 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/internal/charmstore"
-	"github.com/juju/charmstore/internal/storetesting"
+	"gopkg.in/juju/charmstore.v4/internal/charmstore"
+	"gopkg.in/juju/charmstore.v4/internal/storetesting"
 )
 
 type StatsSuite struct {

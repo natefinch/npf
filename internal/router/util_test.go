@@ -8,7 +8,7 @@ import (
 
 	gc "gopkg.in/check.v1"
 
-	"github.com/juju/charmstore/internal/router"
+	"gopkg.in/juju/charmstore.v4/internal/router"
 )
 
 type utilSuite struct{}

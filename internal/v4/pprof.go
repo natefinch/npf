@@ -8,7 +8,7 @@ import (
 
 	"github.com/juju/httpprof"
 
-	"github.com/juju/charmstore/internal/router"
+	"gopkg.in/juju/charmstore.v4/internal/router"
 )
 
 type pprofHandler struct {

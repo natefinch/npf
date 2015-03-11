@@ -27,13 +27,13 @@ import (
 	charmtesting "gopkg.in/juju/charm.v4/testing"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/internal/blobstore"
-	"github.com/juju/charmstore/internal/charmstore"
-	"github.com/juju/charmstore/internal/mongodoc"
-	"github.com/juju/charmstore/internal/storetesting"
-	"github.com/juju/charmstore/internal/storetesting/stats"
-	"github.com/juju/charmstore/internal/v4"
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/internal/blobstore"
+	"gopkg.in/juju/charmstore.v4/internal/charmstore"
+	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/internal/storetesting"
+	"gopkg.in/juju/charmstore.v4/internal/storetesting/stats"
+	"gopkg.in/juju/charmstore.v4/internal/v4"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 type ArchiveSuite struct {

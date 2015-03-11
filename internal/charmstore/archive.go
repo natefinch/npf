@@ -11,7 +11,7 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 
-	"github.com/juju/charmstore/internal/blobstore"
+	"gopkg.in/juju/charmstore.v4/internal/blobstore"
 )
 
 type archiverTo interface {
