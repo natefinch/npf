@@ -124,9 +124,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	h.Router.ServeHTTP(w, req)
 }
 
-// ResolveURL resolves the series and revision of the given URL
-// if either is unspecified by filling them out with information retrieved
-// from the store.
+// ResolveURL resolves the series and revision of the given URL if either is
+// unspecified by filling them out with information retrieved from the store.
 func ResolveURL(store *charmstore.Store, url *charm.Reference) error {
 	if url.Series != "" && url.Revision != -1 {
 		return nil
