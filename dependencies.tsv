@@ -1,7 +1,7 @@
 code.google.com/p/go.net	hg	937a34c9de13c766c814510f76bca091dee06028	239
 github.com/ajstarks/svgo	git	89e3ac64b5b3e403a5e7c35ea4f98d45db7b4518	2014-10-04T21:11:59Z
 github.com/juju/blobstore	git	3aa294463f563d40f3722a00a4c2de72dbbe3f76	2014-11-14T04:26:36Z
-github.com/juju/errors	git	c3aaee403f140e8ab35eca129eb0a514bed780eb	2015-01-08T02:04:25Z
+github.com/juju/errors	git	036046bfdccf6f576e2e5dec7f7878597bcaebe7	2015-02-11T20:59:49Z
 github.com/juju/gojsonpointer	git	0154bf5a168b672d8c97d8dd83a54cb60cd088e8	2014-07-18T03:59:30Z
 github.com/juju/gojsonreference	git	f0d24ac5ee330baa21721cdff56d45e4ee42628e	2015-02-04T19:46:33Z
 github.com/juju/gojsonschema	git	995b906ce18b2726e9d284efbfa79bd7070ec8c8	2015-02-19T20:49:45Z
@@ -10,7 +10,7 @@ github.com/juju/jujusvg	git	223e0e5a15113b2bd7dcc1bc286372e78491a1a5	2015-03-05T
 github.com/juju/loggo	git	dc8e19f7c70a62a59c69c40f85b8df09ff20742c	2014-11-17T04:05:26Z
 github.com/juju/names	git	ce4ecb2967822062fc606e733919c677c584ab7e	2015-02-20T07:57:36Z
 github.com/juju/schema	git	27a52be50766490a6fd3531865095fda6c0eeb6d	2014-07-23T04:23:18Z
-github.com/juju/testing	git	006244fdb8dc686679d221bc720562a0155ebb5f	2015-01-20T14:33:09Z
+github.com/juju/testing	git	59acbfa640360b9df5d5f9806e0be976f2e44951	2015-03-04T15:30:15Z
 github.com/juju/txn	git	e02f26c56cfb81c7c1236df499deebb0369bd97c	2014-09-25T11:49:22Z
 github.com/juju/utils	git	a90aa2e02b9e7fe354ab816e05b1e0a77f27242d	2015-02-23T16:02:32Z
 github.com/juju/xml	git	91535ba18a6afd756e38a40c91fea0ed8e5dbaa6	2014-12-04T14:59:31Z
