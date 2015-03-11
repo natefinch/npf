@@ -3,6 +3,9 @@ api-addr: localhost:8080
 auth-username: admin
 auth-password: example-passwd
 #elasticsearch-addr: localhost:9200
+# For locally running services.
 identity-public-key: CIdWcEUN+0OZnKW9KwruRQnQDY/qqzVdD30CijwiWCk=
 identity-location: localhost:8081
-
+# For production identity manager.
+#identity-public-key: hmHaPgCC1UfuhYHUSX5+aihSAZesqpVdjRv0mgfIwjo=
+#identity-location: api.jujucharms.com/identity/v1
