@@ -21,7 +21,7 @@ import (
 	"gopkg.in/juju/charm.v4"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
 
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 const apiVersion = "v4"

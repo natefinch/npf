@@ -23,7 +23,7 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 type RouterSuite struct {

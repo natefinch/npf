@@ -9,8 +9,8 @@ import (
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 
-	"github.com/juju/charmstore/internal/router"
-	"github.com/juju/charmstore/internal/storetesting"
+	"gopkg.in/juju/charmstore.v4/internal/router"
+	"gopkg.in/juju/charmstore.v4/internal/storetesting"
 )
 
 var serverParams = ServerParams{

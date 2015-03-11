@@ -19,10 +19,10 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 
-	"github.com/juju/charmstore/internal/charmstore"
-	"github.com/juju/charmstore/internal/storetesting"
-	"github.com/juju/charmstore/internal/v4"
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/internal/charmstore"
+	"gopkg.in/juju/charmstore.v4/internal/storetesting"
+	"gopkg.in/juju/charmstore.v4/internal/v4"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 var serveDiagramErrorsTests = []struct {

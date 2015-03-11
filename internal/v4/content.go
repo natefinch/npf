@@ -16,9 +16,9 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v4"
 
-	"github.com/juju/charmstore/internal/mongodoc"
-	"github.com/juju/charmstore/internal/router"
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/internal/router"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 // GET id/diagram.svg

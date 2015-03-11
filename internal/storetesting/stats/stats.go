@@ -9,7 +9,7 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v4"
 
-	"github.com/juju/charmstore/internal/charmstore"
+	"gopkg.in/juju/charmstore.v4/internal/charmstore"
 )
 
 // CheckCounterSum checks that statistics are properly collected.

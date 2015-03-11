@@ -25,10 +25,10 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/internal/charmstore"
-	"github.com/juju/charmstore/internal/storetesting"
-	"github.com/juju/charmstore/internal/v4"
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/internal/charmstore"
+	"gopkg.in/juju/charmstore.v4/internal/storetesting"
+	"gopkg.in/juju/charmstore.v4/internal/v4"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 func AssertEndpointAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParams) {

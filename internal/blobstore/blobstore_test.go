@@ -14,8 +14,8 @@ import (
 	jujutesting "github.com/juju/testing"
 	gc "gopkg.in/check.v1"
 
-	"github.com/juju/charmstore/internal/blobstore"
-	"github.com/juju/charmstore/internal/storetesting"
+	"gopkg.in/juju/charmstore.v4/internal/blobstore"
+	"gopkg.in/juju/charmstore.v4/internal/storetesting"
 )
 
 func TestPackage(t *testing.T) {

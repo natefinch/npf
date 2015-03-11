@@ -8,8 +8,8 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/internal/mongodoc"
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 // migrations holds all the migration functions that are executed in the order

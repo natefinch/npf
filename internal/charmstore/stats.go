@@ -16,7 +16,7 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 // Note that changing the StatsGranularity constant

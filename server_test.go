@@ -12,9 +12,9 @@ import (
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 
-	"github.com/juju/charmstore"
-	"github.com/juju/charmstore/internal/storetesting"
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4"
+	"gopkg.in/juju/charmstore.v4/internal/storetesting"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 // These tests are copied (almost) verbatim from internal/charmstore/server_test.go

@@ -20,9 +20,9 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
-	"github.com/juju/charmstore/internal/blobstore"
-	"github.com/juju/charmstore/internal/mongodoc"
-	"github.com/juju/charmstore/params"
+	"gopkg.in/juju/charmstore.v4/internal/blobstore"
+	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/params"
 )
 
 var logger = loggo.GetLogger("charmstore.internal.charmstore")
