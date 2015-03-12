@@ -18,6 +18,7 @@ import (
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v5-unstable"
+	"gopkg.in/juju/charm.v5-unstable/charmrepo"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -121,7 +122,7 @@ func (s *APISuite) TestCharmInfoNotFound(c *gc.C) {
 		Handler:      s.srv,
 		URL:          "/charm-info?charms=cs:precise/something-23",
 		ExpectStatus: http.StatusOK,
-		ExpectBody: map[string]charm.InfoResponse{
+		ExpectBody: map[string]charmrepo.InfoResponse{
 			"cs:precise/something-23": {
 				Errors: []string{"entry not found"},
 			},
@@ -210,7 +211,7 @@ func (s *APISuite) TestServerCharmInfo(c *gc.C) {
 			"$set", bson.D{{"extrainfo", test.extrainfo}},
 		}})
 		c.Assert(err, gc.IsNil)
-		expectInfo := charm.InfoResponse{
+		expectInfo := charmrepo.InfoResponse{
 			CanonicalURL: test.canonical,
 			Sha256:       test.sha,
 			Revision:     test.revision,
@@ -223,7 +224,7 @@ func (s *APISuite) TestServerCharmInfo(c *gc.C) {
 			Handler:      s.srv,
 			URL:          "/charm-info?charms=" + test.url,
 			ExpectStatus: http.StatusOK,
-			ExpectBody: map[string]charm.InfoResponse{
+			ExpectBody: map[string]charmrepo.InfoResponse{
 				test.url: expectInfo,
 			},
 		})
@@ -289,11 +290,11 @@ func (s *APISuite) TestCharmPackageGet(c *gc.C) {
 	srv := httptest.NewServer(s.srv)
 	defer srv.Close()
 
-	s.PatchValue(&charm.CacheDir, c.MkDir())
-	s.PatchValue(&charm.Store.BaseURL, srv.URL)
+	s.PatchValue(&charmrepo.CacheDir, c.MkDir())
+	s.PatchValue(&charmrepo.Store.BaseURL, srv.URL)
 
 	url, _ := wordpressURL.URL("")
-	ch, err := charm.Store.Get(url)
+	ch, err := charmrepo.Store.Get(url)
 	c.Assert(err, gc.IsNil)
 	chArchive := ch.(*charm.CharmArchive)
 
@@ -311,12 +312,12 @@ func (s *APISuite) TestCharmPackageCharmInfo(c *gc.C) {
 
 	srv := httptest.NewServer(s.srv)
 	defer srv.Close()
-	s.PatchValue(&charm.Store.BaseURL, srv.URL)
+	s.PatchValue(&charmrepo.Store.BaseURL, srv.URL)
 
-	resp, err := charm.Store.Info(wordpressURL, mysqlURL, notFoundURL)
+	resp, err := charmrepo.Store.Info(wordpressURL, mysqlURL, notFoundURL)
 	c.Assert(err, gc.IsNil)
 	c.Assert(resp, gc.HasLen, 3)
-	c.Assert(resp, jc.DeepEquals, []*charm.InfoResponse{{
+	c.Assert(resp, jc.DeepEquals, []*charmrepo.InfoResponse{{
 		CanonicalURL: wordpressURL.String(),
 		Sha256:       wordpressSHA256,
 	}, {
@@ -341,7 +342,7 @@ func (s *APISuite) TestSHA256Laziness(c *gc.C) {
 			Handler:      s.srv,
 			URL:          "/charm-info?charms=" + url,
 			ExpectStatus: http.StatusOK,
-			ExpectBody: map[string]charm.InfoResponse{
+			ExpectBody: map[string]charmrepo.InfoResponse{
 				url: {
 					CanonicalURL: url,
 					Sha256:       sum256,
@@ -426,7 +427,7 @@ func (s *APISuite) TestServeCharmEventErrors(c *gc.C) {
 			Handler:      s.srv,
 			URL:          "/charm-event?charms=" + test.url,
 			ExpectStatus: http.StatusOK,
-			ExpectBody: map[string]charm.EventResponse{
+			ExpectBody: map[string]charmrepo.EventResponse{
 				test.responseUrl: {
 					Errors: []string{test.err},
 				},
@@ -460,11 +461,11 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 	tests := []struct {
 		about  string
 		query  string
-		expect map[string]*charm.EventResponse
+		expect map[string]*charmrepo.EventResponse
 	}{{
 		about: "valid digest",
 		query: "?charms=cs:trusty/mysql",
-		expect: map[string]*charm.EventResponse{
+		expect: map[string]*charmrepo.EventResponse{
 			"cs:trusty/mysql": {
 				Kind:     "published",
 				Revision: mysql.Revision,
@@ -475,7 +476,7 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 	}, {
 		about: "invalid digest",
 		query: "?charms=cs:utopic/riak",
-		expect: map[string]*charm.EventResponse{
+		expect: map[string]*charmrepo.EventResponse{
 			"cs:utopic/riak": {
 				Kind:     "published",
 				Revision: riak.Revision,
@@ -486,7 +487,7 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 	}, {
 		about: "partial charm URL",
 		query: "?charms=cs:mysql",
-		expect: map[string]*charm.EventResponse{
+		expect: map[string]*charmrepo.EventResponse{
 			"cs:mysql": {
 				Kind:     "published",
 				Revision: mysql.Revision,
@@ -497,7 +498,7 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 	}, {
 		about: "digest in request",
 		query: "?charms=cs:trusty/mysql@my-digest",
-		expect: map[string]*charm.EventResponse{
+		expect: map[string]*charmrepo.EventResponse{
 			"cs:trusty/mysql": {
 				Kind:     "published",
 				Revision: mysql.Revision,
@@ -508,7 +509,7 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 	}, {
 		about: "multiple charms",
 		query: "?charms=cs:mysql&charms=utopic/riak",
-		expect: map[string]*charm.EventResponse{
+		expect: map[string]*charmrepo.EventResponse{
 			"cs:mysql": {
 				Kind:     "published",
 				Revision: mysql.Revision,
@@ -546,7 +547,7 @@ func (s *APISuite) TestServeCharmEventDigestNotFound(c *gc.C) {
 		Handler:      s.srv,
 		URL:          "/charm-event?charms=cs:trusty/wordpress",
 		ExpectStatus: http.StatusOK,
-		ExpectBody: map[string]charm.EventResponse{
+		ExpectBody: map[string]charmrepo.EventResponse{
 			"cs:trusty/wordpress": {
 				Errors: []string{"entry not found"},
 			},
@@ -559,7 +560,7 @@ func (s *APISuite) TestServeCharmEventDigestNotFound(c *gc.C) {
 		Handler:      s.srv,
 		URL:          "/charm-event?charms=cs:trusty/wordpress",
 		ExpectStatus: http.StatusOK,
-		ExpectBody: map[string]charm.EventResponse{
+		ExpectBody: map[string]charmrepo.EventResponse{
 			"cs:trusty/wordpress": {
 				Errors: []string{"digest not found: this can be due to an error while ingesting the entity"},
 			},
@@ -585,7 +586,7 @@ func (s *APISuite) TestServeCharmEventLastRevision(c *gc.C) {
 		Handler:      s.srv,
 		URL:          "/charm-event?charms=wordpress",
 		ExpectStatus: http.StatusOK,
-		ExpectBody: map[string]*charm.EventResponse{
+		ExpectBody: map[string]*charmrepo.EventResponse{
 			"wordpress": {
 				Kind:     "published",
 				Revision: 2,

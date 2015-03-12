@@ -74,6 +74,7 @@ import (
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v5-unstable"
+	"gopkg.in/juju/charm.v5-unstable/charmrepo"
 
 	"gopkg.in/juju/charmstore.v4/internal/charmstore"
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
@@ -145,9 +146,9 @@ func charmStatsKey(url *charm.Reference, kind string) []string {
 var errNotFound = fmt.Errorf("entry not found")
 
 func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{}, error) {
-	response := make(map[string]*charm.InfoResponse)
+	response := make(map[string]*charmrepo.InfoResponse)
 	for _, url := range req.Form["charms"] {
-		c := &charm.InfoResponse{}
+		c := &charmrepo.InfoResponse{}
 		response[url] = c
 		curl, err := charm.ParseReference(url)
 		if err != nil {
@@ -199,9 +200,9 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 // "charms" query. In this implementation, the only supported event is
 // "published", required by the "juju publish" command.
 func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}, error) {
-	response := make(map[string]*charm.EventResponse)
+	response := make(map[string]*charmrepo.EventResponse)
 	for _, url := range req.Form["charms"] {
-		c := &charm.EventResponse{}
+		c := &charmrepo.EventResponse{}
 
 		// Ignore the digest part of the request.
 		if i := strings.Index(url, "@"); i != -1 {
