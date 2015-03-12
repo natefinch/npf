@@ -190,6 +190,18 @@ type PermRequest struct {
 	Write []string
 }
 
+// PromulgatedResponse holds the result of an id/meta/promulgated GET request.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapromulgated
+type PromulgatedResponse struct {
+	Promulgated bool
+}
+
+// PromulgateRequest holds the request of an id/promulgate PUT request.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idpromulgate
+type PromulgateRequest struct {
+	Promulgated bool
+}
+
 const (
 	// BzrDigestKey is the extra-info key used to store the Bazaar digest
 	BzrDigestKey = "bzr-digest"

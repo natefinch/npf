@@ -144,9 +144,10 @@ type Router struct {
 // The Cause of the resolveURL error will be left unchanged,
 // as for the handlers.
 //
-// The authorize function will be called to authorize the request.
-// The Cause of the authorize error will be left unchanged,
-// as for the handlers.
+// The authorize function will be called to authorize the request
+// to any BulkIncludeHandlers. All other handlers are expected
+// to handle their own authorization. The Cause of the authorize
+// error will be left unchanged, as for the handlers.
 //
 // The exists function may be called to test whether an entity
 // exists when an API endpoint needs to know that
@@ -241,9 +242,6 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	}
 	if handler != nil {
 		req.URL.Path = path
-		if err := r.authorize(url, req); err != nil {
-			return errgo.Mask(err, errgo.Any)
-		}
 		err := handler(url, fullySpecified, w, req)
 		// Note: preserve error cause from handlers.
 		return errgo.Mask(err, errgo.Any)

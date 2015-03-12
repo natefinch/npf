@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"reflect"
@@ -39,6 +40,15 @@ import (
 	"gopkg.in/juju/charmstore.v4/internal/v4"
 	"gopkg.in/juju/charmstore.v4/params"
 )
+
+var testPublicKey = bakery.PublicKey{
+	bakery.Key{
+		0xf6, 0xfb, 0xcf, 0x67, 0x8c, 0x5a, 0xb6, 0x52,
+		0xa9, 0x23, 0x4d, 0x7e, 0x01, 0xf5, 0x0a, 0x25,
+		0xc4, 0x63, 0x69, 0x54, 0x42, 0x62, 0xaf, 0x62,
+		0xbe, 0x40, 0x6a, 0x0b, 0xe2, 0x9a, 0xb0, 0x5f,
+	},
+}
 
 var serverParams = charmstore.ServerParams{
 	AuthUsername: "test-user",
@@ -422,6 +432,21 @@ var metaEndpoints = []metaEndpoint{{
 			Name:     "category",
 			Revision: 2,
 		})
+	},
+}, {
+	name: "promulgated",
+	get: func(store *charmstore.Store, url *charm.Reference) (interface{}, error) {
+		e, err := store.FindBaseEntity(url)
+		if err != nil {
+			return nil, err
+		}
+		return params.PromulgatedResponse{
+			Promulgated: bool(e.Promulgated),
+		}, nil
+	},
+	checkURL: "cs:~bob/utopic/wordpress-2",
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.Equals, params.PromulgatedResponse{Promulgated: false})
 	},
 }}
 
@@ -2047,4 +2072,340 @@ func (s *APISuite) TestMacaroon(c *gc.C) {
 			Message: `unauthorized: access denied for user "who"`,
 		},
 	})
+}
+
+var promulgateTests = []struct {
+	about              string
+	entities           []*mongodoc.Entity
+	baseEntities       []*mongodoc.BaseEntity
+	id                 string
+	method             string
+	caveats            []checkers.Caveat
+	body               io.Reader
+	username           string
+	password           string
+	expectStatus       int
+	expectBody         interface{}
+	expectEntities     []*mongodoc.Entity
+	expectBaseEntities []*mongodoc.BaseEntity
+}{{
+	about: "unpromulgate base entity",
+	entities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+	},
+	id:           "~charmers/wordpress",
+	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: false}),
+	username:     serverParams.AuthUsername,
+	password:     serverParams.AuthPassword,
+	expectStatus: http.StatusOK,
+	expectEntities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
+	},
+}, {
+	about: "promulgate base entity",
+	entities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").Build(),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
+	},
+	id:           "~charmers/wordpress",
+	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
+	username:     serverParams.AuthUsername,
+	password:     serverParams.AuthPassword,
+	expectStatus: http.StatusOK,
+	expectEntities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+	},
+}, {
+	about: "unpromulgate base entity not found",
+	entities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+	},
+	id:           "~charmers/mysql",
+	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: false}),
+	username:     serverParams.AuthUsername,
+	password:     serverParams.AuthPassword,
+	expectStatus: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: `entity not found`,
+	},
+	expectEntities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+	},
+}, {
+	about: "promulgate base entity not found",
+	entities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").Build(),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
+	},
+	id:           "~charmers/mysql",
+	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
+	username:     serverParams.AuthUsername,
+	password:     serverParams.AuthPassword,
+	expectStatus: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: `entity not found`,
+	},
+	expectEntities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").Build(),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
+	},
+}, {
+	about: "bad method",
+	entities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+	},
+	id:           "~charmers/wordpress",
+	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: false}),
+	username:     serverParams.AuthUsername,
+	password:     serverParams.AuthPassword,
+	method:       "POST",
+	expectStatus: http.StatusMethodNotAllowed,
+	expectBody: params.Error{
+		Code:    params.ErrMethodNotAllowed,
+		Message: "POST not allowed",
+	},
+	expectEntities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+	},
+}, {
+	about: "bad JSON",
+	entities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+	},
+	id:           "~charmers/wordpress",
+	body:         bytes.NewReader([]byte("tru")),
+	username:     serverParams.AuthUsername,
+	password:     serverParams.AuthPassword,
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: "bad request: invalid character ' ' in literal true (expecting 'e')",
+	},
+	expectEntities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+	},
+}, {
+	about: "unpromulgate base entity with macaroon",
+	entities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+	},
+	id:   "~charmers/wordpress",
+	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: false}),
+	caveats: []checkers.Caveat{
+		checkers.DeclaredCaveat(v4.UsernameAttr, "promulgators"),
+		checkers.DeclaredCaveat(v4.GroupsAttr, ""),
+	},
+	expectStatus: http.StatusOK,
+	expectEntities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
+	},
+}, {
+	about: "promulgate base entity with macaroon",
+	entities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").Build(),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
+	},
+	id:   "~charmers/wordpress",
+	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
+	caveats: []checkers.Caveat{
+		checkers.DeclaredCaveat(v4.UsernameAttr, "promulgators"),
+		checkers.DeclaredCaveat(v4.GroupsAttr, ""),
+	},
+	expectStatus: http.StatusOK,
+	expectEntities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+	},
+}, {
+	about: "promulgate base entity with group macaroon",
+	entities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").Build(),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
+	},
+	id:   "~charmers/wordpress",
+	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
+	caveats: []checkers.Caveat{
+		checkers.DeclaredCaveat(v4.UsernameAttr, "bob"),
+		checkers.DeclaredCaveat(v4.GroupsAttr, "promulgators yellow"),
+	},
+	expectStatus: http.StatusOK,
+	expectEntities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+	},
+}, {
+	about: "no authorisation",
+	entities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+	},
+	id:           "~charmers/wordpress",
+	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: false}),
+	expectStatus: http.StatusProxyAuthRequired,
+	expectBody:   dischargeRequiredBody("http://0.1.2.3/"),
+	expectEntities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+	},
+}, {
+	about: "promulgate base entity with unauthorized user macaroon",
+	entities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").Build(),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
+	},
+	id:   "~charmers/wordpress",
+	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
+	caveats: []checkers.Caveat{
+		checkers.DeclaredCaveat(v4.UsernameAttr, "bob"),
+		checkers.DeclaredCaveat(v4.GroupsAttr, "yellow"),
+	},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Message: `unauthorized: access denied for user "bob"`,
+		Code:    params.ErrUnauthorized,
+	},
+	expectEntities: []*mongodoc.Entity{
+		storetesting.NewEntity("~charmers/trusty/wordpress-0").Build(),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
+	},
+}}
+
+func (s *APISuite) TestPromulgate(c *gc.C) {
+	srv, store := newServer(c, s.Session, nil, charmstore.ServerParams{
+		AuthUsername:     serverParams.AuthUsername,
+		AuthPassword:     serverParams.AuthPassword,
+		IdentityLocation: "http://0.1.2.3/",
+		PublicKeyLocator: bakery.PublicKeyLocatorMap{
+			"http://0.1.2.3/": &testPublicKey,
+		},
+	})
+	for i, test := range promulgateTests {
+		c.Logf("%d. %s\n", i, test.about)
+		_, err := store.DB.Entities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+		_, err = store.DB.BaseEntities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+		for _, e := range test.entities {
+			err := store.DB.Entities().Insert(e)
+			c.Assert(err, gc.IsNil)
+		}
+		for _, e := range test.baseEntities {
+			err := store.DB.BaseEntities().Insert(e)
+			c.Assert(err, gc.IsNil)
+		}
+		if test.method == "" {
+			test.method = "PUT"
+		}
+		header := http.Header{"Content-Type": {"application/json"}}
+		if len(test.caveats) > 0 {
+			m, err := store.Bakery.NewMacaroon("", nil, test.caveats)
+			c.Assert(err, gc.IsNil)
+			cookie, err := httpbakery.NewCookie(macaroon.Slice{m})
+			c.Assert(err, gc.IsNil)
+			header.Set("Cookie", (&http.Cookie{
+				Name:  cookie.Name,
+				Value: cookie.Value,
+			}).String())
+		}
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler:      srv,
+			URL:          storeURL(test.id + "/promulgate"),
+			Method:       test.method,
+			Body:         test.body,
+			Header:       header,
+			Username:     test.username,
+			Password:     test.password,
+			ExpectStatus: test.expectStatus,
+			ExpectBody:   test.expectBody,
+		})
+		n, err := store.DB.Entities().Count()
+		c.Assert(err, gc.IsNil)
+		c.Assert(n, gc.Equals, len(test.expectEntities))
+		for _, e := range test.expectEntities {
+			storetesting.AssertEntity(c, store.DB.Entities(), e)
+		}
+		n, err = store.DB.BaseEntities().Count()
+		c.Assert(err, gc.IsNil)
+		c.Assert(n, gc.Equals, len(test.expectBaseEntities))
+		for _, e := range test.expectBaseEntities {
+			storetesting.AssertBaseEntity(c, store.DB.BaseEntities(), e)
+		}
+	}
+}
+
+// dischargeRequiredBody returns a httptesting.BodyAsserter that checks
+// that the response body contains a discharge required error holding a macaroon
+// with a third-party caveat addressed to expectedEntityLocation.
+func dischargeRequiredBody(expectIdentityLocation string) httptesting.BodyAsserter {
+	return func(c *gc.C, body json.RawMessage) {
+		var response httpbakery.Error
+		err := json.Unmarshal(body, &response)
+		c.Assert(err, gc.IsNil)
+		c.Assert(response.Code, gc.Equals, httpbakery.ErrDischargeRequired)
+		c.Assert(response.Message, gc.Equals, "verification failed: no macaroon cookies in request")
+		c.Assert(response.Info.Macaroon, gc.NotNil)
+		for _, cav := range response.Info.Macaroon.Caveats() {
+			if cav.Location == expectIdentityLocation {
+				return
+			}
+		}
+		c.Fatalf("no third party caveat found in response macaroon; caveats %#v", response.Info.Macaroon.Caveats())
+	}
 }

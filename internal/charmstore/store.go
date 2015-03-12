@@ -505,10 +505,11 @@ func (s *Store) UpdateBaseEntity(url *charm.Reference, update interface{}) error
 	return nil
 }
 
-// Promulgate sets the base entity of url to be promulgated, and unsets
-// promulgated on any other base entity for charms with the same name. It
-// also calculates the next promulgated URL for the charms owned by the
-// new owner and sets those charms.
+// SetPromulgated sets whether the base entity of url is promulgated, If
+// promulgated is true it also unsets promulgated on any other base
+// entity for entities with the same name. It also calculates the next
+// promulgated URL for the entities owned by the new owner and sets those
+// entities appropriately.
 //
 // Note: This code is known to have some unfortunate (but not dangerous)
 // race conditions. It is possible that if one or more promulgations
@@ -522,12 +523,22 @@ func (s *Store) UpdateBaseEntity(url *charm.Reference, update interface{}) error
 // This will be remedied when a new charm is uploaded by the promulgated
 // user. As promulgation is a rare operation, it is considered that the
 // chances this will happen are slim.
-func (s *Store) Promulgate(url *charm.Reference) error {
-	entity, err := s.FindEntity(url)
+func (s *Store) SetPromulgated(url *charm.Reference, promulgate bool) error {
+	entity, err := s.FindBestEntity(url)
 	if err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
 	bURL := baseURL(entity.URL)
+	if !promulgate {
+		err := s.DB.BaseEntities().UpdateId(
+			bURL,
+			bson.D{{"$set", bson.D{{"promulgated", mongodoc.IntBool(false)}}}},
+		)
+		if err != nil {
+			return errgo.Mask(err)
+		}
+		return nil
+	}
 
 	// Clear the promulgated flag on any Base entities with the same name,
 	// but aren't the one that is being set.
