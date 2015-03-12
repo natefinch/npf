@@ -6,7 +6,7 @@ github.com/juju/gojsonpointer	git	0154bf5a168b672d8c97d8dd83a54cb60cd088e8	2014-
 github.com/juju/gojsonreference	git	f0d24ac5ee330baa21721cdff56d45e4ee42628e	2015-02-04T19:46:33Z
 github.com/juju/gojsonschema	git	995b906ce18b2726e9d284efbfa79bd7070ec8c8	2015-02-19T20:49:45Z
 github.com/juju/httpprof	git	14bf14c307672fd2456bdbf35d19cf0ccd3cf565	2014-12-17T16:00:36Z
-github.com/juju/jujusvg	git	223e0e5a15113b2bd7dcc1bc286372e78491a1a5	2015-03-05T18:18:32Z
+github.com/juju/jujusvg	git	99cc8e38406a692203d6a4673199e1683f6e8d82	2015-03-12T10:01:01Z
 github.com/juju/loggo	git	dc8e19f7c70a62a59c69c40f85b8df09ff20742c	2014-11-17T04:05:26Z
 github.com/juju/names	git	ce4ecb2967822062fc606e733919c677c584ab7e	2015-02-20T07:57:36Z
 github.com/juju/schema	git	27a52be50766490a6fd3531865095fda6c0eeb6d	2014-07-23T04:23:18Z
@@ -17,7 +17,7 @@ github.com/juju/xml	git	91535ba18a6afd756e38a40c91fea0ed8e5dbaa6	2014-12-04T14:5
 golang.org/x/crypto	git	4ed45ec682102c643324fae5dff8dab085b6c300	2015-01-12T22:01:33Z
 gopkg.in/check.v1	git	64131543e7896d5bcc6bd5a76287eb75ea96c673	2014-10-24T13:38:53Z
 gopkg.in/errgo.v1	git	81357a83344ddd9f7772884874e5622c2a3da21c	2014-10-13T17:33:38Z
-gopkg.in/juju/charm.v4	git	c9dacb8f7647108fd1837666145fc3ea05eb9e26	2015-03-03T11:49:15Z
+gopkg.in/juju/charm.v5-unstable	git	4b7b3e4404d287d75797b5b21e22d7297f792646	2015-03-11T09:47:15Z
 gopkg.in/macaroon-bakery.v0	git	4c0e0fae424e8d1bc71c0b0caca3cd2c32381dca	2015-01-27T17:01:29Z
 gopkg.in/macaroon.v1	git	ab3940c6c16510a850e1c2dd628b919f0f3f1464	2015-01-21T11:42:31Z
 gopkg.in/mgo.v2	git	c6a7dce14133ccac2dcac3793f1d6e2ef048503a	2015-01-24T11:37:54Z
