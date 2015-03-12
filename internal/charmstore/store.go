@@ -505,6 +505,117 @@ func (s *Store) UpdateBaseEntity(url *charm.Reference, update interface{}) error
 	return nil
 }
 
+// Promulgate sets the base entity of url to be promulgated, and unsets
+// promulgated on any other base entity for charms with the same name. It
+// also calculates the next promulgated URL for the charms owned by the
+// new owner and sets those charms.
+//
+// Note: This code is known to have some unfortunate (but not dangerous)
+// race conditions. It is possible that if one or more promulgations
+// happens concurrently for the same entity name then it could result in
+// more than one base entity being promulgated. If this happens then
+// uploads to either user will get promulgated names, these names will
+// never clash. This situation is easily remedied by setting the
+// promulgated user for this charm again, even to one of the ones that is
+// already promulgated. It can also result in the latest promulgated
+// revision of the charm not being one created by the promulgated user.
+// This will be remedied when a new charm is uploaded by the promulgated
+// user. As promulgation is a rare operation, it is considered that the
+// chances this will happen are slim.
+func (s *Store) Promulgate(url *charm.Reference) error {
+	entity, err := s.FindEntity(url)
+	if err != nil {
+		return errgo.Mask(err, errgo.Any)
+	}
+	bURL := baseURL(entity.URL)
+
+	// Clear the promulgated flag on any Base entities with the same name,
+	// but aren't the one that is being set.
+	_, err = s.DB.BaseEntities().UpdateAll(
+		bson.D{
+			{"_id", bson.D{{"$ne", bURL}}},
+			{"name", bURL.Name},
+			{"promulgated", 1},
+		},
+		bson.D{{"$set", bson.D{{"promulgated", mongodoc.IntBool(false)}}}},
+	)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+
+	// Set the promulgated flag on the base entity.
+	err = s.DB.BaseEntities().UpdateId(bURL, bson.D{{"$set", bson.D{{"promulgated", mongodoc.IntBool(true)}}}})
+	if err != nil {
+		return errgo.Mask(err)
+	}
+
+	type result struct {
+		Series   string `bson:"_id"`
+		Revision int
+	}
+
+	// Find the latest revision in each series of entities with the promulgated base URL.
+	var latestOwned []result
+	err = s.DB.Entities().Pipe([]bson.D{
+		{{"$match", bson.D{{"baseurl", bURL}}}},
+		{{"$group", bson.D{{"_id", "$series"}, {"revision", bson.D{{"$max", "$revision"}}}}}},
+	}).All(&latestOwned)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+
+	// Find the latest revision in each series of the promulgated entitities
+	// with the same name as the base entity. Note that this works because:
+	//     1) promulgated URLs always have the same charm name as their
+	//     non-promulgated counterparts.
+	//     2) bundles cannot have names that overlap with charms.
+	// Because of 1), we are sure that selecting on the entity name will
+	// select all entities with a matching promulgated URL name. Because of
+	// 2) we are sure that we are only updating all charms or the single
+	// bundle entity.
+	latestPromulgated := make(map[string]int)
+	iter := s.DB.Entities().Pipe([]bson.D{
+		{{"$match", bson.D{{"name", bURL.Name}}}},
+		{{"$group", bson.D{{"_id", "$series"}, {"revision", bson.D{{"$max", "$promulgated-revision"}}}}}},
+	}).Iter()
+	var res result
+	for iter.Next(&res) {
+		latestPromulgated[res.Series] = res.Revision
+	}
+	if err := iter.Close(); err != nil {
+		return errgo.Mask(err)
+	}
+
+	// Update the newest entity in each series with a base URL that matches the newly promulgated
+	// base entity to have a promulgated URL, if it does not already have one.
+	for _, r := range latestOwned {
+		id := *bURL
+		id.Series = r.Series
+		id.Revision = r.Revision
+		pID := id
+		pID.User = ""
+		pID.Revision = latestPromulgated[r.Series] + 1
+		err := s.DB.Entities().Update(
+			bson.D{
+				{"_id", &id},
+				{"promulgated-revision", -1},
+			},
+			bson.D{
+				{"$set", bson.D{
+					{"promulgated-url", &pID},
+					{"promulgated-revision", pID.Revision},
+				}},
+			},
+		)
+		if err != nil && err != mgo.ErrNotFound {
+			// If we get NotFound it is most likely because the latest owned revision is
+			// already promulgated, so carry on.
+			return errgo.Mask(err)
+		}
+	}
+	return nil
+}
+
 // ExpandURL returns all the URLs that the given URL may refer to.
 func (s *Store) ExpandURL(url *charm.Reference) ([]*charm.Reference, error) {
 	entities, err := s.FindEntities(url, "_id", "promulgated-url")

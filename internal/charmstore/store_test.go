@@ -1814,3 +1814,281 @@ func (s *StoreSuite) TestUpdateBaseEntity(c *gc.C) {
 		}
 	}
 }
+
+var promulgateTests = []struct {
+	about              string
+	entities           []*mongodoc.Entity
+	baseEntities       []*mongodoc.BaseEntity
+	url                string
+	expectErr          string
+	expectEntities     []*mongodoc.Entity
+	expectBaseEntities []*mongodoc.BaseEntity
+}{{
+	about: "single charm not already promulgated",
+	entities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", ""),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
+	},
+	url: "~charmers/trusty/wordpress-0",
+	expectEntities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", true),
+	},
+}, {
+	about: "multiple series not already promulgated",
+	entities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", ""),
+		entity("~charmers/precise/wordpress-0", ""),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
+	},
+	url: "~charmers/trusty/wordpress-0",
+	expectEntities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+		entity("~charmers/precise/wordpress-0", "precise/wordpress-0"),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", true),
+	},
+}, {
+	about: "charm promulgated as different user",
+	entities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+		entity("~test-charmers/trusty/wordpress-0", ""),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", true),
+		baseEntity("~test-charmers/wordpress", false),
+	},
+	url: "~test-charmers/trusty/wordpress-0",
+	expectEntities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-1"),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
+		baseEntity("~test-charmers/wordpress", true),
+	},
+}, {
+	about: "single charm already promulgated",
+	entities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", true),
+	},
+	url: "~charmers/trusty/wordpress-0",
+	expectEntities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", true),
+	},
+}, {
+	about: "unrelated charms are unaffected",
+	entities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", ""),
+		entity("~test-charmers/trusty/mysql-0", "trusty/mysql-0"),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
+		baseEntity("~test-charmers/mysql", true),
+	},
+	url: "~charmers/trusty/wordpress-0",
+	expectEntities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+		entity("~test-charmers/trusty/mysql-0", "trusty/mysql-0"),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", true),
+		baseEntity("~test-charmers/mysql", true),
+	},
+}, {
+	about: "only one owner promulgated",
+	entities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", ""),
+		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+		entity("~test2-charmers/trusty/wordpress-0", "trusty/wordpress-1"),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
+		baseEntity("~test-charmers/wordpress", false),
+		baseEntity("~test2-charmers/wordpress", true),
+	},
+	url: "~charmers/trusty/wordpress-0",
+	expectEntities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-2"),
+		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+		entity("~test2-charmers/trusty/wordpress-0", "trusty/wordpress-1"),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", true),
+		baseEntity("~test-charmers/wordpress", false),
+		baseEntity("~test2-charmers/wordpress", false),
+	},
+}, {
+	about: "charm not found",
+	entities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", ""),
+		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+		entity("~test2-charmers/trusty/wordpress-0", "trusty/wordpress-1"),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
+		baseEntity("~test-charmers/wordpress", false),
+		baseEntity("~test2-charmers/wordpress", true),
+	},
+	url:       "~charmers/trusty/wordpress-2",
+	expectErr: "entity not found",
+}, {
+	about: "promulgate owner of previously promulgated charm",
+	entities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", ""),
+		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+		entity("~test-charmers/trusty/wordpress-1", ""),
+		entity("~test2-charmers/trusty/wordpress-0", "trusty/wordpress-1"),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
+		baseEntity("~test-charmers/wordpress", false),
+		baseEntity("~test2-charmers/wordpress", true),
+	},
+	url: "trusty/wordpress-0",
+	expectEntities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", ""),
+		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+		entity("~test-charmers/trusty/wordpress-1", "trusty/wordpress-2"),
+		entity("~test2-charmers/trusty/wordpress-0", "trusty/wordpress-1"),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
+		baseEntity("~test-charmers/wordpress", true),
+		baseEntity("~test2-charmers/wordpress", false),
+	},
+}, {
+	about: "recovers from two promulgated base entities",
+	entities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", ""),
+		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+		entity("~test-charmers/trusty/wordpress-1", "trusty/wordpress-2"),
+		entity("~test2-charmers/trusty/wordpress-0", "trusty/wordpress-1"),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
+		baseEntity("~test-charmers/wordpress", true),
+		baseEntity("~test2-charmers/wordpress", true),
+	},
+	url: "~test2-charmers/trusty/wordpress-0",
+	expectEntities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", ""),
+		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+		entity("~test-charmers/trusty/wordpress-1", "trusty/wordpress-2"),
+		entity("~test2-charmers/trusty/wordpress-0", "trusty/wordpress-1"),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
+		baseEntity("~test-charmers/wordpress", false),
+		baseEntity("~test2-charmers/wordpress", true),
+	},
+}, {
+	about: "multiple series already promulgated",
+	entities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-2"),
+		entity("~charmers/precise/wordpress-0", "precise/wordpress-1"),
+		entity("~test-charmers/trusty/wordpress-0", ""),
+		entity("~test-charmers/utopic/wordpress-0", ""),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", true),
+		baseEntity("~test-charmers/wordpress", false),
+	},
+	url: "~test-charmers/trusty/wordpress-0",
+	expectEntities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-2"),
+		entity("~charmers/precise/wordpress-0", "precise/wordpress-1"),
+		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-3"),
+		entity("~test-charmers/utopic/wordpress-0", "utopic/wordpress-0"),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
+		baseEntity("~test-charmers/wordpress", true),
+	},
+}}
+
+func (s *StoreSuite) TestPromulgate(c *gc.C) {
+	store, err := NewStore(s.Session.DB("juju_test"), nil, nil)
+	c.Assert(err, gc.IsNil)
+	for i, test := range promulgateTests {
+		c.Logf("test %d. %s", i, test.about)
+		url := charm.MustParseReference(test.url)
+		_, err := store.DB.Entities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+		_, err = store.DB.BaseEntities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+		for _, entity := range test.entities {
+			err := store.DB.Entities().Insert(entity)
+			c.Assert(err, gc.IsNil)
+		}
+		for _, baseEntity := range test.baseEntities {
+			err := store.DB.BaseEntities().Insert(baseEntity)
+			c.Assert(err, gc.IsNil)
+		}
+		err = store.Promulgate(url)
+		if test.expectErr != "" {
+			c.Assert(err, gc.ErrorMatches, test.expectErr)
+			continue
+		}
+		c.Assert(err, gc.IsNil)
+		n, err := store.DB.Entities().Count()
+		c.Assert(err, gc.IsNil)
+		c.Assert(n, gc.Equals, len(test.expectEntities))
+		n, err = store.DB.BaseEntities().Count()
+		c.Assert(err, gc.IsNil)
+		c.Assert(n, gc.Equals, len(test.expectBaseEntities))
+		for _, expectEntity := range test.expectEntities {
+			entity, err := store.FindEntity(expectEntity.URL)
+			c.Assert(err, gc.IsNil)
+			c.Assert(entity, jc.DeepEquals, expectEntity)
+		}
+		for _, expectBaseEntity := range test.expectBaseEntities {
+			baseEntity, err := store.FindBaseEntity(expectBaseEntity.URL)
+			c.Assert(err, gc.IsNil)
+			c.Assert(baseEntity, jc.DeepEquals, expectBaseEntity)
+		}
+	}
+}
+
+func entity(url, purl string) *mongodoc.Entity {
+	id := charm.MustParseReference(url)
+	var pid *charm.Reference
+	pRev := -1
+	if purl != "" {
+		pid = charm.MustParseReference(purl)
+		pRev = pid.Revision
+	}
+	return &mongodoc.Entity{
+		URL:                 id,
+		User:                id.User,
+		Name:                id.Name,
+		Series:              id.Series,
+		Revision:            id.Revision,
+		BaseURL:             baseURL(id),
+		PromulgatedURL:      pid,
+		PromulgatedRevision: pRev,
+	}
+}
+
+func baseEntity(url string, promulgated bool) *mongodoc.BaseEntity {
+	id := charm.MustParseReference(url)
+	return &mongodoc.BaseEntity{
+		URL:         id,
+		Name:        id.Name,
+		User:        id.User,
+		Promulgated: mongodoc.IntBool(promulgated),
+	}
+}
