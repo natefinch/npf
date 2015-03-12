@@ -14,7 +14,7 @@ import (
 
 	"github.com/juju/loggo"
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v4"
+	"gopkg.in/juju/charm.v5-unstable"
 	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/macaroon-bakery.v0/bakery/mgostorage"
 	"gopkg.in/mgo.v2"

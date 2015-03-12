@@ -18,7 +18,7 @@ import (
 	"unicode"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v4"
+	"gopkg.in/juju/charm.v5-unstable"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
 
 	"gopkg.in/juju/charmstore.v4/params"
