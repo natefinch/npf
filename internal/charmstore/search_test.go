@@ -11,7 +11,7 @@ import (
 
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
-	"gopkg.in/juju/charm.v4"
+	"gopkg.in/juju/charm.v5-unstable"
 
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v4/internal/storetesting"
