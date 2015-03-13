@@ -231,16 +231,21 @@ func (s *APISuite) TestServeIconEntityNotFound(c *gc.C) {
 	})
 }
 
+func charmWithExtraFile(c *gc.C, name, file, content string) *charm.CharmDir {
+	ch := storetesting.Charms.ClonedDir(c.MkDir(), name)
+	err := ioutil.WriteFile(filepath.Join(ch.Path, file), []byte(content), 0666)
+	c.Assert(err, gc.IsNil)
+	return ch
+}
+
 func (s *APISuite) TestServeIcon(c *gc.C) {
 	patchArchiveCacheAges(s)
-	url := charm.MustParseReference("cs:~charmers/precise/wordpress-0")
-	wordpress := storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
 	content := `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">an icon, really</svg>`
 	expected := `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1" viewBox="0 0 1 1">an icon, really</svg>`
-	err := ioutil.WriteFile(filepath.Join(wordpress.Path, "icon.svg"), []byte(content), 0666)
-	c.Assert(err, gc.IsNil)
+	wordpress := charmWithExtraFile(c, "wordpress", "icon.svg", content)
 
-	err = s.store.AddCharmWithArchive(url, nil, wordpress)
+	url := charm.MustParseReference("cs:~charmers/precise/wordpress-0")
+	err := s.store.AddCharmWithArchive(url, nil, wordpress)
 	c.Assert(err, gc.IsNil)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -310,6 +315,34 @@ func (s *APISuite) TestServeDefaultIcon(c *gc.C) {
 	c.Assert(rec.Body.String(), gc.Equals, v4.DefaultIcon)
 	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
 	assertCacheControl(c, rec.Header(), true)
+}
+
+func (s *APISuite) TestServeDefaultIconForBadXML(c *gc.C) {
+	patchArchiveCacheAges(s)
+
+	for i, content := range []string{
+		"\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44",
+		// Technically this XML is not bad - we just can't parse it because
+		// it's got internally defined character entities. Nonetheless, we treat
+		// it as "bad" for the time being.
+		cloudfoundrySVG,
+	} {
+		wordpress := charmWithExtraFile(c, "wordpress", "icon.svg", content)
+
+		url := charm.MustParseReference("cs:~charmers/precise/wordpress-0")
+		url.Revision = i
+		err := s.store.AddCharmWithArchive(url, nil, wordpress)
+		c.Assert(err, gc.IsNil)
+
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+			Handler: s.srv,
+			URL:     storeURL(url.Path() + "/icon.svg"),
+		})
+		c.Assert(rec.Code, gc.Equals, http.StatusOK)
+		c.Assert(rec.Body.String(), gc.Equals, v4.DefaultIcon)
+		c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
+		assertCacheControl(c, rec.Header(), true)
+	}
 }
 
 func (s *APISuite) TestProcessIconWorksOnDefaultIcon(c *gc.C) {
@@ -434,3 +467,22 @@ func isStartElementWithAttr(name, attr, val string) func(xml.Token) bool {
 		return false
 	}
 }
+
+const cloudfoundrySVG = `<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 18.1.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [
+	<!ENTITY ns_extend "http://ns.adobe.com/Extensibility/1.0/">
+	<!ENTITY ns_ai "http://ns.adobe.com/AdobeIllustrator/10.0/">
+	<!ENTITY ns_graphs "http://ns.adobe.com/Graphs/1.0/">
+	<!ENTITY ns_vars "http://ns.adobe.com/Variables/1.0/">
+	<!ENTITY ns_imrep "http://ns.adobe.com/ImageReplacement/1.0/">
+	<!ENTITY ns_sfw "http://ns.adobe.com/SaveForWeb/1.0/">
+	<!ENTITY ns_custom "http://ns.adobe.com/GenericCustomNamespace/1.0/">
+	<!ENTITY ns_adobe_xpath "http://ns.adobe.com/XPath/1.0/">
+]>
+<svg version="1.1" id="Layer_1" xmlns:x="&ns_extend;" xmlns:i="&ns_ai;" xmlns:graph="&ns_graphs;"
+	 xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 96 96"
+	 enable-background="new 0 0 96 96" xml:space="preserve">
+content omitted
+</svg>
+`
