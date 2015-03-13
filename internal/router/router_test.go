@@ -716,8 +716,9 @@ var routerGetTests = []struct {
 			"foo/": testMetaHandler(0),
 		},
 	},
-	expectStatus: http.StatusInternalServerError,
+	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
 		Message: "no ids specified in meta request",
 	},
 }, {
@@ -788,6 +789,24 @@ var routerGetTests = []struct {
 	expectStatus: http.StatusOK,
 	expectBody: map[string]string{
 		"bundle/something-24": "something",
+	},
+}, {
+	about:        "meta request with invalid entity reference",
+	urlStr:       "/robots.txt/meta/any",
+	handlers:     Handlers{},
+	expectStatus: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: `not found: charm URL has invalid charm name: "robots.txt"`,
+	},
+}, {
+	about:        "bulk meta handler, invalid id",
+	urlStr:       "/meta/foo?id=robots.txt",
+	handlers:     Handlers{},
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: `bad request: charm URL has invalid charm name: "robots.txt"`,
 	},
 }}
 

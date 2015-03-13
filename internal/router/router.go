@@ -221,7 +221,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	path := strings.TrimSuffix(req.URL.Path, "/")
 	url, path, err := splitId(path)
 	if err != nil {
-		return errgo.Mask(err)
+		return errgo.WithCausef(err, params.ErrNotFound, "")
 	}
 	key, path := handlerKey(path)
 	if key == "" {
@@ -476,14 +476,14 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 	// TODO get the metadata concurrently for each id.
 	ids := req.Form["id"]
 	if len(ids) == 0 {
-		return nil, errgo.Newf("no ids specified in meta request")
+		return nil, errgo.WithCausef(nil, params.ErrBadRequest, "no ids specified in meta request")
 	}
 	delete(req.Form, "id")
 	result := make(map[string]interface{})
 	for _, id := range ids {
 		url, err := charm.ParseReference(id)
 		if err != nil {
-			return nil, errgo.Mask(err)
+			return nil, errgo.WithCausef(err, params.ErrBadRequest, "")
 		}
 		if err := r.resolveURL(url); err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
