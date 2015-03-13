@@ -12,6 +12,7 @@ var (
 	ParamsLogLevels                = paramsLogLevels
 	ParamsLogTypes                 = paramsLogTypes
 	ProcessIcon                    = processIcon
+	ErrProbablyNotXML              = errProbablyNotXML
 	UsernameAttr                   = usernameAttr
 	GroupsAttr                     = groupsAttr
 	GetPromulgatedURL              = (*Handler).getPromulgatedURL

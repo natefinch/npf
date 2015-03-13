@@ -5,6 +5,7 @@ package v4
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -106,6 +107,7 @@ func (h *Handler) serveIcon(id *charm.Reference, fullySpecified bool, w http.Res
 	}
 	r, err := h.store.OpenCachedBlobFile(entity, mongodoc.FileIcon, isIconFile)
 	if err != nil {
+		logger.Errorf("cannot open icon.svg file for %v: %v", id, err)
 		if errgo.Cause(err) != params.ErrNotFound {
 			return errgo.Mask(err)
 		}
@@ -118,10 +120,17 @@ func (h *Handler) serveIcon(id *charm.Reference, fullySpecified bool, w http.Res
 	w.Header().Set("Content-Type", "image/svg+xml")
 	setArchiveCacheControl(w.Header(), fullySpecified)
 	if err := processIcon(w, r); err != nil {
+		if errgo.Cause(err) == errProbablyNotXML {
+			logger.Errorf("cannot process icon.svg from %s: %v", id, err)
+			io.Copy(w, strings.NewReader(defaultIcon))
+			return nil
+		}
 		return errgo.Mask(err)
 	}
 	return nil
 }
+
+var errProbablyNotXML = errgo.New("probably not XML")
 
 const svgNamespace = "http://www.w3.org/2000/svg"
 
@@ -129,18 +138,50 @@ const svgNamespace = "http://www.w3.org/2000/svg"
 // it to w, making any changes that need to be made.
 // Currently it adds a viewBox attribute to the <svg>
 // element if necessary.
+// If there is an error processing the XML before
+// the first token has been written, it returns an error
+// with errProbablyNotXML as the cause.
 func processIcon(w io.Writer, r io.Reader) error {
+	// Arrange to save all the content that we find up
+	// until the first <svg> element. Then we'll stitch it
+	// back together again for the actual processing.
+	var saved bytes.Buffer
+	dec := xml.NewDecoder(io.TeeReader(r, &saved))
+	dec.DefaultSpace = svgNamespace
+	found, changed := false, false
+	for !found {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return errgo.WithCausef(err, errProbablyNotXML, "")
+		}
+		_, found, changed = ensureViewbox(tok)
+	}
+	if !found {
+		return errgo.WithCausef(nil, errProbablyNotXML, "no <svg> element found")
+	}
+	// Stitch the input back together again so we can
+	// write the output without buffering it in memory.
+	r = io.MultiReader(&saved, r)
+	if !found || !changed {
+		_, err := io.Copy(w, r)
+		return err
+	}
+	return processNaive(w, r)
+}
+
+// processNaive is like processIcon but processes all of the
+// XML elements. It does not return errProbablyNotXML
+// on error because it may have written arbitrary XML
+// to w, at which point writing an alternative response would
+// be unwise.
+func processNaive(w io.Writer, r io.Reader) error {
 	dec := xml.NewDecoder(r)
 	dec.DefaultSpace = svgNamespace
 	enc := xml.NewEncoder(w)
-	ensured := false
-	// This could be slightly more efficient, because
-	// for large icons which already have a viewbox,
-	// we are doing more marshaling/unmarshaling work
-	// than we need to. But icons will be cached, and the
-	// extra overhead isn't that big, so we go with the
-	// simple approach, trusting that the icon still works
-	// after being processed through the xml package.
+	found := false
 	for {
 		tok, err := dec.Token()
 		if err == io.EOF {
@@ -149,8 +190,8 @@ func processIcon(w io.Writer, r io.Reader) error {
 		if err != nil {
 			return fmt.Errorf("failed to read token: %v", err)
 		}
-		if !ensured {
-			tok, ensured = ensureViewbox(tok)
+		if !found {
+			tok, found, _ = ensureViewbox(tok)
 		}
 		if err := enc.EncodeToken(tok); err != nil {
 			return fmt.Errorf("cannot encode token %#v: %v", tok, err)
@@ -162,10 +203,10 @@ func processIcon(w io.Writer, r io.Reader) error {
 	return nil
 }
 
-func ensureViewbox(tok0 xml.Token) (_ xml.Token, found bool) {
+func ensureViewbox(tok0 xml.Token) (_ xml.Token, found, changed bool) {
 	tok, ok := tok0.(xml.StartElement)
 	if !ok || tok.Name.Space != svgNamespace || tok.Name.Local != "svg" {
-		return tok0, false
+		return tok0, false, false
 	}
 	var width, height string
 	for _, attr := range tok.Attr {
@@ -178,13 +219,13 @@ func ensureViewbox(tok0 xml.Token) (_ xml.Token, found bool) {
 		case "height":
 			height = attr.Value
 		case "viewBox":
-			return tok, true
+			return tok, true, false
 		}
 	}
 	if width == "" || height == "" {
 		// Width and/or height have not been specified,
 		// so leave viewbox unspecified too.
-		return tok, true
+		return tok, true, false
 	}
 	tok.Attr = append(tok.Attr, xml.Attr{
 		Name: xml.Name{
@@ -192,5 +233,5 @@ func ensureViewbox(tok0 xml.Token) (_ xml.Token, found bool) {
 		},
 		Value: fmt.Sprintf("0 0 %s %s", width, height),
 	})
-	return tok, true
+	return tok, true, true
 }
