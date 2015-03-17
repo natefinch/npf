@@ -10,7 +10,7 @@ github.com/juju/jujusvg	git	99cc8e38406a692203d6a4673199e1683f6e8d82	2015-03-12T
 github.com/juju/loggo	git	dc8e19f7c70a62a59c69c40f85b8df09ff20742c	2014-11-17T04:05:26Z
 github.com/juju/names	git	ce4ecb2967822062fc606e733919c677c584ab7e	2015-02-20T07:57:36Z
 github.com/juju/schema	git	27a52be50766490a6fd3531865095fda6c0eeb6d	2014-07-23T04:23:18Z
-github.com/juju/testing	git	59acbfa640360b9df5d5f9806e0be976f2e44951	2015-03-04T15:30:15Z
+github.com/juju/testing	git	b93c38205ac2e3817b7b1d9d60e89e69c99a6362	2015-03-16T13:08:43Z
 github.com/juju/txn	git	e02f26c56cfb81c7c1236df499deebb0369bd97c	2014-09-25T11:49:22Z
 github.com/juju/utils	git	a90aa2e02b9e7fe354ab816e05b1e0a77f27242d	2015-02-23T16:02:32Z
 github.com/juju/xml	git	91535ba18a6afd756e38a40c91fea0ed8e5dbaa6	2014-12-04T14:59:31Z

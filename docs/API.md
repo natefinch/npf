@@ -220,6 +220,43 @@ icon does not exist, this endpoint returns the default icon.
 
 This returns the README.
 
+### Promulgation
+
+#### PUT *id*/promulgate
+
+A PUT to ~*user*/*anyseries*/*name*-*anyrevision* sets whether entities
+with the id *x*/*name* are considered to be aliases
+for ~*user*/*x*/*name* for all series *x*. The series
+and revision in the id are ignored (except that an
+entity must exist that matches the id).
+
+If Promulgate is true, it means that any new charms published
+to ~*user*/*x*/*name* will also be given the alias
+*x*/*name*. The latest revision for all ids ~*user*/*anyseries*/*name* 
+will also be aliased likewise.
+
+If Promulgate is false, any new charms published
+to ~*user*/*anyseries*/*name* will not be given a promulgated
+alias, but no change is made to any existing aliases.
+
+The promulgated status can be retrieved from the
+promulgated meta endpoint.
+
+```go
+type PromulgateRequest struct {
+	Promulgate bool
+}
+```
+
+Example: `PUT ~charmers/precise/wordpress-23/promulgate`
+
+Request body:
+```json
+{
+    "Promulgate" : true,
+}
+```
+
 ### Stats
 
 #### GET stats/counter/...
@@ -347,6 +384,7 @@ Example: `GET /meta`
     "id-series",
     "id-user",
     "manifest",
+    "promulgated",
     "revision-info",
     "stats",
     "tags"
@@ -499,6 +537,7 @@ Example: `GET foo/meta`
     "id-series",
     "id-user",
     "manifest",
+    "promulgated",
     "revision-info",
     "stats",
     "tags"
@@ -1214,6 +1253,25 @@ Example: `GET trusty/wordpress-42/meta/archive-upload-time`
 ```json
 {
     "UploadTime": "2014-07-04T13:53:57.403506102Z"
+}
+```
+
+#### GET *id*/meta/promulgated
+
+The `promulgated` path reports whether the entity with the given ID is promulgated.
+Promulgated charms do not require the user portion of the ID to be specified.
+
+```go
+type PromulgatedResponse struct {
+	Promulgated bool
+}
+```
+
+Example: `GET trusty/wordpress-42/meta/promulgated`
+
+```json
+{
+	"Promulgated": true
 }
 ```
 

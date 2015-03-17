@@ -18,7 +18,10 @@ import (
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
-const basicRealm = "CharmStore4"
+const (
+	basicRealm        = "CharmStore4"
+	promulgatorsGroup = "promulgators"
+)
 
 // authorize checks that the current user is authorized based on the provided
 // ACL. If an authenticated user is required, authorize tries to retrieve the
@@ -47,7 +50,7 @@ func (h *Handler) authorize(req *http.Request, acl []string) error {
 
 	auth, verr := h.checkRequest(req)
 	if verr == nil {
-		logger.Infof("authenticated with auth: %q", auth)
+		logger.Infof("authenticated with auth: %#v", auth)
 		if err := h.checkACLMembership(auth, acl); err != nil {
 			return errgo.WithCausef(err, params.ErrUnauthorized, "")
 		}
@@ -95,7 +98,7 @@ func (h *Handler) checkRequest(req *http.Request) (authorization, error) {
 }
 
 func (h *Handler) authorizeEntity(id *charm.Reference, req *http.Request) error {
-	// TThe first time a new charm is published, its corresponding base entity
+	// The first time a new charm is published, its corresponding base entity
 	// is not yet present in the database. For this reason, the check below
 	// must still allow specific users to proceed with the request, even in the
 	// case ACL cannot be retrieved from the base entity.

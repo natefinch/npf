@@ -285,20 +285,6 @@ var routerGetTests = []struct {
 		Code:    params.ErrNotFound,
 	},
 }, {
-	about:  "unauthorized id handler",
-	urlStr: "/precise/wordpress-42/foo",
-	handlers: Handlers{
-		Id: map[string]IdHandler{
-			"foo": testIdHandler,
-		},
-	},
-	authorize:    neverAuthorize,
-	expectStatus: http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: "bad wolf",
-	},
-}, {
 	about: "meta list",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{

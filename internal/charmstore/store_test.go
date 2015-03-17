@@ -1820,6 +1820,7 @@ var promulgateTests = []struct {
 	entities           []*mongodoc.Entity
 	baseEntities       []*mongodoc.BaseEntity
 	url                string
+	promulgate         bool
 	expectErr          string
 	expectEntities     []*mongodoc.Entity
 	expectBaseEntities []*mongodoc.BaseEntity
@@ -1831,7 +1832,8 @@ var promulgateTests = []struct {
 	baseEntities: []*mongodoc.BaseEntity{
 		baseEntity("~charmers/wordpress", false),
 	},
-	url: "~charmers/trusty/wordpress-0",
+	url:        "~charmers/trusty/wordpress-0",
+	promulgate: true,
 	expectEntities: []*mongodoc.Entity{
 		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
 	},
@@ -1847,7 +1849,8 @@ var promulgateTests = []struct {
 	baseEntities: []*mongodoc.BaseEntity{
 		baseEntity("~charmers/wordpress", false),
 	},
-	url: "~charmers/trusty/wordpress-0",
+	url:        "~charmers/trusty/wordpress-0",
+	promulgate: true,
 	expectEntities: []*mongodoc.Entity{
 		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
 		entity("~charmers/precise/wordpress-0", "precise/wordpress-0"),
@@ -1865,7 +1868,8 @@ var promulgateTests = []struct {
 		baseEntity("~charmers/wordpress", true),
 		baseEntity("~test-charmers/wordpress", false),
 	},
-	url: "~test-charmers/trusty/wordpress-0",
+	url:        "~test-charmers/trusty/wordpress-0",
+	promulgate: true,
 	expectEntities: []*mongodoc.Entity{
 		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
 		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-1"),
@@ -1882,7 +1886,8 @@ var promulgateTests = []struct {
 	baseEntities: []*mongodoc.BaseEntity{
 		baseEntity("~charmers/wordpress", true),
 	},
-	url: "~charmers/trusty/wordpress-0",
+	url:        "~charmers/trusty/wordpress-0",
+	promulgate: true,
 	expectEntities: []*mongodoc.Entity{
 		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
 	},
@@ -1899,7 +1904,8 @@ var promulgateTests = []struct {
 		baseEntity("~charmers/wordpress", false),
 		baseEntity("~test-charmers/mysql", true),
 	},
-	url: "~charmers/trusty/wordpress-0",
+	url:        "~charmers/trusty/wordpress-0",
+	promulgate: true,
 	expectEntities: []*mongodoc.Entity{
 		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
 		entity("~test-charmers/trusty/mysql-0", "trusty/mysql-0"),
@@ -1920,7 +1926,8 @@ var promulgateTests = []struct {
 		baseEntity("~test-charmers/wordpress", false),
 		baseEntity("~test2-charmers/wordpress", true),
 	},
-	url: "~charmers/trusty/wordpress-0",
+	url:        "~charmers/trusty/wordpress-0",
+	promulgate: true,
 	expectEntities: []*mongodoc.Entity{
 		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-2"),
 		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-0"),
@@ -1943,8 +1950,9 @@ var promulgateTests = []struct {
 		baseEntity("~test-charmers/wordpress", false),
 		baseEntity("~test2-charmers/wordpress", true),
 	},
-	url:       "~charmers/trusty/wordpress-2",
-	expectErr: "entity not found",
+	url:        "~charmers/trusty/wordpress-2",
+	promulgate: true,
+	expectErr:  "entity not found",
 }, {
 	about: "promulgate owner of previously promulgated charm",
 	entities: []*mongodoc.Entity{
@@ -1958,7 +1966,8 @@ var promulgateTests = []struct {
 		baseEntity("~test-charmers/wordpress", false),
 		baseEntity("~test2-charmers/wordpress", true),
 	},
-	url: "trusty/wordpress-0",
+	url:        "trusty/wordpress-0",
+	promulgate: true,
 	expectEntities: []*mongodoc.Entity{
 		entity("~charmers/trusty/wordpress-0", ""),
 		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-0"),
@@ -1983,7 +1992,8 @@ var promulgateTests = []struct {
 		baseEntity("~test-charmers/wordpress", true),
 		baseEntity("~test2-charmers/wordpress", true),
 	},
-	url: "~test2-charmers/trusty/wordpress-0",
+	url:        "~test2-charmers/trusty/wordpress-0",
+	promulgate: true,
 	expectEntities: []*mongodoc.Entity{
 		entity("~charmers/trusty/wordpress-0", ""),
 		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-0"),
@@ -2007,7 +2017,8 @@ var promulgateTests = []struct {
 		baseEntity("~charmers/wordpress", true),
 		baseEntity("~test-charmers/wordpress", false),
 	},
-	url: "~test-charmers/trusty/wordpress-0",
+	url:        "~test-charmers/trusty/wordpress-0",
+	promulgate: true,
 	expectEntities: []*mongodoc.Entity{
 		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-2"),
 		entity("~charmers/precise/wordpress-0", "precise/wordpress-1"),
@@ -2017,6 +2028,38 @@ var promulgateTests = []struct {
 	expectBaseEntities: []*mongodoc.BaseEntity{
 		baseEntity("~charmers/wordpress", false),
 		baseEntity("~test-charmers/wordpress", true),
+	},
+}, {
+	about: "unpromulgate single promulgated charm ",
+	entities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", true),
+	},
+	url:        "~charmers/trusty/wordpress-0",
+	promulgate: false,
+	expectEntities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", "trusty/wordpress-0"),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
+	},
+}, {
+	about: "unpromulgate single unpromulgated charm ",
+	entities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", ""),
+	},
+	baseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
+	},
+	url:        "~charmers/trusty/wordpress-0",
+	promulgate: false,
+	expectEntities: []*mongodoc.Entity{
+		entity("~charmers/trusty/wordpress-0", ""),
+	},
+	expectBaseEntities: []*mongodoc.BaseEntity{
+		baseEntity("~charmers/wordpress", false),
 	},
 }}
 
@@ -2038,7 +2081,7 @@ func (s *StoreSuite) TestPromulgate(c *gc.C) {
 			err := store.DB.BaseEntities().Insert(baseEntity)
 			c.Assert(err, gc.IsNil)
 		}
-		err = store.Promulgate(url)
+		err = store.SetPromulgated(url, test.promulgate)
 		if test.expectErr != "" {
 			c.Assert(err, gc.ErrorMatches, test.expectErr)
 			continue
