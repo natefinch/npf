@@ -22,6 +22,7 @@ import (
 
 	"gopkg.in/juju/charmstore.v4/internal/charmstore"
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/internal/storetesting"
 	. "gopkg.in/juju/charmstore.v4/internal/v4"
 	"gopkg.in/juju/charmstore.v4/params"
@@ -65,7 +66,7 @@ func (s *SearchSuite) SetUpTest(c *gc.C) {
 		}}},
 	)
 	c.Assert(err, gc.IsNil)
-	err = s.store.UpdateSearch(charm.MustParseReference("~charmers/trusty/riak"))
+	err = s.store.UpdateSearch(newResolvedURL("~charmers/trusty/riak-0", 0))
 	c.Assert(err, gc.IsNil)
 	err = s.ES.RefreshIndex(s.TestIndex)
 	c.Assert(err, gc.IsNil)
@@ -572,7 +573,7 @@ func (s *SearchSuite) TestSearchIncludeError(c *gc.C) {
 
 	// Now remove one of the blobs. The search should still
 	// work, but only return a single result.
-	blobName, _, err := s.store.BlobNameAndHash(charm.MustParseReference("~charmers/precise/wordpress-23"))
+	blobName, _, err := s.store.BlobNameAndHash(newResolvedURL("~charmers/precise/wordpress-23", 23))
 	c.Assert(err, gc.IsNil)
 	err = s.store.BlobStore.Remove(blobName)
 	c.Assert(err, gc.IsNil)
@@ -698,14 +699,17 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 		"varnish":   8,
 	}
 	for n, cnt := range charmDownloads {
-		ref := &charm.Reference{
-			Schema:   "cs",
-			User:     "downloads-test",
-			Name:     n,
-			Revision: 1,
-			Series:   "trusty",
+		ref := &router.ResolvedURL{
+			URL: charm.Reference{
+				Schema:   "cs",
+				User:     "downloads-test",
+				Name:     n,
+				Revision: 1,
+				Series:   "trusty",
+			},
+			PromulgatedRevision: -1,
 		}
-		err := s.store.AddCharmWithArchive(ref, nil, getCharm(n))
+		err := s.store.AddCharmWithArchive(&ref.URL, nil, getCharm(n))
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < cnt; i++ {
 			err := s.store.IncrementDownloadCounts(ref)

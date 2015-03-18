@@ -830,7 +830,7 @@ var archiveFileErrorsTests = []struct {
 	about:         "entity not found",
 	path:          "~charmers/trusty/no-such-42/archive/icon.svg",
 	expectStatus:  http.StatusNotFound,
-	expectMessage: "entity not found",
+	expectMessage: `entity "cs:~charmers/trusty/no-such-42" not found`,
 	expectCode:    params.ErrNotFound,
 }, {
 	about:         "directory listing",
@@ -1088,13 +1088,13 @@ func (s *ArchiveSuite) TestDeleteNotFound(c *gc.C) {
 	// Try to delete a non existing charm using the API.
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
-		URL:          storeURL("utopic/no-such-0/archive"),
+		URL:          storeURL("~charmers/utopic/no-such-0/archive"),
 		Method:       "DELETE",
 		Username:     serverParams.AuthUsername,
 		Password:     serverParams.AuthPassword,
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
-			Message: "entity not found",
+			Message: `entity "cs:~charmers/utopic/no-such-0" not found`,
 			Code:    params.ErrNotFound,
 		},
 	})
@@ -1156,10 +1156,16 @@ func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 }
 
 func (s *ArchiveSuite) TestPostAuthErrors(c *gc.C) {
-	checkAuthErrors(c, s.srv, "POST", "utopic/django/archive")
+	checkAuthErrors(c, s.srv, "POST", "~charmers/utopic/django/archive")
 }
 
 func (s *ArchiveSuite) TestDeleteAuthErrors(c *gc.C) {
+	err := s.store.AddCharmWithArchive(
+		charm.MustParseReference("~charmers/utopic/django-42"),
+		charm.MustParseReference("utopic/django-42"),
+		storetesting.Charms.CharmArchive(c.MkDir(), "wordpress"),
+	)
+	c.Assert(err, gc.IsNil)
 	checkAuthErrors(c, s.srv, "DELETE", "utopic/django-42/archive")
 }
 

@@ -6,7 +6,6 @@ package v4_test
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"time"
 
 	jc "github.com/juju/testing/checkers"
@@ -16,21 +15,22 @@ import (
 	"gopkg.in/juju/charm.v5-unstable"
 
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
 var zeroTimeStr = time.Time{}.Format(time.RFC3339)
 
 func (s *APISuite) TestStatus(c *gc.C) {
-	for _, id := range []string{
-		"cs:precise/wordpress-2",
-		"cs:precise/wordpress-3",
-		"cs:~foo/precise/arble-9",
-		"cs:~bar/utopic/arble-10",
-		"cs:bundle/oflaughs-3",
-		"cs:~bar/bundle/oflaughs-4",
+	for _, id := range []*router.ResolvedURL{
+		newResolvedURL("cs:~charmers/precise/wordpress-2", 2),
+		newResolvedURL("cs:~charmers/precise/wordpress-3", 3),
+		newResolvedURL("cs:~foo/precise/arble-9", -1),
+		newResolvedURL("cs:~bar/utopic/arble-10", -1),
+		newResolvedURL("cs:~charmers/bundle/oflaughs-3", 3),
+		newResolvedURL("cs:~bar/bundle/oflaughs-4", -1),
 	} {
-		if strings.Contains(id, "bundle") {
+		if id.URL.Series == "bundle" {
 			s.addBundle(c, "wordpress-simple", id)
 		} else {
 			s.addCharm(c, "wordpress", id)

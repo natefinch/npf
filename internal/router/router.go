@@ -70,7 +70,7 @@ type BulkIncludeHandler interface {
 	// and flags holds all the URL query values.
 	//
 	// TODO(rog) document indexed errors.
-	HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values, req *http.Request) ([]interface{}, error)
+	HandleGet(hs []BulkIncludeHandler, id *ResolvedURL, paths []string, flags url.Values, req *http.Request) ([]interface{}, error)
 
 	// HandlePut invokes a PUT request on all the given handlers on
 	// the given charm or bundle id. If there is an error, the
@@ -82,15 +82,13 @@ type BulkIncludeHandler interface {
 	// for the handler in the corresponding position
 	// in hs after the prefix in Handlers.Meta has been stripped,
 	// and flags holds all the url query values.
-	HandlePut(hs []BulkIncludeHandler, id *charm.Reference, paths []string, values []*json.RawMessage, req *http.Request) []error
+	HandlePut(hs []BulkIncludeHandler, id *ResolvedURL, paths []string, values []*json.RawMessage, req *http.Request) []error
 }
 
 // IdHandler handles a charm store request rooted at the given id.
 // The request path (req.URL.Path) holds the URL path after
 // the id has been stripped off.
-// The fullySpecified parameter holds whether the charm id was
-// fully specified in the original client request.
-type IdHandler func(charmId *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error
+type IdHandler func(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error
 
 // Handlers specifies how HTTP requests will be routed
 // by the router. All errors returned by the handlers will
@@ -130,9 +128,58 @@ type Handlers struct {
 type Router struct {
 	handlers   *Handlers
 	handler    http.Handler
-	resolveURL func(id *charm.Reference) error
-	authorize  func(id *charm.Reference, req *http.Request) error
-	exists     func(id *charm.Reference, req *http.Request) (bool, error)
+	resolveURL func(id *charm.Reference) (*ResolvedURL, error)
+	authorize  func(id *ResolvedURL, req *http.Request) error
+	exists     func(id *ResolvedURL, req *http.Request) (bool, error)
+}
+
+// ResolvedURL represents a URL that has been resolved by resolveURL.
+// URL.User and URL.Series should always be non-empty and
+// URL.Revision should never be -1.
+//
+// If PromulgatedRevision is not -1, it holds the revision of the
+// promulgated version of the charm.
+type ResolvedURL struct {
+	URL                 charm.Reference
+	PromulgatedRevision int
+}
+
+// MustNewResolvedURL returns a new ResolvedURL by parsing
+// the entity URL in urlStr. The promulgatedRev parameter
+// specifies the value of PromulgatedRevision in the returned
+// value.
+//
+// This function panics if urlStr cannot be parsed as a charm.Reference
+// or if it is not fully specified, including user, series and revision.
+func MustNewResolvedURL(urlStr string, promulgatedRev int) *ResolvedURL {
+	url := charm.MustParseReference(urlStr)
+	if url.User == "" || url.Series == "" || url.Revision == -1 {
+		panic(fmt.Errorf("incomplete url %v", urlStr))
+	}
+	return &ResolvedURL{
+		URL:                 *url,
+		PromulgatedRevision: promulgatedRev,
+	}
+}
+
+// PreferredURL returns the promulgated URL for
+// the given id if there is one, otherwise it
+// returns the non-promulgated URL. The returned *charm.Reference
+// may be modified freely.
+func (id *ResolvedURL) PreferredURL() *charm.Reference {
+	u := id.URL
+	if id.PromulgatedRevision == -1 {
+		return &u
+	}
+	u.User = ""
+	u.Revision = id.PromulgatedRevision
+	return &u
+}
+
+// String returns the preferred string representation of u.
+// It prefers to use the promulgated URL when there is one.
+func (u *ResolvedURL) String() string {
+	return u.PreferredURL().String()
 }
 
 // New returns a charm store router that will route requests to
@@ -154,9 +201,9 @@ type Router struct {
 // but has no appropriate handler to call.
 func New(
 	handlers *Handlers,
-	resolveURL func(id *charm.Reference) error,
-	authorize func(id *charm.Reference, req *http.Request) error,
-	exists func(id *charm.Reference, req *http.Request) (bool, error),
+	resolveURL func(id *charm.Reference) (*ResolvedURL, error),
+	authorize func(id *ResolvedURL, req *http.Request) error,
+	exists func(id *ResolvedURL, req *http.Request) (bool, error),
 ) *Router {
 	r := &Router{
 		handlers:   handlers,
@@ -228,29 +275,24 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	if key == "" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "")
 	}
-	fullySpecified := url.Series != "" && url.Revision != -1
 	handler := r.handlers.Id[key]
-	if handler == nil || idHandlerNeedsResolveURL(req) {
-		// If it's not an id handler, it's a meta endpoint, so
-		// we always want a resolved URL. Otherwise we leave the
-		// URL unresolved for cases where the id may validly not
-		// exist (for example when uploading a new charm).
-		if err := r.resolveURL(url); err != nil {
-			// Note: preserve error cause from resolveURL.
-			return errgo.Mask(err, errgo.Any)
-		}
-	}
 	if handler != nil {
 		req.URL.Path = path
-		err := handler(url, fullySpecified, w, req)
+		err := handler(url, w, req)
 		// Note: preserve error cause from handlers.
 		return errgo.Mask(err, errgo.Any)
 	}
 	if key != "meta/" && key != "meta" {
 		return errgo.WithCausef(nil, params.ErrNotFound, params.ErrNotFound.Error())
 	}
+	// Always resolve the entity id for meta requests.
+	rurl, err := r.resolveURL(url)
+	if err != nil {
+		// Note: preserve error cause from resolveURL.
+		return errgo.Mask(err, errgo.Any)
+	}
 	req.URL.Path = path
-	return r.serveMeta(url, w, req)
+	return r.serveMeta(rurl, w, req)
 }
 
 func idHandlerNeedsResolveURL(req *http.Request) bool {
@@ -275,7 +317,7 @@ func handlerKey(path string) (key, rest string) {
 	return key, ""
 }
 
-func (r *Router) serveMeta(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (r *Router) serveMeta(id *ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
 	case "GET", "HEAD":
 		resp, err := r.serveMetaGet(id, req)
@@ -293,7 +335,7 @@ func (r *Router) serveMeta(id *charm.Reference, w http.ResponseWriter, req *http
 	return params.ErrMethodNotAllowed
 }
 
-func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface{}, error) {
+func (r *Router) serveMetaGet(id *ResolvedURL, req *http.Request) (interface{}, error) {
 	// TODO: consider whether we might want the capability to
 	// have different permissions for different meta endpoints.
 	if err := r.authorize(id, req); err != nil {
@@ -320,7 +362,7 @@ func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface
 			if !exists {
 				return nil, errgo.WithCausef(nil, params.ErrNotFound, "")
 			}
-			return params.MetaAnyResponse{Id: id}, nil
+			return params.MetaAnyResponse{Id: id.PreferredURL()}, nil
 		}
 		meta, err := r.GetMetadata(id, includes, req)
 		if err != nil {
@@ -328,7 +370,7 @@ func (r *Router) serveMetaGet(id *charm.Reference, req *http.Request) (interface
 			return nil, errgo.Mask(err, errgo.Any)
 		}
 		return params.MetaAnyResponse{
-			Id:   id,
+			Id:   id.PreferredURL(),
 			Meta: meta,
 		}, nil
 	}
@@ -363,7 +405,7 @@ func unmarshalJSONBody(req *http.Request, val interface{}) error {
 // serveMetaPut serves a PUT request to the metadata for the given id.
 // The metadata to be put is in the request body.
 // PUT /$id/meta/...
-func (r *Router) serveMetaPut(id *charm.Reference, req *http.Request) error {
+func (r *Router) serveMetaPut(id *ResolvedURL, req *http.Request) error {
 	if err := r.authorize(id, req); err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
@@ -378,7 +420,7 @@ func (r *Router) serveMetaPut(id *charm.Reference, req *http.Request) error {
 // The metadata to be put is in body.
 // This method is used both for individual metadata PUTs and
 // also bulk metadata PUTs.
-func (r *Router) serveMetaPutBody(id *charm.Reference, req *http.Request, body *json.RawMessage) error {
+func (r *Router) serveMetaPutBody(id *ResolvedURL, req *http.Request, body *json.RawMessage) error {
 	key, path := handlerKey(req.URL.Path)
 	if key == "" {
 		return params.ErrForbidden
@@ -483,7 +525,8 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 		if err != nil {
 			return nil, errgo.WithCausef(err, params.ErrBadRequest, "")
 		}
-		if err := r.resolveURL(url); err != nil {
+		rurl, err := r.resolveURL(url)
+		if err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				// URLs not found will be omitted from the result.
 				// https://github.com/juju/charmstore/blob/v4/docs/API.md#bulk-requests-and-missing-metadata
@@ -492,7 +535,7 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 			// Note: preserve error cause from resolveURL.
 			return nil, errgo.Mask(err, errgo.Any)
 		}
-		meta, err := r.serveMetaGet(url, req)
+		meta, err := r.serveMetaGet(rurl, req)
 		if cause := errgo.Cause(err); cause == params.ErrNotFound || cause == params.ErrMetadataNotFound {
 			// The relevant data does not exist.
 			// https://github.com/juju/charmstore/blob/v4/docs/API.md#bulk-requests-and-missing-metadata
@@ -539,14 +582,15 @@ func (r *Router) serveBulkMetaPutOne(req *http.Request, id string, val *json.Raw
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	if err := r.resolveURL(url); err != nil {
+	rurl, err := r.resolveURL(url)
+	if err != nil {
 		// Note: preserve error cause from resolveURL.
 		return errgo.Mask(err, errgo.Any)
 	}
-	if err := r.authorize(url, req); err != nil {
+	if err := r.authorize(rurl, req); err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
-	if err := r.serveMetaPutBody(url, req, val); err != nil {
+	if err := r.serveMetaPutBody(rurl, req, val); err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
 	return nil
@@ -560,7 +604,7 @@ const maxMetadataConcurrency = 5
 
 // GetMetadata retrieves metadata for the given charm or bundle id,
 // including information as specified by the includes slice.
-func (r *Router) GetMetadata(id *charm.Reference, includes []string, req *http.Request) (map[string]interface{}, error) {
+func (r *Router) GetMetadata(id *ResolvedURL, includes []string, req *http.Request) (map[string]interface{}, error) {
 	groups := make(map[interface{}][]BulkIncludeHandler)
 	includesByGroup := make(map[interface{}][]string)
 	for _, include := range includes {
@@ -632,7 +676,7 @@ func (r *Router) GetMetadata(id *charm.Reference, includes []string, req *http.R
 // PutMetadata puts metadata for the given id. Each key in data holds
 // the name of a metadata endpoint; its associated value
 // holds the value to be written.
-func (r *Router) PutMetadata(id *charm.Reference, data map[string]*json.RawMessage, req *http.Request) error {
+func (r *Router) PutMetadata(id *ResolvedURL, data map[string]*json.RawMessage, req *http.Request) error {
 	groups := make(map[interface{}][]BulkIncludeHandler)
 	valuesByGroup := make(map[interface{}][]*json.RawMessage)
 	pathsByGroup := make(map[interface{}][]string)

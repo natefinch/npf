@@ -9,12 +9,12 @@ import (
 	"strings"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v5-unstable"
 	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
 	"gopkg.in/macaroon.v1"
 
+	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
@@ -97,24 +97,11 @@ func (h *Handler) checkRequest(req *http.Request) (authorization, error) {
 	}, nil
 }
 
-func (h *Handler) authorizeEntity(id *charm.Reference, req *http.Request) error {
-	// The first time a new charm is published, its corresponding base entity
-	// is not yet present in the database. For this reason, the check below
-	// must still allow specific users to proceed with the request, even in the
-	// case ACL cannot be retrieved from the base entity.
-	baseEntity, err := h.store.FindBaseEntity(id, "acls")
+func (h *Handler) authorizeEntity(id *router.ResolvedURL, req *http.Request) error {
+	baseEntity, err := h.store.FindBaseEntity(&id.URL, "acls")
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
-			// Cannot get the ACL from a non-existing entity.
-			// Assume read permissions for everyone and write permissions
-			// for the entity user. If no user is associated with the entity,
-			// than no write permission are for the time being we only grant
-			// access to the HTTP basic auth superuser.
-			var writePerm []string
-			if id.User != "" {
-				writePerm = []string{id.User}
-			}
-			return h.authorizeWithPerms(req, []string{params.Everyone}, writePerm)
+			return errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
 		}
 		return errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}

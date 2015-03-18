@@ -9,12 +9,11 @@ import (
 	"net/url"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v5-unstable"
 )
 
 // A FieldQueryFunc is used to retrieve a metadata document for the given URL,
 // selecting only those fields specified in keys of the given selector.
-type FieldQueryFunc func(id *charm.Reference, selector map[string]int, req *http.Request) (interface{}, error)
+type FieldQueryFunc func(id *ResolvedURL, selector map[string]int, req *http.Request) (interface{}, error)
 
 // FieldUpdater records field changes made by a FieldUpdateFunc.
 type FieldUpdater struct {
@@ -36,22 +35,22 @@ func (u *FieldUpdater) UpdateSearch() {
 // A FieldUpdateFunc is used to update a metadata document for the
 // given id. For each field in fields, it should set that field to
 // its corresponding value in the metadata document.
-type FieldUpdateFunc func(id *charm.Reference, fields map[string]interface{}) error
+type FieldUpdateFunc func(id *ResolvedURL, fields map[string]interface{}) error
 
 // A FieldUpdateSearchFunc is used to update a search document for the
 // given id. For each field in fields, it should set that field to
 // its corresponding value in the search document.
-type FieldUpdateSearchFunc func(id *charm.Reference, fields map[string]interface{}) error
+type FieldUpdateSearchFunc func(id *ResolvedURL, fields map[string]interface{}) error
 
 // A FieldGetFunc returns some data from the given document. The
 // document will have been returned from an earlier call to the
 // associated QueryFunc.
-type FieldGetFunc func(doc interface{}, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error)
+type FieldGetFunc func(doc interface{}, id *ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error)
 
 // FieldPutFunc sets using the given FieldUpdater corresponding to fields to be set
 // in the metadata document for the given id. The path holds the metadata path
 // after the initial prefix has been removed.
-type FieldPutFunc func(id *charm.Reference, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error
+type FieldPutFunc func(id *ResolvedURL, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error
 
 // FieldIncludeHandlerParams specifies the parameters for NewFieldIncludeHandler.
 type FieldIncludeHandlerParams struct {
@@ -102,7 +101,7 @@ func (h *fieldIncludeHandler) Key() interface{} {
 	return h.p.Key
 }
 
-func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Reference, paths []string, values []*json.RawMessage, req *http.Request) []error {
+func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *ResolvedURL, paths []string, values []*json.RawMessage, req *http.Request) []error {
 	updater := &FieldUpdater{
 		fields: make(map[string]interface{}),
 	}
@@ -147,7 +146,7 @@ func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Refer
 	return errs
 }
 
-func (h *fieldIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values, req *http.Request) ([]interface{}, error) {
+func (h *fieldIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *ResolvedURL, paths []string, flags url.Values, req *http.Request) ([]interface{}, error) {
 	funcs := make([]FieldGetFunc, len(hs))
 	selector := make(map[string]int)
 	// Extract the handler functions and union all the fields.

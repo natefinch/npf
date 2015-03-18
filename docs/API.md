@@ -1365,7 +1365,7 @@ type Id struct {
 }
 ```
 
-Example: `GET trusty/~bob/wordpress/meta/id`
+Example: `GET ~bob/trusty/wordpress/meta/id`
 
 ```json
 {

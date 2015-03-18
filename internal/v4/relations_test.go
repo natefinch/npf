@@ -4,9 +4,12 @@
 package v4_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 
+	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v5-unstable"
@@ -500,6 +503,9 @@ var metaBundlesContainingBundles = map[string]charm.Bundle{
 	"bundle/mediawiki-simple-48": relationTestingBundle([]string{
 		"precise/mediawiki-0",
 	}),
+	"~bob/bundle/bobthebundle-2": relationTestingBundle([]string{
+		"precise/mediawiki-0",
+	}),
 }
 
 var metaBundlesContainingTests = []struct {
@@ -616,6 +622,8 @@ var metaBundlesContainingTests = []struct {
 		Id: charm.MustParseReference("bundle/mediawiki-simple-47"),
 	}, {
 		Id: charm.MustParseReference("bundle/mediawiki-simple-46"),
+	}, {
+		Id: charm.MustParseReference("~bob/bundle/bobthebundle-2"),
 	}},
 }, {
 	about:        "all-results set to false",
@@ -623,6 +631,8 @@ var metaBundlesContainingTests = []struct {
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: charm.MustParseReference("bundle/mediawiki-simple-48"),
+	}, {
+		Id: charm.MustParseReference("~bob/bundle/bobthebundle-2"),
 	}},
 }, {
 	about:        "invalid all-results",
@@ -672,6 +682,8 @@ var metaBundlesContainingTests = []struct {
 		Id: charm.MustParseReference("bundle/mediawiki-simple-48"),
 	}, {
 		Id: charm.MustParseReference("bundle/useless-0"),
+	}, {
+		Id: charm.MustParseReference("~bob/bundle/bobthebundle-2"),
 	}},
 }, {
 	about:        "any series and revision with includes",
@@ -771,12 +783,32 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 			Handler:      s.srv,
 			URL:          storeURL,
 			ExpectStatus: test.expectStatus,
-			ExpectBody:   test.expectBody,
+			ExpectBody:   sameMetaAnyResponses(test.expectBody),
 		})
 
 		// Clean up the charm entity in the store.
 		err = s.store.DB.Entities().Remove(bson.D{{"_id", url}})
 		c.Assert(err, gc.IsNil)
+	}
+}
+
+// sameMetaAnyResponses returns a BodyAsserter that checks whether the meta/any response
+// matches the expected one, even if the results appear in a different order.
+func sameMetaAnyResponses(expect interface{}) httptesting.BodyAsserter {
+	return func(c *gc.C, m json.RawMessage) {
+		expectMeta, ok := expect.([]*params.MetaAnyResponse)
+		if !ok {
+			c.Assert(string(m), jc.JSONEquals, expect)
+			return
+		}
+		var got []*params.MetaAnyResponse
+		err := json.Unmarshal(m, &got)
+		c.Assert(err, gc.IsNil)
+		sort.Sort(metaAnyResponseById(got))
+		sort.Sort(metaAnyResponseById(expectMeta))
+		data, err := json.Marshal(got)
+		c.Assert(err, gc.IsNil)
+		c.Assert(string(data), jc.JSONEquals, expect)
 	}
 }
 
@@ -814,4 +846,12 @@ func (b *testingBundle) ReadMe() string {
 	// For the purposes of this implementation, the charm readme is not
 	// relevant.
 	return ""
+}
+
+type metaAnyResponseById []*params.MetaAnyResponse
+
+func (s metaAnyResponseById) Len() int      { return len(s) }
+func (s metaAnyResponseById) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s metaAnyResponseById) Less(i, j int) bool {
+	return s[i].Id.String() < s[j].Id.String()
 }

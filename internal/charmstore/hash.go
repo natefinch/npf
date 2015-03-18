@@ -13,15 +13,16 @@ import (
 	"io"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v5-unstable"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
+
+	"gopkg.in/juju/charmstore.v4/internal/router"
 )
 
 // UpdateEntitySHA256 calculates and return the SHA256 hash of the archive of
 // the given entity id. The entity document is then asynchronously updated with
 // the resulting hash. This method will be removed soon.
-func (s *Store) UpdateEntitySHA256(id *charm.Reference) (string, error) {
+func (s *Store) UpdateEntitySHA256(id *router.ResolvedURL) (string, error) {
 	r, _, _, err := s.OpenBlob(id)
 	defer r.Close()
 	hash := sha256.New()
@@ -42,8 +43,8 @@ func (s *Store) UpdateEntitySHA256(id *charm.Reference) (string, error) {
 // UpdateEntitySHA256 updates the BlobHash256 entry for the entity.
 // It is defined as a variable so that it can be mocked in tests.
 // This function will be removed soon.
-var UpdateEntitySHA256 = func(store *Store, id *charm.Reference, sum256 string) {
-	err := store.DB.Entities().UpdateId(id, bson.D{{"$set", bson.D{{"blobhash256", sum256}}}})
+var UpdateEntitySHA256 = func(store *Store, id *router.ResolvedURL, sum256 string) {
+	err := store.DB.Entities().UpdateId(&id.URL, bson.D{{"$set", bson.D{{"blobhash256", sum256}}}})
 	if err != nil && err != mgo.ErrNotFound {
 		logger.Errorf("cannot update sha256 of archive: %v", err)
 	}

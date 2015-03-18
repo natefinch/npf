@@ -59,7 +59,7 @@ func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, er
 				return nil
 			}
 			response.Results[i] = params.SearchResult{
-				Id:   ref,
+				Id:   ref.PreferredURL(),
 				Meta: meta,
 			}
 			return nil

@@ -18,6 +18,7 @@ import (
 
 	"gopkg.in/juju/charmstore.v4/internal/elasticsearch"
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
@@ -59,7 +60,7 @@ type SearchDoc struct {
 
 // UpdateSearchAsync will update the search record for the entity
 // reference r in the backgroud.
-func (s *Store) UpdateSearchAsync(r *charm.Reference) {
+func (s *Store) UpdateSearchAsync(r *router.ResolvedURL) {
 	go func() {
 		if err := s.UpdateSearch(r); err != nil {
 			logger.Errorf("cannot update search record for %v: %s", r, err)
@@ -70,27 +71,26 @@ func (s *Store) UpdateSearchAsync(r *charm.Reference) {
 // UpdateSearch updates the search record for the entity reference r.
 // The search index only includes the latest revision of each entity so
 // the latest revision of the charm specified by r will be indexed.
-func (s *Store) UpdateSearch(r *charm.Reference) error {
+func (s *Store) UpdateSearch(r *router.ResolvedURL) error {
 	if s.ES == nil || s.ES.Database == nil {
 		return nil
 	}
-	if deprecatedSeries[r.Series] {
+	if deprecatedSeries[r.URL.Series] {
 		return nil
 	}
+	// TODO This is not necessarily good enough, as we
+	// can get more than one entity in the search results
+	// even when there is only one promulgated entity.
+	// This can happen when a promulgated entity changes owners.
+	// Perhaps key the search entities by preferred URL, not
+	// canonical URL.
+
 	var query *mgo.Query
-	if r.User == "" {
-		query = s.DB.Entities().Find(bson.D{
-			{"name", r.Name},
-			{"series", r.Series},
-			{"promulgated-url", bson.D{{"$exists", true}}},
-		}).Sort("-promulgated-revision")
-	} else {
-		query = s.DB.Entities().Find(bson.D{
-			{"user", r.User},
-			{"name", r.Name},
-			{"series", r.Series},
-		}).Sort("-revision")
-	}
+	query = s.DB.Entities().Find(bson.D{
+		{"user", r.URL.User},
+		{"name", r.URL.Name},
+		{"series", r.URL.Series},
+	}).Sort("-revision")
 	var entity mongodoc.Entity
 	if err := query.One(&entity); err != nil {
 		if err == mgo.ErrNotFound {
@@ -114,7 +114,7 @@ func (s *Store) UpdateSearch(r *charm.Reference) error {
 
 // UpdateSearchFields updates the search record for the entity reference r
 // with the updated values in fields.
-func (s *Store) UpdateSearchFields(r *charm.Reference, fields map[string]interface{}) error {
+func (s *Store) UpdateSearchFields(r *router.ResolvedURL, fields map[string]interface{}) error {
 	if s.ES == nil || s.ES.Database == nil {
 		return nil
 	}
@@ -139,7 +139,7 @@ func (s *Store) UpdateSearchFields(r *charm.Reference, fields map[string]interfa
 func (s *Store) searchDocFromEntity(e *mongodoc.Entity, be *mongodoc.BaseEntity) (*SearchDoc, error) {
 	doc := SearchDoc{Entity: e}
 	doc.ReadACLs = be.ACLs.Read
-	_, allRevisions, err := s.ArchiveDownloadCounts(e.URL)
+	_, allRevisions, err := s.ArchiveDownloadCounts(EntityResolvedURL(e))
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
@@ -195,18 +195,28 @@ func (si *SearchIndex) search(sp SearchParams) (SearchResult, error) {
 	r := SearchResult{
 		SearchTime: time.Duration(esr.Took) * time.Millisecond,
 		Total:      esr.Hits.Total,
-		Results:    make([]*charm.Reference, 0, len(esr.Hits.Hits)),
+		Results:    make([]*router.ResolvedURL, 0, len(esr.Hits.Hits)),
 	}
 	for _, h := range esr.Hits.Hits {
-		url := h.Fields.GetString("PromulgatedURL")
-		if url == "" {
-			url = h.Fields.GetString("URL")
-		}
-		ref, err := charm.ParseReference(url)
+		urlStr := h.Fields.GetString("URL")
+		url, err := charm.ParseReference(urlStr)
 		if err != nil {
-			return SearchResult{}, errgo.Notef(err, "invalid result %q", h.Fields.GetString("URL"))
+			return SearchResult{}, errgo.Notef(err, "invalid URL in result %q", urlStr)
 		}
-		r.Results = append(r.Results, ref)
+		id := &router.ResolvedURL{
+			URL: *url,
+		}
+
+		if purlStr := h.Fields.GetString("PromulgatedURL"); purlStr != "" {
+			purl, err := charm.ParseReference(purlStr)
+			if err != nil {
+				return SearchResult{}, errgo.Notef(err, "invalid promulgated URL in result %q", purlStr)
+			}
+			id.PromulgatedRevision = purl.Revision
+		} else {
+			id.PromulgatedRevision = -1
+		}
+		r.Results = append(r.Results, id)
 	}
 	return r, nil
 }
@@ -343,11 +353,12 @@ func (s *Store) syncSearch() error {
 	var result mongodoc.Entity
 	// Only get the IDs here, UpdateSearch will get the full document
 	// if it is in a series that is indexed.
-	iter := s.DB.Entities().Find(nil).Select(bson.M{"_id": 1}).Iter()
+	iter := s.DB.Entities().Find(nil).Select(bson.M{"_id": 1, "promulgated-url": 1}).Iter()
 	defer iter.Close() // Make sure we always close on error.
 	for iter.Next(&result) {
-		if err := s.UpdateSearch(result.URL); err != nil {
-			return errgo.Notef(err, "cannot index %s", result.URL)
+		rurl := EntityResolvedURL(&result)
+		if err := s.UpdateSearch(rurl); err != nil {
+			return errgo.Notef(err, "cannot index %s", rurl)
 		}
 	}
 	if err := iter.Close(); err != nil {
@@ -426,7 +437,7 @@ var sortFields = map[string]string{
 type SearchResult struct {
 	SearchTime time.Duration
 	Total      int
-	Results    []*charm.Reference
+	Results    []*router.ResolvedURL
 }
 
 // queryFields provides a map of fields to weighting to use with the

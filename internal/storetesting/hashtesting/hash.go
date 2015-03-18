@@ -16,6 +16,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v4/internal/charmstore"
+	"gopkg.in/juju/charmstore.v4/internal/router"
 )
 
 func CheckSHA256Laziness(c *gc.C, store *charmstore.Store, id *charm.Reference, check func()) {
@@ -26,7 +27,7 @@ func CheckSHA256Laziness(c *gc.C, store *charmstore.Store, id *charm.Reference, 
 	original := charmstore.UpdateEntitySHA256
 	restore := jujutesting.PatchValue(
 		&charmstore.UpdateEntitySHA256,
-		func(store *charmstore.Store, id *charm.Reference, sum256 string) {
+		func(store *charmstore.Store, id *router.ResolvedURL, sum256 string) {
 			original(store, id, sum256)
 			updated <- struct{}{}
 		})

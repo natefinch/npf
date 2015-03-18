@@ -24,6 +24,7 @@ import (
 
 	"gopkg.in/juju/charmstore.v4/internal/charmstore"
 	"gopkg.in/juju/charmstore.v4/internal/legacy"
+	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/internal/storetesting"
 	"gopkg.in/juju/charmstore.v4/internal/storetesting/hashtesting"
 	"gopkg.in/juju/charmstore.v4/internal/storetesting/stats"
@@ -293,7 +294,7 @@ func (s *APISuite) TestCharmPackageGet(c *gc.C) {
 	s.PatchValue(&charmrepo.CacheDir, c.MkDir())
 	s.PatchValue(&charmrepo.Store.BaseURL, srv.URL)
 
-	url, _ := wordpressURL.URL("")
+	url, _ := wordpressURL.URL.URL("")
 	ch, err := charmrepo.Store.Get(url)
 	c.Assert(err, gc.IsNil)
 	chArchive := ch.(*charm.CharmArchive)
@@ -314,7 +315,7 @@ func (s *APISuite) TestCharmPackageCharmInfo(c *gc.C) {
 	defer srv.Close()
 	s.PatchValue(&charmrepo.Store.BaseURL, srv.URL)
 
-	resp, err := charmrepo.Store.Info(wordpressURL, mysqlURL, notFoundURL)
+	resp, err := charmrepo.Store.Info(wordpressURL.PreferredURL(), mysqlURL.PreferredURL(), notFoundURL)
 	c.Assert(err, gc.IsNil)
 	c.Assert(resp, gc.HasLen, 3)
 	c.Assert(resp, jc.DeepEquals, []*charmrepo.InfoResponse{{
@@ -337,7 +338,7 @@ func (s *APISuite) TestSHA256Laziness(c *gc.C) {
 	url := id.String()
 	sum256 := fileSHA256(c, ch.Path)
 
-	hashtesting.CheckSHA256Laziness(c, s.store, id, func() {
+	hashtesting.CheckSHA256Laziness(c, s.store, &id.URL, func() {
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          "/charm-info?charms=" + url,
@@ -375,7 +376,7 @@ func (s *APISuite) TestServerStatus(c *gc.C) {
 	}
 }
 
-func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, *charm.CharmArchive) {
+func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*router.ResolvedURL, *charm.CharmArchive) {
 	url := charm.MustParseReference(curl)
 	var purl *charm.Reference
 	if url.User == "" {
@@ -383,14 +384,16 @@ func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*charm.Reference, 
 		*purl = *url
 		url.User = "charmers"
 	}
-	wordpress := storetesting.Charms.CharmArchive(c.MkDir(), charmName)
-	err := s.store.AddCharmWithArchive(url, purl, wordpress)
+	archive := storetesting.Charms.CharmArchive(c.MkDir(), charmName)
+	err := s.store.AddCharmWithArchive(url, purl, archive)
 	c.Assert(err, gc.IsNil)
+	var rurl *router.ResolvedURL
 	if purl != nil {
-		return purl, wordpress
+		rurl = router.MustNewResolvedURL(url.String(), purl.Revision)
 	} else {
-		return url, wordpress
+		rurl = router.MustNewResolvedURL(url.String(), -1)
 	}
+	return rurl, archive
 }
 
 var serveCharmEventErrorsTests = []struct {
@@ -597,7 +600,7 @@ func (s *APISuite) TestServeCharmEventLastRevision(c *gc.C) {
 	})
 }
 
-func (s *APISuite) addExtraInfoDigest(c *gc.C, id *charm.Reference, digest string) {
+func (s *APISuite) addExtraInfoDigest(c *gc.C, id *router.ResolvedURL, digest string) {
 	b, err := json.Marshal(digest)
 	c.Assert(err, gc.IsNil)
 	err = s.store.UpdateEntity(id, bson.D{{
@@ -608,7 +611,7 @@ func (s *APISuite) addExtraInfoDigest(c *gc.C, id *charm.Reference, digest strin
 	c.Assert(err, gc.IsNil)
 }
 
-func (s *APISuite) updateUploadTime(c *gc.C, id *charm.Reference, uploadTime time.Time) {
+func (s *APISuite) updateUploadTime(c *gc.C, id *router.ResolvedURL, uploadTime time.Time) {
 	err := s.store.UpdateEntity(id, bson.D{{
 		"$set", bson.D{{"uploadtime", uploadTime}},
 	}})
