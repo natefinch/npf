@@ -35,7 +35,8 @@ var ServerURL = "https://api.jujucharms.com/charmstore"
 
 // Client represents the client side of a charm store.
 type Client struct {
-	params Params
+	params        Params
+	statsDisabled bool
 }
 
 // Params holds parameters for creating a new charm store client.
@@ -88,6 +89,12 @@ func (c *Client) ServerURL() string {
 	return c.params.URL
 }
 
+// DisableStats disables incrementing download stats when retrieving archives
+// from the charm store.
+func (c *Client) DisableStats() {
+	c.statsDisabled = true
+}
+
 // GetArchive retrieves the archive for the given charm or bundle, returning a
 // reader its data can be read from, the fully qualified id of the
 // corresponding entity, the SHA384 hash of the data and its size.
@@ -99,7 +106,15 @@ func (c *Client) GetArchive(id *charm.Reference) (r io.ReadCloser, eid *charm.Re
 	}
 
 	// Send the request.
-	resp, err := c.Do(req, "/"+id.Path()+"/archive")
+	v := url.Values{}
+	if c.statsDisabled {
+		v.Set("stats", "0")
+	}
+	u := url.URL{
+		Path:     "/" + id.Path() + "/archive",
+		RawQuery: v.Encode(),
+	}
+	resp, err := c.Do(req, u.String())
 	if err != nil {
 		return nil, nil, "", 0, errgo.Notef(err, "cannot get archive")
 	}
