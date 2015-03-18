@@ -214,7 +214,7 @@ func (s *suite) checkGetArchive(c *gc.C) []string {
 
 	rb, id, hash, size, err := s.client.GetArchive(url)
 	c.Assert(err, gc.IsNil)
-	defer r.Close()
+	defer rb.Close()
 	c.Assert(id, jc.DeepEquals, url)
 	c.Assert(hash, gc.Equals, expectHash)
 	c.Assert(size, gc.Equals, expectSize)
