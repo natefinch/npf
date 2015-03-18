@@ -30,6 +30,7 @@ import (
 	"gopkg.in/juju/charmstore.v4/internal/blobstore"
 	internalCharmstore "gopkg.in/juju/charmstore.v4/internal/charmstore"
 	"gopkg.in/juju/charmstore.v4/internal/storetesting"
+	"gopkg.in/juju/charmstore.v4/internal/storetesting/stats"
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
@@ -185,6 +186,21 @@ func (s *suite) TestGet(c *gc.C) {
 }
 
 func (s *suite) TestGetArchive(c *gc.C) {
+	key := s.checkGetArchive(c)
+
+	// Check that the downloads count for the entity has been updated.
+	stats.CheckCounterSum(c, s.store, key, false, 1)
+}
+
+func (s *suite) TestGetArchiveWithStatsDisabled(c *gc.C) {
+	s.client.DisableStats()
+	key := s.checkGetArchive(c)
+
+	// Check that the downloads count for the entity has not been updated.
+	stats.CheckCounterSum(c, s.store, key, false, 0)
+}
+
+func (s *suite) checkGetArchive(c *gc.C) []string {
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 
 	// Open the archive and calculate its hash and size.
@@ -198,7 +214,7 @@ func (s *suite) TestGetArchive(c *gc.C) {
 
 	rb, id, hash, size, err := s.client.GetArchive(url)
 	c.Assert(err, gc.IsNil)
-	defer r.Close()
+	defer rb.Close()
 	c.Assert(id, jc.DeepEquals, url)
 	c.Assert(hash, gc.Equals, expectHash)
 	c.Assert(size, gc.Equals, expectSize)
@@ -208,6 +224,9 @@ func (s *suite) TestGetArchive(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(size, gc.Equals, expectSize)
 	c.Assert(fmt.Sprintf("%x", h.Sum(nil)), gc.Equals, expectHash)
+
+	// Return the stats key for the archive download.
+	return []string{params.StatsArchiveDownload, "utopic", "wordpress", "charmers", "42"}
 }
 
 var getArchiveWithBadResponseTests = []struct {
