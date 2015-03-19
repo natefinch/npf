@@ -539,7 +539,7 @@ var uploadEntityAuthorizationTests = []struct {
 	about:        "promulgated entity",
 	username:     "sisko",
 	groups:       []string{"group1", "group2"},
-	id:           "utopic/django",
+	id:           "~charmers/utopic/django",
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
@@ -555,7 +555,7 @@ var uploadEntityAuthorizationTests = []struct {
 	},
 }, {
 	about:        "anonymous user and promulgated entity",
-	id:           "utopic/django",
+	id:           "~charmers/utopic/django",
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
@@ -584,7 +584,7 @@ var uploadEntityAuthorizationTests = []struct {
 	about:        "specific group and promulgated entity",
 	username:     "janeway",
 	groups:       []string{"group1"},
-	id:           "utopic/django",
+	id:           "~charmers/utopic/django",
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,

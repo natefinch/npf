@@ -115,24 +115,11 @@ func (h *Handler) serveCharm(w http.ResponseWriter, req *http.Request) error {
 	if req.Method != "GET" && req.Method != "HEAD" {
 		return params.ErrMethodNotAllowed
 	}
-	url, fullySpecified, err := h.resolveURLStr(strings.TrimPrefix(req.URL.Path, "/"))
+	curl, err := charm.ParseReference(strings.TrimPrefix(req.URL.Path, "/"))
 	if err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+		return errgo.WithCausef(err, params.ErrNotFound, "")
 	}
-	return h.v4.Id["archive"](url, fullySpecified, w, req)
-}
-
-func (h *Handler) resolveURLStr(urlStr string) (*charm.Reference, bool, error) {
-	curl, err := charm.ParseReference(urlStr)
-	if err != nil {
-		return nil, false, errgo.WithCausef(err, params.ErrNotFound, "")
-	}
-	fullySpecified := curl.Series != "" && curl.Revision != -1
-	if err := v4.ResolveURL(h.store, curl); err != nil {
-		// Note: preserve error cause from resolveURL.
-		return nil, false, errgo.Mask(err, errgo.Is(params.ErrNotFound))
-	}
-	return curl, fullySpecified, nil
+	return h.v4.Id["archive"](curl, w, req)
 }
 
 // charmStatsKey returns a stats key for the given charm reference and kind.
@@ -171,7 +158,7 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 			// command is run in the production db. At that point, entities
 			// always have their blobhash256 field populated, and there is no
 			// need for this lazy evaluation anymore.
-			entity.BlobHash256, err = h.store.UpdateEntitySHA256(curl)
+			entity.BlobHash256, err = h.store.UpdateEntitySHA256(charmstore.EntityResolvedURL(entity))
 		}
 		// Prepare the response part for this charm.
 		if err == nil {

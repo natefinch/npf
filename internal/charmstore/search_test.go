@@ -14,6 +14,7 @@ import (
 	"gopkg.in/juju/charm.v5-unstable"
 
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/internal/storetesting"
 	"gopkg.in/juju/charmstore.v4/params"
 )
@@ -47,15 +48,28 @@ func (s *StoreSearchSuite) SetUpTest(c *gc.C) {
 	s.store = store
 }
 
-var exportTestCharms = map[string]string{
-	"wordpress": "cs:precise/wordpress-23",
-	"mysql":     "cs:trusty/mysql-7",
-	"varnish":   "cs:~foo/trusty/varnish-1",
-	"riak":      "cs:trusty/riak-67",
+var exportTestCharms = map[string]*router.ResolvedURL{
+	"wordpress": newResolvedURL("cs:~charmers/precise/wordpress-23", true),
+	"mysql":     newResolvedURL("cs:~charmers/trusty/mysql-7", true),
+	"varnish":   newResolvedURL("cs:~foo/trusty/varnish-1", false),
+	"riak":      newResolvedURL("cs:~charmers/trusty/riak-67", true),
 }
 
-var exportTestBundles = map[string]string{
-	"wordpress-simple": "cs:bundle/wordpress-simple-4",
+var exportTestBundles = map[string]*router.ResolvedURL{
+	"wordpress-simple": newResolvedURL("cs:~charmers/bundle/wordpress-simple-4", true),
+}
+
+func newResolvedURL(s string, promulgated bool) *router.ResolvedURL {
+	url := charm.MustParseReference(s)
+	rurl := &router.ResolvedURL{
+		URL: *url,
+	}
+	if promulgated {
+		rurl.PromulgatedRevision = url.Revision
+	} else {
+		rurl.PromulgatedRevision = -1
+	}
+	return rurl
 }
 
 var charmDownloadCounts = map[string]int{
@@ -67,19 +81,13 @@ var charmDownloadCounts = map[string]int{
 
 func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 	for name, ref := range exportTestCharms {
-		entity, err := s.store.FindEntity(charm.MustParseReference(ref))
+		entity, err := s.store.FindEntity(ref)
 		c.Assert(err, gc.IsNil)
 		var actual json.RawMessage
 		err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL), &actual)
 		c.Assert(err, gc.IsNil)
-		r := charm.MustParseReference(ref)
-		readACLs := []string{params.Everyone}
-		if r.User != "" {
-			readACLs = append(readACLs, r.User)
-		} else {
-			readACLs = append(readACLs, "charmers")
-		}
-		if r.Name == "riak" {
+		readACLs := []string{params.Everyone, ref.URL.User}
+		if ref.URL.Name == "riak" {
 			readACLs = []string{"quux"}
 		}
 		doc := SearchDoc{
@@ -142,34 +150,28 @@ func (s *StoreSearchSuite) TestExportSearchDocument(c *gc.C) {
 }
 
 func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
-	for name, ref := range exportTestCharms {
+	for name, url := range exportTestCharms {
 		charmArchive := storetesting.Charms.CharmDir(name)
-		url := charm.MustParseReference(ref)
 		var purl *charm.Reference
-		if url.User == "" {
-			purl = new(charm.Reference)
-			*purl = *url
-			url.User = "charmers"
+		if url.PromulgatedRevision != -1 {
+			purl = url.PreferredURL()
 		}
 		charmArchive.Meta().Categories = strings.Split(name, "-")
-		err := store.AddCharmWithArchive(url, purl, charmArchive)
+		err := store.AddCharmWithArchive(&url.URL, purl, charmArchive)
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < charmDownloadCounts[name]; i++ {
 			err := store.IncrementDownloadCounts(url)
 			c.Assert(err, gc.IsNil)
 		}
 	}
-	for name, ref := range exportTestBundles {
+	for name, url := range exportTestBundles {
 		bundleArchive := storetesting.Charms.BundleDir(name)
-		url := charm.MustParseReference(ref)
 		var purl *charm.Reference
-		if url.User == "" {
-			purl = new(charm.Reference)
-			*purl = *url
-			url.User = "charmers"
+		if url.PromulgatedRevision != -1 {
+			purl = url.PreferredURL()
 		}
 		bundleArchive.Data().Tags = strings.Split(name, "-")
-		err := store.AddBundleWithArchive(url, purl, bundleArchive)
+		err := store.AddBundleWithArchive(&url.URL, purl, bundleArchive)
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < charmDownloadCounts[name]; i++ {
 			err := store.IncrementDownloadCounts(url)
@@ -181,21 +183,22 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 	baseEntity.ACLs.Read = []string{"quux"}
 	err = store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
 	c.Assert(err, gc.IsNil)
-	err = store.UpdateSearch(charm.MustParseReference(exportTestCharms["riak"]))
+	err = store.UpdateSearch(exportTestCharms["riak"])
 	c.Assert(err, gc.IsNil)
 }
 
 var searchTests = []struct {
-	about   string
-	sp      SearchParams
-	results []string
+	about     string
+	sp        SearchParams
+	results   []*router.ResolvedURL
+	totalDiff int // len(results) + totalDiff = expected total
 }{
 	{
 		about: "basic text search",
 		sp: SearchParams{
 			Text: "wordpress",
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
 		},
@@ -204,7 +207,7 @@ var searchTests = []struct {
 		sp: SearchParams{
 			Text: "",
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
@@ -216,7 +219,7 @@ var searchTests = []struct {
 			Text:         "word",
 			AutoComplete: true,
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
 		},
@@ -228,7 +231,7 @@ var searchTests = []struct {
 				"description": {"blog"},
 			},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 		},
 	}, {
@@ -239,7 +242,7 @@ var searchTests = []struct {
 				"name": {"wordpress"},
 			},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 		},
 	}, {
@@ -250,7 +253,7 @@ var searchTests = []struct {
 				"owner": {"foo"},
 			},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["varnish"],
 		},
 	}, {
@@ -261,7 +264,7 @@ var searchTests = []struct {
 				"provides": {"mysql"},
 			},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 		},
 	}, {
@@ -272,7 +275,7 @@ var searchTests = []struct {
 				"requires": {"mysql"},
 			},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 		},
 	}, {
@@ -283,7 +286,7 @@ var searchTests = []struct {
 				"series": {"trusty"},
 			},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 		},
@@ -295,7 +298,7 @@ var searchTests = []struct {
 				"summary": {"Database engine"},
 			},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 		},
@@ -307,7 +310,7 @@ var searchTests = []struct {
 				"tags": {"wordpress"},
 			},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
 		},
@@ -319,7 +322,7 @@ var searchTests = []struct {
 				"type": {"bundle"},
 			},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestBundles["wordpress-simple"],
 		},
 	}, {
@@ -330,7 +333,7 @@ var searchTests = []struct {
 				"type": {"charm"},
 			},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
@@ -343,7 +346,7 @@ var searchTests = []struct {
 				"type": {"charm", "bundle"},
 			},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
@@ -357,7 +360,7 @@ var searchTests = []struct {
 				"no such filter": {"foo"},
 			},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
@@ -372,7 +375,7 @@ var searchTests = []struct {
 				"type":           {"charm"},
 			},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
@@ -385,13 +388,13 @@ var searchTests = []struct {
 			},
 			Skip: 1,
 		},
-		results: []string{},
+		totalDiff: +1,
 	}, {
 		about: "additional groups",
 		sp: SearchParams{
 			Groups: []string{"quux"},
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["riak"],
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
@@ -403,7 +406,7 @@ var searchTests = []struct {
 		sp: SearchParams{
 			Admin: true,
 		},
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["riak"],
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
@@ -419,8 +422,26 @@ func (s *StoreSearchSuite) TestSearches(c *gc.C) {
 		c.Logf("test %d: %s", i, test.about)
 		res, err := s.store.Search(test.sp)
 		c.Assert(err, gc.IsNil)
-		assertSearchResults(c, res, test.results)
+		c.Logf("results: %v", res.Results)
+		sort.Sort(resolvedURLsByString(res.Results))
+		sort.Sort(resolvedURLsByString(test.results))
+		c.Assert(res.Results, jc.DeepEquals, test.results)
+		c.Assert(res.Total, gc.Equals, len(test.results)+test.totalDiff)
 	}
+}
+
+type resolvedURLsByString []*router.ResolvedURL
+
+func (r resolvedURLsByString) Less(i, j int) bool {
+	return r[i].URL.String() < r[j].URL.String()
+}
+
+func (r resolvedURLsByString) Swap(i, j int) {
+	r[i], r[j] = r[j], r[i]
+}
+
+func (r resolvedURLsByString) Len() int {
+	return len(r)
 }
 
 func (s *StoreSearchSuite) TestPaginatedSearch(c *gc.C) {
@@ -450,9 +471,8 @@ func (s *StoreSearchSuite) TestLimitTestSearch(c *gc.C) {
 
 func (s *StoreSearchSuite) TestPromulgatedRank(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("varnish")
-	url := charm.MustParseReference("cs:~charmers/trusty/varnish-1")
-	purl := charm.MustParseReference("cs:trusty/varnish-1")
-	s.store.AddCharmWithArchive(url, purl, charmArchive)
+	rurl := newResolvedURL("cs:~charmers/trusty/varnish-1", true)
+	s.store.AddCharmWithArchive(&rurl.URL, rurl.PreferredURL(), charmArchive)
 	s.store.ES.Database.RefreshIndex(s.TestIndex)
 	sp := SearchParams{
 		Filters: map[string][]string{
@@ -461,9 +481,10 @@ func (s *StoreSearchSuite) TestPromulgatedRank(c *gc.C) {
 	}
 	res, err := s.store.Search(sp)
 	c.Assert(err, gc.IsNil)
-	c.Assert(res.Results, gc.HasLen, 2)
-	c.Assert(res.Results[0].String(), gc.Equals, "cs:trusty/varnish-1")
-	c.Assert(res.Results[1].String(), gc.Equals, exportTestCharms["varnish"])
+	c.Assert(res.Results, jc.DeepEquals, []*router.ResolvedURL{
+		rurl,
+		exportTestCharms["varnish"],
+	})
 }
 
 func (s *StoreSearchSuite) TestSorting(c *gc.C) {
@@ -471,11 +492,11 @@ func (s *StoreSearchSuite) TestSorting(c *gc.C) {
 	tests := []struct {
 		about     string
 		sortQuery string
-		results   []string
+		results   []*router.ResolvedURL
 	}{{
 		about:     "name ascending",
 		sortQuery: "name",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 			exportTestCharms["wordpress"],
@@ -484,7 +505,7 @@ func (s *StoreSearchSuite) TestSorting(c *gc.C) {
 	}, {
 		about:     "name descending",
 		sortQuery: "-name",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestBundles["wordpress-simple"],
 			exportTestCharms["wordpress"],
 			exportTestCharms["varnish"],
@@ -493,7 +514,7 @@ func (s *StoreSearchSuite) TestSorting(c *gc.C) {
 	}, {
 		about:     "series ascending",
 		sortQuery: "series,name",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestBundles["wordpress-simple"],
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
@@ -502,7 +523,7 @@ func (s *StoreSearchSuite) TestSorting(c *gc.C) {
 	}, {
 		about:     "series descending",
 		sortQuery: "-series,name",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 			exportTestCharms["wordpress"],
@@ -511,7 +532,7 @@ func (s *StoreSearchSuite) TestSorting(c *gc.C) {
 	}, {
 		about:     "owner ascending",
 		sortQuery: "owner,name",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
@@ -520,7 +541,7 @@ func (s *StoreSearchSuite) TestSorting(c *gc.C) {
 	}, {
 		about:     "owner descending",
 		sortQuery: "-owner,name",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["varnish"],
 			exportTestCharms["mysql"],
 			exportTestCharms["wordpress"],
@@ -529,7 +550,7 @@ func (s *StoreSearchSuite) TestSorting(c *gc.C) {
 	}, {
 		about:     "downloads ascending",
 		sortQuery: "downloads",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
 			exportTestCharms["mysql"],
@@ -538,7 +559,7 @@ func (s *StoreSearchSuite) TestSorting(c *gc.C) {
 	}, {
 		about:     "downloads descending",
 		sortQuery: "-downloads",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["varnish"],
 			exportTestCharms["mysql"],
 			exportTestBundles["wordpress-simple"],
@@ -552,10 +573,8 @@ func (s *StoreSearchSuite) TestSorting(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		res, err := s.store.Search(sp)
 		c.Assert(err, gc.IsNil)
-		c.Assert(res.Results, gc.HasLen, len(test.results))
-		for i, ref := range res.Results {
-			c.Assert(ref.String(), gc.Equals, test.results[i])
-		}
+		c.Assert(res.Results, jc.DeepEquals, test.results)
+		c.Assert(res.Total, gc.Equals, len(test.results))
 	}
 }
 
@@ -565,11 +584,12 @@ func (s *StoreSearchSuite) TestBoosting(c *gc.C) {
 	res, err := s.store.Search(sp)
 	c.Assert(err, gc.IsNil)
 	c.Assert(res.Results, gc.HasLen, 4)
-	c.Assert(res.Results, jc.DeepEquals, []*charm.Reference{
-		charm.MustParseReference(exportTestBundles["wordpress-simple"]),
-		charm.MustParseReference(exportTestCharms["mysql"]),
-		charm.MustParseReference(exportTestCharms["wordpress"]),
-		charm.MustParseReference(exportTestCharms["varnish"]),
+	c.Logf("results: %s", res.Results)
+	c.Assert(res.Results, jc.DeepEquals, []*router.ResolvedURL{
+		exportTestBundles["wordpress-simple"],
+		exportTestCharms["mysql"],
+		exportTestCharms["wordpress"],
+		exportTestCharms["varnish"],
 	})
 }
 
@@ -710,20 +730,4 @@ func (s *StoreSearchSuite) TestUpdateConflict(c *gc.C) {
 	updated, err = s.store.ES.updateVersion(version{1, index}, 3)
 	c.Assert(err, gc.Equals, nil)
 	c.Assert(updated, gc.Equals, false)
-}
-
-// assertSearchResults checks that the results obtained from a search are the same
-// as those in the expected set, but in any order.
-func assertSearchResults(c *gc.C, obtained SearchResult, expected []string) {
-	c.Assert(len(obtained.Results), gc.Equals, len(expected))
-
-	sort.Strings(expected)
-	var ids []string
-	for _, ref := range obtained.Results {
-		ids = append(ids, ref.String())
-	}
-	sort.Strings(ids)
-	for i, v := range expected {
-		c.Assert(ids[i], gc.Equals, v)
-	}
 }

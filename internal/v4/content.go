@@ -24,8 +24,8 @@ import (
 
 // GET id/diagram.svg
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-iddiagramsvg
-func (h *Handler) serveDiagram(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
-	if id.Series != "bundle" {
+func (h *Handler) serveDiagram(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+	if id.URL.Series != "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "diagrams not supported for charms")
 	}
 	entity, err := h.store.FindEntity(id, "bundledata")
@@ -70,7 +70,7 @@ var allowedReadMe = map[string]bool{
 
 // GET id/readme
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idreadme
-func (h *Handler) serveReadMe(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveReadMe(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	entity, err := h.store.FindEntity(id, "_id", "contents", "blobname")
 	if err != nil {
 		return errgo.NoteMask(err, "cannot get README", errgo.Is(params.ErrNotFound))
@@ -93,8 +93,8 @@ func (h *Handler) serveReadMe(id *charm.Reference, fullySpecified bool, w http.R
 
 // GET id/icon.svg
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idiconsvg
-func (h *Handler) serveIcon(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
-	if id.Series == "bundle" {
+func (h *Handler) serveIcon(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+	if id.URL.Series == "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "icons not supported for bundles")
 	}
 

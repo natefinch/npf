@@ -652,7 +652,7 @@ func (s *suite) TestDoAuthorization(c *gc.C) {
 
 	// Check that it's now really gone.
 	err = client.Get("/utopic/wordpress-42/expand-id", nil)
-	c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for "cs:wordpress"`)
+	c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for "cs:utopic/wordpress-42"`)
 }
 
 var getWithBadResponseTests = []struct {

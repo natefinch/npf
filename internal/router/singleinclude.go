@@ -9,14 +9,13 @@ import (
 	"net/url"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v5-unstable"
 )
 
 var _ BulkIncludeHandler = SingleIncludeHandler(nil)
 
 // SingleIncludeHandler implements BulkMetaHander for a non-batching
 // metadata retrieval function that can perform a GET only.
-type SingleIncludeHandler func(id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error)
+type SingleIncludeHandler func(id *ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error)
 
 // Key implements BulkMetadataHander.Key.
 func (h SingleIncludeHandler) Key() interface{} {
@@ -27,7 +26,7 @@ func (h SingleIncludeHandler) Key() interface{} {
 }
 
 // HandleGet implements BulkMetadataHander.HandleGet.
-func (h SingleIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *charm.Reference, paths []string, flags url.Values, req *http.Request) ([]interface{}, error) {
+func (h SingleIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *ResolvedURL, paths []string, flags url.Values, req *http.Request) ([]interface{}, error) {
 	results := make([]interface{}, len(hs))
 	for i, h := range hs {
 		h := h.(SingleIncludeHandler)
@@ -44,7 +43,7 @@ func (h SingleIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *charm.Refer
 var errPutNotImplemented = errgo.New("PUT not implemented")
 
 // HandlePut implements BulkMetadataHander.HandlePut.
-func (h SingleIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *charm.Reference, paths []string, values []*json.RawMessage, req *http.Request) []error {
+func (h SingleIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *ResolvedURL, paths []string, values []*json.RawMessage, req *http.Request) []error {
 	errs := make([]error, len(hs))
 	for i := range hs {
 		errs[i] = errPutNotImplemented

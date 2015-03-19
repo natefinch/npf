@@ -59,14 +59,14 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 			"macaroon":           router.HandleJSON(h.serveMacaroon),
 		},
 		Id: map[string]router.IdHandler{
-			"archive":     h.authIdHandler(h.serveArchive),
-			"archive/":    h.authIdHandler(h.serveArchiveFile),
-			"diagram.svg": h.authIdHandler(h.serveDiagram),
-			"expand-id":   h.authIdHandler(h.serveExpandId),
-			"icon.svg":    h.authIdHandler(h.serveIcon),
-			"readme":      h.authIdHandler(h.serveReadMe),
-			"resources":   h.authIdHandler(h.serveResources),
-			"promulgate":  h.serveAdminPromulgate,
+			"archive":     h.serveArchive,
+			"archive/":    h.resolveId(h.authId(h.serveArchiveFile)),
+			"diagram.svg": h.resolveId(h.authId(h.serveDiagram)),
+			"expand-id":   h.resolveId(h.authId(h.serveExpandId)),
+			"icon.svg":    h.resolveId(h.authId(h.serveIcon)),
+			"readme":      h.resolveId(h.authId(h.serveReadMe)),
+			"resources":   h.resolveId(h.authId(h.serveResources)),
+			"promulgate":  h.resolveId(h.serveAdminPromulgate),
 		},
 		Meta: map[string]router.BulkIncludeHandler{
 			"archive-size":         h.entityHandler(h.metaArchiveSize, "size"),
@@ -129,33 +129,44 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 // ResolveURL resolves the series and revision of the given URL if either is
 // unspecified by filling them out with information retrieved from the store.
-func ResolveURL(store *charmstore.Store, url *charm.Reference) error {
-	if url.Series != "" && url.Revision != -1 {
-		return nil
+func ResolveURL(store *charmstore.Store, url *charm.Reference) (*router.ResolvedURL, error) {
+	if url.Series != "" && url.Revision != -1 && url.User != "" {
+		// URL is fully specified; no need for a database lookup.
+		return &router.ResolvedURL{
+			URL:                 *url,
+			PromulgatedRevision: -1,
+		}, nil
 	}
-	entity, err := store.FindBestEntity(url, "_id", "promulgated-url")
+	entity, err := store.FindBestEntity(url, "_id", "promulgated-revision")
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
-		return errgo.Mask(err)
+		return nil, errgo.Mask(err)
 	}
 	if errgo.Cause(err) == params.ErrNotFound {
-		return noMatchingURLError(url)
+		return nil, noMatchingURLError(url)
 	}
-	url.Series = entity.URL.Series
-	url.Revision = entity.PreferredURL(url.User == "").Revision
-	return nil
+	if url.User == "" {
+		return &router.ResolvedURL{
+			URL:                 *entity.URL,
+			PromulgatedRevision: entity.PromulgatedRevision,
+		}, nil
+	}
+	return &router.ResolvedURL{
+		URL:                 *entity.URL,
+		PromulgatedRevision: -1,
+	}, nil
 }
 
 func noMatchingURLError(url *charm.Reference) error {
 	return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
 }
 
-func (h *Handler) resolveURL(url *charm.Reference) error {
+func (h *Handler) resolveURL(url *charm.Reference) (*router.ResolvedURL, error) {
 	return ResolveURL(h.store, url)
 }
 
-type entityHandlerFunc func(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error)
+type entityHandlerFunc func(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error)
 
-type baseEntityHandlerFunc func(entity *mongodoc.BaseEntity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error)
+type baseEntityHandlerFunc func(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error)
 
 // entityHandler returns a Handler that calls f with a *mongodoc.Entity that
 // contains at least the given fields. It allows only GET requests.
@@ -164,7 +175,7 @@ func (h *Handler) entityHandler(f entityHandlerFunc, fields ...string) router.Bu
 }
 
 func (h *Handler) puttableEntityHandler(get entityHandlerFunc, handlePut router.FieldPutFunc, fields ...string) router.BulkIncludeHandler {
-	handleGet := func(doc interface{}, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	handleGet := func(doc interface{}, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 		edoc := doc.(*mongodoc.Entity)
 		val, err := get(edoc, id, path, flags, req)
 		return val, errgo.Mask(err, errgo.Any)
@@ -188,7 +199,7 @@ func (h *Handler) baseEntityHandler(f baseEntityHandlerFunc, fields ...string) r
 }
 
 func (h *Handler) puttableBaseEntityHandler(get baseEntityHandlerFunc, handlePut router.FieldPutFunc, fields ...string) router.BulkIncludeHandler {
-	handleGet := func(doc interface{}, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	handleGet := func(doc interface{}, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 		edoc := doc.(*mongodoc.BaseEntity)
 		val, err := get(edoc, id, path, flags, req)
 		return val, errgo.Mask(err, errgo.Any)
@@ -205,34 +216,38 @@ func (h *Handler) puttableBaseEntityHandler(get baseEntityHandlerFunc, handlePut
 	})
 }
 
-func (h *Handler) updateBaseEntity(id *charm.Reference, fields map[string]interface{}) error {
+func (h *Handler) updateBaseEntity(id *router.ResolvedURL, fields map[string]interface{}) error {
 	if err := h.store.UpdateBaseEntity(id, bson.D{{"$set", fields}}); err != nil {
 		return errgo.Notef(err, "cannot update base entity %q", id)
 	}
 	return nil
 }
 
-func (h *Handler) updateEntity(id *charm.Reference, fields map[string]interface{}) error {
+func (h *Handler) updateEntity(id *router.ResolvedURL, fields map[string]interface{}) error {
 	err := h.store.UpdateEntity(id, bson.D{{"$set", fields}})
 	if err != nil {
-		return errgo.Notef(err, "cannot update %q", id)
+		return errgo.Notef(err, "cannot update %q", &id.URL)
 	}
 	err = h.store.UpdateSearchFields(id, fields)
 	if err != nil {
-		return errgo.Notef(err, "cannot update %q", id)
+		return errgo.Notef(err, "cannot update %q", &id.URL)
 	}
 	return nil
 }
 
-func (h *Handler) updateSearch(id *charm.Reference, fields map[string]interface{}) error {
+func (h *Handler) updateSearch(id *router.ResolvedURL, fields map[string]interface{}) error {
 	return h.store.UpdateSearch(id)
 }
 
-func (h *Handler) updateSearchBase(id *charm.Reference, fields map[string]interface{}) error {
+// updateSearchBase updates the search records for all entities with
+// the same base URL as the given id.
+func (h *Handler) updateSearchBase(id *router.ResolvedURL, fields map[string]interface{}) error {
+	// TODO we can be more efficient here and find all series
+	// for the entity by an aggregation search.
 	iter := h.store.DB.Entities().Find(bson.M{
-		"name": id.Name,
-		"user": id.User,
-	}).Iter()
+		"name": id.URL.Name,
+		"user": id.URL.User,
+	}).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}}).Iter()
 	defer iter.Close()
 	updated := make(map[string]bool)
 	var entity mongodoc.Entity
@@ -244,7 +259,7 @@ func (h *Handler) updateSearchBase(id *charm.Reference, fields map[string]interf
 		if updated[url.String()] {
 			continue
 		}
-		if err := h.store.UpdateSearch(&url); err != nil {
+		if err := h.store.UpdateSearch(charmstore.EntityResolvedURL(&entity)); err != nil {
 			return errgo.Notef(err, "cannot update %q", url)
 		}
 		updated[url.String()] = true
@@ -252,7 +267,7 @@ func (h *Handler) updateSearchBase(id *charm.Reference, fields map[string]interf
 	return errgo.Mask(iter.Close())
 }
 
-func (h *Handler) entityExists(id *charm.Reference, req *http.Request) (bool, error) {
+func (h *Handler) entityExists(id *router.ResolvedURL, req *http.Request) (bool, error) {
 	// TODO add http.Request to entityExists params
 	_, err := h.entityQuery(id, nil, req)
 	if errgo.Cause(err) == params.ErrNotFound {
@@ -264,7 +279,7 @@ func (h *Handler) entityExists(id *charm.Reference, req *http.Request) (bool, er
 	return true, nil
 }
 
-func (h *Handler) baseEntityQuery(id *charm.Reference, selector map[string]int, req *http.Request) (interface{}, error) {
+func (h *Handler) baseEntityQuery(id *router.ResolvedURL, selector map[string]int, req *http.Request) (interface{}, error) {
 	fields := make([]string, 0, len(selector))
 	for k, v := range selector {
 		if v == 0 {
@@ -272,7 +287,7 @@ func (h *Handler) baseEntityQuery(id *charm.Reference, selector map[string]int, 
 		}
 		fields = append(fields, k)
 	}
-	val, err := h.store.FindBaseEntity(id, fields...)
+	val, err := h.store.FindBaseEntity(&id.URL, fields...)
 	if errgo.Cause(err) == params.ErrNotFound {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
@@ -282,8 +297,8 @@ func (h *Handler) baseEntityQuery(id *charm.Reference, selector map[string]int, 
 	return val, nil
 }
 
-func (h *Handler) entityQuery(id *charm.Reference, selector map[string]int, req *http.Request) (interface{}, error) {
-	val, err := h.store.FindBestEntity(id, fieldsFromSelector(selector)...)
+func (h *Handler) entityQuery(id *router.ResolvedURL, selector map[string]int, req *http.Request) (interface{}, error) {
+	val, err := h.store.FindEntity(id, fieldsFromSelector(selector)...)
 	if errgo.Cause(err) == params.ErrNotFound {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
@@ -338,20 +353,25 @@ func (h *Handler) serveDebug(w http.ResponseWriter, req *http.Request) {
 //
 // PUT id/resources/[~user/]series/name.stream-revision/arch?sha256=hash
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idresourcesuserseriesnamestream-revisionarchsha256hash
-func (h *Handler) serveResources(charmId *charm.Reference, _ bool, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveResources(id *router.ResolvedURL, _ bool, w http.ResponseWriter, req *http.Request) error {
 	return errNotImplemented
 }
 
 // GET id/expand-id
 // https://docs.google.com/a/canonical.com/document/d/1TgRA7jW_mmXoKH3JiwBbtPvQu7WiM6XMrz1wSrhTMXw/edit#bookmark=id.4xdnvxphb2si
-func (h *Handler) serveExpandId(id *charm.Reference, _ bool, w http.ResponseWriter, req *http.Request) error {
-	// Mutate the given id so that it represents a base URL.
-	id.Revision = -1
-	id.Series = ""
+func (h *Handler) serveExpandId(id *router.ResolvedURL, _ bool, w http.ResponseWriter, req *http.Request) error {
+	baseURL := id.PreferredURL()
+	baseURL.Revision = -1
+	baseURL.Series = ""
+
+	// baseURL now represents the base URL of the given id;
+	// it will be a promulgated URL iff the original URL was
+	// specified without a user, which will cause EntitiesQuery
+	// to return entities that match appropriately.
 
 	// Retrieve all the entities with the same base URL.
-	q := h.store.EntitiesQuery(id).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}})
-	if id.User == "" {
+	q := h.store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}})
+	if id.PromulgatedRevision != -1 {
 		q = q.Sort("-series", "-promulgated-revision")
 	} else {
 		q = q.Sort("-series", "-revision")
@@ -366,13 +386,13 @@ func (h *Handler) serveExpandId(id *charm.Reference, _ bool, w http.ResponseWrit
 	// case a partial id is provided. Here we do the same for the case when
 	// a fully qualified URL is provided, but no matching entities are found.
 	if len(docs) == 0 {
-		return noMatchingURLError(id)
+		return noMatchingURLError(id.PreferredURL())
 	}
 
 	// Collect all the expanded identifiers for each entity.
 	response := make([]params.ExpandedId, 0, len(docs))
 	for _, doc := range docs {
-		url := doc.PreferredURL(id.User == "")
+		url := doc.PreferredURL(id.PromulgatedRevision != -1)
 		response = append(response, params.ExpandedId{Id: url.String()})
 	}
 
@@ -388,25 +408,25 @@ func badRequestf(underlying error, f string, a ...interface{}) error {
 
 // GET id/meta/charm-metadata
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacharm-metadata
-func (h *Handler) metaCharmMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaCharmMetadata(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return entity.CharmMeta, nil
 }
 
 // GET id/meta/bundle-metadata
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetabundle-metadata
-func (h *Handler) metaBundleMetadata(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaBundleMetadata(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return entity.BundleData, nil
 }
 
 // GET id/meta/bundle-unit-count
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetabundle-unit-count
-func (h *Handler) metaBundleUnitCount(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaBundleUnitCount(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return bundleCount(entity.BundleUnitCount), nil
 }
 
 // GET id/meta/bundle-machine-count
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetabundle-machine-count
-func (h *Handler) metaBundleMachineCount(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaBundleMachineCount(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return bundleCount(entity.BundleMachineCount), nil
 }
 
@@ -421,7 +441,7 @@ func bundleCount(x *int) interface{} {
 
 // GET id/meta/manifest
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetamanifest
-func (h *Handler) metaManifest(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaManifest(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	r, size, err := h.store.BlobStore.Open(entity.BlobName)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot open archive data for %s", id)
@@ -448,24 +468,24 @@ func (h *Handler) metaManifest(entity *mongodoc.Entity, id *charm.Reference, pat
 
 // GET id/meta/charm-actions
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacharm-actions
-func (h *Handler) metaCharmActions(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaCharmActions(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return entity.CharmActions, nil
 }
 
 // GET id/meta/charm-config
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacharm-config
-func (h *Handler) metaCharmConfig(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaCharmConfig(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return entity.CharmConfig, nil
 }
 
 // GET id/meta/color
-func (h *Handler) metaColor(id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaColor(id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return nil, errNotImplemented
 }
 
 // GET id/meta/archive-size
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaarchive-size
-func (h *Handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaArchiveSize(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return &params.ArchiveSizeResponse{
 		Size: entity.Size,
 	}, nil
@@ -473,7 +493,7 @@ func (h *Handler) metaArchiveSize(entity *mongodoc.Entity, id *charm.Reference, 
 
 // GET id/meta/hash
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetahash
-func (h *Handler) metaHash(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaHash(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return &params.HashResponse{
 		Sum: entity.BlobHash,
 	}, nil
@@ -481,14 +501,14 @@ func (h *Handler) metaHash(entity *mongodoc.Entity, id *charm.Reference, path st
 
 // GET id/meta/hash256
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetahash256
-func (h *Handler) metaHash256(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaHash256(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	// TODO frankban: remove this lazy calculation after the cshash256
 	// command is run in the production db. At that point, entities
 	// always have their blobhash256 field populated, and there is no
 	// need for this lazy evaluation anymore.
 	if entity.BlobHash256 == "" {
 		var err error
-		if entity.BlobHash256, err = h.store.UpdateEntitySHA256(entity.URL); err != nil {
+		if entity.BlobHash256, err = h.store.UpdateEntitySHA256(id); err != nil {
 			return nil, errgo.Notef(err, "cannot retrieve the SHA256 hash for entity %s", entity.URL)
 		}
 	}
@@ -499,10 +519,10 @@ func (h *Handler) metaHash256(entity *mongodoc.Entity, id *charm.Reference, path
 
 // GET id/meta/tags
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetatags
-func (h *Handler) metaTags(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaTags(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	var tags []string
 	switch {
-	case id.Series == "bundle":
+	case id.URL.Series == "bundle":
 		tags = entity.BundleData.Tags
 	case len(entity.CharmMeta.Tags) > 0:
 		// TODO only return whitelisted tags.
@@ -517,7 +537,7 @@ func (h *Handler) metaTags(entity *mongodoc.Entity, id *charm.Reference, path st
 
 // GET id/meta/stats/
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetastats
-func (h *Handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaStats(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	// Retrieve the aggregated downloads count for the specific revision.
 	counts, countsAllRevisions, err := h.store.ArchiveDownloadCounts(id)
 	if err != nil {
@@ -543,12 +563,12 @@ func (h *Handler) metaStats(entity *mongodoc.Entity, id *charm.Reference, path s
 
 // GET id/meta/revision-info
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetarevision-info
-func (h *Handler) metaRevisionInfo(id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	searchURL := *id
+func (h *Handler) metaRevisionInfo(id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	searchURL := id.PreferredURL()
 	searchURL.Revision = -1
 
-	q := h.store.EntitiesQuery(&searchURL)
-	if id.User == "" {
+	q := h.store.EntitiesQuery(searchURL)
+	if id.PromulgatedRevision != -1 {
 		q = q.Sort("-promulgated-revision")
 	} else {
 		q = q.Sort("-revision")
@@ -561,9 +581,9 @@ func (h *Handler) metaRevisionInfo(id *charm.Reference, path string, flags url.V
 	if len(docs) == 0 {
 		return "", errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
-	response := &params.RevisionInfoResponse{}
+	var response params.RevisionInfoResponse
 	for _, doc := range docs {
-		if id.User == "" {
+		if id.PromulgatedRevision != -1 {
 			response.Revisions = append(response.Revisions, doc.PromulgatedURL)
 		} else {
 			response.Revisions = append(response.Revisions, doc.URL)
@@ -571,56 +591,57 @@ func (h *Handler) metaRevisionInfo(id *charm.Reference, path string, flags url.V
 	}
 
 	// Write the response in JSON format.
-	return response, nil
+	return &response, nil
 }
 
 // GET id/meta/id-user
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaid-user
-func (h *Handler) metaIdUser(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaIdUser(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.IdUserResponse{
-		User: id.User,
+		User: id.PreferredURL().User,
 	}, nil
 }
 
 // GET id/meta/id-series
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaid-series
-func (h *Handler) metaIdSeries(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaIdSeries(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.IdSeriesResponse{
-		Series: id.Series,
+		Series: id.PreferredURL().Series,
 	}, nil
 }
 
 // GET id/meta/id
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaid
-func (h *Handler) metaId(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaId(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	u := id.PreferredURL()
 	return params.IdResponse{
-		Id:       id,
-		User:     id.User,
-		Series:   id.Series,
-		Name:     id.Name,
-		Revision: id.Revision,
+		Id:       u,
+		User:     u.User,
+		Series:   u.Series,
+		Name:     u.Name,
+		Revision: u.Revision,
 	}, nil
 }
 
 // GET id/meta/id-name
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaid-name
-func (h *Handler) metaIdName(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaIdName(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.IdNameResponse{
-		Name: id.Name,
+		Name: id.URL.Name,
 	}, nil
 }
 
 // GET id/meta/id-revision
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaid-revision
-func (h *Handler) metaIdRevision(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaIdRevision(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.IdRevisionResponse{
-		Revision: id.Revision,
+		Revision: id.PreferredURL().Revision,
 	}, nil
 }
 
 // GET id/meta/extra-info
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaextra-info
-func (h *Handler) metaExtraInfo(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaExtraInfo(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	// The extra-info is stored in mongo as simple byte
 	// slices, so convert the values to json.RawMessages
 	// so that the client will see the original JSON.
@@ -634,7 +655,7 @@ func (h *Handler) metaExtraInfo(entity *mongodoc.Entity, id *charm.Reference, pa
 
 // GET id/meta/extra-info/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaextra-infokey
-func (h *Handler) metaExtraInfoWithKey(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaExtraInfoWithKey(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	path = strings.TrimPrefix(path, "/")
 	var data json.RawMessage = entity.ExtraInfo[path]
 	if len(data) == 0 {
@@ -645,7 +666,7 @@ func (h *Handler) metaExtraInfoWithKey(entity *mongodoc.Entity, id *charm.Refere
 
 // PUT id/meta/extra-info
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetaextra-info
-func (h *Handler) putMetaExtraInfo(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+func (h *Handler) putMetaExtraInfo(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
 	var fields map[string]*json.RawMessage
 	if err := json.Unmarshal(*val, &fields); err != nil {
 		return errgo.Notef(err, "cannot unmarshal extra info body")
@@ -664,7 +685,7 @@ func (h *Handler) putMetaExtraInfo(id *charm.Reference, path string, val *json.R
 
 // PUT id/meta/extra-info/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetaextra-infokey
-func (h *Handler) putMetaExtraInfoWithKey(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+func (h *Handler) putMetaExtraInfoWithKey(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
 	key := strings.TrimPrefix(path, "/")
 	if err := checkExtraInfoKey(key); err != nil {
 		return err
@@ -682,7 +703,7 @@ func checkExtraInfoKey(key string) error {
 
 // GET id/meta/perm
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaperm
-func (h *Handler) metaPerm(entity *mongodoc.BaseEntity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaPerm(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.PermResponse{
 		Read:  entity.ACLs.Read,
 		Write: entity.ACLs.Write,
@@ -691,7 +712,7 @@ func (h *Handler) metaPerm(entity *mongodoc.BaseEntity, id *charm.Reference, pat
 
 // PUT id/meta/perm
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmeta
-func (h *Handler) putMetaPerm(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+func (h *Handler) putMetaPerm(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
 	var perms params.PermRequest
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
@@ -712,7 +733,7 @@ func (h *Handler) putMetaPerm(id *charm.Reference, path string, val *json.RawMes
 
 // GET id/meta/promulgated
 // See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapromulgated
-func (h *Handler) metaPromulgated(entity *mongodoc.BaseEntity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaPromulgated(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.PromulgatedResponse{
 		Promulgated: bool(entity.Promulgated),
 	}, nil
@@ -720,7 +741,7 @@ func (h *Handler) metaPromulgated(entity *mongodoc.BaseEntity, id *charm.Referen
 
 // GET id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapermkey
-func (h *Handler) metaPermWithKey(entity *mongodoc.BaseEntity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaPermWithKey(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	switch path {
 	case "/read":
 		return entity.ACLs.Read, nil
@@ -732,7 +753,7 @@ func (h *Handler) metaPermWithKey(entity *mongodoc.BaseEntity, id *charm.Referen
 
 // PUT id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetapermkey
-func (h *Handler) putMetaPermWithKey(id *charm.Reference, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+func (h *Handler) putMetaPermWithKey(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
 	var perms []string
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
@@ -759,7 +780,7 @@ func (h *Handler) putMetaPermWithKey(id *charm.Reference, path string, val *json
 
 // GET id/meta/archive-upload-time
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaarchive-upload-time
-func (h *Handler) metaArchiveUploadTime(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *Handler) metaArchiveUploadTime(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return &params.ArchiveUploadTimeResponse{
 		UploadTime: entity.UploadTime.UTC(),
 	}, nil
@@ -829,7 +850,7 @@ func (h *Handler) serveMacaroon(_ http.Header, _ *http.Request) (interface{}, er
 
 // GET id/promulgate
 // See https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idpromulgate
-func (h *Handler) serveAdminPromulgate(id *charm.Reference, _ bool, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveAdminPromulgate(id *router.ResolvedURL, _ bool, w http.ResponseWriter, req *http.Request) error {
 	if err := h.authorize(req, []string{promulgatorsGroup}); err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
@@ -850,14 +871,35 @@ func (h *Handler) serveAdminPromulgate(id *charm.Reference, _ bool, w http.Respo
 	return nil
 }
 
-func (h *Handler) authIdHandler(f router.IdHandler) router.IdHandler {
-	return func(charmId *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
-		if err := h.authorizeEntity(charmId, req); err != nil {
+type resolvedIdHandler func(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error
+
+// authId returns a resolvedIdHandler that checks that the client
+// is authorized to perform the HTTP request method before
+// invoking f.
+func (h *Handler) authId(f resolvedIdHandler) resolvedIdHandler {
+	return func(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+		if err := h.authorizeEntity(id, req); err != nil {
 			return errgo.Mask(err, errgo.Any)
 		}
-		if err := f(charmId, fullySpecified, w, req); err != nil {
+		if err := f(id, fullySpecified, w, req); err != nil {
 			return errgo.Mask(err, errgo.Any)
 		}
 		return nil
+	}
+}
+
+func isFullySpecified(id *charm.Reference) bool {
+	return id.Series != "" && id.Revision != -1
+}
+
+// resolveId returns an id handler that resolves any non-fully-specified
+// entity ids using h.resolveURL before calling f with the resolved id.
+func (h *Handler) resolveId(f resolvedIdHandler) router.IdHandler {
+	return func(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+		rid, err := h.resolveURL(id)
+		if err != nil {
+			return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+		}
+		return f(rid, isFullySpecified(id), w, req)
 	}
 }

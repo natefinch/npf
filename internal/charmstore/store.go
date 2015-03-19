@@ -22,6 +22,7 @@ import (
 
 	"gopkg.in/juju/charmstore.v4/internal/blobstore"
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
@@ -161,6 +162,9 @@ func (s *Store) AddCharmWithArchive(url, purl *charm.Reference, ch charm.Charm) 
 //
 // If purl is not nil then the bundle will also be
 // available at the promulgated url specified.
+//
+// TODO This could take a *router.ResolvedURL as an argument
+// instead of two *charm.References.
 func (s *Store) AddBundleWithArchive(url, purl *charm.Reference, b charm.Bundle) error {
 	blobName, blobHash, blobHash256, size, err := s.uploadCharmOrBundle(b)
 	if err != nil {
@@ -312,7 +316,7 @@ func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 		}
 	}()
 	// Add entity to ElasticSearch.
-	if err := s.UpdateSearch(entity.URL); err != nil {
+	if err := s.UpdateSearch(EntityResolvedURL(entity)); err != nil {
 		return errgo.Notef(err, "cannot index %s to ElasticSearch", entity.URL)
 	}
 	return nil
@@ -323,11 +327,8 @@ func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 // only those fields will be populated in the returned entities.
 // If the given URL has no user then it is assumed to be a
 // promulgated entity.
-func (s *Store) FindEntity(url *charm.Reference, fields ...string) (*mongodoc.Entity, error) {
-	if url.Series == "" || url.Revision == -1 {
-		return nil, errgo.Newf("entity id %q is not fully qualified", url)
-	}
-	entities, err := s.FindEntities(url, fields...)
+func (s *Store) FindEntity(url *router.ResolvedURL, fields ...string) (*mongodoc.Entity, error) {
+	entities, err := s.FindEntities(&url.URL, fields...)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
@@ -472,14 +473,8 @@ func selectFields(query *mgo.Query, fields []string) *mgo.Query {
 }
 
 // UpdateEntity applies the provided update to the entity described by url.
-func (s *Store) UpdateEntity(url *charm.Reference, update interface{}) error {
-	var q bson.D
-	if url.User == "" {
-		q = bson.D{{"promulgated-url", url}}
-	} else {
-		q = bson.D{{"_id", url}}
-	}
-	if err := s.DB.Entities().Update(q, update); err != nil {
+func (s *Store) UpdateEntity(url *router.ResolvedURL, update interface{}) error {
+	if err := s.DB.Entities().Update(bson.D{{"_id", &url.URL}}, update); err != nil {
 		if err == mgo.ErrNotFound {
 			return errgo.WithCausef(err, params.ErrNotFound, "cannot update %q", url)
 		}
@@ -489,14 +484,8 @@ func (s *Store) UpdateEntity(url *charm.Reference, update interface{}) error {
 }
 
 // UpdateBaseEntity applies the provided update to the base entity of url.
-func (s *Store) UpdateBaseEntity(url *charm.Reference, update interface{}) error {
-	var q bson.D
-	if url.User == "" {
-		q = bson.D{{"name", url.Name}, {"promulgated", 1}}
-	} else {
-		q = bson.D{{"_id", baseURL(url)}}
-	}
-	if err := s.DB.BaseEntities().Update(q, update); err != nil {
+func (s *Store) UpdateBaseEntity(url *router.ResolvedURL, update interface{}) error {
+	if err := s.DB.BaseEntities().Update(bson.D{{"_id", baseURL(&url.URL)}}, update); err != nil {
 		if err == mgo.ErrNotFound {
 			return errgo.WithCausef(err, params.ErrNotFound, "cannot update base entity for %q", url)
 		}
@@ -523,41 +512,43 @@ func (s *Store) UpdateBaseEntity(url *charm.Reference, update interface{}) error
 // This will be remedied when a new charm is uploaded by the promulgated
 // user. As promulgation is a rare operation, it is considered that the
 // chances this will happen are slim.
-func (s *Store) SetPromulgated(url *charm.Reference, promulgate bool) error {
-	entity, err := s.FindBestEntity(url)
-	if err != nil {
-		return errgo.Mask(err, errgo.Any)
-	}
-	bURL := baseURL(entity.URL)
+func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
+	base := baseURL(&url.URL)
 	if !promulgate {
 		err := s.DB.BaseEntities().UpdateId(
-			bURL,
+			base,
 			bson.D{{"$set", bson.D{{"promulgated", mongodoc.IntBool(false)}}}},
 		)
 		if err != nil {
-			return errgo.Mask(err)
+			if errgo.Cause(err) == mgo.ErrNotFound {
+				return errgo.WithCausef(nil, params.ErrNotFound, "base entity %q not found", base)
+			}
+			return errgo.Notef(err, "cannot unpromulgate base entity %q", base)
 		}
 		return nil
 	}
 
 	// Clear the promulgated flag on any Base entities with the same name,
 	// but aren't the one that is being set.
-	_, err = s.DB.BaseEntities().UpdateAll(
+	_, err := s.DB.BaseEntities().UpdateAll(
 		bson.D{
-			{"_id", bson.D{{"$ne", bURL}}},
-			{"name", bURL.Name},
+			{"_id", bson.D{{"$ne", base}}},
+			{"name", base.Name},
 			{"promulgated", 1},
 		},
 		bson.D{{"$set", bson.D{{"promulgated", mongodoc.IntBool(false)}}}},
 	)
 	if err != nil {
-		return errgo.Mask(err)
+		return errgo.Notef(err, "cannot unpromulgate other base entities")
 	}
 
 	// Set the promulgated flag on the base entity.
-	err = s.DB.BaseEntities().UpdateId(bURL, bson.D{{"$set", bson.D{{"promulgated", mongodoc.IntBool(true)}}}})
+	err = s.DB.BaseEntities().UpdateId(base, bson.D{{"$set", bson.D{{"promulgated", mongodoc.IntBool(true)}}}})
 	if err != nil {
-		return errgo.Mask(err)
+		if errgo.Cause(err) == mgo.ErrNotFound {
+			return errgo.WithCausef(nil, params.ErrNotFound, "base entity %q not found", base)
+		}
+		return errgo.Notef(err, "cannot promulgate base entity %q", base)
 	}
 
 	type result struct {
@@ -568,7 +559,7 @@ func (s *Store) SetPromulgated(url *charm.Reference, promulgate bool) error {
 	// Find the latest revision in each series of entities with the promulgated base URL.
 	var latestOwned []result
 	err = s.DB.Entities().Pipe([]bson.D{
-		{{"$match", bson.D{{"baseurl", bURL}}}},
+		{{"$match", bson.D{{"baseurl", base}}}},
 		{{"$group", bson.D{{"_id", "$series"}, {"revision", bson.D{{"$max", "$revision"}}}}}},
 	}).All(&latestOwned)
 	if err != nil {
@@ -586,7 +577,7 @@ func (s *Store) SetPromulgated(url *charm.Reference, promulgate bool) error {
 	// bundle entity.
 	latestPromulgated := make(map[string]int)
 	iter := s.DB.Entities().Pipe([]bson.D{
-		{{"$match", bson.D{{"name", bURL.Name}}}},
+		{{"$match", bson.D{{"name", base.Name}}}},
 		{{"$group", bson.D{{"_id", "$series"}, {"revision", bson.D{{"$max", "$promulgated-revision"}}}}}},
 	}).Iter()
 	var res result
@@ -600,7 +591,7 @@ func (s *Store) SetPromulgated(url *charm.Reference, promulgate bool) error {
 	// Update the newest entity in each series with a base URL that matches the newly promulgated
 	// base entity to have a promulgated URL, if it does not already have one.
 	for _, r := range latestOwned {
-		id := *bURL
+		id := *base
 		id.Series = r.Series
 		id.Revision = r.Revision
 		pID := id
@@ -625,23 +616,6 @@ func (s *Store) SetPromulgated(url *charm.Reference, promulgate bool) error {
 		}
 	}
 	return nil
-}
-
-// ExpandURL returns all the URLs that the given URL may refer to.
-func (s *Store) ExpandURL(url *charm.Reference) ([]*charm.Reference, error) {
-	entities, err := s.FindEntities(url, "_id", "promulgated-url")
-	if err != nil {
-		return nil, errgo.Mask(err)
-	}
-	urls := make([]*charm.Reference, len(entities))
-	for i, entity := range entities {
-		if url.User == "" {
-			urls[i] = entity.PromulgatedURL
-		} else {
-			urls[i] = entity.URL
-		}
-	}
-	return urls, nil
 }
 
 func interfacesForRelations(rels map[string]charm.Relation) []string {
@@ -719,7 +693,7 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 // OpenBlob opens a blob given its entity id; it returns the blob's
 // data source, its size and its hash. It returns a params.ErrNotFound
 // error if the entity does not exist.
-func (s *Store) OpenBlob(id *charm.Reference) (r blobstore.ReadSeekCloser, size int64, hash string, err error) {
+func (s *Store) OpenBlob(id *router.ResolvedURL) (r blobstore.ReadSeekCloser, size int64, hash string, err error) {
 	blobName, hash, err := s.BlobNameAndHash(id)
 	if err != nil {
 		return nil, 0, "", errgo.Mask(err, errgo.Is(params.ErrNotFound))
@@ -734,7 +708,7 @@ func (s *Store) OpenBlob(id *charm.Reference) (r blobstore.ReadSeekCloser, size 
 // BlobNameAndHash returns the name that is used to store the blob
 // for the entity with the given id and its hash. It returns a params.ErrNotFound
 // error if the entity does not exist.
-func (s *Store) BlobNameAndHash(id *charm.Reference) (name, hash string, err error) {
+func (s *Store) BlobNameAndHash(id *router.ResolvedURL) (name, hash string, err error) {
 	entity, err := s.FindEntity(id, "blobname", "blobhash")
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
@@ -1046,4 +1020,18 @@ func (s *Store) SynchroniseElasticsearch() error {
 		return errgo.Notef(err, "cannot synchronise indexes")
 	}
 	return nil
+}
+
+// EntityResolvedURL returns the ResolvedURL for the entity.
+// It requires the PromulgatedURL field to have been
+// filled out in the entity.
+func EntityResolvedURL(e *mongodoc.Entity) *router.ResolvedURL {
+	promulgatedRev := -1
+	if e.PromulgatedURL != nil {
+		promulgatedRev = e.PromulgatedURL.Revision
+	}
+	return &router.ResolvedURL{
+		URL:                 *e.URL,
+		PromulgatedRevision: promulgatedRev,
+	}
 }

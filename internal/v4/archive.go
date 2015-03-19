@@ -26,6 +26,7 @@ import (
 
 	"gopkg.in/juju/charmstore.v4/internal/charmstore"
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
@@ -43,19 +44,45 @@ import (
 // rather than choosing a new one. As this feature is to support legacy
 // ingestion methods, and will be removed in the future, it has no entry
 // in the specification.
-func (h *Handler) serveArchive(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
-	default:
-		// TODO(rog) params.ErrMethodNotAllowed
-		return errgo.Newf("method not allowed")
 	case "DELETE":
-		return h.serveDeleteArchive(id, w, req)
-	case "POST":
-		return h.servePostArchive(id, w, req)
-	case "PUT":
-		return h.servePutArchive(id, w, req)
+		return h.resolveId(h.authId(h.serveDeleteArchive))(id, w, req)
 	case "GET":
+		return h.resolveId(h.authId(h.serveGetArchive))(id, w, req)
+	case "POST", "PUT":
+		if err := h.authorizeUpload(id, req); err != nil {
+			return errgo.Mask(err, errgo.Any)
+		}
+		if req.Method == "POST" {
+			return h.servePostArchive(id, w, req)
+		}
+		return h.servePutArchive(id, w, req)
 	}
+	// TODO(rog) params.ErrMethodNotAllowed
+	return errgo.Newf("method not allowed")
+}
+
+func (h *Handler) authorizeUpload(id *charm.Reference, req *http.Request) error {
+	if id.User == "" {
+		return badRequestf(nil, "user not specified in entity upload URL %q", id)
+	}
+	baseURL := *id
+	baseURL.Revision = -1
+	baseURL.Series = ""
+	baseEntity, err := h.store.FindBaseEntity(id, "acls")
+	if err == nil {
+		return h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write)
+	}
+	if errgo.Cause(err) != params.ErrNotFound {
+		return errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
+	}
+	// The base entity does not currently exist, so we default to
+	// assuming write permissions for the entity user.
+	return h.authorizeWithPerms(req, nil, []string{id.User})
+}
+
+func (h *Handler) serveGetArchive(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	r, size, hash, err := h.store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
@@ -75,21 +102,21 @@ func (h *Handler) serveArchive(id *charm.Reference, fullySpecified bool, w http.
 	return nil
 }
 
-func (h *Handler) serveDeleteArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveDeleteArchive(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	// Retrieve the entity blob name from the database.
 	blobName, _, err := h.store.BlobNameAndHash(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	// Remove the entity.
-	if err := h.store.DB.Entities().RemoveId(id); err != nil {
+	if err := h.store.DB.Entities().RemoveId(&id.URL); err != nil {
 		return errgo.Notef(err, "cannot remove %s", id)
 	}
 	// Remove the reference to the archive from the blob store.
 	if err := h.store.BlobStore.Remove(blobName); err != nil {
 		return errgo.Notef(err, "cannot remove blob %s", blobName)
 	}
-	h.store.IncCounterAsync(charmstore.EntityStatsKey(id, params.StatsArchiveDelete))
+	h.store.IncCounterAsync(charmstore.EntityStatsKey(&id.URL, params.StatsArchiveDelete))
 	return nil
 }
 
@@ -335,7 +362,7 @@ func verifyConstraints(s string) error {
 
 // GET id/archive/path
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idarchivepath
-func (h *Handler) serveArchiveFile(id *charm.Reference, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+func (h *Handler) serveArchiveFile(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	r, size, _, err := h.store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))

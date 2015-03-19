@@ -16,6 +16,7 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
+	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
@@ -484,7 +485,7 @@ var LegacyDownloadCountsEnabled = true
 
 // ArchiveDownloadCounts calculates the aggregated download counts for
 // a charm or bundle.
-func (s *Store) ArchiveDownloadCounts(id *charm.Reference) (thisRevision, allRevisions AggregatedCounts, err error) {
+func (s *Store) ArchiveDownloadCounts(id *router.ResolvedURL) (thisRevision, allRevisions AggregatedCounts, err error) {
 	// TODO (frankban): remove this condition when removing the legacy counts
 	// logic.
 	if LegacyDownloadCountsEnabled {
@@ -492,12 +493,12 @@ func (s *Store) ArchiveDownloadCounts(id *charm.Reference) (thisRevision, allRev
 	}
 
 	// Retrieve the aggregated stats.
-	thisRevision, err = s.aggregateStats(EntityStatsKey(id, params.StatsArchiveDownload), false)
+	thisRevision, err = s.aggregateStats(EntityStatsKey(&id.URL, params.StatsArchiveDownload), false)
 	if err != nil {
 		err = errgo.Notef(err, "cannot get aggregated count for the specific revision")
 		return
 	}
-	noRevisionId := *id
+	noRevisionId := id.URL
 	noRevisionId.Revision = -1
 	allRevisions, err = s.aggregateStats(EntityStatsKey(&noRevisionId, params.StatsArchiveDownload), true)
 	if err != nil {
@@ -510,7 +511,7 @@ func (s *Store) ArchiveDownloadCounts(id *charm.Reference) (thisRevision, allRev
 // legacyDownloadCounts retrieves the aggregated stats from the entity
 // extra-info. This is used when LegacyDownloadCountsEnabled is true.
 // TODO (frankban): remove this method when removing the legacy counts logic.
-func (s *Store) legacyDownloadCounts(id *charm.Reference) (AggregatedCounts, AggregatedCounts, error) {
+func (s *Store) legacyDownloadCounts(id *router.ResolvedURL) (AggregatedCounts, AggregatedCounts, error) {
 	counts := AggregatedCounts{}
 	entity, err := s.FindEntity(id, "extrainfo")
 	if err != nil {
@@ -564,7 +565,7 @@ func (s *Store) aggregateStats(key []string, prefix bool) (AggregatedCounts, err
 // IncrementDownloadCounts updates the download statistics for entity id in both
 // the statistics database and the search database. The action is done in the
 // background using a separate goroutine.
-func (s *Store) IncrementDownloadCountsAsync(id *charm.Reference) {
+func (s *Store) IncrementDownloadCountsAsync(id *router.ResolvedURL) {
 	go func() {
 		if err := s.IncrementDownloadCounts(id); err != nil {
 			logger.Errorf("cannot increase download counter for %v: %s", id, err)
@@ -574,8 +575,8 @@ func (s *Store) IncrementDownloadCountsAsync(id *charm.Reference) {
 
 // IncrementDownloadCounts updates the download statistics for entity id in both
 // the statistics database and the search database.
-func (s *Store) IncrementDownloadCounts(id *charm.Reference) error {
-	key := EntityStatsKey(id, params.StatsArchiveDownload)
+func (s *Store) IncrementDownloadCounts(id *router.ResolvedURL) error {
+	key := EntityStatsKey(&id.URL, params.StatsArchiveDownload)
 	if err := s.IncCounter(key); err != nil {
 		return errgo.Notef(err, "cannot increase stats counter for %v", key)
 	}

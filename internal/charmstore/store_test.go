@@ -27,6 +27,7 @@ import (
 	"gopkg.in/juju/charmstore.v4/internal/blobstore"
 	"gopkg.in/juju/charmstore.v4/internal/elasticsearch"
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/internal/storetesting"
 	"gopkg.in/juju/charmstore.v4/params"
 )
@@ -307,16 +308,6 @@ var urlFindingTests = []struct {
 	expect:  []string{},
 }}
 
-func (s *StoreSuite) TestExpandURL(c *gc.C) {
-	s.testURLFinding(c, func(store *Store, expand *charm.Reference, expect []*charm.Reference) {
-		gotURLs, err := store.ExpandURL(expand)
-		c.Assert(err, gc.IsNil)
-
-		sort.Sort(orderedURLs(gotURLs))
-		c.Assert(gotURLs, jc.DeepEquals, expect)
-	})
-}
-
 func (s *StoreSuite) testURLFinding(c *gc.C, check func(store *Store, expand *charm.Reference, expect []*charm.Reference)) {
 	wordpress := storetesting.Charms.CharmDir("wordpress")
 	for i, test := range urlFindingTests {
@@ -391,11 +382,14 @@ func (s *StoreSuite) TestFindEntities(c *gc.C) {
 
 func (s *StoreSuite) TestFindEntity(c *gc.C) {
 	s.testURLFinding(c, func(store *Store, expand *charm.Reference, expect []*charm.Reference) {
-		entity, err := store.FindEntity(expand, "_id", "promulgated-url")
-		if expand.Series == "" || expand.Revision == -1 {
-			c.Assert(err, gc.ErrorMatches, `entity id ".*" is not fully qualified`)
+		if expand.Series == "" || expand.Revision == -1 || expand.User == "" {
 			return
 		}
+		rurl := &router.ResolvedURL{
+			URL:                 *expand,
+			PromulgatedRevision: -1,
+		}
+		entity, err := store.FindEntity(rurl, "_id", "promulgated-url")
 		if len(expect) == 0 {
 			c.Assert(err, gc.ErrorMatches, "entity not found")
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
@@ -411,7 +405,7 @@ func (s *StoreSuite) TestFindEntity(c *gc.C) {
 		}
 
 		// Check that it works when returning other fields too.
-		entity, err = store.FindEntity(expand, "blobname")
+		entity, err = store.FindEntity(rurl, "blobname")
 		c.Assert(err, gc.IsNil)
 		c.Assert(entity.BlobName, gc.Not(gc.Equals), "")
 	})
@@ -522,8 +516,8 @@ func (s *StoreSuite) TestAddCharmWithFailedESInsert(c *gc.C) {
 	store.ES = es
 	c.Assert(err, gc.IsNil)
 
-	url := charm.MustParseReference("~charmers/precise/wordpress-12")
-	err = store.AddCharmWithArchive(url, nil, storetesting.Charms.CharmDir("wordpress"))
+	url := newResolvedURL("~charmers/precise/wordpress-12", false)
+	err = store.AddCharmWithArchive(&url.URL, nil, storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.ErrorMatches, "cannot index cs:~charmers/precise/wordpress-12 to ElasticSearch: .*")
 
 	// Check that the entity has been correctly removed.
@@ -1133,12 +1127,10 @@ func (s *StoreSuite) TestAddCharmDuplicatingBundle(c *gc.C) {
 
 func (s *StoreSuite) TestOpenBlob(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-
 	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
-	url := charm.MustParseReference("cs:~charmers/precise/wordpress-23")
-	purl := charm.MustParseReference("cs:precise/wordpress-23")
-	err = store.AddCharmWithArchive(url, purl, charmArchive)
+	url := newResolvedURL("cs:~charmers/precise/wordpress-23", true)
+	err = store.AddCharmWithArchive(&url.URL, url.PreferredURL(), charmArchive)
 	c.Assert(err, gc.IsNil)
 
 	f, err := os.Open(charmArchive.Path)
@@ -1163,9 +1155,8 @@ func (s *StoreSuite) TestBlobNameAndHash(c *gc.C) {
 
 	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
-	url := charm.MustParseReference("cs:~charmers/precise/wordpress-23")
-	purl := charm.MustParseReference("cs:precise/wordpress-23")
-	err = store.AddCharmWithArchive(url, purl, charmArchive)
+	url := newResolvedURL("cs:~charmers/precise/wordpress-23", true)
+	err = store.AddCharmWithArchive(&url.URL, url.PreferredURL(), charmArchive)
 	c.Assert(err, gc.IsNil)
 
 	f, err := os.Open(charmArchive.Path)
@@ -1336,9 +1327,8 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithInvalidEntity(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
-	url := charm.MustParseReference("cs:~charmers/precise/wordpress-23")
-	purl := charm.MustParseReference("cs:precise/wordpress-23")
-	err = store.AddCharmWithArchive(url, purl, wordpress)
+	url := newResolvedURL("cs:~charmers/precise/wordpress-23", true)
+	err = store.AddCharmWithArchive(&url.URL, url.PreferredURL(), wordpress)
 	c.Assert(err, gc.IsNil)
 
 	entity, err := store.FindEntity(url, "charmmeta")
@@ -1353,9 +1343,8 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithFoundContent(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
-	url := charm.MustParseReference("cs:~charmers/precise/wordpress-23")
-	purl := charm.MustParseReference("cs:precise/wordpress-23")
-	err = store.AddCharmWithArchive(url, purl, wordpress)
+	url := newResolvedURL("cs:~charmers/precise/wordpress-23", true)
+	err = store.AddCharmWithArchive(&url.URL, url.PreferredURL(), wordpress)
 	c.Assert(err, gc.IsNil)
 
 	// Get our expected content.
@@ -1410,9 +1399,8 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithNotFoundContent(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
-	url := charm.MustParseReference("cs:~charmers/precise/wordpress-23")
-	purl := charm.MustParseReference("cs:precise/wordpress-23")
-	err = store.AddCharmWithArchive(url, purl, wordpress)
+	url := newResolvedURL("cs:~charmers/precise/wordpress-23", true)
+	err = store.AddCharmWithArchive(&url.URL, url.PreferredURL(), wordpress)
 	c.Assert(err, gc.IsNil)
 
 	entity, err := store.FindEntity(url, "blobname", "contents")
@@ -1506,8 +1494,7 @@ var fakeBlobSize, fakeBlobHash = func() (int64, string) {
 func (s *StoreSuite) TestSESPutDoesNotErrorWithNoESConfigured(c *gc.C) {
 	store, err := NewStore(s.Session.DB("mongodoctoelasticsearch"), nil, nil)
 	c.Assert(err, gc.IsNil)
-	var entity mongodoc.Entity
-	err = store.UpdateSearch(entity.URL)
+	err = store.UpdateSearch(nil)
 	c.Assert(err, gc.IsNil)
 }
 
@@ -1737,10 +1724,8 @@ var updateEntityTests = []struct {
 }{{
 	url: "~charmers/trusty/wordpress-10",
 }, {
-	url: "trusty/wordpress-4",
-}, {
 	url:       "~charmers/precise/wordpress-10",
-	expectErr: `cannot update "cs:~charmers/precise/wordpress-10": not found`,
+	expectErr: `cannot update "cs:precise/wordpress-10": not found`,
 }}
 
 func (s *StoreSuite) TestUpdateEntity(c *gc.C) {
@@ -1748,7 +1733,7 @@ func (s *StoreSuite) TestUpdateEntity(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	for i, test := range updateEntityTests {
 		c.Logf("test %d. %s", i, test.url)
-		url := charm.MustParseReference(test.url)
+		url := newResolvedURL(test.url, true)
 		_, err = store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 		err = store.DB.Entities().Insert(&mongodoc.Entity{
@@ -1780,10 +1765,8 @@ var updateBaseEntityTests = []struct {
 }{{
 	url: "~charmers/trusty/wordpress-10",
 }, {
-	url: "trusty/wordpress-4",
-}, {
 	url:       "~charmers/precise/mysql-10",
-	expectErr: `cannot update base entity for "cs:~charmers/precise/mysql-10": not found`,
+	expectErr: `cannot update base entity for "cs:precise/mysql-10": not found`,
 }}
 
 func (s *StoreSuite) TestUpdateBaseEntity(c *gc.C) {
@@ -1791,7 +1774,7 @@ func (s *StoreSuite) TestUpdateBaseEntity(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	for i, test := range updateBaseEntityTests {
 		c.Logf("test %d. %s", i, test.url)
-		url := charm.MustParseReference(test.url)
+		url := newResolvedURL(test.url, true)
 		_, err = store.DB.BaseEntities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 		err = store.DB.BaseEntities().Insert(&mongodoc.BaseEntity{
@@ -1808,7 +1791,7 @@ func (s *StoreSuite) TestUpdateBaseEntity(c *gc.C) {
 			c.Assert(err, gc.ErrorMatches, test.expectErr)
 		} else {
 			c.Assert(err, gc.IsNil)
-			baseEntity, err := store.FindBaseEntity(url)
+			baseEntity, err := store.FindBaseEntity(&url.URL)
 			c.Assert(err, gc.IsNil)
 			c.Assert(baseEntity.ACLs.Read, jc.DeepEquals, []string{"test"})
 		}
@@ -1939,47 +1922,6 @@ var promulgateTests = []struct {
 		baseEntity("~test2-charmers/wordpress", false),
 	},
 }, {
-	about: "charm not found",
-	entities: []*mongodoc.Entity{
-		entity("~charmers/trusty/wordpress-0", ""),
-		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-0"),
-		entity("~test2-charmers/trusty/wordpress-0", "trusty/wordpress-1"),
-	},
-	baseEntities: []*mongodoc.BaseEntity{
-		baseEntity("~charmers/wordpress", false),
-		baseEntity("~test-charmers/wordpress", false),
-		baseEntity("~test2-charmers/wordpress", true),
-	},
-	url:        "~charmers/trusty/wordpress-2",
-	promulgate: true,
-	expectErr:  "entity not found",
-}, {
-	about: "promulgate owner of previously promulgated charm",
-	entities: []*mongodoc.Entity{
-		entity("~charmers/trusty/wordpress-0", ""),
-		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-0"),
-		entity("~test-charmers/trusty/wordpress-1", ""),
-		entity("~test2-charmers/trusty/wordpress-0", "trusty/wordpress-1"),
-	},
-	baseEntities: []*mongodoc.BaseEntity{
-		baseEntity("~charmers/wordpress", false),
-		baseEntity("~test-charmers/wordpress", false),
-		baseEntity("~test2-charmers/wordpress", true),
-	},
-	url:        "trusty/wordpress-0",
-	promulgate: true,
-	expectEntities: []*mongodoc.Entity{
-		entity("~charmers/trusty/wordpress-0", ""),
-		entity("~test-charmers/trusty/wordpress-0", "trusty/wordpress-0"),
-		entity("~test-charmers/trusty/wordpress-1", "trusty/wordpress-2"),
-		entity("~test2-charmers/trusty/wordpress-0", "trusty/wordpress-1"),
-	},
-	expectBaseEntities: []*mongodoc.BaseEntity{
-		baseEntity("~charmers/wordpress", false),
-		baseEntity("~test-charmers/wordpress", true),
-		baseEntity("~test2-charmers/wordpress", false),
-	},
-}, {
 	about: "recovers from two promulgated base entities",
 	entities: []*mongodoc.Entity{
 		entity("~charmers/trusty/wordpress-0", ""),
@@ -2068,7 +2010,7 @@ func (s *StoreSuite) TestPromulgate(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	for i, test := range promulgateTests {
 		c.Logf("test %d. %s", i, test.about)
-		url := charm.MustParseReference(test.url)
+		url := newResolvedURL(test.url, false)
 		_, err := store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 		_, err = store.DB.BaseEntities().RemoveAll(nil)
@@ -2094,7 +2036,7 @@ func (s *StoreSuite) TestPromulgate(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		c.Assert(n, gc.Equals, len(test.expectBaseEntities))
 		for _, expectEntity := range test.expectEntities {
-			entity, err := store.FindEntity(expectEntity.URL)
+			entity, err := store.FindEntity(EntityResolvedURL(expectEntity))
 			c.Assert(err, gc.IsNil)
 			c.Assert(entity, jc.DeepEquals, expectEntity)
 		}
@@ -2104,6 +2046,22 @@ func (s *StoreSuite) TestPromulgate(c *gc.C) {
 			c.Assert(baseEntity, jc.DeepEquals, expectBaseEntity)
 		}
 	}
+}
+
+func (s *StoreSuite) TestEntityResolvedURL(c *gc.C) {
+	c.Assert(EntityResolvedURL(&mongodoc.Entity{
+		URL: charm.MustParseReference("~charmers/precise/wordpress-23"),
+	}), gc.DeepEquals, &router.ResolvedURL{
+		URL:                 *charm.MustParseReference("~charmers/precise/wordpress-23"),
+		PromulgatedRevision: -1,
+	})
+	c.Assert(EntityResolvedURL(&mongodoc.Entity{
+		URL:            charm.MustParseReference("~charmers/precise/wordpress-23"),
+		PromulgatedURL: charm.MustParseReference("precise/wordpress-4"),
+	}), gc.DeepEquals, &router.ResolvedURL{
+		URL:                 *charm.MustParseReference("~charmers/precise/wordpress-23"),
+		PromulgatedRevision: 4,
+	})
 }
 
 func entity(url, purl string) *mongodoc.Entity {

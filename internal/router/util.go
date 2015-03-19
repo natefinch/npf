@@ -8,12 +8,15 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/juju/loggo"
 	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
 
 	"gopkg.in/juju/charmstore.v4/params"
 )
+
+var logger = loggo.GetLogger("charmstore.internal.router")
 
 var (
 	HandleErrors = jsonhttp.HandleErrors(errorToResp)
@@ -22,6 +25,12 @@ var (
 )
 
 func errorToResp(err error) (int, interface{}) {
+	status, body := errorToResp1(err)
+	logger.Infof("error response %d; %s", status, errgo.Details(err))
+	return status, body
+}
+
+func errorToResp1(err error) (int, interface{}) {
 	// Allow bakery errors to be returned as the bakery would
 	// like them, so that httpbakery.Client.Do will work.
 	if err, ok := errgo.Cause(err).(*httpbakery.Error); ok {
@@ -51,6 +60,7 @@ func errorToResp(err error) (int, interface{}) {
 // errorResponse returns an appropriate error
 // response for the provided error.
 func errorResponseBody(err error) *params.Error {
+
 	errResp := &params.Error{
 		Message: err.Error(),
 	}

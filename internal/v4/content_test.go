@@ -36,7 +36,7 @@ var serveDiagramErrorsTests = []struct {
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
-		Message: "entity not found",
+		Message: `entity "cs:~charmers/bundle/foo-23" not found`,
 	},
 }, {
 	about:        "diagram for a charm",
@@ -56,8 +56,8 @@ var serveDiagramErrorsTests = []struct {
 }}
 
 func (s *APISuite) TestServeDiagramErrors(c *gc.C) {
-	s.addCharm(c, "wordpress", "cs:~charmers/trusty/wordpress-42")
-	s.addBundle(c, "wordpress-simple", "cs:~charmers/bundle/nopositionbundle-42")
+	s.addCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-42", 42))
+	s.addBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/nopositionbundle-42", 42))
 	for i, test := range serveDiagramErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
@@ -208,25 +208,37 @@ func (s *APISuite) TestServeReadMe(c *gc.C) {
 }
 
 func (s *APISuite) TestServeReadMeEntityNotFound(c *gc.C) {
+	// Add another charm so that the base entity exists so we
+	// actually get through to the code we're wanting to test.
+	// (if the base entity does not exist, the authorization code
+	// will fail).
+	s.addCharm(c, "wordpress", newResolvedURL("~charmers/precise/nothingatall-1", -1))
+
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
-		URL:          storeURL("precise/nothingatall-32/readme"),
+		URL:          storeURL("~charmers/precise/nothingatall-32/readme"),
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
 			Code:    params.ErrNotFound,
-			Message: "cannot get README: entity not found",
+			Message: `cannot get README: entity not found`,
 		},
 	})
 }
 
 func (s *APISuite) TestServeIconEntityNotFound(c *gc.C) {
+	// Add another charm so that the base entity exists so we
+	// actually get through to the code we're wanting to test.
+	// (if the base entity does not exist, the authorization code
+	// will fail).
+	s.addCharm(c, "wordpress", newResolvedURL("~charmers/precise/nothingatall-1", -1))
+
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
-		URL:          storeURL("precise/nothingatall-32/icon.svg"),
+		URL:          storeURL("~charmers/precise/nothingatall-32/icon.svg"),
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
 			Code:    params.ErrNotFound,
-			Message: "cannot get icon: entity not found",
+			Message: `cannot get icon: entity not found`,
 		},
 	})
 }
@@ -287,9 +299,11 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 }
 
 func (s *APISuite) TestServeBundleIcon(c *gc.C) {
+	s.addBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/something-32", 32))
+
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
-		URL:          storeURL("bundle/something-32/icon.svg"),
+		URL:          storeURL("~charmers/bundle/something-32/icon.svg"),
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
 			Code:    params.ErrNotFound,

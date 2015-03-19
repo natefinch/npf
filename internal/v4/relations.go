@@ -11,14 +11,16 @@ import (
 	"gopkg.in/juju/charm.v5-unstable"
 	"gopkg.in/mgo.v2/bson"
 
+	"gopkg.in/juju/charmstore.v4/internal/charmstore"
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
 // GET id/meta/charm-related[?include=meta[&include=meta…]]
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacharm-related
-func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	if id.Series == "bundle" {
+func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	if id.URL.Series == "bundle" {
 		return nil, nil
 	}
 
@@ -33,11 +35,13 @@ func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *charm.Reference,
 		"$or": []bson.M{
 			{"charmrequiredinterfaces": bson.M{
 				"$elemMatch": bson.M{
-					"$in": entity.CharmProvidedInterfaces},
+					"$in": entity.CharmProvidedInterfaces,
+				},
 			}},
 			{"charmprovidedinterfaces": bson.M{
 				"$elemMatch": bson.M{
-					"$in": entity.CharmRequiredInterfaces},
+					"$in": entity.CharmRequiredInterfaces,
+				},
 			}},
 		},
 	}
@@ -46,6 +50,7 @@ func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *charm.Reference,
 		{"charmrequiredinterfaces", 1},
 		{"charmprovidedinterfaces", 1},
 		{"promulgated-url", 1},
+		{"promulgated-revision", 1},
 	}
 
 	// Retrieve the entities from the database.
@@ -130,7 +135,7 @@ func (h *Handler) getRelatedIfaceResponses(
 		for _, entityIface := range getInterfaces(entity) {
 			if entityIface == iface {
 				// Retrieve the requested metadata for the entity.
-				meta, err := h.GetMetadata(entity.URL, includes, req)
+				meta, err := h.getMetadataForEntity(&entity, includes, req)
 				if err != nil {
 					return nil, err
 				}
@@ -147,8 +152,8 @@ func (h *Handler) getRelatedIfaceResponses(
 
 // GET id/meta/bundles-containing[?include=meta[&include=meta…]][&any-series=1][&any-revision=1][&all-results=1]
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetabundles-containing
-func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Reference, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	if id.Series == "bundle" {
+func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	if id.URL.Series == "bundle" {
 		return nil, nil
 	}
 
@@ -167,59 +172,99 @@ func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 	}
 
 	// Mutate the reference so that it represents a base URL if required.
-	searchId := *id
+	prefURL := id.PreferredURL()
+	searchId := *prefURL
 	if anySeries || anyRevision {
 		searchId.Revision = -1
 		searchId.Series = ""
 	}
 
 	// Retrieve the bundles containing the resulting charm id.
-	var entities []mongodoc.Entity
+	var entities []*mongodoc.Entity
 	if err := h.store.DB.Entities().
 		Find(bson.D{{"bundlecharms", &searchId}}).
 		Select(bson.D{{"_id", 1}, {"bundlecharms", 1}, {"promulgated-url", 1}}).
-		Sort("name", "-promulgated-revision", "-revision").
 		All(&entities); err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related bundles")
 	}
 
 	// Further filter the entities if required, by only including latest
 	// bundle revisions and/or excluding specific charm series or revisions.
-	anySeriesOrRevisionPredicate := func(e *mongodoc.Entity) bool {
+
+	// Filter entities so it contains only entities that actually
+	// match the desired search criteria.
+	filterEntities(&entities, func(e *mongodoc.Entity) bool {
 		if anySeries == anyRevision {
+			// If neither anySeries or anyRevision are true, then
+			// the search will be exact and therefore e must be
+			// matched.
+			// If both anySeries and anyRevision are true, then
+			// the base entity that we are searching for is exactly
+			// what we want to search for, therefore e must be matched.
 			return true
 		}
 		for _, charmId := range e.BundleCharms {
-			if charmId.Name == id.Name &&
-				charmId.User == id.User &&
-				(anySeries || charmId.Series == id.Series) &&
-				(anyRevision || charmId.Revision == id.Revision) {
+			if charmId.Name == prefURL.Name &&
+				charmId.User == prefURL.User &&
+				(anySeries || charmId.Series == prefURL.Series) &&
+				(anyRevision || charmId.Revision == prefURL.Revision) {
 				return true
 			}
 		}
 		return false
-	}
-	predicate := anySeriesOrRevisionPredicate
+	})
+
+	var latest map[charm.Reference]int
 	if !allResults {
-		previous := &charm.Reference{}
-		predicate = func(e *mongodoc.Entity) bool {
-			if e.URL.User == previous.User && e.URL.Name == previous.Name && e.URL.Series == previous.Series {
-				return false
+		// Include only the latest revision of any bundle.
+		// This is made somewhat tricky by the fact that
+		// each bundle can have two URLs, its canonical
+		// URL (with user) and its promulgated URL.
+		//
+		// We want to maximise the URL revision regardless of
+		// whether the URL is promulgated or not, so we
+		// we build a map holding the latest revision for both
+		// promulgated and non-promulgated revisions
+		// and then include entities that have the latest
+		// revision for either.
+		latest = make(map[charm.Reference]int)
+
+		// updateLatest updates the latest revision for u
+		// without its revision if it's greater than the existing
+		// entry.
+		updateLatest := func(u *charm.Reference) {
+			u1 := *u
+			u1.Revision = -1
+			if rev, ok := latest[u1]; !ok || rev < u.Revision {
+				latest[u1] = u.Revision
 			}
-			if included := anySeriesOrRevisionPredicate(e); included {
-				previous = e.URL
-				return true
-			}
-			return false
 		}
+		for _, e := range entities {
+			updateLatest(e.URL)
+			if e.PromulgatedURL != nil {
+				updateLatest(e.PromulgatedURL)
+			}
+		}
+		filterEntities(&entities, func(e *mongodoc.Entity) bool {
+			if e.PromulgatedURL != nil {
+				u := *e.PromulgatedURL
+				u.Revision = -1
+				if latest[u] == e.PromulgatedURL.Revision {
+					return true
+				}
+			}
+			u := *e.URL
+			u.Revision = -1
+			return latest[u] == e.URL.Revision
+		})
 	}
-	entities = filterEntities(entities, predicate)
 
 	// Prepare and return the response.
 	response := make([]*params.MetaAnyResponse, 0, len(entities))
 	includes := flags["include"]
+	// TODO(rog) make this concurrent.
 	for _, e := range entities {
-		meta, err := h.GetMetadata(e.URL, includes, req)
+		meta, err := h.getMetadataForEntity(e, includes, req)
 		if err != nil {
 			return nil, errgo.Notef(err, "cannot retrieve bundle metadata")
 		}
@@ -231,14 +276,20 @@ func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *charm.Refer
 	return response, nil
 }
 
-// filterEntities returns a slice containing all the entities for which the
-// given predicate returns true.
-func filterEntities(entities []mongodoc.Entity, predicate func(*mongodoc.Entity) bool) []mongodoc.Entity {
-	results := make([]mongodoc.Entity, 0, len(entities))
-	for _, entity := range entities {
-		if predicate(&entity) {
-			results = append(results, entity)
+func (h *Handler) getMetadataForEntity(e *mongodoc.Entity, includes []string, req *http.Request) (map[string]interface{}, error) {
+	return h.GetMetadata(charmstore.EntityResolvedURL(e), includes, req)
+}
+
+// filterEntities deletes all entities from *entities for which
+// the given predicate returns false.
+func filterEntities(entities *[]*mongodoc.Entity, predicate func(*mongodoc.Entity) bool) {
+	entities1 := *entities
+	j := 0
+	for _, e := range entities1 {
+		if predicate(e) {
+			entities1[j] = e
+			j++
 		}
 	}
-	return results
+	*entities = entities1[0:j]
 }
