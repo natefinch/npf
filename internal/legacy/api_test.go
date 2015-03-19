@@ -377,22 +377,17 @@ func (s *APISuite) TestServerStatus(c *gc.C) {
 }
 
 func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*router.ResolvedURL, *charm.CharmArchive) {
-	url := charm.MustParseReference(curl)
-	var purl *charm.Reference
-	if url.User == "" {
-		purl = new(charm.Reference)
-		*purl = *url
-		url.User = "charmers"
+	rurl := &router.ResolvedURL{
+		URL:                 *charm.MustParseReference(curl),
+		PromulgatedRevision: -1,
+	}
+	if rurl.URL.User == "" {
+		rurl.URL.User = "charmers"
+		rurl.PromulgatedRevision = rurl.URL.Revision
 	}
 	archive := storetesting.Charms.CharmArchive(c.MkDir(), charmName)
-	err := s.store.AddCharmWithArchive(url, purl, archive)
+	err := s.store.AddCharmWithArchive(rurl, archive)
 	c.Assert(err, gc.IsNil)
-	var rurl *router.ResolvedURL
-	if purl != nil {
-		rurl = router.MustNewResolvedURL(url.String(), purl.Revision)
-	} else {
-		rurl = router.MustNewResolvedURL(url.String(), -1)
-	}
 	return rurl, archive
 }
 

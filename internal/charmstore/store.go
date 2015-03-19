@@ -135,23 +135,17 @@ func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (blobName, blobHash
 //
 // If purl is not nil then the charm will also be
 // available at the promulgated url specified.
-func (s *Store) AddCharmWithArchive(url, purl *charm.Reference, ch charm.Charm) error {
+func (s *Store) AddCharmWithArchive(url *router.ResolvedURL, ch charm.Charm) error {
 	blobName, blobHash, blobHash256, blobSize, err := s.uploadCharmOrBundle(ch)
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	promulgatedRevision := -1
-	if purl != nil {
-		promulgatedRevision = purl.Revision
-	}
 	return s.AddCharm(ch, AddParams{
-		URL:                 url,
-		BlobName:            blobName,
-		BlobHash:            blobHash,
-		BlobHash256:         blobHash256,
-		BlobSize:            blobSize,
-		PromulgatedURL:      purl,
-		PromulgatedRevision: promulgatedRevision,
+		URL:         url,
+		BlobName:    blobName,
+		BlobHash:    blobHash,
+		BlobHash256: blobHash256,
+		BlobSize:    blobSize,
 	})
 }
 
@@ -165,23 +159,17 @@ func (s *Store) AddCharmWithArchive(url, purl *charm.Reference, ch charm.Charm) 
 //
 // TODO This could take a *router.ResolvedURL as an argument
 // instead of two *charm.References.
-func (s *Store) AddBundleWithArchive(url, purl *charm.Reference, b charm.Bundle) error {
+func (s *Store) AddBundleWithArchive(url *router.ResolvedURL, b charm.Bundle) error {
 	blobName, blobHash, blobHash256, size, err := s.uploadCharmOrBundle(b)
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	promulgatedRevision := -1
-	if purl != nil {
-		promulgatedRevision = purl.Revision
-	}
 	return s.AddBundle(b, AddParams{
-		URL:                 url,
-		BlobName:            blobName,
-		BlobHash:            blobHash,
-		BlobHash256:         blobHash256,
-		BlobSize:            size,
-		PromulgatedURL:      purl,
-		PromulgatedRevision: promulgatedRevision,
+		URL:         url,
+		BlobName:    blobName,
+		BlobHash:    blobHash,
+		BlobHash256: blobHash256,
+		BlobSize:    size,
 	})
 }
 
@@ -198,7 +186,9 @@ func (s *Store) uploadCharmOrBundle(c interface{}) (blobName, blobHash, blobHash
 // Store.AddCharm and Store.AddBundle methods.
 type AddParams struct {
 	// URL holds the id to be associated with the stored entity.
-	URL *charm.Reference
+	// If URL.PromulgatedRevision is not -1, the entity will
+	// be promulgated.
+	URL *router.ResolvedURL
 
 	// BlobName holds the name of the entity's archive blob.
 	BlobName string
@@ -215,29 +205,26 @@ type AddParams struct {
 	// Contents holds references to files inside the
 	// entity's archive blob.
 	Contents map[mongodoc.FileId]mongodoc.ZipFile
-
-	// PromulgatedURL holds the promulgated URL of the entity. If the entity
-	// is not promulgated this should be set to nil.
-	PromulgatedURL *charm.Reference
-
-	// PromulgatedRevision holds the revision number from the promulgated URL.
-	// If the entity is not promulgated this should be set to -1.
-	PromulgatedRevision int
 }
 
 // AddCharm adds a charm entities collection with the given
 // parameters.
 func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
-	if p.URL.Series == "bundle" || p.URL.User == "" {
-		return errgo.Newf("charm added with invalid id %v", p.URL)
+	// Strictly speaking this test is redundant, because a ResolvedURL should
+	// always be canonical, but check just in case anyway, as this is
+	// final gateway before a potentially invalid url might be stored
+	// in the database.
+	if p.URL.URL.Series == "bundle" || p.URL.URL.User == "" || p.URL.URL.Revision == -1 || p.URL.URL.Series == "" {
+		return errgo.Newf("charm added with invalid id %v", &p.URL.URL)
 	}
+	logger.Infof("add charm url %s; prev %d", &p.URL.URL, p.URL.PromulgatedRevision)
 	entity := &mongodoc.Entity{
-		URL:                     p.URL,
-		BaseURL:                 baseURL(p.URL),
-		User:                    p.URL.User,
-		Name:                    p.URL.Name,
-		Revision:                p.URL.Revision,
-		Series:                  p.URL.Series,
+		URL:                     &p.URL.URL,
+		BaseURL:                 baseURL(&p.URL.URL),
+		User:                    p.URL.URL.User,
+		Name:                    p.URL.URL.Name,
+		Revision:                p.URL.URL.Revision,
+		Series:                  p.URL.URL.Series,
 		BlobHash:                p.BlobHash,
 		BlobHash256:             p.BlobHash256,
 		BlobName:                p.BlobName,
@@ -249,13 +236,13 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 		CharmProvidedInterfaces: interfacesForRelations(c.Meta().Provides),
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
 		Contents:                p.Contents,
-		PromulgatedURL:          p.PromulgatedURL,
-		PromulgatedRevision:     p.PromulgatedRevision,
+		PromulgatedURL:          p.URL.PromulgatedURL(),
+		PromulgatedRevision:     p.URL.PromulgatedRevision,
 	}
 
 	// Check that we're not going to create a charm that duplicates
 	// the name of a bundle. This is racy, but it's the best we can do.
-	entities, err := s.FindEntities(baseURL(p.URL))
+	entities, err := s.FindEntities(baseURL(&p.URL.URL))
 	if err != nil {
 		return errgo.Notef(err, "cannot check for existing entities")
 	}
@@ -643,7 +630,11 @@ var errNotImplemented = errgo.Newf("not implemented")
 // AddBundle adds a bundle to the entities collection with the given
 // parameters.
 func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
-	if p.URL.Series != "bundle" || p.URL.User == "" {
+	// Strictly speaking this test is redundant, because a ResolvedURL should
+	// always be canonical, but check just in case anyway, as this is
+	// final gateway before a potentially invalid url might be stored
+	// in the database.
+	if p.URL.URL.Series != "bundle" || p.URL.URL.User == "" || p.URL.URL.Revision == -1 || p.URL.URL.Series == "" {
 		return errgo.Newf("bundle added with invalid id %v", p.URL)
 	}
 	bundleData := b.Data()
@@ -652,12 +643,12 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 		return errgo.Mask(err)
 	}
 	entity := &mongodoc.Entity{
-		URL:                 p.URL,
-		BaseURL:             baseURL(p.URL),
-		User:                p.URL.User,
-		Name:                p.URL.Name,
-		Revision:            p.URL.Revision,
-		Series:              p.URL.Series,
+		URL:                 &p.URL.URL,
+		BaseURL:             baseURL(&p.URL.URL),
+		User:                p.URL.URL.User,
+		Name:                p.URL.URL.Name,
+		Revision:            p.URL.URL.Revision,
+		Series:              p.URL.URL.Series,
 		BlobHash:            p.BlobHash,
 		BlobHash256:         p.BlobHash256,
 		BlobName:            p.BlobName,
@@ -669,13 +660,13 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 		BundleReadMe:        b.ReadMe(),
 		BundleCharms:        urls,
 		Contents:            p.Contents,
-		PromulgatedURL:      p.PromulgatedURL,
-		PromulgatedRevision: p.PromulgatedRevision,
+		PromulgatedURL:      p.URL.PromulgatedURL(),
+		PromulgatedRevision: p.URL.PromulgatedRevision,
 	}
 
 	// Check that we're not going to create a bundle that duplicates
 	// the name of a charm. This is racy, but it's the best we can do.
-	entities, err := s.FindEntities(baseURL(p.URL))
+	entities, err := s.FindEntities(baseURL(&p.URL.URL))
 	if err != nil {
 		return errgo.Notef(err, "cannot check for existing entities")
 	}

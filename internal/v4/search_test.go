@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/juju/loggo"
@@ -36,15 +37,15 @@ type SearchSuite struct {
 
 var _ = gc.Suite(&SearchSuite{})
 
-var exportTestCharms = map[string]string{
-	"wordpress": "cs:precise/wordpress-23",
-	"mysql":     "cs:trusty/mysql-7",
-	"varnish":   "cs:~foo/trusty/varnish-1",
-	"riak":      "cs:trusty/riak-67",
+var exportTestCharms = map[string]*router.ResolvedURL{
+	"wordpress": newResolvedURL("cs:~charmers/precise/wordpress-23", 23),
+	"mysql":     newResolvedURL("cs:~charmers/trusty/mysql-7", 7),
+	"varnish":   newResolvedURL("cs:~foo/trusty/varnish-1", -1),
+	"riak":      newResolvedURL("cs:~charmers/trusty/riak-67", 67),
 }
 
-var exportTestBundles = map[string]string{
-	"wordpress-simple": "cs:bundle/wordpress-simple-4",
+var exportTestBundles = map[string]*router.ResolvedURL{
+	"wordpress-simple": newResolvedURL("cs:~charmers/bundle/wordpress-simple-4", 4),
 }
 
 func (s *SearchSuite) SetUpTest(c *gc.C) {
@@ -78,25 +79,11 @@ func (s *SearchSuite) TearDownTest(c *gc.C) {
 
 func (s *SearchSuite) addCharmsToStore(c *gc.C, store *charmstore.Store) {
 	for name, id := range exportTestCharms {
-		url := charm.MustParseReference(id)
-		var purl *charm.Reference
-		if url.User == "" {
-			purl = new(charm.Reference)
-			*purl = *url
-			url.User = "charmers"
-		}
-		err := store.AddCharmWithArchive(url, purl, getCharm(name))
+		err := store.AddCharmWithArchive(id, getCharm(name))
 		c.Assert(err, gc.IsNil)
 	}
 	for name, id := range exportTestBundles {
-		url := charm.MustParseReference(id)
-		var purl *charm.Reference
-		if url.User == "" {
-			purl = new(charm.Reference)
-			*purl = *url
-			url.User = "charmers"
-		}
-		err := store.AddBundleWithArchive(url, purl, getBundle(name))
+		err := store.AddBundleWithArchive(id, getBundle(name))
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -284,11 +271,11 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 	tests := []struct {
 		about   string
 		query   string
-		results []string
+		results []*router.ResolvedURL
 	}{{
 		about: "bare search",
 		query: "",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
@@ -297,21 +284,21 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 	}, {
 		about: "text search",
 		query: "text=wordpress",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "autocomplete search",
 		query: "text=word&autocomplete=1",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "blank text search",
 		query: "text=",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
@@ -320,65 +307,65 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 	}, {
 		about: "description filter search",
 		query: "description=database",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 		},
 	}, {
 		about: "name filter search",
 		query: "name=mysql",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 		},
 	}, {
 		about: "owner filter search",
 		query: "owner=foo",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["varnish"],
 		},
 	}, {
 		about: "provides filter search",
 		query: "provides=mysql",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 		},
 	}, {
 		about: "requires filter search",
 		query: "requires=mysql",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 		},
 	}, {
 		about: "series filter search",
 		query: "series=trusty",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 		},
 	}, {
 		about: "summary filter search",
 		query: "summary=database",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 		},
 	}, {
 		about: "tags filter search",
 		query: "tags=wordpress",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "type filter search",
 		query: "type=bundle",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestBundles["wordpress-simple"],
 		},
 	}, {
 		about: "multiple type filter search",
 		query: "type=bundle&type=charm",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
@@ -387,33 +374,32 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 	}, {
 		about: "provides multiple interfaces filter search",
 		query: "provides=monitoring+http",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 		},
 	}, {
 		about: "requires multiple interfaces filter search",
 		query: "requires=mysql+varnish",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 		},
 	}, {
 		about: "multiple tags filter search",
 		query: "tags=mysql+bar",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 		},
 	}, {
 		about: "blank owner",
 		query: "owner=",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestBundles["wordpress-simple"],
 		},
 	}, {
-		about:   "paginated search",
-		query:   "name=mysql&skip=1",
-		results: []string{},
+		about: "paginated search",
+		query: "name=mysql&skip=1",
 	}}
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.about)
@@ -491,12 +477,12 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 				Provides: map[string][]params.MetaAnyResponse{
 					"mysql": {
 						{
-							Id: charm.MustParseReference(exportTestCharms["mysql"]),
+							Id: exportTestCharms["mysql"].PreferredURL(),
 						},
 					},
 					"varnish": {
 						{
-							Id: charm.MustParseReference(exportTestCharms["varnish"]),
+							Id: exportTestCharms["varnish"].PreferredURL(),
 						},
 					},
 				},
@@ -510,12 +496,12 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 				Provides: map[string][]params.MetaAnyResponse{
 					"mysql": {
 						{
-							Id: charm.MustParseReference(exportTestCharms["mysql"]),
+							Id: exportTestCharms["mysql"].PreferredURL(),
 						},
 					},
 					"varnish": {
 						{
-							Id: charm.MustParseReference(exportTestCharms["varnish"]),
+							Id: exportTestCharms["varnish"].PreferredURL(),
 						},
 					},
 				},
@@ -606,11 +592,11 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 	tests := []struct {
 		about   string
 		query   string
-		results []string
+		results []*router.ResolvedURL
 	}{{
 		about: "name ascending",
 		query: "sort=name",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 			exportTestCharms["wordpress"],
@@ -619,7 +605,7 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 	}, {
 		about: "name descending",
 		query: "sort=-name",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestBundles["wordpress-simple"],
 			exportTestCharms["wordpress"],
 			exportTestCharms["varnish"],
@@ -628,7 +614,7 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 	}, {
 		about: "series ascending",
 		query: "sort=series,name",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestBundles["wordpress-simple"],
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
@@ -637,7 +623,7 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 	}, {
 		about: "series descending",
 		query: "sort=-series&sort=name",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 			exportTestCharms["wordpress"],
@@ -646,7 +632,7 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 	}, {
 		about: "owner ascending",
 		query: "sort=owner,name",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["mysql"],
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
@@ -655,7 +641,7 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 	}, {
 		about: "owner descending",
 		query: "sort=-owner&sort=name",
-		results: []string{
+		results: []*router.ResolvedURL{
 			exportTestCharms["varnish"],
 			exportTestCharms["mysql"],
 			exportTestCharms["wordpress"],
@@ -671,10 +657,7 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 		var sr params.SearchResponse
 		err := json.Unmarshal(rec.Body.Bytes(), &sr)
 		c.Assert(err, gc.IsNil)
-		c.Assert(sr.Results, gc.HasLen, len(test.results))
-		for i, res := range sr.Results {
-			c.Assert(res.Id.String(), gc.Equals, test.results[i])
-		}
+		assertResultSet(c, sr, test.results)
 	}
 }
 
@@ -699,20 +682,12 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 		"varnish":   8,
 	}
 	for n, cnt := range charmDownloads {
-		ref := &router.ResolvedURL{
-			URL: charm.Reference{
-				Schema:   "cs",
-				User:     "downloads-test",
-				Name:     n,
-				Revision: 1,
-				Series:   "trusty",
-			},
-			PromulgatedRevision: -1,
-		}
-		err := s.store.AddCharmWithArchive(&ref.URL, nil, getCharm(n))
+		url := newResolvedURL("cs:~downloads-test/trusty/x-1", -1)
+		url.URL.Name = n
+		err := s.store.AddCharmWithArchive(url, getCharm(n))
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < cnt; i++ {
-			err := s.store.IncrementDownloadCounts(ref)
+			err := s.store.IncrementDownloadCounts(url)
 			c.Assert(err, gc.IsNil)
 		}
 	}
@@ -770,7 +745,7 @@ func (s *SearchSuite) TestSearchWithAdminCredentials(c *gc.C) {
 		Password: serverParams.AuthPassword,
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	expected := []string{
+	expected := []*router.ResolvedURL{
 		exportTestCharms["mysql"],
 		exportTestCharms["wordpress"],
 		exportTestCharms["riak"],
@@ -796,7 +771,7 @@ func (s *SearchSuite) TestSearchWithUserMacaroon(c *gc.C) {
 		Cookies: []*http.Cookie{macaroonCookie},
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	expected := []string{
+	expected := []*router.ResolvedURL{
 		exportTestCharms["mysql"],
 		exportTestCharms["wordpress"],
 		exportTestCharms["riak"],
@@ -822,7 +797,7 @@ func (s *SearchSuite) TestSearchWithGroupMacaroon(c *gc.C) {
 		Cookies: []*http.Cookie{macaroonCookie},
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	expected := []string{
+	expected := []*router.ResolvedURL{
 		exportTestCharms["mysql"],
 		exportTestCharms["wordpress"],
 		exportTestCharms["riak"],
@@ -850,7 +825,7 @@ func (s *SearchSuite) TestSearchWithBadAdminCredentialsAndACookie(c *gc.C) {
 		Password: "bad-password",
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	expected := []string{
+	expected := []*router.ResolvedURL{
 		exportTestCharms["mysql"],
 		exportTestCharms["wordpress"],
 		exportTestCharms["varnish"],
@@ -862,16 +837,27 @@ func (s *SearchSuite) TestSearchWithBadAdminCredentialsAndACookie(c *gc.C) {
 	assertResultSet(c, sr, expected)
 }
 
-func assertResultSet(c *gc.C, sr params.SearchResponse, expected []string) {
-	c.Assert(sr.Results, gc.HasLen, len(expected))
-OUTER:
-	for _, res := range sr.Results {
-		for i, r := range expected {
-			if res.Id.String() == r {
-				expected[i] = ""
-				continue OUTER
-			}
-		}
-		c.Errorf("Unexpected result received %q", res.Id.String())
+func assertResultSet(c *gc.C, sr params.SearchResponse, expected []*router.ResolvedURL) {
+	sort.Sort(searchResultById(sr.Results))
+	sort.Sort(resolvedURLByPreferredURL(expected))
+	c.Assert(sr.Results, gc.HasLen, len(expected), gc.Commentf("expected %#v", expected))
+	for i := range expected {
+		c.Assert(sr.Results[i].Id.String(), gc.Equals, expected[i].PreferredURL().String(), gc.Commentf("element %d"))
 	}
+}
+
+type searchResultById []params.SearchResult
+
+func (s searchResultById) Len() int      { return len(s) }
+func (s searchResultById) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s searchResultById) Less(i, j int) bool {
+	return s[i].Id.String() < s[j].Id.String()
+}
+
+type resolvedURLByPreferredURL []*router.ResolvedURL
+
+func (s resolvedURLByPreferredURL) Len() int      { return len(s) }
+func (s resolvedURLByPreferredURL) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s resolvedURLByPreferredURL) Less(i, j int) bool {
+	return s[i].PreferredURL().String() < s[j].PreferredURL().String()
 }

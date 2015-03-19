@@ -93,12 +93,10 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 	}
 
 	err := s.store.AddBundle(bundle, charmstore.AddParams{
-		URL:                 charm.MustParseReference("cs:~charmers/bundle/wordpressbundle-42"),
-		BlobName:            "blobName",
-		BlobHash:            fakeBlobHash,
-		BlobSize:            fakeBlobSize,
-		PromulgatedURL:      charm.MustParseReference("cs:bundle/wordpressbundle-42"),
-		PromulgatedRevision: 42,
+		URL:      newResolvedURL("cs:~charmers/bundle/wordpressbundle-42", 42),
+		BlobName: "blobName",
+		BlobHash: fakeBlobHash,
+		BlobSize: fakeBlobSize,
 	})
 	c.Assert(err, gc.IsNil)
 
@@ -175,7 +173,7 @@ var serveReadMeTests = []struct {
 
 func (s *APISuite) TestServeReadMe(c *gc.C) {
 	patchArchiveCacheAges(s)
-	url := charm.MustParseReference("cs:~charmers/precise/wordpress-0")
+	url := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
 	for i, test := range serveReadMeTests {
 		c.Logf("test %d: %s", i, test.name)
 		wordpress := storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
@@ -185,13 +183,13 @@ func (s *APISuite) TestServeReadMe(c *gc.C) {
 			c.Assert(err, gc.IsNil)
 		}
 
-		url.Revision = i
-		err := s.store.AddCharmWithArchive(url, nil, wordpress)
+		url.URL.Revision = i
+		err := s.store.AddCharmWithArchive(url, wordpress)
 		c.Assert(err, gc.IsNil)
 
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,
-			URL:     storeURL(url.Path() + "/readme"),
+			URL:     storeURL(url.URL.Path() + "/readme"),
 		})
 		if test.expectNotFound {
 			c.Assert(rec.Code, gc.Equals, http.StatusNotFound)
@@ -256,13 +254,13 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 	expected := `<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1" viewBox="0 0 1 1">an icon, really</svg>`
 	wordpress := charmWithExtraFile(c, "wordpress", "icon.svg", content)
 
-	url := charm.MustParseReference("cs:~charmers/precise/wordpress-0")
-	err := s.store.AddCharmWithArchive(url, nil, wordpress)
+	url := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
+	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
-		URL:     storeURL(url.Path() + "/icon.svg"),
+		URL:     storeURL(url.URL.Path() + "/icon.svg"),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.String(), gc.Equals, expected)
@@ -270,10 +268,11 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 	assertCacheControl(c, rec.Header(), true)
 
 	// Test with revision -1
-	url.Revision = -1
+	noRevURL := url.URL
+	noRevURL.Revision = -1
 	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
-		URL:     storeURL(url.Path() + "/icon.svg"),
+		URL:     storeURL(noRevURL.Path() + "/icon.svg"),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.String(), gc.Equals, expected)
@@ -285,13 +284,14 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 	err = ioutil.WriteFile(filepath.Join(wordpress.Path, "icon.svg"), []byte(expected), 0666)
 	c.Assert(err, gc.IsNil)
 
-	err = s.store.AddCharmWithArchive(url, nil, wordpress)
+	url.URL.Revision++
+	err = s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 
 	// Check that we still get expected svg.
 	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
-		URL:     storeURL(url.Path() + "/icon.svg"),
+		URL:     storeURL(url.URL.Path() + "/icon.svg"),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.String(), gc.Equals, expected)
@@ -314,16 +314,15 @@ func (s *APISuite) TestServeBundleIcon(c *gc.C) {
 
 func (s *APISuite) TestServeDefaultIcon(c *gc.C) {
 	patchArchiveCacheAges(s)
-	url := charm.MustParseReference("cs:~charmers/precise/wordpress-0")
-	purl := charm.MustParseReference("cs:precise/wordpress-0")
 	wordpress := storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
 
-	err := s.store.AddCharmWithArchive(url, purl, wordpress)
+	url := newResolvedURL("cs:~charmers/precise/wordpress-0", 0)
+	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
-		URL:     storeURL(url.Path() + "/icon.svg"),
+		URL:     storeURL(url.URL.Path() + "/icon.svg"),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.String(), gc.Equals, v4.DefaultIcon)
@@ -343,14 +342,14 @@ func (s *APISuite) TestServeDefaultIconForBadXML(c *gc.C) {
 	} {
 		wordpress := charmWithExtraFile(c, "wordpress", "icon.svg", content)
 
-		url := charm.MustParseReference("cs:~charmers/precise/wordpress-0")
-		url.Revision = i
-		err := s.store.AddCharmWithArchive(url, nil, wordpress)
+		url := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
+		url.URL.Revision = i
+		err := s.store.AddCharmWithArchive(url, wordpress)
 		c.Assert(err, gc.IsNil)
 
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,
-			URL:     storeURL(url.Path() + "/icon.svg"),
+			URL:     storeURL(url.URL.Path() + "/icon.svg"),
 		})
 		c.Assert(rec.Code, gc.Equals, http.StatusOK)
 		c.Assert(rec.Body.String(), gc.Equals, v4.DefaultIcon)
