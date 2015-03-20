@@ -176,6 +176,22 @@ func (id *ResolvedURL) PreferredURL() *charm.Reference {
 	return &u
 }
 
+// PromulgatedURL returns the promulgated URL for id if there
+// is one, or nil otherwise.
+func (id *ResolvedURL) PromulgatedURL() *charm.Reference {
+	if id.PromulgatedRevision == -1 {
+		return nil
+	}
+	return id.PreferredURL()
+}
+
+func (id *ResolvedURL) GoString() string {
+	if id.PromulgatedRevision != -1 {
+		return fmt.Sprintf("%d %s", id.PromulgatedRevision, &id.URL)
+	}
+	return id.URL.String()
+}
+
 // String returns the preferred string representation of u.
 // It prefers to use the promulgated URL when there is one.
 func (u *ResolvedURL) String() string {

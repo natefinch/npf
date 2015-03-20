@@ -16,6 +16,8 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	jc "github.com/juju/testing/checkers"
@@ -39,29 +41,22 @@ type StoreSuite struct {
 
 var _ = gc.Suite(&StoreSuite{})
 
-func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES, promulgate bool) {
+func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, url *router.ResolvedURL) {
 	var es *elasticsearch.Database
 	if addToES {
 		es = s.ES
 	}
 	store, err := NewStore(s.Session.DB("juju_test"), &SearchIndex{s.ES, s.TestIndex}, nil)
 	c.Assert(err, gc.IsNil)
-	url := charm.MustParseReference("cs:~charmers/precise/wordpress-23")
-	var purl *charm.Reference
-	promulgatedRevision := -1
-	if promulgate {
-		purl = charm.MustParseReference("cs:precise/wordpress-23")
-		promulgatedRevision = 23
-	}
 
 	// Add the charm to the store.
 	beforeAdding := time.Now()
-	err = store.AddCharmWithArchive(url, purl, ch)
+	err = store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
 	afterAdding := time.Now()
 
 	var doc mongodoc.Entity
-	err = store.DB.Entities().FindId("cs:~charmers/precise/wordpress-23").One(&doc)
+	err = store.DB.Entities().FindId(&url.URL).One(&doc)
 	c.Assert(err, gc.IsNil)
 
 	// Ensure the document was indexed in ElasticSearch, if an ES database was provided.
@@ -73,7 +68,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES, promulgate 
 		exists, err := store.ES.HasDocument(s.TestIndex, typeName, id)
 		c.Assert(err, gc.IsNil)
 		c.Assert(exists, gc.Equals, true)
-		if promulgate {
+		if purl := url.PromulgatedURL(); purl != nil {
 			c.Assert(result.PromulgatedURL, jc.DeepEquals, purl)
 		}
 	}
@@ -91,13 +86,14 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES, promulgate 
 	blobName := doc.BlobName
 	c.Assert(blobName, gc.Matches, "[0-9a-z]+")
 	doc.BlobName = ""
+
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
-		URL:                     url,
-		BaseURL:                 charm.MustParseReference("cs:~charmers/wordpress"),
-		User:                    url.User,
-		Name:                    url.Name,
-		Revision:                url.Revision,
-		Series:                  url.Series,
+		URL:                     &url.URL,
+		BaseURL:                 baseURL(&url.URL),
+		User:                    url.URL.User,
+		Name:                    url.URL.Name,
+		Revision:                url.URL.Revision,
+		Series:                  url.URL.Series,
 		BlobHash:                hash,
 		BlobHash256:             hash256,
 		Size:                    size,
@@ -106,8 +102,8 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES, promulgate 
 		CharmConfig:             ch.Config(),
 		CharmProvidedInterfaces: []string{"http", "logging", "monitoring"},
 		CharmRequiredInterfaces: []string{"mysql", "varnish"},
-		PromulgatedURL:          purl,
-		PromulgatedRevision:     promulgatedRevision,
+		PromulgatedURL:          url.PromulgatedURL(),
+		PromulgatedRevision:     url.PromulgatedRevision,
 	})
 
 	// The charm archive has been properly added to the blob store.
@@ -124,15 +120,15 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES, promulgate 
 	c.Assert(charmArchive.Revision(), jc.DeepEquals, ch.Revision())
 
 	// Check that the base entity has been properly created.
-	assertBaseEntity(c, store, baseURL(url), promulgate)
+	assertBaseEntity(c, store, baseURL(&url.URL), url.PromulgatedRevision != -1)
 
 	// Try inserting the charm again - it should fail because the charm is
 	// already there.
-	err = store.AddCharmWithArchive(url, nil, ch)
+	err = store.AddCharmWithArchive(url, ch)
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrDuplicateUpload)
 }
 
-func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES, promulgate bool) {
+func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool, url *router.ResolvedURL) {
 	var es *elasticsearch.Database
 
 	if addToES {
@@ -140,21 +136,14 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES, promu
 	}
 	store, err := NewStore(s.Session.DB("juju_test"), &SearchIndex{s.ES, s.TestIndex}, nil)
 	c.Assert(err, gc.IsNil)
-	url := charm.MustParseReference("cs:~charmers/bundle/wordpress-simple-42")
-	var purl *charm.Reference
-	promulgatedRevision := -1
-	if promulgate {
-		purl = charm.MustParseReference("cs:bundle/wordpress-simple-42")
-		promulgatedRevision = 42
-	}
 	// Add the bundle to the store.
 	beforeAdding := time.Now()
-	err = store.AddBundleWithArchive(url, purl, bundle)
+	err = store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
 	afterAdding := time.Now()
 
 	var doc mongodoc.Entity
-	err = store.DB.Entities().FindId("cs:~charmers/bundle/wordpress-simple-42").One(&doc)
+	err = store.DB.Entities().FindId(&url.URL).One(&doc)
 	c.Assert(err, gc.IsNil)
 	sort.Sort(orderedURLs(doc.BundleCharms))
 
@@ -167,7 +156,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES, promu
 		exists, err := store.ES.HasDocument(s.TestIndex, typeName, id)
 		c.Assert(err, gc.IsNil)
 		c.Assert(exists, gc.Equals, true)
-		if promulgate {
+		if purl := url.PromulgatedURL(); purl != nil {
 			c.Assert(result.PromulgatedURL, jc.DeepEquals, purl)
 		}
 	}
@@ -186,12 +175,12 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES, promu
 	// The entity doc has been correctly added to the mongo collection.
 	size, hash, hash256 := getSizeAndHashes(bundle)
 	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
-		URL:          url,
-		BaseURL:      charm.MustParseReference("cs:~charmers/wordpress-simple"),
-		User:         url.User,
-		Name:         url.Name,
-		Revision:     url.Revision,
-		Series:       url.Series,
+		URL:          &url.URL,
+		BaseURL:      baseURL(&url.URL),
+		User:         url.URL.User,
+		Name:         url.URL.Name,
+		Revision:     url.URL.Revision,
+		Series:       url.URL.Series,
 		BlobHash:     hash,
 		BlobHash256:  hash256,
 		Size:         size,
@@ -203,8 +192,8 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES, promu
 		},
 		BundleMachineCount:  newInt(2),
 		BundleUnitCount:     newInt(2),
-		PromulgatedURL:      purl,
-		PromulgatedRevision: promulgatedRevision,
+		PromulgatedURL:      url.PromulgatedURL(),
+		PromulgatedRevision: url.PromulgatedRevision,
 	})
 
 	// The bundle archive has been properly added to the blob store.
@@ -219,11 +208,11 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES, promu
 	c.Assert(bundleArchive.ReadMe(), jc.DeepEquals, bundle.ReadMe())
 
 	// Check that the base entity has been properly created.
-	assertBaseEntity(c, store, baseURL(url), promulgate)
+	assertBaseEntity(c, store, baseURL(&url.URL), url.PromulgatedRevision != -1)
 
 	// Try inserting the bundle again - it should fail because the bundle is
 	// already there.
-	err = store.AddBundleWithArchive(url, nil, bundle)
+	err = store.AddBundleWithArchive(url, bundle)
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrDuplicateUpload)
 }
 
@@ -267,25 +256,25 @@ var urlFindingTests = []struct {
 	expand  string
 	expect  []string
 }{{
-	inStore: []string{"cs:precise/wordpress-23"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23"},
 	expand:  "wordpress",
-	expect:  []string{"cs:precise/wordpress-23"},
+	expect:  []string{"23 cs:~charmers/precise/wordpress-23"},
 }, {
-	inStore: []string{"cs:precise/wordpress-23", "cs:precise/wordpress-24"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24"},
 	expand:  "wordpress",
-	expect:  []string{"cs:precise/wordpress-23", "cs:precise/wordpress-24"},
+	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24"},
 }, {
-	inStore: []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-24"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24"},
 	expand:  "precise/wordpress",
-	expect:  []string{"cs:precise/wordpress-23"},
+	expect:  []string{"23 cs:~charmers/precise/wordpress-23"},
 }, {
-	inStore: []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-24", "cs:foo/bar-434"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "434 cs:~charmers/foo/bar-434"},
 	expand:  "wordpress",
-	expect:  []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-24"},
+	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24"},
 }, {
-	inStore: []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-23", "cs:trusty/wordpress-24"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "23 cs:~charmers/trusty/wordpress-23", "24 cs:~charmers/trusty/wordpress-24"},
 	expand:  "wordpress-23",
-	expect:  []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-23"},
+	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "23 cs:~charmers/trusty/wordpress-23"},
 }, {
 	inStore: []string{"cs:~user/precise/wordpress-23", "cs:~user/trusty/wordpress-23"},
 	expand:  "~user/precise/wordpress",
@@ -295,11 +284,11 @@ var urlFindingTests = []struct {
 	expand:  "~user/wordpress",
 	expect:  []string{"cs:~user/precise/wordpress-23", "cs:~user/trusty/wordpress-23"},
 }, {
-	inStore: []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-24", "cs:foo/bar-434"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "434 cs:~charmers/foo/bar-434"},
 	expand:  "precise/wordpress-23",
-	expect:  []string{"cs:precise/wordpress-23"},
+	expect:  []string{"23 cs:~charmers/precise/wordpress-23"},
 }, {
-	inStore: []string{"cs:precise/wordpress-23", "cs:trusty/wordpress-24", "cs:foo/bar-434"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "434 cs:~charmers/foo/bar-434"},
 	expand:  "arble",
 	expect:  []string{},
 }, {
@@ -308,7 +297,7 @@ var urlFindingTests = []struct {
 	expect:  []string{},
 }}
 
-func (s *StoreSuite) testURLFinding(c *gc.C, check func(store *Store, expand *charm.Reference, expect []*charm.Reference)) {
+func (s *StoreSuite) testURLFinding(c *gc.C, check func(store *Store, expand *charm.Reference, expect []*router.ResolvedURL)) {
 	wordpress := storetesting.Charms.CharmDir("wordpress")
 	for i, test := range urlFindingTests {
 		c.Logf("test %d: %q from %q", i, test.expand, test.inStore)
@@ -316,27 +305,17 @@ func (s *StoreSuite) testURLFinding(c *gc.C, check func(store *Store, expand *ch
 		c.Assert(err, gc.IsNil)
 		_, err = store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
-		urls := mustParseReferences(test.inStore)
+		urls := mustParseResolvedURLs(test.inStore)
 		for _, url := range urls {
-			var purl *charm.Reference
-			if url.User == "" {
-				purl = new(charm.Reference)
-				*purl = *url
-				url.User = "charmers"
-			}
-			err := store.AddCharmWithArchive(url, purl, wordpress)
+			err := store.AddCharmWithArchive(url, wordpress)
 			c.Assert(err, gc.IsNil)
 		}
-		expectURLs := make([]*charm.Reference, len(test.expect))
-		for i, expect := range test.expect {
-			expectURLs[i] = charm.MustParseReference(expect)
-		}
-		check(store, charm.MustParseReference(test.expand), expectURLs)
+		check(store, charm.MustParseReference(test.expand), mustParseResolvedURLs(test.expect))
 	}
 }
 
 func (s *StoreSuite) TestFindEntities(c *gc.C) {
-	s.testURLFinding(c, func(store *Store, expand *charm.Reference, expect []*charm.Reference) {
+	s.testURLFinding(c, func(store *Store, expand *charm.Reference, expect []*router.ResolvedURL) {
 		// Check FindEntities works when just retrieving the id and promulgated id.
 		gotEntities, err := store.FindEntities(expand, "_id", "promulgated-url")
 		c.Assert(err, gc.IsNil)
@@ -347,15 +326,9 @@ func (s *StoreSuite) TestFindEntities(c *gc.C) {
 		}
 		c.Assert(gotEntities, gc.HasLen, len(expect))
 		for i, url := range expect {
-			var purl *charm.Reference
-			if url.User == "" {
-				purl = new(charm.Reference)
-				*purl = *url
-				url.User = "charmers"
-			}
 			c.Assert(gotEntities[i], jc.DeepEquals, &mongodoc.Entity{
-				URL:            url,
-				PromulgatedURL: purl,
+				URL:            &url.URL,
+				PromulgatedURL: url.PromulgatedURL(),
 			})
 		}
 
@@ -370,10 +343,7 @@ func (s *StoreSuite) TestFindEntities(c *gc.C) {
 		c.Assert(gotEntities, gc.HasLen, len(expect))
 		for i, url := range expect {
 			var entity mongodoc.Entity
-			if url.User == "" {
-				url.User = "charmers"
-			}
-			err := store.DB.Entities().FindId(url).One(&entity)
+			err := store.DB.Entities().FindId(&url.URL).One(&entity)
 			c.Assert(err, gc.IsNil)
 			c.Assert(gotEntities[i], jc.DeepEquals, &entity)
 		}
@@ -381,7 +351,7 @@ func (s *StoreSuite) TestFindEntities(c *gc.C) {
 }
 
 func (s *StoreSuite) TestFindEntity(c *gc.C) {
-	s.testURLFinding(c, func(store *Store, expand *charm.Reference, expect []*charm.Reference) {
+	s.testURLFinding(c, func(store *Store, expand *charm.Reference, expect []*router.ResolvedURL) {
 		if expand.Series == "" || expand.Revision == -1 || expand.User == "" {
 			return
 		}
@@ -398,11 +368,7 @@ func (s *StoreSuite) TestFindEntity(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		c.Assert(len(expect), gc.Equals, 1)
 		c.Assert(entity.BlobName, gc.Equals, "")
-		if expect[0].User == "" {
-			c.Assert(entity.PromulgatedURL, jc.DeepEquals, expect[0])
-		} else {
-			c.Assert(entity.URL, jc.DeepEquals, expect[0])
-		}
+		c.Assert(entity.URL, jc.DeepEquals, expect[0])
 
 		// Check that it works when returning other fields too.
 		entity, err = store.FindEntity(rurl, "blobname")
@@ -419,7 +385,7 @@ var findBaseEntityTests = []struct {
 	expect *mongodoc.BaseEntity
 }{{
 	about:  "entity found, base url, all fields",
-	stored: []string{"utopic/django-42"},
+	stored: []string{"42 cs:~charmers/utopic/django-42"},
 	url:    "django",
 	expect: &mongodoc.BaseEntity{
 		URL:         charm.MustParseReference("~charmers/django"),
@@ -434,7 +400,7 @@ var findBaseEntityTests = []struct {
 	},
 }, {
 	about:  "entity found, fully qualified url, few fields",
-	stored: []string{"utopic/django-42", "~who/precise/django-47"},
+	stored: []string{"42 cs:~charmers/utopic/django-42", "~who/precise/django-47"},
 	url:    "~who/precise/django-0",
 	fields: []string{"public", "user"},
 	expect: &mongodoc.BaseEntity{
@@ -444,7 +410,7 @@ var findBaseEntityTests = []struct {
 	},
 }, {
 	about:  "entity found, partial url, only the ACLs",
-	stored: []string{"utopic/django-42", "~who/trusty/django-47"},
+	stored: []string{"42 cs:~charmers/utopic/django-42", "~who/trusty/django-47"},
 	url:    "~who/django-42",
 	fields: []string{"acls"},
 	expect: &mongodoc.BaseEntity{
@@ -456,11 +422,11 @@ var findBaseEntityTests = []struct {
 	},
 }, {
 	about:  "entity not found, charm name",
-	stored: []string{"utopic/django-42", "~who/trusty/django-47"},
+	stored: []string{"42 cs:~charmers/utopic/django-42", "~who/trusty/django-47"},
 	url:    "rails",
 }, {
 	about:  "entity not found, user",
-	stored: []string{"utopic/django-42", "~who/trusty/django-47"},
+	stored: []string{"42 cs:~charmers/utopic/django-42", "~who/trusty/django-47"},
 	url:    "~dalek/django",
 	fields: []string{"acls"},
 }}
@@ -473,14 +439,8 @@ func (s *StoreSuite) TestFindBaseEntity(c *gc.C) {
 		c.Logf("test %d: %s", i, test.about)
 
 		// Add initial charms to the store.
-		for _, url := range mustParseReferences(test.stored) {
-			var purl *charm.Reference
-			if url.User == "" {
-				purl = new(charm.Reference)
-				*purl = *url
-				url.User = "charmers"
-			}
-			err := store.AddCharmWithArchive(url, purl, ch)
+		for _, url := range mustParseResolvedURLs(test.stored) {
+			err := store.AddCharmWithArchive(url, ch)
 			c.Assert(err, gc.IsNil)
 		}
 
@@ -516,8 +476,8 @@ func (s *StoreSuite) TestAddCharmWithFailedESInsert(c *gc.C) {
 	store.ES = es
 	c.Assert(err, gc.IsNil)
 
-	url := newResolvedURL("~charmers/precise/wordpress-12", false)
-	err = store.AddCharmWithArchive(&url.URL, nil, storetesting.Charms.CharmDir("wordpress"))
+	url := newResolvedURL("~charmers/precise/wordpress-12", -1)
+	err = store.AddCharmWithArchive(url, storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.ErrorMatches, "cannot index cs:~charmers/precise/wordpress-12 to ElasticSearch: .*")
 
 	// Check that the entity has been correctly removed.
@@ -530,13 +490,12 @@ func (s *StoreSuite) TestAddCharmsWithTheSameBaseEntity(c *gc.C) {
 
 	// Add a charm to the database.
 	ch := storetesting.Charms.CharmDir("wordpress")
-	url := charm.MustParseReference("~charmers/trusty/wordpress-12")
-	purl := charm.MustParseReference("trusty/wordpress-12")
-	err = store.AddCharmWithArchive(url, purl, ch)
+	url := newResolvedURL("~charmers/trusty/wordpress-12", 12)
+	err = store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
 
 	// Add a second charm to the database, sharing the same base URL.
-	err = store.AddCharmWithArchive(charm.MustParseReference("~charmers/utopic/wordpress-13"), nil, ch)
+	err = store.AddCharmWithArchive(newResolvedURL("~charmers/utopic/wordpress-13", -1), ch)
 	c.Assert(err, gc.IsNil)
 
 	// Ensure a single base entity has been created.
@@ -624,36 +583,24 @@ func (s *StoreSuite) TestBundleUnitCount(c *gc.C) {
 	entities := store.DB.Entities()
 	for i, test := range bundleUnitCountTests {
 		c.Logf("test %d: %s", i, test.about)
-		url := &charm.Reference{
-			Schema:   "cs",
-			Series:   "bundle",
-			Name:     "django",
-			Revision: i,
-			User:     "charmers",
-		}
-		purl := &charm.Reference{
-			Schema:   "cs",
-			Series:   "bundle",
-			Name:     "django",
-			Revision: i,
-		}
+		url := newResolvedURL("cs:~charmers/bundle/django-0", -1)
+		url.URL.Revision = i
+		url.PromulgatedRevision = i
 
 		// Add the bundle used for this test.
 		err := store.AddBundle(&testingBundle{
 			data: test.data,
 		}, AddParams{
-			URL:                 url,
-			BlobName:            "blobName",
-			BlobHash:            fakeBlobHash,
-			BlobSize:            fakeBlobSize,
-			PromulgatedURL:      purl,
-			PromulgatedRevision: purl.Revision,
+			URL:      url,
+			BlobName: "blobName",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
 		})
 		c.Assert(err, gc.IsNil)
 
 		// Retrieve the bundle from the database.
 		var doc mongodoc.Entity
-		err = entities.FindId(url).One(&doc)
+		err = entities.FindId(&url.URL).One(&doc)
 		c.Assert(err, gc.IsNil)
 
 		c.Assert(*doc.BundleUnitCount, gc.Equals, test.expectUnits)
@@ -961,37 +908,25 @@ func (s *StoreSuite) TestBundleMachineCount(c *gc.C) {
 	entities := store.DB.Entities()
 	for i, test := range bundleMachineCountTests {
 		c.Logf("test %d: %s", i, test.about)
-		url := &charm.Reference{
-			Schema:   "cs",
-			Series:   "bundle",
-			Name:     "django",
-			Revision: i,
-			User:     "charmers",
-		}
-		purl := &charm.Reference{
-			Schema:   "cs",
-			Series:   "bundle",
-			Name:     "django",
-			Revision: i,
-		}
+		url := newResolvedURL("cs:~charmers/bundle/django-0", -1)
+		url.URL.Revision = i
+		url.PromulgatedRevision = i
 		err := test.data.Verify(func(string) error { return nil })
 		c.Assert(err, gc.IsNil)
 		// Add the bundle used for this test.
 		err = store.AddBundle(&testingBundle{
 			data: test.data,
 		}, AddParams{
-			URL:                 url,
-			BlobName:            "blobName",
-			BlobHash:            fakeBlobHash,
-			BlobSize:            fakeBlobSize,
-			PromulgatedURL:      purl,
-			PromulgatedRevision: purl.Revision,
+			URL:      url,
+			BlobName: "blobName",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
 		})
 		c.Assert(err, gc.IsNil)
 
 		// Retrieve the bundle from the database.
 		var doc mongodoc.Entity
-		err = entities.FindId(url).One(&doc)
+		err = entities.FindId(&url.URL).One(&doc)
 		c.Assert(err, gc.IsNil)
 
 		c.Assert(*doc.BundleMachineCount, gc.Equals, test.expectMachines)
@@ -1006,6 +941,37 @@ func urlStrings(urls []*charm.Reference) []string {
 	return urlStrs
 }
 
+// mustParseResolvedURL parses a resolved URL in string form, with
+// the optional promulgated revision preceding the entity URL
+// separated by a space.
+func mustParseResolvedURL(urlStr string) *router.ResolvedURL {
+	s := strings.Fields(urlStr)
+	promRev := -1
+	switch len(s) {
+	default:
+		panic(fmt.Errorf("invalid resolved URL string %q", urlStr))
+	case 2:
+		var err error
+		promRev, err = strconv.Atoi(s[0])
+		if err != nil || promRev < 0 {
+			panic(fmt.Errorf("invalid resolved URL string %q", urlStr))
+		}
+	case 1:
+	}
+	return &router.ResolvedURL{
+		URL:                 *charm.MustParseReference(s[len(s)-1]),
+		PromulgatedRevision: promRev,
+	}
+}
+
+func mustParseResolvedURLs(urlStrs []string) []*router.ResolvedURL {
+	urls := make([]*router.ResolvedURL, len(urlStrs))
+	for i, u := range urlStrs {
+		urls[i] = mustParseResolvedURL(u)
+	}
+	return urls
+}
+
 func mustParseReferences(urlStrs []string) []*charm.Reference {
 	urls := make([]*charm.Reference, len(urlStrs))
 	for i, u := range urlStrs {
@@ -1016,27 +982,27 @@ func mustParseReferences(urlStrs []string) []*charm.Reference {
 
 func (s *StoreSuite) TestAddPromulgatedCharmDir(c *gc.C) {
 	charmDir := storetesting.Charms.CharmDir("wordpress")
-	s.checkAddCharm(c, charmDir, false, true)
+	s.checkAddCharm(c, charmDir, false, newResolvedURL("~charmers/precise/wordpress-1", 1))
 }
 
 func (s *StoreSuite) TestAddPromulgatedCharmArchive(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	s.checkAddCharm(c, charmArchive, false, true)
+	s.checkAddCharm(c, charmArchive, false, newResolvedURL("~charmers/precise/wordpress-1", 1))
 }
 
 func (s *StoreSuite) TestAddUserOwnedCharmDir(c *gc.C) {
 	charmDir := storetesting.Charms.CharmDir("wordpress")
-	s.checkAddCharm(c, charmDir, false, false)
+	s.checkAddCharm(c, charmDir, false, newResolvedURL("~charmers/precise/wordpress-1", -1))
 }
 
 func (s *StoreSuite) TestAddUserOwnedCharmArchive(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	s.checkAddCharm(c, charmArchive, false, false)
+	s.checkAddCharm(c, charmArchive, false, newResolvedURL("~charmers/precise/wordpress-1", -1))
 }
 
 func (s *StoreSuite) TestAddBundleDir(c *gc.C) {
 	bundleDir := storetesting.Charms.BundleDir("wordpress-simple")
-	s.checkAddBundle(c, bundleDir, false, true)
+	s.checkAddBundle(c, bundleDir, false, newResolvedURL("~charmers/bundle/wordpress-simple-2", 3))
 }
 
 func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
@@ -1044,12 +1010,12 @@ func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
 		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
-	s.checkAddBundle(c, bundleArchive, false, true)
+	s.checkAddBundle(c, bundleArchive, false, newResolvedURL("~charmers/bundle/wordpress-simple-2", 3))
 }
 
 func (s *StoreSuite) TestAddUserOwnedBundleDir(c *gc.C) {
 	bundleDir := storetesting.Charms.BundleDir("wordpress-simple")
-	s.checkAddBundle(c, bundleDir, false, false)
+	s.checkAddBundle(c, bundleDir, false, newResolvedURL("~charmers/bundle/wordpress-simple-1", -1))
 }
 
 func (s *StoreSuite) TestAddUserOwnedBundleArchive(c *gc.C) {
@@ -1057,7 +1023,7 @@ func (s *StoreSuite) TestAddUserOwnedBundleArchive(c *gc.C) {
 		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
-	s.checkAddBundle(c, bundleArchive, false, false)
+	s.checkAddBundle(c, bundleArchive, false, newResolvedURL("~charmers/bundle/wordpress-simple-1", -1))
 }
 
 func (s *StoreSuite) TestAddCharmWithBundleSeries(c *gc.C) {
@@ -1065,50 +1031,66 @@ func (s *StoreSuite) TestAddCharmWithBundleSeries(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	err = store.AddCharm(ch, AddParams{
-		URL: charm.MustParseReference("~charmers/bundle/wordpress-2"),
+		URL: newResolvedURL("~charmers/bundle/wordpress-2", -1),
 	})
 	c.Assert(err, gc.ErrorMatches, `charm added with invalid id cs:~charmers/bundle/wordpress-2`)
+}
+
+var addInvalidCharmURLTests = []string{
+	"cs:precise/wordpress-2",          // no user
+	"cs:~charmers/precise/wordpress",  // no revision
+	"cs:~charmers/wordpress-3",        // no series
+	"cs:~charmers/bundle/wordpress-2", // invalid series
+}
+
+func (s *StoreSuite) TestAddInvalidCharmURL(c *gc.C) {
+	store, err := NewStore(s.Session.DB("foo"), nil, nil)
+	c.Assert(err, gc.IsNil)
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
+	for i, urlStr := range addInvalidCharmURLTests {
+		c.Logf("test %d: %s", i, urlStr)
+		err := store.AddCharm(ch, AddParams{
+			URL: &router.ResolvedURL{
+				URL:                 *charm.MustParseReference(urlStr),
+				PromulgatedRevision: -1,
+			},
+		})
+		c.Assert(err, gc.ErrorMatches, `charm added with invalid id .*`)
+	}
+}
+
+var addInvalidBundleURLTests = []string{
+	"cs:bundle/wordpress-2",            // no user
+	"cs:~charmers/bundle/wordpress",    // no revision
+	"cs:~charmers/wordpress-2",         // no series
+	"cs:~charmers/precise/wordpress-3", // invalid series
 }
 
 func (s *StoreSuite) TestAddBundleWithCharmSeries(c *gc.C) {
 	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	b := storetesting.Charms.BundleDir("wordpress-simple")
-	err = store.AddBundle(b, AddParams{
-		URL: charm.MustParseReference("~charmers/precise/wordpress-simple-2"),
-	})
-	c.Assert(err, gc.ErrorMatches, `bundle added with invalid id cs:~charmers/precise/wordpress-simple-2`)
-}
-
-func (s *StoreSuite) TestAddCharmWithoutUser(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"), nil, nil)
-	c.Assert(err, gc.IsNil)
-	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	err = store.AddCharm(ch, AddParams{
-		URL: charm.MustParseReference("precise/wordpress-2"),
-	})
-	c.Assert(err, gc.ErrorMatches, `charm added with invalid id cs:precise/wordpress-2`)
-}
-
-func (s *StoreSuite) TestAddBundleWithoutUser(c *gc.C) {
-	store, err := NewStore(s.Session.DB("foo"), nil, nil)
-	c.Assert(err, gc.IsNil)
-	b := storetesting.Charms.BundleDir("wordpress-simple")
-	err = store.AddBundle(b, AddParams{
-		URL: charm.MustParseReference("bundle/wordpress-simple-2"),
-	})
-	c.Assert(err, gc.ErrorMatches, `bundle added with invalid id cs:bundle/wordpress-simple-2`)
+	for i, urlStr := range addInvalidBundleURLTests {
+		c.Logf("test %d: %s", i, urlStr)
+		err := store.AddBundle(b, AddParams{
+			URL: &router.ResolvedURL{
+				URL:                 *charm.MustParseReference(urlStr),
+				PromulgatedRevision: -1,
+			},
+		})
+		c.Assert(err, gc.ErrorMatches, `bundle added with invalid id .*`)
+	}
 }
 
 func (s *StoreSuite) TestAddBundleDuplicatingCharm(c *gc.C) {
 	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	ch := storetesting.Charms.CharmDir("wordpress")
-	err = store.AddCharmWithArchive(charm.MustParseReference("~charmers/precise/wordpress-2"), nil, ch)
+	err = store.AddCharmWithArchive(newResolvedURL("~charmers/precise/wordpress-2", -1), ch)
 	c.Assert(err, gc.IsNil)
 
 	b := storetesting.Charms.BundleDir("wordpress-simple")
-	err = store.AddBundleWithArchive(charm.MustParseReference("~charmers/bundle/wordpress-5"), nil, b)
+	err = store.AddBundleWithArchive(newResolvedURL("~charmers/bundle/wordpress-5", -1), b)
 	c.Assert(err, gc.ErrorMatches, "bundle name duplicates charm name cs:~charmers/precise/wordpress-2")
 }
 
@@ -1117,11 +1099,11 @@ func (s *StoreSuite) TestAddCharmDuplicatingBundle(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	b := storetesting.Charms.BundleDir("wordpress-simple")
-	err = store.AddBundleWithArchive(charm.MustParseReference("~charmers/bundle/wordpress-2"), nil, b)
+	err = store.AddBundleWithArchive(newResolvedURL("~charmers/bundle/wordpress-2", -1), b)
 	c.Assert(err, gc.IsNil)
 
 	ch := storetesting.Charms.CharmDir("wordpress")
-	err = store.AddCharmWithArchive(charm.MustParseReference("~charmers/precise/wordpress-5"), nil, ch)
+	err = store.AddCharmWithArchive(newResolvedURL("~charmers/precise/wordpress-5", -1), ch)
 	c.Assert(err, gc.ErrorMatches, "charm name duplicates bundle name cs:~charmers/bundle/wordpress-2")
 }
 
@@ -1129,8 +1111,8 @@ func (s *StoreSuite) TestOpenBlob(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
-	url := newResolvedURL("cs:~charmers/precise/wordpress-23", true)
-	err = store.AddCharmWithArchive(&url.URL, url.PreferredURL(), charmArchive)
+	url := newResolvedURL("cs:~charmers/precise/wordpress-23", 23)
+	err = store.AddCharmWithArchive(url, charmArchive)
 	c.Assert(err, gc.IsNil)
 
 	f, err := os.Open(charmArchive.Path)
@@ -1155,8 +1137,8 @@ func (s *StoreSuite) TestBlobNameAndHash(c *gc.C) {
 
 	store, err := NewStore(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
-	url := newResolvedURL("cs:~charmers/precise/wordpress-23", true)
-	err = store.AddCharmWithArchive(&url.URL, url.PreferredURL(), charmArchive)
+	url := newResolvedURL("cs:~charmers/precise/wordpress-23", 23)
+	err = store.AddCharmWithArchive(url, charmArchive)
 	c.Assert(err, gc.IsNil)
 
 	f, err := os.Open(charmArchive.Path)
@@ -1327,8 +1309,8 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithInvalidEntity(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
-	url := newResolvedURL("cs:~charmers/precise/wordpress-23", true)
-	err = store.AddCharmWithArchive(&url.URL, url.PreferredURL(), wordpress)
+	url := newResolvedURL("cs:~charmers/precise/wordpress-23", 23)
+	err = store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 
 	entity, err := store.FindEntity(url, "charmmeta")
@@ -1343,8 +1325,8 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithFoundContent(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
-	url := newResolvedURL("cs:~charmers/precise/wordpress-23", true)
-	err = store.AddCharmWithArchive(&url.URL, url.PreferredURL(), wordpress)
+	url := newResolvedURL("cs:~charmers/precise/wordpress-23", 23)
+	err = store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 
 	// Get our expected content.
@@ -1388,10 +1370,10 @@ func (s *StoreSuite) TestAddCharmWithUser(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
-	url := charm.MustParseReference("cs:~who/precise/wordpress-23")
-	err = store.AddCharmWithArchive(url, nil, wordpress)
+	url := newResolvedURL("cs:~who/precise/wordpress-23", -1)
+	err = store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
-	assertBaseEntity(c, store, baseURL(url), false)
+	assertBaseEntity(c, store, baseURL(&url.URL), false)
 }
 
 func (s *StoreSuite) TestOpenCachedBlobFileWithNotFoundContent(c *gc.C) {
@@ -1399,8 +1381,8 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithNotFoundContent(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
-	url := newResolvedURL("cs:~charmers/precise/wordpress-23", true)
-	err = store.AddCharmWithArchive(&url.URL, url.PreferredURL(), wordpress)
+	url := newResolvedURL("cs:~charmers/precise/wordpress-23", 23)
+	err = store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 
 	entity, err := store.FindEntity(url, "blobname", "contents")
@@ -1500,17 +1482,17 @@ func (s *StoreSuite) TestSESPutDoesNotErrorWithNoESConfigured(c *gc.C) {
 
 func (s *StoreSuite) TestAddCharmDirIndexed(c *gc.C) {
 	charmDir := storetesting.Charms.CharmDir("wordpress")
-	s.checkAddCharm(c, charmDir, true, false)
+	s.checkAddCharm(c, charmDir, true, newResolvedURL("cs:~charmers/precise/wordpress-2", -1))
 }
 
 func (s *StoreSuite) TestAddCharmArchiveIndexed(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	s.checkAddCharm(c, charmArchive, true, false)
+	s.checkAddCharm(c, charmArchive, true, newResolvedURL("cs:~charmers/precise/wordpress-2", -1))
 }
 
 func (s *StoreSuite) TestAddBundleDirIndexed(c *gc.C) {
 	bundleDir := storetesting.Charms.BundleDir("wordpress-simple")
-	s.checkAddBundle(c, bundleDir, true, false)
+	s.checkAddBundle(c, bundleDir, true, newResolvedURL("cs:~charmers/bundle/baboom-2", -1))
 }
 
 func (s *StoreSuite) TestAddBundleArchiveIndexed(c *gc.C) {
@@ -1518,22 +1500,22 @@ func (s *StoreSuite) TestAddBundleArchiveIndexed(c *gc.C) {
 		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
-	s.checkAddBundle(c, bundleArchive, true, false)
+	s.checkAddBundle(c, bundleArchive, true, newResolvedURL("cs:~charmers/bundle/baboom-2", -1))
 }
 
 func (s *StoreSuite) TestAddCharmDirIndexedAndPromulgated(c *gc.C) {
 	charmDir := storetesting.Charms.CharmDir("wordpress")
-	s.checkAddCharm(c, charmDir, true, true)
+	s.checkAddCharm(c, charmDir, true, newResolvedURL("cs:~charmers/precise/wordpress-2", -1))
 }
 
 func (s *StoreSuite) TestAddCharmArchiveIndexedAndPromulgated(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	s.checkAddCharm(c, charmArchive, true, true)
+	s.checkAddCharm(c, charmArchive, true, newResolvedURL("cs:~charmers/precise/wordpress-2", 2))
 }
 
 func (s *StoreSuite) TestAddBundleDirIndexedAndPromulgated(c *gc.C) {
 	bundleDir := storetesting.Charms.BundleDir("wordpress-simple")
-	s.checkAddBundle(c, bundleDir, true, true)
+	s.checkAddBundle(c, bundleDir, true, newResolvedURL("cs:~charmers/bundle/baboom-2", 2))
 }
 
 func (s *StoreSuite) TestAddBundleArchiveIndexedAndPromulgated(c *gc.C) {
@@ -1541,7 +1523,7 @@ func (s *StoreSuite) TestAddBundleArchiveIndexedAndPromulgated(c *gc.C) {
 		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
-	s.checkAddBundle(c, bundleArchive, true, true)
+	s.checkAddBundle(c, bundleArchive, true, newResolvedURL("cs:~charmers/bundle/baboom-2", 2))
 }
 
 var findBestEntityTests = []struct {
@@ -1733,7 +1715,7 @@ func (s *StoreSuite) TestUpdateEntity(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	for i, test := range updateEntityTests {
 		c.Logf("test %d. %s", i, test.url)
-		url := newResolvedURL(test.url, true)
+		url := newResolvedURL(test.url, 10)
 		_, err = store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 		err = store.DB.Entities().Insert(&mongodoc.Entity{
@@ -1774,7 +1756,7 @@ func (s *StoreSuite) TestUpdateBaseEntity(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	for i, test := range updateBaseEntityTests {
 		c.Logf("test %d. %s", i, test.url)
-		url := newResolvedURL(test.url, true)
+		url := newResolvedURL(test.url, 10)
 		_, err = store.DB.BaseEntities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 		err = store.DB.BaseEntities().Insert(&mongodoc.BaseEntity{
@@ -2010,7 +1992,7 @@ func (s *StoreSuite) TestPromulgate(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	for i, test := range promulgateTests {
 		c.Logf("test %d. %s", i, test.about)
-		url := newResolvedURL(test.url, false)
+		url := newResolvedURL(test.url, -1)
 		_, err := store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 		_, err = store.DB.BaseEntities().RemoveAll(nil)

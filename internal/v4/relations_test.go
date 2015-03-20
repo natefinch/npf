@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
+	"strings"
 
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
@@ -17,6 +19,7 @@ import (
 
 	"gopkg.in/juju/charmstore.v4/internal/blobstore"
 	"gopkg.in/juju/charmstore.v4/internal/charmstore"
+	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/internal/storetesting"
 	"gopkg.in/juju/charmstore.v4/params"
 )
@@ -45,7 +48,7 @@ func (s *RelationsSuite) SetUpTest(c *gc.C) {
 // metaCharmRelatedCharms defines a bunch of charms to be used in
 // the relation tests.
 var metaCharmRelatedCharms = map[string]charm.Charm{
-	"utopic/wordpress-0": &relationTestingCharm{
+	"0 ~charmers/utopic/wordpress-0": &relationTestingCharm{
 		provides: map[string]charm.Relation{
 			"website": {
 				Name:      "website",
@@ -66,7 +69,7 @@ var metaCharmRelatedCharms = map[string]charm.Charm{
 			},
 		},
 	},
-	"utopic/memcached-42": &relationTestingCharm{
+	"42 ~charmers/utopic/memcached-42": &relationTestingCharm{
 		provides: map[string]charm.Relation{
 			"cache": {
 				Name:      "cache",
@@ -75,7 +78,7 @@ var metaCharmRelatedCharms = map[string]charm.Charm{
 			},
 		},
 	},
-	"precise/nfs-1": &relationTestingCharm{
+	"1 ~charmers/precise/nfs-1": &relationTestingCharm{
 		provides: map[string]charm.Relation{
 			"nfs": {
 				Name:      "nfs",
@@ -84,7 +87,7 @@ var metaCharmRelatedCharms = map[string]charm.Charm{
 			},
 		},
 	},
-	"trusty/haproxy-47": &relationTestingCharm{
+	"47 ~charmers/trusty/haproxy-47": &relationTestingCharm{
 		requires: map[string]charm.Relation{
 			"reverseproxy": {
 				Name:      "reverseproxy",
@@ -93,7 +96,7 @@ var metaCharmRelatedCharms = map[string]charm.Charm{
 			},
 		},
 	},
-	"precise/haproxy-48": &relationTestingCharm{
+	"48 ~charmers/precise/haproxy-48": &relationTestingCharm{
 		requires: map[string]charm.Relation{
 			"reverseproxy": {
 				Name:      "reverseproxy",
@@ -161,7 +164,7 @@ var metaCharmRelatedTests = []struct {
 }, {
 	about: "no relations found",
 	charms: map[string]charm.Charm{
-		"utopic/wordpress-0": &relationTestingCharm{
+		"0 ~charmers/utopic/wordpress-0": &relationTestingCharm{
 			provides: map[string]charm.Relation{
 				"website": {
 					Name:      "website",
@@ -187,13 +190,13 @@ var metaCharmRelatedTests = []struct {
 }, {
 	about: "no relations defined",
 	charms: map[string]charm.Charm{
-		"utopic/django-42": &relationTestingCharm{},
+		"42 ~charmers/utopic/django-42": &relationTestingCharm{},
 	},
 	id: "utopic/django-42",
 }, {
 	about: "multiple revisions of the same related charm",
 	charms: map[string]charm.Charm{
-		"trusty/wordpress-0": &relationTestingCharm{
+		"0 ~charmers/trusty/wordpress-0": &relationTestingCharm{
 			requires: map[string]charm.Relation{
 				"cache": {
 					Name:      "cache",
@@ -202,7 +205,7 @@ var metaCharmRelatedTests = []struct {
 				},
 			},
 		},
-		"utopic/memcached-1": &relationTestingCharm{
+		"1 ~charmers/utopic/memcached-1": &relationTestingCharm{
 			provides: map[string]charm.Relation{
 				"cache": {
 					Name:      "cache",
@@ -211,7 +214,7 @@ var metaCharmRelatedTests = []struct {
 				},
 			},
 		},
-		"utopic/memcached-2": &relationTestingCharm{
+		"2 ~charmers/utopic/memcached-2": &relationTestingCharm{
 			provides: map[string]charm.Relation{
 				"cache": {
 					Name:      "cache",
@@ -220,7 +223,7 @@ var metaCharmRelatedTests = []struct {
 				},
 			},
 		},
-		"utopic/memcached-3": &relationTestingCharm{
+		"3 ~charmers/utopic/memcached-3": &relationTestingCharm{
 			provides: map[string]charm.Relation{
 				"cache": {
 					Name:      "cache",
@@ -245,7 +248,7 @@ var metaCharmRelatedTests = []struct {
 }, {
 	about: "reference ordering",
 	charms: map[string]charm.Charm{
-		"trusty/wordpress-0": &relationTestingCharm{
+		"0 ~charmers/trusty/wordpress-0": &relationTestingCharm{
 			requires: map[string]charm.Relation{
 				"cache": {
 					Name:      "cache",
@@ -259,7 +262,7 @@ var metaCharmRelatedTests = []struct {
 				},
 			},
 		},
-		"utopic/memcached-1": &relationTestingCharm{
+		"1 ~charmers/utopic/memcached-1": &relationTestingCharm{
 			provides: map[string]charm.Relation{
 				"cache": {
 					Name:      "cache",
@@ -268,7 +271,7 @@ var metaCharmRelatedTests = []struct {
 				},
 			},
 		},
-		"utopic/memcached-2": &relationTestingCharm{
+		"2 ~charmers/utopic/memcached-2": &relationTestingCharm{
 			provides: map[string]charm.Relation{
 				"cache": {
 					Name:      "cache",
@@ -277,7 +280,7 @@ var metaCharmRelatedTests = []struct {
 				},
 			},
 		},
-		"utopic/redis-90": &relationTestingCharm{
+		"90 ~charmers/utopic/redis-90": &relationTestingCharm{
 			provides: map[string]charm.Relation{
 				"cache": {
 					Name:      "cache",
@@ -286,7 +289,7 @@ var metaCharmRelatedTests = []struct {
 				},
 			},
 		},
-		"trusty/nfs-47": &relationTestingCharm{
+		"47 ~charmers/trusty/nfs-47": &relationTestingCharm{
 			provides: map[string]charm.Relation{
 				"nfs": {
 					Name:      "nfs",
@@ -295,7 +298,7 @@ var metaCharmRelatedTests = []struct {
 				},
 			},
 		},
-		"precise/nfs-42": &relationTestingCharm{
+		"42 ~charmers/precise/nfs-42": &relationTestingCharm{
 			provides: map[string]charm.Relation{
 				"nfs": {
 					Name:      "nfs",
@@ -304,7 +307,7 @@ var metaCharmRelatedTests = []struct {
 				},
 			},
 		},
-		"precise/nfs-47": &relationTestingCharm{
+		"47 ~charmers/precise/nfs-47": &relationTestingCharm{
 			provides: map[string]charm.Relation{
 				"nfs": {
 					Name:      "nfs",
@@ -373,28 +376,17 @@ var metaCharmRelatedTests = []struct {
 
 func (s *RelationsSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
 	for id, ch := range charms {
-		url := charm.MustParseReference(id)
-		var purl *charm.Reference
-		pRev := -1
-		if url.User == "" {
-			purl = url
-			url = new(charm.Reference)
-			*url = *purl
-			url.User = "charmers"
-			pRev = purl.Revision
-		}
+		url := mustParseResolvedURL(id)
 		// The blob related info are not used in these tests.
 		// The related charms are retrieved from the entities collection,
 		// without accessing the blob store.
 		err := s.store.AddCharm(ch, charmstore.AddParams{
-			URL:                 url,
-			BlobName:            "blobName",
-			BlobHash:            fakeBlobHash,
-			BlobSize:            fakeBlobSize,
-			PromulgatedURL:      purl,
-			PromulgatedRevision: pRev,
+			URL:      url,
+			BlobName: "blobName",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
 		})
-		c.Assert(err, gc.IsNil)
+		c.Assert(err, gc.IsNil, gc.Commentf("id %q", id))
 	}
 }
 
@@ -468,39 +460,39 @@ func (ch *relationTestingCharm) Revision() int {
 // metaBundlesContainingBundles defines a bunch of bundles to be used in
 // the bundles-containing tests.
 var metaBundlesContainingBundles = map[string]charm.Bundle{
-	"bundle/wordpress-simple-0": relationTestingBundle([]string{
+	"0 ~charmers/bundle/wordpress-simple-0": relationTestingBundle([]string{
 		"cs:utopic/wordpress-42",
 		"cs:utopic/mysql-0",
 	}),
-	"bundle/wordpress-simple-1": relationTestingBundle([]string{
+	"1 ~charmers/bundle/wordpress-simple-1": relationTestingBundle([]string{
 		"cs:utopic/wordpress-47",
 		"cs:utopic/mysql-1",
 	}),
-	"bundle/wordpress-complex-1": relationTestingBundle([]string{
+	"1 ~charmers/bundle/wordpress-complex-1": relationTestingBundle([]string{
 		"cs:utopic/wordpress-42",
 		"cs:utopic/wordpress-47",
 		"cs:trusty/mysql-0",
 		"cs:trusty/mysql-1",
 		"cs:trusty/memcached-2",
 	}),
-	"bundle/django-generic-42": relationTestingBundle([]string{
+	"42 ~charmers/bundle/django-generic-42": relationTestingBundle([]string{
 		"django",
 		"django",
 		"mysql-1",
 		"trusty/memcached",
 	}),
-	"bundle/useless-0": relationTestingBundle([]string{
+	"0 ~charmers/bundle/useless-0": relationTestingBundle([]string{
 		"cs:utopic/wordpress-42",
 		"precise/mediawiki-10",
 	}),
-	"bundle/mediawiki-simple-46": relationTestingBundle([]string{
+	"46 ~charmers/bundle/mediawiki-simple-46": relationTestingBundle([]string{
 		"precise/mediawiki-0",
 	}),
-	"bundle/mediawiki-simple-47": relationTestingBundle([]string{
+	"47 ~charmers/bundle/mediawiki-simple-47": relationTestingBundle([]string{
 		"precise/mediawiki-0",
 		"mysql",
 	}),
-	"bundle/mediawiki-simple-48": relationTestingBundle([]string{
+	"48 ~charmers/bundle/mediawiki-simple-48": relationTestingBundle([]string{
 		"precise/mediawiki-0",
 	}),
 	"~bob/bundle/bobthebundle-2": relationTestingBundle([]string{
@@ -551,7 +543,7 @@ var metaBundlesContainingTests = []struct {
 		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
-			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-complex-1"].Data(),
+			"bundle-metadata": metaBundlesContainingBundles["1 ~charmers/bundle/wordpress-complex-1"].Data(),
 		},
 	}},
 }, {
@@ -694,19 +686,19 @@ var metaBundlesContainingTests = []struct {
 		Id: charm.MustParseReference("bundle/useless-0"),
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
-			"bundle-metadata": metaBundlesContainingBundles["bundle/useless-0"].Data(),
+			"bundle-metadata": metaBundlesContainingBundles["0 ~charmers/bundle/useless-0"].Data(),
 		},
 	}, {
 		Id: charm.MustParseReference("bundle/wordpress-complex-1"),
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
-			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-complex-1"].Data(),
+			"bundle-metadata": metaBundlesContainingBundles["1 ~charmers/bundle/wordpress-complex-1"].Data(),
 		},
 	}, {
 		Id: charm.MustParseReference("bundle/wordpress-simple-1"),
 		Meta: map[string]interface{}{
 			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
-			"bundle-metadata": metaBundlesContainingBundles["bundle/wordpress-simple-1"].Data(),
+			"bundle-metadata": metaBundlesContainingBundles["1 ~charmers/bundle/wordpress-simple-1"].Data(),
 		},
 	}},
 }, {
@@ -722,25 +714,15 @@ var metaBundlesContainingTests = []struct {
 func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 	// Add the bundles used for testing to the database.
 	for id, b := range metaBundlesContainingBundles {
-		var purl *charm.Reference
-		pRev := -1
-		url := charm.MustParseReference(id)
-		if url.User == "" {
-			purl = new(charm.Reference)
-			*purl = *url
-			url.User = "charmers"
-			pRev = purl.Revision
-		}
+		url := mustParseResolvedURL(id)
 		// The blob related info are not used in these tests.
 		// The charm-bundle relations are retrieved from the entities
 		// collection, without accessing the blob store.
 		err := s.store.AddBundle(b, charmstore.AddParams{
-			URL:                 url,
-			BlobName:            "blobName",
-			BlobHash:            fakeBlobHash,
-			BlobSize:            fakeBlobSize,
-			PromulgatedURL:      purl,
-			PromulgatedRevision: pRev,
+			URL:      url,
+			BlobName: "blobName",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
 		})
 		c.Assert(err, gc.IsNil)
 	}
@@ -750,30 +732,26 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 
 		// Expand the URL if required before adding the charm to the database,
 		// so that at least one matching charm can be resolved.
-		var purl *charm.Reference
-		pRev := -1
-		url := charm.MustParseReference(test.id)
-		if url.Series == "" {
-			url.Series = "utopic"
+		rurl := &router.ResolvedURL{
+			URL:                 *charm.MustParseReference(test.id),
+			PromulgatedRevision: -1,
 		}
-		if url.Revision == -1 {
-			url.Revision = 0
+		if rurl.URL.Series == "" {
+			rurl.URL.Series = "utopic"
 		}
-		if url.User == "" {
-			purl = new(charm.Reference)
-			*purl = *url
-			url.User = "charmers"
-			pRev = purl.Revision
+		if rurl.URL.Revision == -1 {
+			rurl.URL.Revision = 0
 		}
-
+		if rurl.URL.User == "" {
+			rurl.URL.User = "charmers"
+			rurl.PromulgatedRevision = rurl.URL.Revision
+		}
 		// Add the charm we need bundle info on to the database.
 		err := s.store.AddCharm(&relationTestingCharm{}, charmstore.AddParams{
-			URL:                 url,
-			BlobName:            "blobName",
-			BlobHash:            fakeBlobHash,
-			BlobSize:            fakeBlobSize,
-			PromulgatedURL:      purl,
-			PromulgatedRevision: pRev,
+			URL:      rurl,
+			BlobName: "blobName",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
 		})
 		c.Assert(err, gc.IsNil)
 
@@ -787,7 +765,7 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 		})
 
 		// Clean up the charm entity in the store.
-		err = s.store.DB.Entities().Remove(bson.D{{"_id", url}})
+		err = s.store.DB.Entities().Remove(bson.D{{"_id", &rurl.URL}})
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -854,4 +832,27 @@ func (s metaAnyResponseById) Len() int      { return len(s) }
 func (s metaAnyResponseById) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 func (s metaAnyResponseById) Less(i, j int) bool {
 	return s[i].Id.String() < s[j].Id.String()
+}
+
+// mustParseResolvedURL parses a resolved URL in string form, with
+// the optional promulgated revision preceding the entity URL
+// separated by a space.
+func mustParseResolvedURL(urlStr string) *router.ResolvedURL {
+	s := strings.Fields(urlStr)
+	promRev := -1
+	switch len(s) {
+	default:
+		panic(fmt.Errorf("invalid resolved URL string %q", urlStr))
+	case 2:
+		var err error
+		promRev, err = strconv.Atoi(s[0])
+		if err != nil || promRev < 0 {
+			panic(fmt.Errorf("invalid resolved URL string %q", urlStr))
+		}
+	case 1:
+	}
+	return &router.ResolvedURL{
+		URL:                 *charm.MustParseReference(s[len(s)-1]),
+		PromulgatedRevision: promRev,
+	}
 }

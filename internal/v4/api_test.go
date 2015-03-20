@@ -1014,28 +1014,26 @@ var metaCharmTagsTests = []struct {
 }}
 
 func (s *APISuite) TestMetaCharmTags(c *gc.C) {
-	url := charm.MustParseReference("~charmers/precise/wordpress-0")
+	url := newResolvedURL("~charmers/precise/wordpress-0", -1)
 	for i, test := range metaCharmTagsTests {
 		c.Logf("%d: %s", i, test.about)
 		wordpress := storetesting.Charms.CharmDir("wordpress")
 		meta := wordpress.Meta()
 		meta.Tags, meta.Categories = test.tags, test.categories
-		url.Revision = i
+		url.URL.Revision = i
 		err := s.store.AddCharm(&testMetaCharm{
 			meta:  meta,
 			Charm: wordpress,
 		}, charmstore.AddParams{
-			URL:                 url,
-			BlobName:            "no-such-name",
-			BlobHash:            fakeBlobHash,
-			BlobSize:            fakeBlobSize,
-			PromulgatedURL:      nil,
-			PromulgatedRevision: -1,
+			URL:      url,
+			BlobName: "no-such-name",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
 		})
 		c.Assert(err, gc.IsNil)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
-			URL:          storeURL(url.Path() + "/meta/tags"),
+			URL:          storeURL(url.URL.Path() + "/meta/tags"),
 			ExpectStatus: http.StatusOK,
 			ExpectBody:   params.TagsResponse{test.expectTags},
 		})
@@ -1043,30 +1041,27 @@ func (s *APISuite) TestMetaCharmTags(c *gc.C) {
 }
 
 func (s *APISuite) TestPromulgatedMetaCharmTags(c *gc.C) {
-	url := charm.MustParseReference("~charmers/precise/wordpress")
-	purl := charm.MustParseReference("precise/wordpress")
+	url := newResolvedURL("~charmers/precise/wordpress-0", 0)
 	for i, test := range metaCharmTagsTests {
 		c.Logf("%d: %s", i, test.about)
 		wordpress := storetesting.Charms.CharmDir("wordpress")
 		meta := wordpress.Meta()
 		meta.Tags, meta.Categories = test.tags, test.categories
-		url.Revision = i
-		purl.Revision = i
+		url.URL.Revision = i
+		url.PromulgatedRevision = i
 		err := s.store.AddCharm(&testMetaCharm{
 			meta:  meta,
 			Charm: wordpress,
 		}, charmstore.AddParams{
-			URL:                 url,
-			BlobName:            "no-such-name",
-			BlobHash:            fakeBlobHash,
-			BlobSize:            fakeBlobSize,
-			PromulgatedURL:      purl,
-			PromulgatedRevision: purl.Revision,
+			URL:      url,
+			BlobName: "no-such-name",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
 		})
 		c.Assert(err, gc.IsNil)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
-			URL:          storeURL(purl.Path() + "/meta/tags"),
+			URL:          storeURL(url.PromulgatedURL().Path() + "/meta/tags"),
 			ExpectStatus: http.StatusOK,
 			ExpectBody:   params.TagsResponse{test.expectTags},
 		})
@@ -1075,21 +1070,19 @@ func (s *APISuite) TestPromulgatedMetaCharmTags(c *gc.C) {
 
 func (s *APISuite) TestBundleTags(c *gc.C) {
 	b := storetesting.Charms.BundleDir("wordpress-simple")
-	url := charm.MustParseReference("~charmers/bundle/wordpress-2")
+	url := newResolvedURL("~charmers/bundle/wordpress-2", -1)
 	data := b.Data()
 	data.Tags = []string{"foo", "bar"}
 	err := s.store.AddBundle(&testingBundle{data}, charmstore.AddParams{
-		URL:                 url,
-		BlobName:            "no-such-name",
-		BlobHash:            fakeBlobHash,
-		BlobSize:            fakeBlobSize,
-		PromulgatedURL:      nil,
-		PromulgatedRevision: -1,
+		URL:      url,
+		BlobName: "no-such-name",
+		BlobHash: fakeBlobHash,
+		BlobSize: fakeBlobSize,
 	})
 	c.Assert(err, gc.IsNil)
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
-		URL:          storeURL(url.Path() + "/meta/tags"),
+		URL:          storeURL(url.URL.Path() + "/meta/tags"),
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   params.TagsResponse{[]string{"foo", "bar"}},
 	})
@@ -1097,22 +1090,19 @@ func (s *APISuite) TestBundleTags(c *gc.C) {
 
 func (s *APISuite) TestPromulgatedBundleTags(c *gc.C) {
 	b := storetesting.Charms.BundleDir("wordpress-simple")
-	url := charm.MustParseReference("~charmers/bundle/wordpress-2")
-	purl := charm.MustParseReference("bundle/wordpress-2")
+	url := newResolvedURL("~charmers/bundle/wordpress-2", 2)
 	data := b.Data()
 	data.Tags = []string{"foo", "bar"}
 	err := s.store.AddBundle(&testingBundle{data}, charmstore.AddParams{
-		URL:                 url,
-		BlobName:            "no-such-name",
-		BlobHash:            fakeBlobHash,
-		BlobSize:            fakeBlobSize,
-		PromulgatedURL:      purl,
-		PromulgatedRevision: purl.Revision,
+		URL:      url,
+		BlobName: "no-such-name",
+		BlobHash: fakeBlobHash,
+		BlobSize: fakeBlobSize,
 	})
 	c.Assert(err, gc.IsNil)
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
-		URL:          storeURL(purl.Path() + "/meta/tags"),
+		URL:          storeURL(url.PromulgatedURL().Path() + "/meta/tags"),
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   params.TagsResponse{[]string{"foo", "bar"}},
 	})
@@ -2037,23 +2027,15 @@ func entitySizeChecker(c *gc.C, data interface{}) {
 }
 
 func (s *APISuite) addCharm(c *gc.C, charmName string, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Charm) {
-	var purl *charm.Reference
-	if rurl.PromulgatedRevision != -1 {
-		purl = rurl.PreferredURL()
-	}
 	ch := storetesting.Charms.CharmDir(charmName)
-	err := s.store.AddCharmWithArchive(&rurl.URL, purl, ch)
+	err := s.store.AddCharmWithArchive(rurl, ch)
 	c.Assert(err, gc.IsNil)
 	return rurl, ch
 }
 
 func (s *APISuite) addBundle(c *gc.C, bundleName string, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Bundle) {
-	var purl *charm.Reference
-	if rurl.PromulgatedRevision != -1 {
-		purl = rurl.PreferredURL()
-	}
 	bundle := storetesting.Charms.BundleDir(bundleName)
-	err := s.store.AddBundleWithArchive(&rurl.URL, purl, bundle)
+	err := s.store.AddBundleWithArchive(rurl, bundle)
 	c.Assert(err, gc.IsNil)
 	return rurl, bundle
 }

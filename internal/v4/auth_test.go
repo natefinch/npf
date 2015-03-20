@@ -329,9 +329,9 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 
 		// Add a charm to the store, used for testing.
 		err := store.AddCharmWithArchive(
-			charm.MustParseReference("~charmers/utopic/wordpress-42"),
-			nil,
-			storetesting.Charms.CharmDir("wordpress"))
+			newResolvedURL("~charmers/utopic/wordpress-42", -1),
+			storetesting.Charms.CharmDir("wordpress"),
+		)
 		c.Assert(err, gc.IsNil)
 		baseUrl := charm.MustParseReference("~charmers/wordpress")
 
@@ -465,8 +465,7 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 
 		// Add a charm to the store, used for testing.
 		err := store.AddCharmWithArchive(
-			charm.MustParseReference("~charmers/utopic/wordpress-42"),
-			nil,
+			newResolvedURL("~charmers/utopic/wordpress-42", -1),
 			storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
 		baseUrl := charm.MustParseReference("~charmers/wordpress")

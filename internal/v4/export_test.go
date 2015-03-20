@@ -15,5 +15,5 @@ var (
 	ErrProbablyNotXML              = errProbablyNotXML
 	UsernameAttr                   = usernameAttr
 	GroupsAttr                     = groupsAttr
-	GetPromulgatedURL              = (*Handler).getPromulgatedURL
+	GetNewPromulgatedRevision      = (*Handler).getNewPromulgatedRevision
 )

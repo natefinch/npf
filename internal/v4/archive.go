@@ -162,26 +162,26 @@ func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 			Id: oldId,
 		})
 	}
-
-	// Find the promulgated URL for the entity. Note: if the entity is not promulgated,
-	// getPromulgatedURL returns nil.
-	pid, err := h.getPromulgatedURL(id)
+	rid := &router.ResolvedURL{
+		URL: *id,
+	}
+	// Choose the next revision number for the upload.
+	if oldId == nil {
+		rid.URL.Revision = 0
+	} else {
+		rid.URL.Revision = oldId.Revision + 1
+	}
+	rid.PromulgatedRevision, err = h.getNewPromulgatedRevision(id)
 	if err != nil {
 		return errgo.Mask(err)
 	}
 
-	// Choose the next revision number for the upload.
-	if oldId != nil {
-		id.Revision = oldId.Revision + 1
-	} else {
-		id.Revision = 0
-	}
-
-	if err := h.addBlobAndEntity(id, pid, req.Body, hash, req.ContentLength); err != nil {
+	if err := h.addBlobAndEntity(rid, req.Body, hash, req.ContentLength); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 	}
 	return jsonhttp.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
-		Id: id,
+		Id:            &rid.URL,
+		PromulgatedId: rid.PromulgatedURL(),
 	})
 }
 
@@ -203,6 +203,10 @@ func (h *Handler) servePutArchive(id *charm.Reference, w http.ResponseWriter, re
 	if req.ContentLength == -1 {
 		return badRequestf(nil, "Content-Length not specified")
 	}
+	rid := &router.ResolvedURL{
+		URL:                 *id,
+		PromulgatedRevision: -1,
+	}
 	// Get the PromulgatedURL from the request parameters. When ingesting
 	// entities might not be added in order and the promulgated revision might
 	// not match the non-promulgated revision, so the full promulgated URL
@@ -220,12 +224,20 @@ func (h *Handler) servePutArchive(id *charm.Reference, w http.ResponseWriter, re
 		if pid.Name != id.Name {
 			return badRequestf(nil, "promulgated URL has incorrect charm name")
 		}
+		if pid.Series != id.Series {
+			return badRequestf(nil, "promulgated URL has incorrect series")
+		}
+		if pid.Revision == -1 {
+			return badRequestf(nil, "promulgated URL has no revision")
+		}
+		rid.PromulgatedRevision = pid.Revision
 	}
-	if err := h.addBlobAndEntity(id, pid, req.Body, hash, req.ContentLength); err != nil {
+	if err := h.addBlobAndEntity(rid, req.Body, hash, req.ContentLength); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 	}
 	return jsonhttp.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
-		Id: id,
+		Id:            id,
+		PromulgatedId: rid.PromulgatedURL(),
 	})
 	return nil
 }
@@ -234,7 +246,7 @@ func (h *Handler) servePutArchive(id *charm.Reference, w http.ResponseWriter, re
 // to the blob store and adds an entity record for it.
 // The hash and contentLength parameters hold
 // the content hash and the content length respectively.
-func (h *Handler) addBlobAndEntity(id, pid *charm.Reference, body io.Reader, hash string, contentLength int64) (err error) {
+func (h *Handler) addBlobAndEntity(id *router.ResolvedURL, body io.Reader, hash string, contentLength int64) (err error) {
 	name := bson.NewObjectId().Hex()
 
 	// Calculate the SHA256 hash while uploading the blob in the blob store.
@@ -261,7 +273,7 @@ func (h *Handler) addBlobAndEntity(id, pid *charm.Reference, body io.Reader, has
 
 	// Add the entity entry to the charm store.
 	sum256 := fmt.Sprintf("%x", hash256.Sum(nil))
-	if err := h.addEntity(id, pid, r, name, hash, sum256, contentLength); err != nil {
+	if err := h.addEntity(id, r, name, hash, sum256, contentLength); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 	}
 	return nil
@@ -269,22 +281,16 @@ func (h *Handler) addBlobAndEntity(id, pid *charm.Reference, body io.Reader, has
 
 // addEntity adds the entity represented by the contents
 // of the given reader, associating it with the given id.
-func (h *Handler) addEntity(id, pid *charm.Reference, r io.ReadSeeker, blobName, hash, hash256 string, contentLength int64) error {
-	promulgatedRevision := -1
-	if pid != nil {
-		promulgatedRevision = pid.Revision
-	}
+func (h *Handler) addEntity(id *router.ResolvedURL, r io.ReadSeeker, blobName, hash, hash256 string, contentLength int64) error {
 	readerAt := charmstore.ReaderAtSeeker(r)
 	p := charmstore.AddParams{
-		URL:                 id,
-		BlobName:            blobName,
-		BlobHash:            hash,
-		BlobHash256:         hash256,
-		BlobSize:            contentLength,
-		PromulgatedURL:      pid,
-		PromulgatedRevision: promulgatedRevision,
+		URL:         id,
+		BlobName:    blobName,
+		BlobHash:    hash,
+		BlobHash256: hash256,
+		BlobSize:    contentLength,
 	}
-	if id.Series == "bundle" {
+	if id.URL.Series == "bundle" {
 		b, err := charm.ReadBundleArchiveFromReader(readerAt, contentLength)
 		if err != nil {
 			return errgo.Notef(err, "cannot read bundle archive")
@@ -517,17 +523,16 @@ func setArchiveCacheControl(h http.Header, idFullySpecified bool) {
 	h.Set("Cache-Control", "public, max-age="+strconv.Itoa(seconds))
 }
 
-// getPromulgated URL finds the promulgatedURL that should be used for
-// this newly uploaded charm, if the charm should be promulgated,
-// othewise it returns nil. An error is returned if there is a problem
-// communicating with the storage.
-func (h *Handler) getPromulgatedURL(id *charm.Reference) (*charm.Reference, error) {
+// getNewPromulgatedRevision returns the promulgated revision
+// to give to a newly uploaded charm with the given id.
+// It returns -1 if the charm is not promulgated.
+func (h *Handler) getNewPromulgatedRevision(id *charm.Reference) (int, error) {
 	baseEntity, err := h.store.FindBaseEntity(id, "promulgated")
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
-		return nil, errgo.Mask(err)
+		return 0, errgo.Mask(err)
 	}
 	if baseEntity == nil || !baseEntity.Promulgated {
-		return nil, nil
+		return -1, nil
 	}
 	query := h.store.EntitiesQuery(&charm.Reference{
 		Series:   id.Series,
@@ -536,13 +541,11 @@ func (h *Handler) getPromulgatedURL(id *charm.Reference) (*charm.Reference, erro
 	})
 	var entity mongodoc.Entity
 	err = query.Sort("-promulgated-revision").Select(bson.D{{"promulgated-revision", 1}}).One(&entity)
-	promulgatedURL := *id
-	promulgatedURL.User = ""
-	promulgatedURL.Revision = 0
-	if err == nil {
-		promulgatedURL.Revision = entity.PromulgatedRevision + 1
-	} else if err != mgo.ErrNotFound {
-		return nil, errgo.Mask(err)
+	if err == mgo.ErrNotFound {
+		return 0, nil
 	}
-	return &promulgatedURL, nil
+	if err != nil {
+		return 0, errgo.Mask(err)
+	}
+	return entity.PromulgatedRevision + 1, nil
 }

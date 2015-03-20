@@ -48,28 +48,17 @@ func (s *StoreSearchSuite) SetUpTest(c *gc.C) {
 	s.store = store
 }
 
+var newResolvedURL = router.MustNewResolvedURL
+
 var exportTestCharms = map[string]*router.ResolvedURL{
-	"wordpress": newResolvedURL("cs:~charmers/precise/wordpress-23", true),
-	"mysql":     newResolvedURL("cs:~charmers/trusty/mysql-7", true),
-	"varnish":   newResolvedURL("cs:~foo/trusty/varnish-1", false),
-	"riak":      newResolvedURL("cs:~charmers/trusty/riak-67", true),
+	"wordpress": newResolvedURL("cs:~charmers/precise/wordpress-23", 23),
+	"mysql":     newResolvedURL("cs:~charmers/trusty/mysql-7", 7),
+	"varnish":   newResolvedURL("cs:~foo/trusty/varnish-1", -1),
+	"riak":      newResolvedURL("cs:~charmers/trusty/riak-67", 67),
 }
 
 var exportTestBundles = map[string]*router.ResolvedURL{
-	"wordpress-simple": newResolvedURL("cs:~charmers/bundle/wordpress-simple-4", true),
-}
-
-func newResolvedURL(s string, promulgated bool) *router.ResolvedURL {
-	url := charm.MustParseReference(s)
-	rurl := &router.ResolvedURL{
-		URL: *url,
-	}
-	if promulgated {
-		rurl.PromulgatedRevision = url.Revision
-	} else {
-		rurl.PromulgatedRevision = -1
-	}
-	return rurl
+	"wordpress-simple": newResolvedURL("cs:~charmers/bundle/wordpress-simple-4", 4),
 }
 
 var charmDownloadCounts = map[string]int{
@@ -101,8 +90,8 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 
 func (s *StoreSearchSuite) TestNoExportDeprecated(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("mysql")
-	url := charm.MustParseReference("cs:~charmers/saucy/mysql-4")
-	err := s.store.AddCharmWithArchive(url, nil, charmArchive)
+	url := newResolvedURL("cs:~charmers/saucy/mysql-4", -1)
+	err := s.store.AddCharmWithArchive(url, charmArchive)
 	c.Assert(err, gc.IsNil)
 
 	var entity *mongodoc.Entity
@@ -121,8 +110,8 @@ func (s *StoreSearchSuite) TestNoExportDeprecated(c *gc.C) {
 
 func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("wordpress")
-	url := charm.MustParseReference("cs:~charmers/precise/wordpress-24")
-	err := s.store.AddCharmWithArchive(url, nil, charmArchive)
+	url := newResolvedURL("cs:~charmers/precise/wordpress-24", -1)
+	err := s.store.AddCharmWithArchive(url, charmArchive)
 	c.Assert(err, gc.IsNil)
 	var expected, old *mongodoc.Entity
 	var actual json.RawMessage
@@ -152,12 +141,8 @@ func (s *StoreSearchSuite) TestExportSearchDocument(c *gc.C) {
 func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 	for name, url := range exportTestCharms {
 		charmArchive := storetesting.Charms.CharmDir(name)
-		var purl *charm.Reference
-		if url.PromulgatedRevision != -1 {
-			purl = url.PreferredURL()
-		}
 		charmArchive.Meta().Categories = strings.Split(name, "-")
-		err := store.AddCharmWithArchive(&url.URL, purl, charmArchive)
+		err := store.AddCharmWithArchive(url, charmArchive)
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < charmDownloadCounts[name]; i++ {
 			err := store.IncrementDownloadCounts(url)
@@ -166,12 +151,8 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 	}
 	for name, url := range exportTestBundles {
 		bundleArchive := storetesting.Charms.BundleDir(name)
-		var purl *charm.Reference
-		if url.PromulgatedRevision != -1 {
-			purl = url.PreferredURL()
-		}
 		bundleArchive.Data().Tags = strings.Split(name, "-")
-		err := store.AddBundleWithArchive(&url.URL, purl, bundleArchive)
+		err := store.AddBundleWithArchive(url, bundleArchive)
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < charmDownloadCounts[name]; i++ {
 			err := store.IncrementDownloadCounts(url)
@@ -471,8 +452,8 @@ func (s *StoreSearchSuite) TestLimitTestSearch(c *gc.C) {
 
 func (s *StoreSearchSuite) TestPromulgatedRank(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("varnish")
-	rurl := newResolvedURL("cs:~charmers/trusty/varnish-1", true)
-	s.store.AddCharmWithArchive(&rurl.URL, rurl.PreferredURL(), charmArchive)
+	url := newResolvedURL("cs:~charmers/trusty/varnish-1", 1)
+	s.store.AddCharmWithArchive(url, charmArchive)
 	s.store.ES.Database.RefreshIndex(s.TestIndex)
 	sp := SearchParams{
 		Filters: map[string][]string{
@@ -481,8 +462,9 @@ func (s *StoreSearchSuite) TestPromulgatedRank(c *gc.C) {
 	}
 	res, err := s.store.Search(sp)
 	c.Assert(err, gc.IsNil)
+	c.Logf("results: %s", res.Results)
 	c.Assert(res.Results, jc.DeepEquals, []*router.ResolvedURL{
-		rurl,
+		url,
 		exportTestCharms["varnish"],
 	})
 }
