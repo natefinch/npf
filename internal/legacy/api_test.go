@@ -292,10 +292,10 @@ func (s *APISuite) TestCharmPackageGet(c *gc.C) {
 	defer srv.Close()
 
 	s.PatchValue(&charmrepo.CacheDir, c.MkDir())
-	s.PatchValue(&charmrepo.Store.BaseURL, srv.URL)
+	s.PatchValue(&charmrepo.LegacyStore.BaseURL, srv.URL)
 
 	url, _ := wordpressURL.URL.URL("")
-	ch, err := charmrepo.Store.Get(url)
+	ch, err := charmrepo.LegacyStore.Get(url)
 	c.Assert(err, gc.IsNil)
 	chArchive := ch.(*charm.CharmArchive)
 
@@ -313,9 +313,9 @@ func (s *APISuite) TestCharmPackageCharmInfo(c *gc.C) {
 
 	srv := httptest.NewServer(s.srv)
 	defer srv.Close()
-	s.PatchValue(&charmrepo.Store.BaseURL, srv.URL)
+	s.PatchValue(&charmrepo.LegacyStore.BaseURL, srv.URL)
 
-	resp, err := charmrepo.Store.Info(wordpressURL.PreferredURL(), mysqlURL.PreferredURL(), notFoundURL)
+	resp, err := charmrepo.LegacyStore.Info(wordpressURL.PreferredURL(), mysqlURL.PreferredURL(), notFoundURL)
 	c.Assert(err, gc.IsNil)
 	c.Assert(resp, gc.HasLen, 3)
 	c.Assert(resp, jc.DeepEquals, []*charmrepo.InfoResponse{{
