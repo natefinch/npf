@@ -116,7 +116,7 @@ func (c *Client) GetArchive(id *charm.Reference) (r io.ReadCloser, eid *charm.Re
 	}
 	resp, err := c.Do(req, u.String())
 	if err != nil {
-		return nil, nil, "", 0, errgo.Notef(err, "cannot get archive")
+		return nil, nil, "", 0, errgo.NoteMask(err, "cannot get archive", errgo.Any)
 	}
 
 	// Validate the response headers.
