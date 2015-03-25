@@ -229,6 +229,17 @@ func (s *suite) checkGetArchive(c *gc.C) []string {
 	return []string{params.StatsArchiveDownload, "utopic", "wordpress", "charmers", "42"}
 }
 
+func (s *suite) TestGetArchiveErrorNotFound(c *gc.C) {
+	url := charm.MustParseReference("no-such")
+	r, id, hash, size, err := s.client.GetArchive(url)
+	c.Assert(err, gc.ErrorMatches, `cannot get archive: no matching charm or bundle for "cs:no-such"`)
+	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
+	c.Assert(r, gc.IsNil)
+	c.Assert(id, gc.IsNil)
+	c.Assert(hash, gc.Equals, "")
+	c.Assert(size, gc.Equals, int64(0))
+}
+
 var getArchiveWithBadResponseTests = []struct {
 	about       string
 	response    *http.Response
@@ -942,7 +953,7 @@ func (s *suite) TestPutExtraInfo(c *gc.C) {
 	var val struct {
 		ExtraInfo map[string]interface{}
 	}
-	_, err = s.client.Meta(&url.URL,&val)
+	_, err = s.client.Meta(&url.URL, &val)
 	c.Assert(err, gc.IsNil)
 	c.Assert(val.ExtraInfo, jc.DeepEquals, info)
 
