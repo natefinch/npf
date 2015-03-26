@@ -50,8 +50,8 @@ type, otherwise it will be "hulk-smashed" into the specified location, by
 co-locating it with any other units that happen to be there, which may result in
 unintended behavior.
 
-The second part (after the colon) specifies where the new unit should be placed
-- it may refer to a unit of another service specified in the bundle, a machine
+The second part (after the colon) specifies where the new unit should be placed;
+it may refer to a unit of another service specified in the bundle, a machine
 id specified in the machines section, or the special name "new" which specifies
 a newly created machine.
 
