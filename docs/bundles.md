@@ -76,9 +76,76 @@ The above example is the same as this:
 
 Version 3 placement directives take the format:
 
-    (<containertype>:)?<service>(=<unitnumber>)?
+    ((<containertype>:)?<service>(=<unitnumber>)?|0)
 
 meaning that a machine cannot be specified beyond colocating (either through a
 container or hulk-smash) along with a specified unit of another service.
 Version 3 placement directives may be either a string of a single directive or a
-YAML list of directives in the above format.
+YAML list of directives in the above format.  The only machine that may be
+specified is machine 0, allowing colocation on the bootstrap node.
+
+## Example Bundles
+
+### Version 3
+
+```yaml
+series: precise
+services:
+  nova-compute:
+    charm: cs:precise/nova-compute
+    units: 3
+  ceph:
+    units: 3
+    to: [nova-compute, nova-compute]
+  mysql:
+    to: 0
+  quantum:
+    units: 4
+    to: ["lxc:nova-compute", "lxc:nova-compute", "lxc:nova-compute", "lxc:nova-compute"]
+  verity:
+    to: lxc:nova-compute=2
+  semper:
+    to: nova-compute=2
+  lxc-service:
+    num_units: 5
+    to: [ "lxc:nova-compute=1", "lxc:nova-compute=2", "lxc:nova-compute=0", "lxc:nova-compute=0", "lxc:nova-compute=2" ]
+```
+
+### Version 4
+
+```yaml
+series: precise
+services:
+  # Automatically place
+  nova-compute:
+    charm: cs:precise/nova-compute
+    units: 3
+  # Specify containers
+  ceph:
+    units: 3
+    to:
+      # Specify a unit
+      - lxc:nova-compute/0
+      # Specify a machine
+      - lxc:1
+      # Create a new machine, deploy to container on that machine.
+      - lxc:new
+  # Specify a machine
+  mysql:
+    to:
+      - 0
+  # Specify colocation
+  quantum:
+    units: 4
+    to:
+      - ceph/1
+      # Assume first unit
+      - nova-compute
+      # Repeats previous directive to fill out placements
+machines:
+  1:
+    constraints: "mem=16G arch=amd64"
+    annotations:
+      foo: bar
+    series: precise
+```
