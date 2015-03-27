@@ -16,9 +16,22 @@ baskets will still be imported, and split up into their component bundles.
 
 Version 4 bundles are identical to version 3 bundles except for a few key
 differences: the `branch` attribute of the service spec is no longer supported,
-they must contain a machine specification, and their deployment directives are
-different from version 3 bundles.  A bundle without a machine specification is
-treated as a version 3 bundle by the juju deployer.
+they may contain a machine specification, and their deployment directives are
+different from version 3 bundles.
+
+### Deploying version 4 bundles
+
+Because version 4 bundles are not yet idempotent (i.e.: if a machine fails to
+come up, running the bundle again will recreate all machines in the machine
+spec), the juju deployer pessimistically assumes that a bundle is a version 4
+bundle *only* if it has a machine spec.  This means that a bundle without a
+machine spec must use the version 3 style of placement directives listed below
+until further notice, when the deployer is updated.  This does not affect
+version 4 bundle support within the charmstore (that is, the machine spec is
+still optional).
+
+The Juju GUI does not yet support version 4 bundles as of version 1.3.4, as the
+GUI charm contains an older version of the deployer.
 
 ### Machine Specifications
 
