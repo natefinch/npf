@@ -5,7 +5,7 @@ auth-password: example-passwd
 #elasticsearch-addr: localhost:9200
 # For locally running services.
 identity-public-key: CIdWcEUN+0OZnKW9KwruRQnQDY/qqzVdD30CijwiWCk=
-identity-location: localhost:8081
+identity-location: http://localhost:8081/v1/discharger
 # For production identity manager.
 #identity-public-key: hmHaPgCC1UfuhYHUSX5+aihSAZesqpVdjRv0mgfIwjo=
-#identity-location: api.jujucharms.com/identity/v1
+#identity-location: https://api.jujucharms.com/identity/v1/discharger
