@@ -141,7 +141,13 @@ func (s *StoreSearchSuite) TestExportSearchDocument(c *gc.C) {
 func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 	for name, url := range exportTestCharms {
 		charmArchive := storetesting.Charms.CharmDir(name)
-		charmArchive.Meta().Categories = strings.Split(name, "-")
+		cats := strings.Split(name, "-")
+		charmArchive.Meta().Categories = cats
+		tags := make([]string, len(cats))
+		for i, s := range cats {
+			tags[i] = s + "TAG"
+		}
+		charmArchive.Meta().Tags = tags
 		err := store.AddCharmWithArchive(url, charmArchive)
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < charmDownloadCounts[name]; i++ {
@@ -393,6 +399,17 @@ var searchTests = []struct {
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 			exportTestBundles["wordpress-simple"],
+		},
+	}, {
+		about: "charm tags filter search",
+		sp: SearchParams{
+			Text: "",
+			Filters: map[string][]string{
+				"tags": {"wordpressTAG"},
+			},
+		},
+		results: []*router.ResolvedURL{
+			exportTestCharms["wordpress"],
 		},
 	},
 }

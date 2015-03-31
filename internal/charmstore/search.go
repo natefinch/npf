@@ -661,6 +661,10 @@ func tagsFilter(value string) elasticsearch.Filter {
 				Value: t,
 			},
 			elasticsearch.TermFilter{
+				Field: "CharmMeta.Tags",
+				Value: t,
+			},
+			elasticsearch.TermFilter{
 				Field: "BundleData.Tags",
 				Value: t,
 			},

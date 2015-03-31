@@ -10,7 +10,7 @@ var (
 	esMapping = mustParseJSON(esMappingJSON)
 )
 
-const esSettingsVersion = 5
+const esSettingsVersion = 6
 
 func mustParseJSON(s string) interface{} {
 	var j json.RawMessage
@@ -226,6 +226,12 @@ const esMappingJSON = `
             }
           },
           "Categories" : {
+            "type" : "string",
+            "index" : "not_analyzed",
+            "omit_norms" : true,
+            "index_options" : "docs"
+          },
+          "Tags" : {
             "type" : "string",
             "index" : "not_analyzed",
             "omit_norms" : true,
