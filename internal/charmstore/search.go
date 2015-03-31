@@ -446,6 +446,7 @@ func queryFields(sp SearchParams) map[string]float64 {
 	fields := map[string]float64{
 		"URL.ngrams":              8,
 		"CharmMeta.Categories":    5,
+		"CharmMeta.Tags":          5,
 		"BundleData.Tags":         5,
 		"CharmProvidedInterfaces": 3,
 		"CharmRequiredInterfaces": 3,
