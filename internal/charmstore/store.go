@@ -500,9 +500,10 @@ func (s *Store) UpdateBaseEntity(url *router.ResolvedURL, update interface{}) er
 // user. As promulgation is a rare operation, it is considered that the
 // chances this will happen are slim.
 func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
+	baseEntities := s.DB.BaseEntities()
 	base := baseURL(&url.URL)
 	if !promulgate {
-		err := s.DB.BaseEntities().UpdateId(
+		err := baseEntities.UpdateId(
 			base,
 			bson.D{{"$set", bson.D{{"promulgated", mongodoc.IntBool(false)}}}},
 		)
@@ -512,25 +513,42 @@ func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 			}
 			return errgo.Notef(err, "cannot unpromulgate base entity %q", base)
 		}
+		if err := s.UpdateSearchBaseURL(base); err != nil {
+			return errgo.Notef(err, "cannot update search entities for %q", base)
+		}
 		return nil
 	}
 
-	// Clear the promulgated flag on any Base entities with the same name,
-	// but aren't the one that is being set.
-	_, err := s.DB.BaseEntities().UpdateAll(
+	// Find any currently promulgated base entities for this charm name.
+	// Under normal circumstances there should be a maximum of one of these,
+	// but we should attempt to recover if there is an error condition.
+	iter := baseEntities.Find(
 		bson.D{
 			{"_id", bson.D{{"$ne", base}}},
 			{"name", base.Name},
-			{"promulgated", 1},
+			{"promulgated", mongodoc.IntBool(true)},
 		},
-		bson.D{{"$set", bson.D{{"promulgated", mongodoc.IntBool(false)}}}},
-	)
-	if err != nil {
-		return errgo.Notef(err, "cannot unpromulgate other base entities")
+	).Iter()
+	defer iter.Close()
+	var baseEntity mongodoc.BaseEntity
+	for iter.Next(&baseEntity) {
+		err := baseEntities.UpdateId(
+			baseEntity.URL,
+			bson.D{{"$set", bson.D{{"promulgated", mongodoc.IntBool(false)}}}},
+		)
+		if err != nil {
+			return errgo.Notef(err, "cannot unpromulgate base entity %q", baseEntity.URL)
+		}
+		if err := s.UpdateSearchBaseURL(baseEntity.URL); err != nil {
+			return errgo.Notef(err, "cannot update search entities for %q", baseEntity.URL)
+		}
+	}
+	if err := iter.Close(); err != nil {
+		return errgo.Mask(err)
 	}
 
 	// Set the promulgated flag on the base entity.
-	err = s.DB.BaseEntities().UpdateId(base, bson.D{{"$set", bson.D{{"promulgated", mongodoc.IntBool(true)}}}})
+	err := s.DB.BaseEntities().UpdateId(base, bson.D{{"$set", bson.D{{"promulgated", mongodoc.IntBool(true)}}}})
 	if err != nil {
 		if errgo.Cause(err) == mgo.ErrNotFound {
 			return errgo.WithCausef(nil, params.ErrNotFound, "base entity %q not found", base)
@@ -563,7 +581,7 @@ func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 	// 2) we are sure that we are only updating all charms or the single
 	// bundle entity.
 	latestPromulgated := make(map[string]int)
-	iter := s.DB.Entities().Pipe([]bson.D{
+	iter = s.DB.Entities().Pipe([]bson.D{
 		{{"$match", bson.D{{"name", base.Name}}}},
 		{{"$group", bson.D{{"_id", "$series"}, {"revision", bson.D{{"$max", "$promulgated-revision"}}}}}},
 	}).Iter()
@@ -601,6 +619,11 @@ func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 			// already promulgated, so carry on.
 			return errgo.Mask(err)
 		}
+	}
+
+	// Update the search record for the newest entity.
+	if err := s.UpdateSearchBaseURL(base); err != nil {
+		return errgo.Notef(err, "cannot update search entities for %q", base)
 	}
 	return nil
 }
