@@ -122,6 +122,19 @@ func parseSearchParams(req *http.Request) (charmstore.SearchParams, error) {
 				sp.Filters = make(map[string][]string)
 			}
 			sp.Filters[k] = v
+		case "promulgated":
+			promulgated, err := parseBool(v[0])
+			if err != nil {
+				return charmstore.SearchParams{}, badRequestf(err, "invalid promulgated filter parameter")
+			}
+			if sp.Filters == nil {
+				sp.Filters = make(map[string][]string)
+			}
+			if promulgated {
+				sp.Filters[k] = []string{"1"}
+			} else {
+				sp.Filters[k] = []string{"0"}
+			}
 		case "skip":
 			sp.Skip, err = strconv.Atoi(v[0])
 			if err != nil {

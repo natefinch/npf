@@ -52,7 +52,7 @@ var newResolvedURL = router.MustNewResolvedURL
 
 var exportTestCharms = map[string]*router.ResolvedURL{
 	"wordpress": newResolvedURL("cs:~charmers/precise/wordpress-23", 23),
-	"mysql":     newResolvedURL("cs:~charmers/trusty/mysql-7", 7),
+	"mysql":     newResolvedURL("cs:~openstack-charmers/trusty/mysql-7", 7),
 	"varnish":   newResolvedURL("cs:~foo/trusty/varnish-1", -1),
 	"riak":      newResolvedURL("cs:~charmers/trusty/riak-67", 67),
 }
@@ -95,7 +95,7 @@ func (s *StoreSearchSuite) TestNoExportDeprecated(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	var entity *mongodoc.Entity
-	err = s.store.DB.Entities().FindId("cs:~charmers/trusty/mysql-7").One(&entity)
+	err = s.store.DB.Entities().FindId("cs:~openstack-charmers/trusty/mysql-7").One(&entity)
 	c.Assert(err, gc.IsNil)
 	present, err := s.store.ES.HasDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL))
 	c.Assert(err, gc.IsNil)
@@ -411,6 +411,55 @@ var searchTests = []struct {
 		results: []*router.ResolvedURL{
 			exportTestCharms["wordpress"],
 		},
+	}, {
+		about: "blank owner filter search",
+		sp: SearchParams{
+			Text: "",
+			Filters: map[string][]string{
+				"owner": {""},
+			},
+		},
+		results: []*router.ResolvedURL{
+			exportTestCharms["wordpress"],
+			exportTestCharms["mysql"],
+			exportTestBundles["wordpress-simple"],
+		},
+	}, {
+		about: "promulgated search",
+		sp: SearchParams{
+			Text: "",
+			Filters: map[string][]string{
+				"promulgated": {"1"},
+			},
+		},
+		results: []*router.ResolvedURL{
+			exportTestCharms["wordpress"],
+			exportTestCharms["mysql"],
+			exportTestBundles["wordpress-simple"],
+		},
+	}, {
+		about: "not promulgated search",
+		sp: SearchParams{
+			Text: "",
+			Filters: map[string][]string{
+				"promulgated": {"0"},
+			},
+		},
+		results: []*router.ResolvedURL{
+			exportTestCharms["varnish"],
+		},
+	}, {
+		about: "owner and promulgated filter search",
+		sp: SearchParams{
+			Text: "",
+			Filters: map[string][]string{
+				"promulgated": {"1"},
+				"owner":       {"openstack-charmers"},
+			},
+		},
+		results: []*router.ResolvedURL{
+			exportTestCharms["mysql"],
+		},
 	},
 }
 
@@ -532,17 +581,17 @@ func (s *StoreSearchSuite) TestSorting(c *gc.C) {
 		about:     "owner ascending",
 		sortQuery: "owner,name",
 		results: []*router.ResolvedURL{
-			exportTestCharms["mysql"],
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
 			exportTestCharms["varnish"],
+			exportTestCharms["mysql"],
 		},
 	}, {
 		about:     "owner descending",
 		sortQuery: "-owner,name",
 		results: []*router.ResolvedURL{
-			exportTestCharms["varnish"],
 			exportTestCharms["mysql"],
+			exportTestCharms["varnish"],
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
 		},

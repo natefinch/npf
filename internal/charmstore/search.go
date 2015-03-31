@@ -187,6 +187,10 @@ func (s *Store) UpdateSearchFields(r *router.ResolvedURL, fields map[string]inte
 func (s *Store) searchDocFromEntity(e *mongodoc.Entity, be *mongodoc.BaseEntity) (*SearchDoc, error) {
 	doc := SearchDoc{Entity: e}
 	doc.ReadACLs = be.ACLs.Read
+	// There should only be one record for the promulgated entity, which
+	// should be the latest promulgated revision. In the case that the base
+	// entity is not promulgated assume that there is a later promulgated
+	// entity.
 	if !be.Promulgated {
 		doc.Entity.PromulgatedURL = nil
 		doc.Entity.PromulgatedRevision = -1
@@ -552,7 +556,7 @@ func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 			Modifier: "ln2p",
 		},
 		elasticsearch.BoostFactorFunction{
-			Filter:      ownerFilter(""),
+			Filter:      promulgatedFilter("1"),
 			BoostFactor: 1.25,
 		},
 	}
@@ -627,6 +631,7 @@ var filters = map[string]func(string) elasticsearch.Filter{
 	"description": descriptionFilter,
 	"name":        nameFilter,
 	"owner":       ownerFilter,
+	"promulgated": promulgatedFilter,
 	"provides":    termFilter("CharmProvidedInterfaces"),
 	"requires":    termFilter("CharmRequiredInterfaces"),
 	"series":      seriesFilter,
@@ -663,7 +668,7 @@ func nameFilter(value string) elasticsearch.Filter {
 // owner taken from the URL.
 func ownerFilter(value string) elasticsearch.Filter {
 	if value == "" {
-		return elasticsearch.ExistsFilter("PromulgatedURL")
+		return promulgatedFilter("1")
 	}
 	return elasticsearch.QueryFilter{
 		Query: elasticsearch.MatchQuery{
@@ -672,6 +677,16 @@ func ownerFilter(value string) elasticsearch.Filter {
 			Type:  "phrase",
 		},
 	}
+}
+
+// promulgatedFilter generates a filter that will match against the
+// existence of a promulgated URL.
+func promulgatedFilter(value string) elasticsearch.Filter {
+	f := elasticsearch.ExistsFilter("PromulgatedURL")
+	if value == "1" {
+		return f
+	}
+	return elasticsearch.NotFilter{f}
 }
 
 // seriesFilter generates a filter that will match against the

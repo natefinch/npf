@@ -39,7 +39,7 @@ var _ = gc.Suite(&SearchSuite{})
 
 var exportTestCharms = map[string]*router.ResolvedURL{
 	"wordpress": newResolvedURL("cs:~charmers/precise/wordpress-23", 23),
-	"mysql":     newResolvedURL("cs:~charmers/trusty/mysql-7", 7),
+	"mysql":     newResolvedURL("cs:~openstack-charmers/trusty/mysql-7", 7),
 	"varnish":   newResolvedURL("cs:~foo/trusty/varnish-1", -1),
 	"riak":      newResolvedURL("cs:~charmers/trusty/riak-67", 67),
 }
@@ -249,6 +249,18 @@ func (s *SearchSuite) TestParseSearchParams(c *gc.C) {
 		about:       "skip too low",
 		query:       "skip=-1",
 		expectError: "invalid skip parameter: expected non-negative integer",
+	}, {
+		about: "promulgated filter",
+		query: "promulgated=1",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"promulgated": {"1"},
+			},
+		},
+	}, {
+		about:       "promulgated filter - bad",
+		query:       "promulgated=bad",
+		expectError: `invalid promulgated filter parameter: unexpected bool value "bad" (must be "0" or "1")`,
 	}}
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.about)
@@ -400,6 +412,26 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 	}, {
 		about: "paginated search",
 		query: "name=mysql&skip=1",
+	}, {
+		about: "promulgated",
+		query: "promulgated=1",
+		results: []*router.ResolvedURL{
+			exportTestCharms["wordpress"],
+			exportTestCharms["mysql"],
+			exportTestBundles["wordpress-simple"],
+		},
+	}, {
+		about: "not promulgated",
+		query: "promulgated=0",
+		results: []*router.ResolvedURL{
+			exportTestCharms["varnish"],
+		},
+	}, {
+		about: "promulgated with owner",
+		query: "promulgated=1&owner=openstack-charmers",
+		results: []*router.ResolvedURL{
+			exportTestCharms["mysql"],
+		},
 	}}
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.about)
@@ -709,11 +741,11 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 // TODO(mhilton) remove this test when removing legacy counts logic.
 func (s *SearchSuite) TestLegacyStatsUpdatesSearch(c *gc.C) {
 	patchLegacyDownloadCountsEnabled(s.AddCleanup, true)
-	doc, err := s.store.ES.GetSearchDocument(charm.MustParseReference("~charmers/trusty/mysql-7"))
+	doc, err := s.store.ES.GetSearchDocument(charm.MustParseReference("~openstack-charmers/trusty/mysql-7"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(doc.TotalDownloads, gc.Equals, int64(0))
-	s.assertPut(c, "~charmers/trusty/mysql-7/meta/extra-info/"+params.LegacyDownloadStats, 57)
-	doc, err = s.store.ES.GetSearchDocument(charm.MustParseReference("~charmers/trusty/mysql-7"))
+	s.assertPut(c, "~openstack-charmers/trusty/mysql-7/meta/extra-info/"+params.LegacyDownloadStats, 57)
+	doc, err = s.store.ES.GetSearchDocument(charm.MustParseReference("~openstack-charmers/trusty/mysql-7"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(doc.TotalDownloads, gc.Equals, int64(57))
 
