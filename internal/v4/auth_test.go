@@ -199,8 +199,9 @@ func newServerWithDischarger(c *gc.C, session *mgo.Session, username string, gro
 	return srv, store, discharger
 }
 
-// dischargedAuthCookie retrieves and discharges an authentication macaroon cookie.
-func dischargedAuthCookie(c *gc.C, srv http.Handler) *http.Cookie {
+// dischargedAuthCookie retrieves and discharges an authentication macaroon cookie. It adds the provided
+// first-party caveats before discharging the macaroon.
+func dischargedAuthCookie(c *gc.C, srv http.Handler, caveats ...string) *http.Cookie {
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: srv,
 		URL:     storeURL("macaroon"),
@@ -209,6 +210,10 @@ func dischargedAuthCookie(c *gc.C, srv http.Handler) *http.Cookie {
 	var m macaroon.Macaroon
 	err := json.Unmarshal(rec.Body.Bytes(), &m)
 	c.Assert(err, gc.IsNil)
+	for _, cav := range caveats {
+		err := m.AddFirstPartyCaveat(cav)
+		c.Assert(err, gc.IsNil)
+	}
 	ms, err := httpbakery.DischargeAll(&m, httpbakery.NewHTTPClient(), noInteraction)
 	c.Assert(err, gc.IsNil)
 	macaroonCookie, err := httpbakery.NewCookie(ms)
@@ -336,9 +341,10 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		baseUrl := charm.MustParseReference("~charmers/wordpress")
 
 		// Change the ACLs for the testing charm.
-		store.DB.BaseEntities().UpdateId(baseUrl, bson.D{{"$set",
+		err = store.DB.BaseEntities().UpdateId(baseUrl, bson.D{{"$set",
 			bson.D{{"acls.read", test.readPerm}},
 		}})
+		c.Assert(err, gc.IsNil)
 
 		// Prepare the expected status.
 		expectStatus := test.expectStatus
@@ -471,9 +477,10 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 		baseUrl := charm.MustParseReference("~charmers/wordpress")
 
 		// Change the ACLs for the testing charm.
-		store.DB.BaseEntities().UpdateId(baseUrl, bson.D{{"$set",
+		err = store.DB.BaseEntities().UpdateId(baseUrl, bson.D{{"$set",
 			bson.D{{"acls.write", test.writePerm}},
 		}})
+		c.Assert(err, gc.IsNil)
 
 		// Prepare the expected status.
 		expectStatus := test.expectStatus
@@ -643,4 +650,79 @@ func (s *authSuite) archiveInfo(c *gc.C) (r io.ReadCloser, hashSum string, size 
 	_, err = f.Seek(0, 0)
 	c.Assert(err, gc.IsNil)
 	return f, hash, size
+}
+
+var isEntityCaveatTests = []struct {
+	url         string
+	expectError string
+}{{
+	url: "~charmers/utopic/wordpress-42/archive",
+}, {
+	url: "~charmers/utopic/wordpress-42/meta/hash",
+}, {
+	url: "wordpress/archive",
+}, {
+	url: "wordpress/meta/hash",
+}, {
+	url: "utopic/wordpress-10/archive",
+}, {
+	url: "utopic/wordpress-10/meta/hash",
+}, {
+	url:         "~charmers/utopic/wordpress-41/archive",
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:~charmers/utopic/wordpress-41, want cs:~charmers/utopic/wordpress-42`,
+}, {
+	url:         "~charmers/utopic/wordpress-41/meta/hash",
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:~charmers/utopic/wordpress-41, want cs:~charmers/utopic/wordpress-42`,
+}, {
+	url:         "utopic/wordpress-9/archive",
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:utopic/wordpress-9, want cs:~charmers/utopic/wordpress-42`,
+}, {
+	url:         "utopic/wordpress-9/meta/hash",
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:utopic/wordpress-9, want cs:~charmers/utopic/wordpress-42`,
+}, {
+	url:         "log",
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation does not involve expected entity cs:~charmers/utopic/wordpress-42`,
+}}
+
+func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
+	// Create a new server with a third party discharger.
+	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
+	defer discharger.Close()
+
+	// Retrieve the macaroon cookie with an is-entity first party caveat.
+	cookies := []*http.Cookie{dischargedAuthCookie(c, srv, "is-entity cs:~charmers/utopic/wordpress-42")}
+
+	// Add a charm to the store, used for testing.
+	err := store.AddCharmWithArchive(
+		newResolvedURL("~charmers/utopic/wordpress-41", 9),
+		storetesting.Charms.CharmDir("wordpress"))
+	c.Assert(err, gc.IsNil)
+	err = store.AddCharmWithArchive(
+		newResolvedURL("~charmers/utopic/wordpress-42", 10),
+		storetesting.Charms.CharmDir("wordpress"))
+	c.Assert(err, gc.IsNil)
+	// Change the ACLs for the testing charm.
+	err = store.DB.BaseEntities().UpdateId("cs:~charmers/wordpress", bson.D{{"$set",
+		bson.D{{"acls.read", []string{"bob"}}},
+	}})
+	c.Assert(err, gc.IsNil)
+
+	for i, test := range isEntityCaveatTests {
+		c.Logf("test %d: %s", i, test.url)
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+			Handler: srv,
+			URL:     storeURL(test.url),
+			Method:  "GET",
+			Cookies: cookies,
+		})
+		if test.expectError != "" {
+			c.Assert(rec.Code, gc.Equals, http.StatusProxyAuthRequired)
+			var respErr httpbakery.Error
+			err := json.Unmarshal(rec.Body.Bytes(), &respErr)
+			c.Assert(err, gc.IsNil)
+			c.Assert(respErr.Message, gc.Matches, test.expectError)
+			continue
+		}
+		c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	}
 }

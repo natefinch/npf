@@ -25,7 +25,7 @@ func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, er
 	if err != nil {
 		return "", err
 	}
-	auth, err := h.checkRequest(req)
+	auth, err := h.checkRequest(req, nil)
 	if err != nil {
 		logger.Infof("authorization failed on search request, granting no privileges: %v", err)
 	}

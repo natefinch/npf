@@ -40,8 +40,8 @@ type MetaAnyResponse struct {
 // ArchiveUploadResponse holds the result of a post or a put to /id/archive.
 // See https://github.com/juju/charmstore/blob/v4/docs/API.md#post-idarchive
 type ArchiveUploadResponse struct {
-	Id *charm.Reference
-	PromulgatedId *charm.Reference		`json:",omitempty"`
+	Id            *charm.Reference
+	PromulgatedId *charm.Reference `json:",omitempty"`
 }
 
 // ExpandedId holds a charm or bundle fully qualified id.
