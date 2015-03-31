@@ -24,7 +24,7 @@ const (
 )
 
 // authorize checks that the current user is authorized based on the provided
-// ACL. If an authenticated user is required, authorize tries to retrieve the
+// ACL and optional entity. If an authenticated user is required, authorize tries to retrieve the
 // current user in the following ways:
 // - by checking that the request's headers HTTP basic auth credentials match
 //   the superuser credentials stored in the API handler;
@@ -32,7 +32,7 @@ const (
 // A params.ErrUnauthorized error is returned if superuser credentials fail;
 // otherwise a macaroon is minted and a httpbakery discharge-required
 // error is returned holding the macaroon.
-func (h *Handler) authorize(req *http.Request, acl []string) error {
+func (h *Handler) authorize(req *http.Request, acl []string, entityId *router.ResolvedURL) error {
 	logger.Infof(
 		"authorize, bakery %p, auth location %q, acl %q, path: %q, method: %q",
 		h.store.Bakery,
@@ -48,9 +48,8 @@ func (h *Handler) authorize(req *http.Request, acl []string) error {
 		}
 	}
 
-	auth, verr := h.checkRequest(req)
+	auth, verr := h.checkRequest(req, entityId)
 	if verr == nil {
-		logger.Infof("authenticated with auth: %#v", auth)
 		if err := h.checkACLMembership(auth, acl); err != nil {
 			return errgo.WithCausef(err, params.ErrUnauthorized, "")
 		}
@@ -75,7 +74,9 @@ func (h *Handler) authorize(req *http.Request, acl []string) error {
 // checkRequest checks for any authorization tokens in the request and returns any
 // found as an authorization. If no suitable credentials are found, or an error occurs,
 // then a zero valued authorization is returned.
-func (h *Handler) checkRequest(req *http.Request) (authorization, error) {
+// It also checks any first party caveats. If the entityId is provided, it will
+// be used to check any "is-entity" first party caveat.
+func (h *Handler) checkRequest(req *http.Request, entityId *router.ResolvedURL) (authorization, error) {
 	user, passwd, err := parseCredentials(req)
 	if err == nil {
 		if user != h.config.AuthUsername || passwd != h.config.AuthPassword {
@@ -86,7 +87,23 @@ func (h *Handler) checkRequest(req *http.Request) (authorization, error) {
 	if errgo.Cause(err) != errNoCreds || h.store.Bakery == nil || h.config.IdentityLocation == "" {
 		return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "authentication failed")
 	}
-	attrMap, err := httpbakery.CheckRequest(h.store.Bakery, req, nil, checkers.New())
+	attrMap, err := httpbakery.CheckRequest(h.store.Bakery, req, nil, checkers.New(
+		checkers.CheckerFunc{
+			Condition_: "is-entity",
+			Check_: func(_, arg string) error {
+				if entityId == nil {
+					return errgo.Newf("API operation does not involve expected entity %v", arg)
+				}
+				purl := entityId.PromulgatedURL()
+				if entityId.URL.String() == arg || purl != nil && purl.String() == arg {
+					// We allow either the non-promulgated or the promulgated
+					// URL form.
+					return nil
+				}
+				return errgo.Newf("API operation on entity %v, want %v", entityId, arg)
+			},
+		},
+	))
 	if err != nil {
 		return authorization{}, errgo.Mask(err, errgo.Any)
 	}
@@ -105,10 +122,10 @@ func (h *Handler) authorizeEntity(id *router.ResolvedURL, req *http.Request) err
 		}
 		return errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}
-	return h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write)
+	return h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write, id)
 }
 
-func (h *Handler) authorizeWithPerms(req *http.Request, read, write []string) error {
+func (h *Handler) authorizeWithPerms(req *http.Request, read, write []string, entityId *router.ResolvedURL) error {
 	var acl []string
 	switch req.Method {
 	case "DELETE", "PATCH", "POST", "PUT":
@@ -116,7 +133,7 @@ func (h *Handler) authorizeWithPerms(req *http.Request, read, write []string) er
 	default:
 		acl = read
 	}
-	return h.authorize(req, acl)
+	return h.authorize(req, acl, entityId)
 }
 
 const (

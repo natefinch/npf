@@ -851,7 +851,7 @@ func (h *Handler) serveMacaroon(_ http.Header, _ *http.Request) (interface{}, er
 // GET id/promulgate
 // See https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idpromulgate
 func (h *Handler) serveAdminPromulgate(id *router.ResolvedURL, _ bool, w http.ResponseWriter, req *http.Request) error {
-	if err := h.authorize(req, []string{promulgatorsGroup}); err != nil {
+	if err := h.authorize(req, []string{promulgatorsGroup}, id); err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
 	if req.Method != "PUT" {

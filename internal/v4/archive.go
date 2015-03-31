@@ -67,19 +67,24 @@ func (h *Handler) authorizeUpload(id *charm.Reference, req *http.Request) error 
 	if id.User == "" {
 		return badRequestf(nil, "user not specified in entity upload URL %q", id)
 	}
+	// Note that we pass a nil entity URL to authorizeWithPerms, because
+	// we haven't got a resolved URL at this point. At some
+	// point in the future, we may want to be able to allow
+	// is-entity first-party caveats to be allowed when uploading
+	// at which point we will need to rethink this a little.
 	baseURL := *id
 	baseURL.Revision = -1
 	baseURL.Series = ""
 	baseEntity, err := h.store.FindBaseEntity(id, "acls")
 	if err == nil {
-		return h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write)
+		return h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write, nil)
 	}
 	if errgo.Cause(err) != params.ErrNotFound {
 		return errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}
 	// The base entity does not currently exist, so we default to
 	// assuming write permissions for the entity user.
-	return h.authorizeWithPerms(req, nil, []string{id.User})
+	return h.authorizeWithPerms(req, nil, []string{id.User}, nil)
 }
 
 func (h *Handler) serveGetArchive(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
