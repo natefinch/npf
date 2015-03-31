@@ -32,7 +32,7 @@ const (
 // A params.ErrUnauthorized error is returned if superuser credentials fail;
 // otherwise a macaroon is minted and a httpbakery discharge-required
 // error is returned holding the macaroon.
-func (h *Handler) authorize(req *http.Request, acl []string, entityId *router.ResolvedURL) error {
+func (h *Handler) authorize(req *http.Request, acl []string, alwaysAuth bool, entityId *router.ResolvedURL) (authorization, error) {
 	logger.Infof(
 		"authorize, bakery %p, auth location %q, acl %q, path: %q, method: %q",
 		h.store.Bakery,
@@ -41,34 +41,36 @@ func (h *Handler) authorize(req *http.Request, acl []string, entityId *router.Re
 		req.URL.Path,
 		req.Method)
 
-	// No need to authenticate if the ACL is open to everyone.
-	for _, name := range acl {
-		if name == params.Everyone {
-			return nil
+	if !alwaysAuth {
+		// No need to authenticate if the ACL is open to everyone.
+		for _, name := range acl {
+			if name == params.Everyone {
+				return authorization{}, nil
+			}
 		}
 	}
 
 	auth, verr := h.checkRequest(req, entityId)
 	if verr == nil {
 		if err := h.checkACLMembership(auth, acl); err != nil {
-			return errgo.WithCausef(err, params.ErrUnauthorized, "")
+			return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "")
 		}
-		return nil
+		return auth, nil
 	}
 	if _, ok := errgo.Cause(verr).(*bakery.VerificationError); !ok {
-		return errgo.Mask(verr, errgo.Is(params.ErrUnauthorized))
+		return authorization{}, errgo.Mask(verr, errgo.Is(params.ErrUnauthorized))
 	}
 
 	// Macaroon verification failed: mint a new macaroon.
 	m, err := h.newMacaroon()
 	if err != nil {
-		return errgo.Notef(err, "cannot mint macaroon")
+		return authorization{}, errgo.Notef(err, "cannot mint macaroon")
 	}
 	// Request that this macaroon be supplied for all requests
 	// to the whole handler.
 	// TODO use a relative URL here: router.RelativeURLPath(req.RequestURI, "/")
 	cookiePath := "/"
-	return httpbakery.NewDischargeRequiredError(m, cookiePath, verr)
+	return authorization{}, httpbakery.NewDischargeRequiredError(m, cookiePath, verr)
 }
 
 // checkRequest checks for any authorization tokens in the request and returns any
@@ -133,7 +135,8 @@ func (h *Handler) authorizeWithPerms(req *http.Request, read, write []string, en
 	default:
 		acl = read
 	}
-	return h.authorize(req, acl, entityId)
+	_, err := h.authorize(req, acl, false, entityId)
+	return err
 }
 
 const (

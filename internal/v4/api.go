@@ -18,6 +18,7 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v5-unstable"
 	"gopkg.in/macaroon-bakery.v0/bakery"
+	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -36,6 +37,8 @@ type Handler struct {
 	locator *bakery.PublicKeyRing
 }
 
+const delegatableMacaroonExpiry = time.Minute
+
 // New returns a new instance of the v4 API handler.
 func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 	h := &Handler{
@@ -46,17 +49,18 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 
 	h.Router = router.New(&router.Handlers{
 		Global: map[string]http.Handler{
-			"changes/published":  router.HandleJSON(h.serveChangesPublished),
-			"debug":              http.HandlerFunc(h.serveDebug),
-			"debug/pprof/":       newPprofHandler(h),
-			"debug/status":       router.HandleJSON(h.serveDebugStatus),
-			"debug/info":         router.HandleJSON(h.serveDebugInfo),
-			"log":                router.HandleErrors(h.serveLog),
-			"search":             router.HandleJSON(h.serveSearch),
-			"search/interesting": http.HandlerFunc(h.serveSearchInteresting),
-			"stats/":             router.NotFoundHandler(),
-			"stats/counter/":     router.HandleJSON(h.serveStatsCounter),
-			"macaroon":           router.HandleJSON(h.serveMacaroon),
+			"changes/published":    router.HandleJSON(h.serveChangesPublished),
+			"debug":                http.HandlerFunc(h.serveDebug),
+			"debug/pprof/":         newPprofHandler(h),
+			"debug/status":         router.HandleJSON(h.serveDebugStatus),
+			"debug/info":           router.HandleJSON(h.serveDebugInfo),
+			"log":                  router.HandleErrors(h.serveLog),
+			"search":               router.HandleJSON(h.serveSearch),
+			"search/interesting":   http.HandlerFunc(h.serveSearchInteresting),
+			"stats/":               router.NotFoundHandler(),
+			"stats/counter/":       router.HandleJSON(h.serveStatsCounter),
+			"macaroon":             router.HandleJSON(h.serveMacaroon),
+			"delegatable-macaroon": router.HandleJSON(h.serveDelegatableMacaroon),
 		},
 		Id: map[string]router.IdHandler{
 			"archive":     h.serveArchive,
@@ -848,10 +852,36 @@ func (h *Handler) serveMacaroon(_ http.Header, _ *http.Request) (interface{}, er
 	return h.newMacaroon()
 }
 
+// GET /delegatable-macaroon
+// TODO: document macaroon endpoint in the API doc.
+func (h *Handler) serveDelegatableMacaroon(_ http.Header, req *http.Request) (interface{}, error) {
+	// Note that we require authorization even though we allow
+	// anyone to obtain a delegatable macaroon. This means
+	// that we will be able to add the declared caveats to
+	// the returned macaroon.
+	auth, err := h.authorize(req, []string{params.Everyone}, true, nil)
+	if err != nil {
+		return nil, errgo.Mask(err, errgo.Any)
+	}
+	if auth.Username == "" {
+		return nil, errgo.WithCausef(nil, params.ErrForbidden, "delegatable macaroon is not obtainable using admin credentials")
+	}
+	// TODO propagate expiry time from macaroons in request.
+	m, err := h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
+		checkers.DeclaredCaveat(usernameAttr, auth.Username),
+		checkers.DeclaredCaveat(groupsAttr, strings.Join(auth.Groups, " ")),
+		checkers.TimeBeforeCaveat(time.Now().Add(delegatableMacaroonExpiry)),
+	})
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	return m, nil
+}
+
 // GET id/promulgate
 // See https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idpromulgate
 func (h *Handler) serveAdminPromulgate(id *router.ResolvedURL, _ bool, w http.ResponseWriter, req *http.Request) error {
-	if err := h.authorize(req, []string{promulgatorsGroup}, id); err != nil {
+	if _, err := h.authorize(req, []string{promulgatorsGroup}, false, id); err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
 	if req.Method != "PUT" {

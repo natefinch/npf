@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
@@ -725,4 +726,120 @@ func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
 		}
 		c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	}
+}
+
+func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
+	// Create a new server with a third party discharger.
+	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
+	defer discharger.Close()
+
+	// First check that we get a macaraq error when using a vanilla http do
+	// request.
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: srv,
+		URL:     storeURL("delegatable-macaroon"),
+		ExpectBody: httptesting.BodyAsserter(func(c *gc.C, m json.RawMessage) {
+			// Allow any body - the next check will check that it's a valid macaroon.
+		}),
+		ExpectStatus: http.StatusProxyAuthRequired,
+	})
+
+	client := httpbakery.NewHTTPClient()
+
+	now := time.Now()
+	var gotBody json.RawMessage
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: srv,
+		URL:     storeURL("delegatable-macaroon"),
+		ExpectBody: httptesting.BodyAsserter(func(c *gc.C, m json.RawMessage) {
+			gotBody = m
+		}),
+		Do: func(req *http.Request) (*http.Response, error) {
+			return httpbakery.Do(client, req, noInteraction)
+		},
+		ExpectStatus: http.StatusOK,
+	})
+
+	c.Assert(gotBody, gc.NotNil)
+	var m macaroon.Macaroon
+	err := json.Unmarshal(gotBody, &m)
+	c.Assert(err, gc.IsNil)
+
+	caveats := m.Caveats()
+	foundExpiry := false
+	for _, cav := range caveats {
+		cond, arg, err := checkers.ParseCaveat(cav.Id)
+		c.Assert(err, gc.IsNil)
+		switch cond {
+		case checkers.CondTimeBefore:
+			t, err := time.Parse(time.RFC3339Nano, arg)
+			c.Assert(err, gc.IsNil)
+			c.Assert(t, jc.TimeBetween(now.Add(v4.DelegatableMacaroonExpiry), now.Add(v4.DelegatableMacaroonExpiry+time.Second)))
+			foundExpiry = true
+		}
+	}
+	c.Assert(foundExpiry, jc.IsTrue)
+
+	// Now check that we can use the obtained macaroon to do stuff
+	// as the declared user.
+
+	err = store.AddCharmWithArchive(
+		newResolvedURL("~charmers/utopic/wordpress-41", 9),
+		storetesting.Charms.CharmDir("wordpress"))
+	c.Assert(err, gc.IsNil)
+	// Change the ACLs for the testing charm.
+	err = store.DB.BaseEntities().UpdateId("cs:~charmers/wordpress", bson.D{{"$set",
+		bson.D{{"acls.read", []string{"bob"}}},
+	}})
+	c.Assert(err, gc.IsNil)
+
+	// First check that we require authorization to access the charm.
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: srv,
+		URL:     storeURL("~charmers/utopic/wordpress/meta/id-name"),
+		Method:  "GET",
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusProxyAuthRequired)
+
+	// Then check that the request succeeds if we provide the delegatable
+	// macaroon.
+
+	client = httpbakery.NewHTTPClient()
+	u, err := url.Parse("http://127.0.0.1")
+	c.Assert(err, gc.IsNil)
+	err = httpbakery.SetCookie(client.Jar, u, macaroon.Slice{&m})
+	c.Assert(err, gc.IsNil)
+
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: srv,
+		URL:     storeURL("~charmers/utopic/wordpress/meta/id-name"),
+		ExpectBody: params.IdNameResponse{
+			Name: "wordpress",
+		},
+
+		ExpectStatus: http.StatusOK,
+		Do: func(req *http.Request) (*http.Response, error) {
+			return client.Do(req)
+		},
+	})
+}
+
+func (s *authSuite) TestDelegatableMacaroonWithBasicAuth(c *gc.C) {
+	// Create a new server with a third party discharger.
+	srv, _, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
+	defer discharger.Close()
+
+	// First check that we get a macaraq error when using a vanilla http do
+	// request.
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:  srv,
+		Username: serverParams.AuthUsername,
+		Password: serverParams.AuthPassword,
+		URL:      storeURL("delegatable-macaroon"),
+		ExpectBody: params.Error{
+			Code:    params.ErrForbidden,
+			Message: "delegatable macaroon is not obtainable using admin credentials",
+		},
+		ExpectStatus: http.StatusForbidden,
+	})
 }
