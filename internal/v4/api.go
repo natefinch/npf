@@ -831,13 +831,13 @@ func (h *Handler) serveChangesPublished(_ http.Header, r *http.Request) (interfa
 }
 
 // GET /macaroon
-// TODO: document macaroon endpoint in the API doc.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-macaroon
 func (h *Handler) serveMacaroon(_ http.Header, _ *http.Request) (interface{}, error) {
 	return h.newMacaroon()
 }
 
 // GET /delegatable-macaroon
-// TODO: document macaroon endpoint in the API doc.
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-delegatable-macaroon
 func (h *Handler) serveDelegatableMacaroon(_ http.Header, req *http.Request) (interface{}, error) {
 	// Note that we require authorization even though we allow
 	// anyone to obtain a delegatable macaroon. This means
