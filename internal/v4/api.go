@@ -242,29 +242,13 @@ func (h *Handler) updateSearch(id *router.ResolvedURL, fields map[string]interfa
 // updateSearchBase updates the search records for all entities with
 // the same base URL as the given id.
 func (h *Handler) updateSearchBase(id *router.ResolvedURL, fields map[string]interface{}) error {
-	// TODO we can be more efficient here and find all series
-	// for the entity by an aggregation search.
-	iter := h.store.DB.Entities().Find(bson.M{
-		"name": id.URL.Name,
-		"user": id.URL.User,
-	}).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}}).Iter()
-	defer iter.Close()
-	updated := make(map[string]bool)
-	var entity mongodoc.Entity
-	for iter.Next(&entity) {
-		// Search records only contain the latest revision, so only update any given
-		// search record once.
-		url := *entity.URL
-		url.Revision = -1
-		if updated[url.String()] {
-			continue
-		}
-		if err := h.store.UpdateSearch(charmstore.EntityResolvedURL(&entity)); err != nil {
-			return errgo.Notef(err, "cannot update %q", url)
-		}
-		updated[url.String()] = true
+	baseURL := id.URL
+	baseURL.Series = ""
+	baseURL.Revision = -1
+	if err := h.store.UpdateSearchBaseURL(&baseURL); err != nil {
+		return errgo.Mask(err)
 	}
-	return errgo.Mask(iter.Close())
+	return nil
 }
 
 func (h *Handler) entityExists(id *router.ResolvedURL, req *http.Request) (bool, error) {

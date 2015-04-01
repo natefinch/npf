@@ -78,12 +78,6 @@ func (s *Store) UpdateSearch(r *router.ResolvedURL) error {
 	if deprecatedSeries[r.URL.Series] {
 		return nil
 	}
-	// TODO This is not necessarily good enough, as we
-	// can get more than one entity in the search results
-	// even when there is only one promulgated entity.
-	// This can happen when a promulgated entity changes owners.
-	// Perhaps key the search entities by preferred URL, not
-	// canonical URL.
 
 	var query *mgo.Query
 	query = s.DB.Entities().Find(bson.D{
@@ -98,11 +92,64 @@ func (s *Store) UpdateSearch(r *router.ResolvedURL) error {
 		}
 		return errgo.Notef(err, "cannot get %s", r)
 	}
-	baseEntity, err := s.FindBaseEntity(entity.BaseURL, "acls")
+	baseEntity, err := s.FindBaseEntity(entity.BaseURL)
 	if err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+		return errgo.Notef(err, "cannot get %s", entity.BaseURL)
 	}
-	doc, err := s.searchDocFromEntity(&entity, baseEntity)
+	if err := s.updateSearchEntity(&entity, baseEntity); err != nil {
+		return errgo.Notef(err, "cannot update search record for %q", entity.URL)
+	}
+	return nil
+}
+
+// UpdateSearchBaseURL updates the search record for all entities with
+// the specified base URL. It must be called whenever the entry for the
+// given URL in the BaseEntitites collection has changed.
+func (s *Store) UpdateSearchBaseURL(baseURL *charm.Reference) error {
+	if s.ES == nil || s.ES.Database == nil {
+		return nil
+	}
+	if baseURL.Series != "" {
+		return errgo.New("base url cannot contain series")
+	}
+	if baseURL.Revision != -1 {
+		return errgo.New("base url cannot contain revision")
+	}
+	// From the entities with the specified base URL find the latest revision in
+	// each of the available series.
+	//
+	// Note: It is possible to return the complete entity here and save some
+	// database round trips. Unfortunately the version of mongoDB we support
+	// (2.4) would require every field to be enumerated in this query, which
+	// would make it too fragile.
+	iter := s.DB.Entities().Pipe([]bson.D{
+		{{"$match", bson.D{{"baseurl", baseURL}}}},
+		{{"$sort", bson.D{{"revision", 1}}}},
+		{{"$group", bson.D{
+			{"_id", "$series"},
+			{"url", bson.D{{"$last", "$_id"}}},
+		}}},
+	}).Iter()
+	defer iter.Close()
+	var result struct {
+		URL *charm.Reference
+	}
+	for iter.Next(&result) {
+		if deprecatedSeries[result.URL.Series] {
+			continue
+		}
+		if err := s.UpdateSearch(&router.ResolvedURL{URL: *result.URL, PromulgatedRevision: -1}); err != nil {
+			return errgo.Notef(err, "cannot update search record for %q", result.URL)
+		}
+	}
+	if err := iter.Close(); err != nil {
+		return errgo.Mask(err)
+	}
+	return nil
+}
+
+func (s *Store) updateSearchEntity(entity *mongodoc.Entity, baseEntity *mongodoc.BaseEntity) error {
+	doc, err := s.searchDocFromEntity(entity, baseEntity)
 	if err != nil {
 		return errgo.Mask(err)
 	}
@@ -134,11 +181,16 @@ func (s *Store) UpdateSearchFields(r *router.ResolvedURL, fields map[string]inte
 	return nil
 }
 
-// searchDocFromEntity performs the processing required to convert a mongodoc.Entity
-// to an esDoc for indexing.
+// searchDocFromEntity performs the processing required to convert a
+// mongodoc.Entity and the corresponding mongodoc.BaseEntity to an esDoc
+// for indexing.
 func (s *Store) searchDocFromEntity(e *mongodoc.Entity, be *mongodoc.BaseEntity) (*SearchDoc, error) {
 	doc := SearchDoc{Entity: e}
 	doc.ReadACLs = be.ACLs.Read
+	if !be.Promulgated {
+		doc.Entity.PromulgatedURL = nil
+		doc.Entity.PromulgatedRevision = -1
+	}
 	_, allRevisions, err := s.ArchiveDownloadCounts(EntityResolvedURL(e))
 	if err != nil {
 		return nil, errgo.Mask(err)

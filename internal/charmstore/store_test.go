@@ -1987,7 +1987,7 @@ var promulgateTests = []struct {
 	},
 }}
 
-func (s *StoreSuite) TestPromulgate(c *gc.C) {
+func (s *StoreSuite) TestSetPromulgated(c *gc.C) {
 	store, err := NewStore(s.Session.DB("juju_test"), nil, nil)
 	c.Assert(err, gc.IsNil)
 	for i, test := range promulgateTests {
@@ -2028,6 +2028,83 @@ func (s *StoreSuite) TestPromulgate(c *gc.C) {
 			c.Assert(baseEntity, jc.DeepEquals, expectBaseEntity)
 		}
 	}
+}
+
+func (s *StoreSuite) TestSetPromulgatedUpdateSearch(c *gc.C) {
+	si := &SearchIndex{s.ES, s.TestIndex}
+	store, err := NewStore(s.Session.DB("juju_test"), si, nil)
+	c.Assert(err, gc.IsNil)
+
+	// Insert some entities in the store, ensure there are a number of revisions of the same charm.
+	err = store.DB.Entities().Insert(entity("~charmers/trusty/wordpress-0", "trusty/wordpress-2"))
+	c.Assert(err, gc.IsNil)
+	err = store.DB.Entities().Insert(entity("~charmers/precise/wordpress-0", "precise/wordpress-1"))
+	c.Assert(err, gc.IsNil)
+	err = store.DB.Entities().Insert(entity("~openstack-charmers/trusty/wordpress-0", ""))
+	c.Assert(err, gc.IsNil)
+	err = store.DB.Entities().Insert(entity("~openstack-charmers/precise/wordpress-0", ""))
+	c.Assert(err, gc.IsNil)
+	err = store.DB.BaseEntities().Insert(baseEntity("~charmers/wordpress", true))
+	c.Assert(err, gc.IsNil)
+	err = store.DB.BaseEntities().Insert(baseEntity("~openstack-charmers/wordpress", false))
+	c.Assert(err, gc.IsNil)
+	url := newResolvedURL("~openstack-charmers/trusty/wordpress-0", -1)
+
+	// Change the promulgated mysql version to openstack-charmers.
+	err = store.SetPromulgated(url, true)
+	c.Assert(err, gc.IsNil)
+	err = si.RefreshIndex(s.TestIndex)
+	c.Assert(err, gc.IsNil)
+	// Check that the search records contain the correct information.
+	var zdoc SearchDoc
+	doc := zdoc
+	err = si.GetDocument(s.TestIndex, typeName, si.getID(charm.MustParseReference("~charmers/trusty/wordpress-0")), &doc)
+	c.Assert(err, gc.IsNil)
+	c.Assert(doc.PromulgatedURL, gc.IsNil)
+	c.Assert(doc.PromulgatedRevision, gc.Equals, -1)
+	doc = zdoc
+	err = si.GetDocument(s.TestIndex, typeName, si.getID(charm.MustParseReference("~charmers/precise/wordpress-0")), &doc)
+	c.Assert(err, gc.IsNil)
+	c.Assert(doc.PromulgatedURL, gc.IsNil)
+	c.Assert(doc.PromulgatedRevision, gc.Equals, -1)
+	doc = zdoc
+	err = si.GetDocument(s.TestIndex, typeName, si.getID(charm.MustParseReference("~openstack-charmers/trusty/wordpress-0")), &doc)
+	c.Assert(err, gc.IsNil)
+	c.Assert(doc.PromulgatedURL.String(), gc.Equals, "cs:trusty/wordpress-3")
+	c.Assert(doc.PromulgatedRevision, gc.Equals, 3)
+	doc = zdoc
+	err = si.GetDocument(s.TestIndex, typeName, si.getID(charm.MustParseReference("~openstack-charmers/precise/wordpress-0")), &doc)
+	c.Assert(err, gc.IsNil)
+	c.Assert(doc.PromulgatedURL.String(), gc.Equals, "cs:precise/wordpress-2")
+	c.Assert(doc.PromulgatedRevision, gc.Equals, 2)
+
+	// Remove the promulgated flag from openstack-charmers, meaning mysql is
+	// no longer promulgated.
+	err = store.SetPromulgated(url, false)
+	c.Assert(err, gc.IsNil)
+	err = si.RefreshIndex(s.TestIndex)
+	c.Assert(err, gc.IsNil)
+	// Check that the search records contain the correct information.
+	doc = zdoc
+	err = si.GetDocument(s.TestIndex, typeName, si.getID(charm.MustParseReference("~charmers/trusty/wordpress-0")), &doc)
+	c.Assert(err, gc.IsNil)
+	c.Assert(doc.PromulgatedURL, gc.IsNil)
+	c.Assert(doc.PromulgatedRevision, gc.Equals, -1)
+	doc = zdoc
+	err = si.GetDocument(s.TestIndex, typeName, si.getID(charm.MustParseReference("~charmers/precise/wordpress-0")), &doc)
+	c.Assert(err, gc.IsNil)
+	c.Assert(doc.PromulgatedURL, gc.IsNil)
+	c.Assert(doc.PromulgatedRevision, gc.Equals, -1)
+	doc = zdoc
+	err = si.GetDocument(s.TestIndex, typeName, si.getID(charm.MustParseReference("~openstack-charmers/trusty/wordpress-0")), &doc)
+	c.Assert(err, gc.IsNil)
+	c.Assert(doc.PromulgatedURL, gc.IsNil)
+	c.Assert(doc.PromulgatedRevision, gc.Equals, -1)
+	doc = zdoc
+	err = si.GetDocument(s.TestIndex, typeName, si.getID(charm.MustParseReference("~openstack-charmers/precise/wordpress-0")), &doc)
+	c.Assert(err, gc.IsNil)
+	c.Assert(doc.PromulgatedURL, gc.IsNil)
+	c.Assert(doc.PromulgatedRevision, gc.Equals, -1)
 }
 
 func (s *StoreSuite) TestEntityResolvedURL(c *gc.C) {

@@ -170,7 +170,7 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 	baseEntity.ACLs.Read = []string{"quux"}
 	err = store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
 	c.Assert(err, gc.IsNil)
-	err = store.UpdateSearch(exportTestCharms["riak"])
+	err = store.UpdateSearchBaseURL(baseEntity.URL)
 	c.Assert(err, gc.IsNil)
 }
 
