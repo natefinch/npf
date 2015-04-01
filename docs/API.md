@@ -1768,6 +1768,26 @@ Request body:
 ["joe", "frank"]
 ```
 
+### Authorization
+
+#### GET /macaroon
+
+This endpoint returns a macaroon in JSON format that, when its third
+party caveats are discharged, will allow access to the charm store. No
+prior authorization is required.
+
+#### GET /delegatable-macaroon
+
+This endpoint returns a macaroon in JSON format that can be passed to
+third parties to allow them to access the charm store on the user's
+behalf.  A first party "is-entity" caveat may be added to restrict those
+parties so that they can only access a given charmstore entity with a
+specified id.
+
+A delegatable macaroon will only be returned to an authorized user (not
+including admin). It will carry the same privileges as the macaroon used
+to authorize the request.
+
 ### Logs
 
 #### GET /log

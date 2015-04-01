@@ -16,4 +16,5 @@ var (
 	UsernameAttr                   = usernameAttr
 	GroupsAttr                     = groupsAttr
 	GetNewPromulgatedRevision      = (*Handler).getNewPromulgatedRevision
+	DelegatableMacaroonExpiry      = delegatableMacaroonExpiry
 )
