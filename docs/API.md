@@ -1542,6 +1542,7 @@ whose series is 2. Available filters are:
 * tags - the set of tags associated with the charm.
 * name - the charm's name.
 * owner - the charm's owner (the ~user element of the charm id)
+* promulgated - the charm has been promulgated.
 * provides - interfaces provided by the charm.
 * requires - interfaces required by the charm.
 * series - the charm's series.
@@ -1552,8 +1553,11 @@ whose series is 2. Available filters are:
 
 Notes
 
-1. filtering on a specified, but empty, owner will exclude all user charms.
+1. filtering on a specified, but empty, owner is the same as filtering on promulgated=1.
 2. a specified, but empty text field will return all charms and bundles.
+3. the promulgated filter is only applied if specified. If the value is "1" then only
+   promulgated entities are returned if it is any other value only non-promulgated
+   entities are returned.
 
 The response contains a list of information on the charms or bundles that were
 matched by the request. If no parameters are specified, all charms and bundles
