@@ -107,6 +107,19 @@ var routerGetTests = []struct {
 		CharmURL: "cs:precise/wordpress-34",
 	},
 }, {
+	about: "windows id handler",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:       "/win81/visualstudio-2012/foo",
+	expectStatus: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		Method:   "GET",
+		CharmURL: "cs:win81/visualstudio-2012",
+	},
+}, {
 	about: "id handler with no series in id",
 	handlers: Handlers{
 		Id: map[string]IdHandler{
