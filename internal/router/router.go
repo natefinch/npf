@@ -31,15 +31,23 @@ import (
 // code)
 
 var knownSeries = map[string]bool{
-	"bundle":  true,
-	"oneiric": true,
-	"precise": true,
-	"quantal": true,
-	"raring":  true,
-	"saucy":   true,
-	"trusty":  true,
-	"utopic":  true,
-	"vivid":   true,
+	"bundle":      true,
+	"oneiric":     true,
+	"precise":     true,
+	"quantal":     true,
+	"raring":      true,
+	"saucy":       true,
+	"trusty":      true,
+	"utopic":      true,
+	"vivid":       true,
+	"win2012hvr2": true,
+	"win2012hv":   true,
+	"win2012r2":   true,
+	"win2012":     true,
+	"win7":        true,
+	"win8":        true,
+	"win81":       true,
+	"centos7":     true,
 }
 
 // BulkIncludeHandler represents a metadata handler that can

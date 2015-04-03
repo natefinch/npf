@@ -34,10 +34,18 @@ const typeName = "entity"
 // reverse order of LTS releases, followed by the latest
 // non-LTS release, followed by everything else.
 var seriesBoost = map[string]float64{
-	"bundle":  1.1255,
-	"trusty":  1.125,
-	"precise": 1.1125,
-	"utopic":  1.1,
+	"bundle":      1.1255,
+	"trusty":      1.125,
+	"precise":     1.1125,
+	"utopic":      1.1,
+	"win2012hvr2": 1.1,
+	"win2012hv":   1.1,
+	"win2012r2":   1.1,
+	"win2012":     1.1,
+	"win7":        1.1,
+	"win8":        1.1,
+	"win81":       1.1,
+	"centos7":     1.1,
 }
 
 // deprecatedSeries are series that should not show up in search
@@ -504,6 +512,7 @@ func queryFields(sp SearchParams) map[string]float64 {
 		"CharmMeta.Categories":    5,
 		"CharmMeta.Tags":          5,
 		"BundleData.Tags":         5,
+		"Series":                  5,
 		"CharmProvidedInterfaces": 3,
 		"CharmRequiredInterfaces": 3,
 		"CharmMeta.Description":   1,
