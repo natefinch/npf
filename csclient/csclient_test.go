@@ -1065,7 +1065,8 @@ func (s *suite) TestMacaroonAuthorization(c *gc.C) {
 	var result struct{ IdRevision struct{ Revision int } }
 	// TODO 2015-01-23: once supported, rewrite the test using POST requests.
 	_, err = client.Meta(rurl.PromulgatedURL(), &result)
-	c.Assert(err, gc.ErrorMatches, `cannot get "/utopic/wordpress-42/meta/any\?include=id-revision": cannot get discharge from ".*": cannot discharge: no discharge`)
+	c.Assert(err, gc.ErrorMatches, `cannot get "/utopic/wordpress-42/meta/any\?include=id-revision": cannot get discharge from ".*": third party refused discharge: cannot discharge: no discharge`)
+	c.Assert(httpbakery.IsDischargeError(errgo.Cause(err)), gc.Equals, true)
 
 	s.discharge = func(cond, arg string) ([]checkers.Caveat, error) {
 		return []checkers.Caveat{checkers.DeclaredCaveat("username", "bob")}, nil
@@ -1095,4 +1096,5 @@ func (s *suite) TestMacaroonAuthorization(c *gc.C) {
 	_, err = client.Meta(rurl.PromulgatedURL(), &result)
 	c.Assert(err, gc.ErrorMatches, `cannot get "/utopic/wordpress-42/meta/any\?include=id-revision": cannot get discharge from ".*": cannot start interactive session: stopping interaction`)
 	c.Assert(result.IdRevision.Revision, gc.Equals, rurl.URL.Revision)
+	c.Assert(httpbakery.IsInteractionError(errgo.Cause(err)), gc.Equals, true)
 }

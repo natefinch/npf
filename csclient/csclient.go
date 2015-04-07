@@ -60,7 +60,7 @@ type Params struct {
 
 	// VisitWebPage is called when authorization requires that
 	// the user visits a web page to authenticate themselves.
-	// If nil, a default function that returns an error will be used.
+	// If nil, a default function that returns ErrNoInteraction will be used.
 	VisitWebPage func(url *url.URL) error
 }
 
@@ -80,8 +80,12 @@ func New(p Params) *Client {
 	}
 }
 
+// ErrNoInteraction is the error cause returned by the default Params.VisitWebPage
+// value when it is nil.
+var ErrNoInteraction = errgo.New("interaction required but no web browser configured")
+
 func noVisit(url *url.URL) error {
-	return errgo.New("interaction required but no web browser configured")
+	return ErrNoInteraction
 }
 
 // ServerURL returns the charm store URL used by the client.
@@ -200,7 +204,7 @@ func (c *Client) uploadArchive(id *charm.Reference, body io.ReadSeeker, hash str
 	// Send the request.
 	resp, err := c.DoWithBody(req, "/"+id.Path()+"/archive?hash="+hash, httpbakery.SeekerBody(body))
 	if err != nil {
-		return nil, errgo.Notef(err, "cannot post archive")
+		return nil, errgo.NoteMask(err, "cannot post archive", errgo.Any)
 	}
 	defer resp.Body.Close()
 
@@ -398,6 +402,9 @@ func parseResponseBody(body io.Reader, result interface{}) error {
 // DoWithBody is like Do except that the given getBody function is
 // called to obtain the body for the HTTP request. Any body returned
 // by getBody will be closed before DoWithBody returns.
+//
+// Any error returned from the underlying httpbakery.DoWithBody
+// request will have an unchanged error cause.
 func (c *Client) DoWithBody(req *http.Request, path string, getBody httpbakery.BodyGetter) (*http.Response, error) {
 	if c.params.User != "" {
 		userPass := c.params.User + ":" + c.params.Password
@@ -418,7 +425,7 @@ func (c *Client) DoWithBody(req *http.Request, path string, getBody httpbakery.B
 	// Send the request.
 	resp, err := httpbakery.DoWithBody(c.params.HTTPClient, req, getBody, c.params.VisitWebPage)
 	if err != nil {
-		return nil, errgo.Mask(err)
+		return nil, errgo.Mask(err, errgo.Any)
 	}
 	if resp.StatusCode == http.StatusOK {
 		return resp, nil
@@ -501,7 +508,7 @@ func (cs *Client) Log(typ params.LogType, level params.LogLevel, message string,
 	body := bytes.NewReader(b)
 	resp, err := cs.DoWithBody(req, "/log", httpbakery.SeekerBody(body))
 	if err != nil {
-		return errgo.Notef(err, "cannot send log message")
+		return errgo.NoteMask(err, "cannot send log message", errgo.Any)
 	}
 	resp.Body.Close()
 	return nil
