@@ -18,7 +18,8 @@
     {{ range $name, $pages := .Data.Terms }}
       {{ $page := index $pages 0 }}
       {{ $friendly := index $page.Page.Params $taxname 0 }}
-      <a href="{{$base}}/{{$data.Plural}}/{{$name}}"> {{ $friendly }} </a> &nbsp;({{len $pages}} entries)
+      {{ $pageCount := len $pages }}
+      <a href="{{$base}}/{{$data.Plural}}/{{$name}}"> {{ $friendly }} </a> &nbsp;({{ $pageCount }} {{ if eq $pageCount 1 }}entry{{ else }}entries{{ end }})
 
 
       {{ $descpages := index $desctax $name }}
