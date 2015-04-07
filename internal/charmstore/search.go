@@ -508,14 +508,11 @@ type SearchResult struct {
 // elasticsearch query.
 func queryFields(sp SearchParams) map[string]float64 {
 	fields := map[string]float64{
-		"URL.ngrams":           8,
-		"CharmMeta.Categories": 5,
-		"CharmMeta.Tags":       5,
-		"BundleData.Tags":      5,
-		// TODO(uros): Series should be n-grams so that one
-		// can search for all "win*" charms/bundles even in
-		// without the series filter.
-		"Series":                  5,
+		"URL.ngrams":              8,
+		"CharmMeta.Categories":    5,
+		"CharmMeta.Tags":          5,
+		"BundleData.Tags":         5,
+		"Series.ngrams":           5,
 		"CharmProvidedInterfaces": 3,
 		"CharmRequiredInterfaces": 3,
 		"CharmMeta.Description":   1,
