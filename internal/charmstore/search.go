@@ -515,7 +515,7 @@ func queryFields(sp SearchParams) map[string]float64 {
 		// TODO(uros): Series should be n-grams so that one
 		// can search for all "win*" charms/bundles even in
 		// without the series filter.
-		"Series":                  5,
+		"Series.ngrams":           5,
 		"CharmProvidedInterfaces": 3,
 		"CharmRequiredInterfaces": 3,
 		"CharmMeta.Description":   1,
