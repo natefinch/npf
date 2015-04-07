@@ -159,7 +159,7 @@ func testMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParam
 	dischargeError = fmt.Errorf("go away")
 	p.Password = ""
 	p.Username = ""
-	p.ExpectError = `cannot get discharge from "http://[^"]*": cannot discharge: go away`
+	p.ExpectError = `cannot get discharge from "http://[^"]*": third party refused discharge: cannot discharge: go away`
 	httptesting.AssertJSONCall(c, p)
 }
 
