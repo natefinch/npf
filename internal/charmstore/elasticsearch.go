@@ -108,6 +108,7 @@ const esMappingJSON = `
             "analyzer" : "n3_20grams",
             "include_in_all" : false
           }
+        }
       },
       "TotalDownloads": {
         "type": "long"
