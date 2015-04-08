@@ -119,7 +119,6 @@ func (s *suite) TestDefaultServerURL(c *gc.C) {
 
 var getTests = []struct {
 	about           string
-	method          string
 	path            string
 	nilResult       bool
 	expectResult    interface{}
@@ -184,6 +183,66 @@ func (s *suite) TestGet(c *gc.C) {
 			c.Assert(string(result), jc.JSONEquals, test.expectResult)
 		}
 	}
+}
+
+var putErrorTests = []struct {
+	about           string
+	path            string
+	val             interface{}
+	expectError     string
+	expectErrorCode params.ErrorCode
+}{{
+	about:       "bad JSON val",
+	path:        "/~charmers/utopic/wordpress-42/meta/extra-info/foo",
+	val:         make(chan int),
+	expectError: `cannot marshal PUT body: json: unsupported type: chan int`,
+}, {
+	about:       "non-absolute path",
+	path:        "wordpress",
+	expectError: `path "wordpress" is not absolute`,
+}, {
+	about:       "URL parse error",
+	path:        "/wordpress/%zz",
+	expectError: `parse .*: invalid URL escape "%zz"`,
+}, {
+	about:           "result with error code",
+	path:            "/blahblah",
+	expectError:     "not found",
+	expectErrorCode: params.ErrNotFound,
+}}
+
+func (s *suite) TestPutError(c *gc.C) {
+	ch := storetesting.Charms.CharmDir("wordpress")
+	url := newResolvedURL("~charmers/utopic/wordpress-42", 42)
+	err := s.store.AddCharmWithArchive(url, ch)
+	c.Assert(err, gc.IsNil)
+
+	for i, test := range putErrorTests {
+		c.Logf("test %d: %s", i, test.about)
+		err := s.client.Put(test.path, test.val)
+		c.Assert(err, gc.ErrorMatches, test.expectError)
+		cause := errgo.Cause(err)
+		if code, ok := cause.(params.ErrorCode); ok {
+			c.Assert(code, gc.Equals, test.expectErrorCode)
+		} else {
+			c.Assert(test.expectErrorCode, gc.Equals, params.ErrorCode(""))
+		}
+	}
+}
+
+func (s *suite) TestPutSuccess(c *gc.C) {
+	ch := storetesting.Charms.CharmDir("wordpress")
+	url := newResolvedURL("~charmers/utopic/wordpress-42", 42)
+	err := s.store.AddCharmWithArchive(url, ch)
+	c.Assert(err, gc.IsNil)
+
+	perms := []string{"bob"}
+	err = s.client.Put("/~charmers/utopic/wordpress-42/meta/perm/read", perms)
+	c.Assert(err, gc.IsNil)
+	var got []string
+	err = s.client.Get("/~charmers/utopic/wordpress-42/meta/perm/read", &got)
+	c.Assert(err, gc.IsNil)
+	c.Assert(got, jc.DeepEquals, perms)
 }
 
 func (s *suite) TestGetArchive(c *gc.C) {

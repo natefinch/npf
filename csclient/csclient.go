@@ -221,19 +221,7 @@ func (c *Client) uploadArchive(id *charm.Reference, body io.ReadSeeker, hash str
 // that key to be set to the associated value.
 // Entries not set in the map will be unchanged.
 func (c *Client) PutExtraInfo(id *charm.Reference, info map[string]interface{}) error {
-	req, _ := http.NewRequest("PUT", "", nil)
-	req.Header.Set("Content-Type", "application/json")
-	data, err := json.Marshal(info)
-	if err != nil {
-		return errgo.Notef(err, "cannot marshal extra-info")
-	}
-	body := bytes.NewReader(data)
-	resp, err := c.DoWithBody(req, "/"+id.Path()+"/meta/extra-info", httpbakery.SeekerBody(body))
-	if err != nil {
-		return errgo.Mask(err, errgo.Any)
-	}
-	resp.Body.Close()
-	return nil
+	return c.Put("/"+id.Path()+"/meta/extra-info", info)
 }
 
 // Meta fetches metadata on the charm or bundle with the
@@ -363,9 +351,10 @@ func hyphenate(s string) string {
 	return buf.String()
 }
 
-// Get makes a GET request to the charm store, parsing the
-// result as JSON into the given result value, which should be
-// a pointer to the expected data, but may be nil if no result is
+// Get makes a GET request to the given path in the charm store (not
+// including the host name or version prefix but including a leading /),
+// parsing the result as JSON into the given result value, which should
+// be a pointer to the expected data, but may be nil if no result is
 // desired.
 func (c *Client) Get(path string, result interface{}) error {
 	req, err := http.NewRequest("GET", "", nil)
@@ -381,6 +370,25 @@ func (c *Client) Get(path string, result interface{}) error {
 	if err := parseResponseBody(resp.Body, result); err != nil {
 		return errgo.Mask(err)
 	}
+	return nil
+}
+
+// Put makes a PUT request to the given path in the charm store (not
+// including the host name or version prefix, but including a leading
+// /), marshaling the given value as JSON to use as the request body.
+func (c *Client) Put(path string, val interface{}) error {
+	req, _ := http.NewRequest("PUT", "", nil)
+	req.Header.Set("Content-Type", "application/json")
+	data, err := json.Marshal(val)
+	if err != nil {
+		return errgo.Notef(err, "cannot marshal PUT body")
+	}
+	body := bytes.NewReader(data)
+	resp, err := c.DoWithBody(req, path, httpbakery.SeekerBody(body))
+	if err != nil {
+		return errgo.Mask(err, errgo.Any)
+	}
+	resp.Body.Close()
 	return nil
 }
 
