@@ -73,7 +73,9 @@ func (s *Server) Close() {
 	s.srv.Close()
 }
 
-func (s *Server) client() *csclient.Client {
+// NewClient returns a new client that  will talk to the Server using basic
+// (non-macaroon) authentication.
+func (s *Server) NewClient() *csclient.Client {
 	return csclient.New(csclient.Params{
 		URL:      s.srv.URL,
 		User:     s.params.AuthUsername,
@@ -130,7 +132,7 @@ func (s *Server) UploadCharm(c *gc.C, ch charm.Charm, id *charm.Reference, promu
 	}
 
 	// Upload the charm.
-	resp, err := s.client().DoWithBody(req, url, httpbakery.SeekerBody(body))
+	resp, err := s.NewClient().DoWithBody(req, url, httpbakery.SeekerBody(body))
 	c.Assert(err, jc.ErrorIsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, gc.Equals, http.StatusOK)
