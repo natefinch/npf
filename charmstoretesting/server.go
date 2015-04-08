@@ -25,12 +25,9 @@ import (
 )
 
 const (
-	// AuthUsername is the default authentication user name used by the testing
-	// charm store server if none is provided.
+	// If params.AuthUsername or params.AuthPassword are empty,
+	// AuthUsername and AuthPassword will be used.
 	AuthUsername = "charmstore-testing-user"
-
-	// AuthPassword is the default authentication password used by the testing
-	// charm store server if none is provided.
 	AuthPassword = "charmstore-testing-password"
 )
 
