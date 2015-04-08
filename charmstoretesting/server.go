@@ -1,7 +1,7 @@
 // Copyright 2015 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package testing
+package charmstoretesting
 
 import (
 	"crypto/sha512"
@@ -24,12 +24,29 @@ import (
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
+const (
+	// AuthUsername is the default authentication user name used by the testing
+	// charm store server if none is provided.
+	AuthUsername = "charmstore-testing-user"
+
+	// AuthPassword is the default authentication password used by the testing
+	// charm store server if none is provided.
+	AuthPassword = "charmstore-testing-password"
+)
+
 // OpenServer instantiates a new charm store server instance.
 // Callers are responsible of closing the server by calling Close().
 func OpenServer(c *gc.C, session *mgo.Session, params charmstore.ServerParams) *Server {
 	db := session.DB("charmstore-testing")
+	if params.AuthUsername == "" {
+		params.AuthUsername = AuthUsername
+	}
+	if params.AuthPassword == "" {
+		params.AuthPassword = AuthPassword
+	}
 	handler, err := charmstore.NewServer(db, nil, "", params, charmstore.V4)
 	c.Assert(err, jc.ErrorIsNil)
+
 	return &Server{
 		srv:     httptest.NewServer(handler),
 		handler: handler,
@@ -59,7 +76,17 @@ func (s *Server) Close() {
 	s.srv.Close()
 }
 
+func (s *Server) client() *csclient.Client {
+	return csclient.New(csclient.Params{
+		URL:      s.srv.URL,
+		User:     s.params.AuthUsername,
+		Password: s.params.AuthPassword,
+	})
+}
+
 // UploadCharm uploads the given charm to the testing charm store.
+// The given id must include the charm user, series and revision.
+// If promulgated is true, the charm will be promulgated.
 func (s *Server) UploadCharm(c *gc.C, ch charm.Charm, id *charm.Reference, promulgated bool) *charm.Reference {
 	var path string
 
@@ -106,12 +133,7 @@ func (s *Server) UploadCharm(c *gc.C, ch charm.Charm, id *charm.Reference, promu
 	}
 
 	// Upload the charm.
-	client := csclient.New(csclient.Params{
-		URL:      s.srv.URL,
-		User:     s.params.AuthUsername,
-		Password: s.params.AuthPassword,
-	})
-	resp, err := client.DoWithBody(req, url, httpbakery.SeekerBody(body))
+	resp, err := s.client().DoWithBody(req, url, httpbakery.SeekerBody(body))
 	c.Assert(err, jc.ErrorIsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, gc.Equals, http.StatusOK)
