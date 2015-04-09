@@ -561,7 +561,7 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 func (s *APISuite) TestMetaPerm(c *gc.C) {
 	// Create a charm store server that will use the test third party for
 	// its third party caveat.
-	discharger := bakerytest.NewDischarger(nil, func(cond string, arg string) ([]checkers.Caveat, error) {
+	discharger := bakerytest.NewDischarger(nil, func(_ *http.Request, cond string, arg string) ([]checkers.Caveat, error) {
 		return []checkers.Caveat{checkers.DeclaredCaveat("username", "bob")}, nil
 	})
 	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
@@ -2083,7 +2083,7 @@ func (s *APISuite) TestMacaroon(c *gc.C) {
 	var checkedCaveats []string
 	var mu sync.Mutex
 	var dischargeError error
-	discharger := bakerytest.NewDischarger(nil, func(cond string, arg string) ([]checkers.Caveat, error) {
+	discharger := bakerytest.NewDischarger(nil, func(_ *http.Request, cond string, arg string) ([]checkers.Caveat, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		checkedCaveats = append(checkedCaveats, cond+" "+arg)

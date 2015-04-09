@@ -85,7 +85,7 @@ func testMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParam
 	var checkedCaveats []string
 	var mu sync.Mutex
 	var dischargeError error
-	discharger := bakerytest.NewDischarger(nil, func(cond string, arg string) ([]checkers.Caveat, error) {
+	discharger := bakerytest.NewDischarger(nil, func(_ *http.Request, cond string, arg string) ([]checkers.Caveat, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		checkedCaveats = append(checkedCaveats, cond+" "+arg)
@@ -180,7 +180,7 @@ func noInteraction(*url.URL) error {
 }
 
 func newServerWithDischarger(c *gc.C, session *mgo.Session, username string, groups []string) (http.Handler, *charmstore.Store, *bakerytest.Discharger) {
-	discharger := bakerytest.NewDischarger(nil, func(cond string, arg string) ([]checkers.Caveat, error) {
+	discharger := bakerytest.NewDischarger(nil, func(_ *http.Request, cond string, arg string) ([]checkers.Caveat, error) {
 		if username == "" {
 			return nil, nil
 		}
