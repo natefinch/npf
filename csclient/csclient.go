@@ -36,6 +36,7 @@ var ServerURL = "https://api.jujucharms.com/charmstore"
 // Client represents the client side of a charm store.
 type Client struct {
 	params        Params
+	header        http.Header
 	statsDisabled bool
 }
 
@@ -97,6 +98,11 @@ func (c *Client) ServerURL() string {
 // from the charm store.
 func (c *Client) DisableStats() {
 	c.statsDisabled = true
+}
+
+// SetHeader sets custom header to be sent to the charm store on each request.
+func (c *Client) SetHeader(header http.Header) {
+	c.header = header
 }
 
 // GetArchive retrieves the archive for the given charm or bundle, returning a
@@ -423,6 +429,11 @@ func (c *Client) DoWithBody(req *http.Request, path string, getBody httpbakery.B
 	// Prepare the request.
 	if !strings.HasPrefix(path, "/") {
 		return nil, errgo.Newf("path %q is not absolute", path)
+	}
+	for k, vv := range c.header {
+		for _, v := range vv {
+			req.Header.Add(k, v)
+		}
 	}
 	u, err := url.Parse(c.params.URL + "/" + apiVersion + path)
 	if err != nil {

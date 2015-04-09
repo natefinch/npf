@@ -61,7 +61,7 @@ func (s *suite) startServer(c *gc.C, session *mgo.Session) {
 		return nil, fmt.Errorf("no discharge")
 	}
 
-	discharger := bakerytest.NewDischarger(nil, func(cond, arg string) ([]checkers.Caveat, error) {
+	discharger := bakerytest.NewDischarger(nil, func(_ *http.Request, cond, arg string) ([]checkers.Caveat, error) {
 		return s.discharge(cond, arg)
 	})
 
@@ -115,6 +115,44 @@ func (s *suite) TestDefaultServerURL(c *gc.C) {
 	// Check that the request succeeds.
 	err = client.Get("/vivid/testing-wordpress-42/expand-id", nil)
 	c.Assert(err, gc.IsNil)
+}
+
+func (s *suite) TestSetHeader(c *gc.C) {
+	var header http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
+		header = req.Header
+	}))
+	defer srv.Close()
+
+	sendRequest := func(client *csclient.Client) {
+		req, err := http.NewRequest("GET", "", nil)
+		c.Assert(err, jc.ErrorIsNil)
+		_, err = client.Do(req, "/")
+		c.Assert(err, jc.ErrorIsNil)
+	}
+	client := csclient.New(csclient.Params{
+		URL: srv.URL,
+	})
+
+	// Make a first request without custom headers.
+	sendRequest(client)
+	defaultHeaderLen := len(header)
+
+	// Make a second request adding a couple of custom headers.
+	h := make(http.Header)
+	h.Set("k1", "v1")
+	h.Add("k2", "v2")
+	h.Add("k2", "v3")
+	client.SetHeader(h)
+	sendRequest(client)
+	c.Assert(header, gc.HasLen, defaultHeaderLen+len(h))
+	c.Assert(header.Get("k1"), gc.Equals, "v1")
+	c.Assert(header[http.CanonicalHeaderKey("k2")], jc.DeepEquals, []string{"v2", "v3"})
+
+	// Make a third request without custom headers.
+	client.SetHeader(nil)
+	sendRequest(client)
+	c.Assert(header, gc.HasLen, defaultHeaderLen)
 }
 
 var getTests = []struct {
