@@ -117,7 +117,7 @@ func (s *suite) TestDefaultServerURL(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 }
 
-func (s *suite) TestSetHeader(c *gc.C) {
+func (s *suite) TestSetHTTPHeader(c *gc.C) {
 	var header http.Header
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, req *http.Request) {
 		header = req.Header
@@ -143,14 +143,14 @@ func (s *suite) TestSetHeader(c *gc.C) {
 	h.Set("k1", "v1")
 	h.Add("k2", "v2")
 	h.Add("k2", "v3")
-	client.SetHeader(h)
+	client.SetHTTPHeader(h)
 	sendRequest(client)
 	c.Assert(header, gc.HasLen, defaultHeaderLen+len(h))
 	c.Assert(header.Get("k1"), gc.Equals, "v1")
 	c.Assert(header[http.CanonicalHeaderKey("k2")], jc.DeepEquals, []string{"v2", "v3"})
 
 	// Make a third request without custom headers.
-	client.SetHeader(nil)
+	client.SetHTTPHeader(nil)
 	sendRequest(client)
 	c.Assert(header, gc.HasLen, defaultHeaderLen)
 }

@@ -100,8 +100,9 @@ func (c *Client) DisableStats() {
 	c.statsDisabled = true
 }
 
-// SetHeader sets custom header to be sent to the charm store on each request.
-func (c *Client) SetHeader(header http.Header) {
+// SetHTTPHeader sets custom HTTP headers that will be sent to the charm store
+// on each request.
+func (c *Client) SetHTTPHeader(header http.Header) {
 	c.header = header
 }
 
@@ -431,9 +432,7 @@ func (c *Client) DoWithBody(req *http.Request, path string, getBody httpbakery.B
 		return nil, errgo.Newf("path %q is not absolute", path)
 	}
 	for k, vv := range c.header {
-		for _, v := range vv {
-			req.Header.Add(k, v)
-		}
+		req.Header[k] = append(req.Header[k], vv...)
 	}
 	u, err := url.Parse(c.params.URL + "/" + apiVersion + path)
 	if err != nil {
