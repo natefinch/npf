@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/juju/utils/debugstatus"
-	"gopkg.in/juju/charm.v5-unstable"
+	"gopkg.in/juju/charm.v5"
 )
 
 const (
