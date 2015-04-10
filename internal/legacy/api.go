@@ -73,8 +73,8 @@ import (
 	"time"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v5-unstable"
-	"gopkg.in/juju/charm.v5-unstable/charmrepo"
+	"gopkg.in/juju/charm.v5"
+	"gopkg.in/juju/charm.v5/charmrepo"
 
 	"gopkg.in/juju/charmstore.v4/internal/charmstore"
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"

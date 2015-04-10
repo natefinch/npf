@@ -17,7 +17,7 @@ import (
 	"github.com/juju/testing/httptesting"
 	"github.com/juju/xml"
 	gc "gopkg.in/check.v1"
-	"gopkg.in/juju/charm.v5-unstable"
+	"gopkg.in/juju/charm.v5"
 
 	"gopkg.in/juju/charmstore.v4/internal/charmstore"
 	"gopkg.in/juju/charmstore.v4/internal/storetesting"

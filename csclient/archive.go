@@ -11,7 +11,7 @@ import (
 	"os"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v5-unstable"
+	"gopkg.in/juju/charm.v5"
 )
 
 // ReadSeekCloser implements io.ReadSeeker and io.Closer.

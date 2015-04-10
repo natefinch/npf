@@ -20,7 +20,7 @@ import (
 
 	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v5-unstable"
+	"gopkg.in/juju/charm.v5"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 

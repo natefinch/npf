@@ -12,7 +12,7 @@ import (
 
 	jujutesting "github.com/juju/testing"
 	gc "gopkg.in/check.v1"
-	"gopkg.in/juju/charm.v5-unstable"
+	"gopkg.in/juju/charm.v5"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v4/internal/charmstore"
