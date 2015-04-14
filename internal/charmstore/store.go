@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sync"
 	"time"
 
 	"github.com/juju/loggo"
@@ -28,51 +27,119 @@ import (
 
 var logger = loggo.GetLogger("charmstore.internal.charmstore")
 
-// Store represents the underlying charm and blob data stores.
+// Pool holds a connection to the underlying charm and blob
+// data stores. Calling its Store method returns a new Store
+// from the pool that can be used to process short-lived requests
+// to access and modify the store.
+type Pool struct {
+	db        StoreDatabase
+	blobStore *blobstore.Store
+	es        *SearchIndex
+	Bakery    *bakery.Service
+	stats     stats
+}
+
+// NewPool returns a Pool that uses the given database
+// and search index. If bakeryParams is not nil,
+// the Bakery field in the resulting Store will be set
+// to a new Service that stores macaroons in mongo.
+func NewPool(db *mgo.Database, si *SearchIndex, bakeryParams *bakery.NewServiceParams) (*Pool, error) {
+	p := &Pool{
+		db:        StoreDatabase{db},
+		blobStore: blobstore.New(db, "entitystore"),
+		es:        si,
+	}
+	store := p.Store()
+	defer store.Close()
+	if err := store.ensureIndexes(); err != nil {
+		return nil, errgo.Notef(err, "cannot ensure indexes")
+	}
+	if err := store.ES.ensureIndexes(false); err != nil {
+		return nil, errgo.Notef(err, "cannot ensure elasticsearch indexes")
+	}
+	if bakeryParams != nil {
+		// NB we use the pool database here because its lifetime
+		// is indefinite.
+		macStore, err := mgostorage.New(p.db.Macaroons())
+		if err != nil {
+			return nil, errgo.Notef(err, "cannot create macaroon store")
+		}
+		bp := *bakeryParams
+		bp.Store = macStore
+		bsvc, err := bakery.NewService(bp)
+		if err != nil {
+			return nil, errgo.Notef(err, "cannot make bakery service")
+		}
+		p.Bakery = bsvc
+	}
+	return p, nil
+}
+
+// Store returns a Store that can be used to access the data base.
+//
+// It must be closed (with the Close method) after use.
+func (p *Pool) Store() *Store {
+	s := &Store{
+		DB:        p.db.Copy(),
+		BlobStore: p.blobStore,
+		ES:        p.es,
+		Bakery:    p.Bakery,
+		stats:     &p.stats,
+		pool:      p,
+	}
+	logger.Tracef("pool %p -> copy %p", p.db.Session, s.DB.Session)
+	return s
+}
+
+// Store holds a connection to the underlying charm and blob
+// data stores that is appropriate for short term use.
 type Store struct {
 	DB        StoreDatabase
 	BlobStore *blobstore.Store
 	ES        *SearchIndex
 	Bakery    *bakery.Service
-
-	// Cache for statistics key words (two generations).
-	cacheMu       sync.RWMutex
-	statsIdNew    map[string]int
-	statsIdOld    map[string]int
-	statsTokenNew map[int]string
-	statsTokenOld map[int]string
+	stats     *stats
+	pool      *Pool
+	closed    bool
 }
 
-// NewStore returns a Store that uses the given database
-// and search index. If bakeryParams is not nil,
-// the Bakery field in the resulting Store will be set
-// to a new Service that stores macaroons in mongo.
-func NewStore(db *mgo.Database, si *SearchIndex, bakeryParams *bakery.NewServiceParams) (*Store, error) {
-	s := &Store{
-		DB:        StoreDatabase{db},
-		BlobStore: blobstore.New(db, "entitystore"),
-		ES:        si,
+// Copy returns a new store with a lifetime
+// independent of s. Use this method if you
+// need to use a store in an independent goroutine.
+//
+// It must be closed (with the Close method) after use.
+func (s *Store) Copy() *Store {
+	s1 := *s
+	s1.DB = s.DB.Copy()
+	logger.Tracef("store %p -> copy %p", s.DB.Session, s1.DB.Session)
+	return &s1
+}
+
+// Close closes the store instance.
+func (s *Store) Close() {
+	logger.Tracef("store %p closed", s.DB.Session)
+	if s.closed {
+		logger.Errorf("session closed twice")
+		return
 	}
-	if err := s.ensureIndexes(); err != nil {
-		return nil, errgo.Notef(err, "cannot ensure indexes")
-	}
-	if err := s.ES.ensureIndexes(false); err != nil {
-		return nil, errgo.Notef(err, "cannot ensure elasticsearch indexes")
-	}
-	if bakeryParams != nil {
-		macStore, err := mgostorage.New(s.DB.Macaroons())
-		if err != nil {
-			return nil, errgo.Notef(err, "cannot create macaroon store")
-		}
-		p := *bakeryParams
-		p.Store = macStore
-		bsvc, err := bakery.NewService(p)
-		if err != nil {
-			return nil, errgo.Notef(err, "cannot make bakery service")
-		}
-		s.Bakery = bsvc
-	}
-	return s, nil
+	s.DB.Close()
+}
+
+// Go runs the given function in a new goroutine,
+// passing it a copy of s, which will be closed
+// after the function returns.
+func (s *Store) Go(f func(*Store)) {
+	s = s.Copy()
+	go func() {
+		defer s.Close()
+		f(s)
+	}()
+}
+
+// Pool returns the pool that the store originally
+// came from.
+func (s *Store) Pool() *Pool {
+	return s.pool
 }
 
 func (s *Store) ensureIndexes() error {

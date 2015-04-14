@@ -38,10 +38,11 @@ func AssertEndpointAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallPar
 }
 
 func testNonMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParams) {
-	srv, _ := newServer(c, session, nil, charmstore.ServerParams{
+	srv, store := newServer(c, session, nil, charmstore.ServerParams{
 		AuthUsername: "test-user",
 		AuthPassword: "test-password",
 	})
+	defer store.Close()
 	p.Handler = srv
 	// Check that the request succeeds when provided with the
 	// correct credentials.
@@ -100,12 +101,13 @@ func testMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParam
 
 	// Create a charmstore server that will use the test third party for
 	// its third party caveat.
-	srv, _ := newServer(c, session, nil, charmstore.ServerParams{
+	srv, store := newServer(c, session, nil, charmstore.ServerParams{
 		AuthUsername:     "test-user",
 		AuthPassword:     "test-password",
 		IdentityLocation: discharger.Location(),
 		PublicKeyLocator: discharger,
 	})
+	defer store.Close()
 	p.Handler = srv
 
 	client := httpbakery.NewHTTPClient()
@@ -329,6 +331,7 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		// Create a new server with a third party discharger.
 		srv, store, discharger := newServerWithDischarger(c, s.Session, test.username, test.groups)
 		defer discharger.Close()
+		defer store.Close()
 
 		// Retrieve the macaroon cookie.
 		cookies := []*http.Cookie{dischargedAuthCookie(c, srv)}
@@ -466,6 +469,7 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 		// Create a new server with a third party discharger.
 		srv, store, discharger := newServerWithDischarger(c, s.Session, test.username, test.groups)
 		defer discharger.Close()
+		defer store.Close()
 
 		// Retrieve the macaroon cookie.
 		cookies := []*http.Cookie{dischargedAuthCookie(c, srv)}
@@ -606,6 +610,7 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 		// Create a new server with a third party discharger.
 		srv, store, discharger := newServerWithDischarger(c, s.Session, test.username, test.groups)
 		defer discharger.Close()
+		defer store.Close()
 
 		// Retrieve the macaroon cookie.
 		cookies := []*http.Cookie{dischargedAuthCookie(c, srv)}
@@ -689,6 +694,7 @@ func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
 	// Create a new server with a third party discharger.
 	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
 	defer discharger.Close()
+	defer store.Close()
 
 	// Retrieve the macaroon cookie with an is-entity first party caveat.
 	cookies := []*http.Cookie{dischargedAuthCookie(c, srv, "is-entity cs:~charmers/utopic/wordpress-42")}
@@ -732,6 +738,7 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 	// Create a new server with a third party discharger.
 	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
 	defer discharger.Close()
+	defer store.Close()
 
 	// First check that we get a macaraq error when using a vanilla http do
 	// request.
@@ -826,8 +833,9 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 
 func (s *authSuite) TestDelegatableMacaroonWithBasicAuth(c *gc.C) {
 	// Create a new server with a third party discharger.
-	srv, _, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
+	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
 	defer discharger.Close()
+	defer store.Close()
 
 	// First check that we get a macaraq error when using a vanilla http do
 	// request.

@@ -49,13 +49,18 @@ func (s *APISuite) SetUpTest(c *gc.C) {
 	s.srv, s.store = newServer(c, s.Session, serverParams)
 }
 
+func (s *APISuite) TearDownTest(c *gc.C) {
+	s.store.Close()
+	s.IsolatedMgoSuite.TearDownTest(c)
+}
+
 func newServer(c *gc.C, session *mgo.Session, config charmstore.ServerParams) (http.Handler, *charmstore.Store) {
 	db := session.DB("charmstore")
-	store, err := charmstore.NewStore(db, nil, nil)
+	pool, err := charmstore.NewPool(db, nil, nil)
 	c.Assert(err, gc.IsNil)
 	srv, err := charmstore.NewServer(db, nil, config, map[string]charmstore.NewAPIHandlerFunc{"": legacy.NewAPIHandler})
 	c.Assert(err, gc.IsNil)
-	return srv, store
+	return srv, pool.Store()
 }
 
 func (s *APISuite) TestCharmArchive(c *gc.C) {

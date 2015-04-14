@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/errgo.v1"
@@ -19,6 +20,15 @@ import (
 	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/params"
 )
+
+type stats struct {
+	// Cache for statistics key words (two generations).
+	cacheMu       sync.RWMutex
+	statsIdNew    map[string]int
+	statsIdOld    map[string]int
+	statsTokenNew map[int]string
+	statsTokenOld map[int]string
+}
 
 // Note that changing the StatsGranularity constant
 // will not change the stats time granularity - it
@@ -42,13 +52,13 @@ func (s StoreDatabase) StatTokens() *mgo.Collection {
 	return s.C("juju.stat.tokens")
 }
 
-// statsKey returns the compound statistics identifier that represents key.
+// key returns the compound statistics identifier that represents key.
 // If write is true, the identifier will be created if necessary.
 // Identifiers have a form similar to "ab:c:def:", where each section is a
 // base-32 number that represents the respective word in key. This form
 // allows efficiently indexing and searching for prefixes, while detaching
 // the key content and size from the actual words used in key.
-func (s *Store) statsKey(db StoreDatabase, key []string, write bool) (string, error) {
+func (s *stats) key(db StoreDatabase, key []string, write bool) (string, error) {
 	if len(key) == 0 {
 		return "", errgo.New("store: empty statistics key")
 	}
@@ -60,7 +70,7 @@ func (s *Store) statsKey(db StoreDatabase, key []string, write bool) (string, er
 	var err error
 	for i, retry := 0, 30; i < len(key) && retry > 0; retry-- {
 		err = nil
-		id, found := s.statsTokenId(key[i])
+		id, found := s.tokenId(key[i])
 		if !found {
 			var t tokenId
 			err = tokens.Find(bson.D{{"t", key[i]}}).One(&t)
@@ -79,7 +89,7 @@ func (s *Store) statsKey(db StoreDatabase, key []string, write bool) (string, er
 			if err != nil {
 				continue
 			}
-			s.cacheStatsTokenId(t.Token, t.Id)
+			s.cacheTokenId(t.Token, t.Id)
 			id = t.Id
 		}
 		skey = strconv.AppendInt(skey, int64(id), 32)
@@ -99,10 +109,10 @@ type tokenId struct {
 	Token string `bson:"t"`
 }
 
-// cacheStatsTokenId adds the id for token into the cache.
+// cacheTokenId adds the id for token into the cache.
 // The cache has two generations so that the least frequently used
 // tokens are evicted regularly.
-func (s *Store) cacheStatsTokenId(token string, id int) {
+func (s *stats) cacheTokenId(token string, id int) {
 	s.cacheMu.Lock()
 	defer s.cacheMu.Unlock()
 	// Can't possibly be >, but reviews want it for defensiveness.
@@ -120,8 +130,8 @@ func (s *Store) cacheStatsTokenId(token string, id int) {
 	s.statsTokenNew[id] = token
 }
 
-// statsTokenId returns the id for token from the cache, if found.
-func (s *Store) statsTokenId(token string) (id int, found bool) {
+// tokenId returns the id for token from the cache, if found.
+func (s *stats) tokenId(token string) (id int, found bool) {
 	s.cacheMu.RLock()
 	id, found = s.statsIdNew[token]
 	if found {
@@ -131,13 +141,13 @@ func (s *Store) statsTokenId(token string) (id int, found bool) {
 	id, found = s.statsIdOld[token]
 	s.cacheMu.RUnlock()
 	if found {
-		s.cacheStatsTokenId(token, id)
+		s.cacheTokenId(token, id)
 	}
 	return
 }
 
-// statsIdToken returns the token for id from the cache, if found.
-func (s *Store) statsIdToken(id int) (token string, found bool) {
+// idToken returns the token for id from the cache, if found.
+func (s *stats) idToken(id int) (token string, found bool) {
 	s.cacheMu.RLock()
 	token, found = s.statsTokenNew[id]
 	if found {
@@ -147,7 +157,7 @@ func (s *Store) statsIdToken(id int) (token string, found bool) {
 	token, found = s.statsTokenOld[id]
 	s.cacheMu.RUnlock()
 	if found {
-		s.cacheStatsTokenId(token, id)
+		s.cacheTokenId(token, id)
 	}
 	return
 }
@@ -161,11 +171,11 @@ func timeToStamp(t time.Time) int32 {
 // IncCounterAsync increases by one the counter associated with the composed
 // key. The action is done in the background using a separate goroutine.
 func (s *Store) IncCounterAsync(key []string) {
-	go func() {
+	s.Go(func(s *Store) {
 		if err := s.IncCounter(key); err != nil {
 			logger.Errorf("cannot increase stats counter for key %v: %v", key, err)
 		}
-	}()
+	})
 }
 
 // IncCounter increases by one the counter associated with the composed key.
@@ -178,17 +188,14 @@ func (s *Store) IncCounter(key []string) error {
 // This method is exposed for testing purposes only - production
 // code should always call IncCounter or IncCounterAsync.
 func (s *Store) IncCounterAtTime(key []string, t time.Time) error {
-	db := s.DB.Copy()
-	defer db.Close()
-
-	skey, err := s.statsKey(db, key, true)
+	skey, err := s.stats.key(s.DB, key, true)
 	if err != nil {
 		return err
 	}
 
 	// Round to the start of the minute so we get one document per minute at most.
 	t = t.UTC().Add(-time.Duration(t.Second()) * time.Second)
-	counters := db.StatCounters()
+	counters := s.DB.StatCounters()
 	_, err = counters.Upsert(bson.D{{"k", skey}, {"t", timeToStamp(t)}}, bson.D{{"$inc", bson.D{{"c", 1}}}})
 	return err
 }
@@ -264,7 +271,7 @@ func (s *Store) Counters(req *CounterRequest) ([]Counter, error) {
 	tokensColl := db.StatTokens()
 	countersColl := db.StatCounters()
 
-	searchKey, err := s.statsKey(db, req.Key, false)
+	searchKey, err := s.stats.key(db, req.Key, false)
 	if errgo.Cause(err) == params.ErrNotFound {
 		if !req.List {
 			return []Counter{{
@@ -382,14 +389,14 @@ func (s *Store) Counters(req *CounterRequest) ([]Counter, error) {
 			if err != nil {
 				return nil, errgo.Newf("store: invalid id: %q", ids[i])
 			}
-			token, found := s.statsIdToken(int(id))
+			token, found := s.stats.idToken(int(id))
 			if !found {
 				var t tokenId
 				err = tokensColl.FindId(id).One(&t)
 				if err == mgo.ErrNotFound {
 					return nil, errgo.Newf("store: internal error; token id not found: %d", id)
 				}
-				s.cacheStatsTokenId(t.Token, t.Id)
+				s.stats.cacheTokenId(t.Token, t.Id)
 				token = t.Token
 			}
 			tokens = append(tokens, token)
@@ -566,11 +573,11 @@ func (s *Store) aggregateStats(key []string, prefix bool) (AggregatedCounts, err
 // the statistics database and the search database. The action is done in the
 // background using a separate goroutine.
 func (s *Store) IncrementDownloadCountsAsync(id *router.ResolvedURL) {
-	go func() {
+	s.Go(func(s *Store) {
 		if err := s.IncrementDownloadCounts(id); err != nil {
 			logger.Errorf("cannot increase download counter for %v: %s", id, err)
 		}
-	}()
+	})
 }
 
 // IncrementDownloadCounts updates the download statistics for entity id in both

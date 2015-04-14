@@ -25,10 +25,12 @@ import (
 // GET id/diagram.svg
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-iddiagramsvg
 func (h *Handler) serveDiagram(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+	store := h.pool.Store()
+	defer store.Close()
 	if id.URL.Series != "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "diagrams not supported for charms")
 	}
-	entity, err := h.store.FindEntity(id, "bundledata")
+	entity, err := store.FindEntity(id, "bundledata")
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
@@ -71,7 +73,9 @@ var allowedReadMe = map[string]bool{
 // GET id/readme
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idreadme
 func (h *Handler) serveReadMe(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
-	entity, err := h.store.FindEntity(id, "_id", "contents", "blobname")
+	store := h.pool.Store()
+	defer store.Close()
+	entity, err := store.FindEntity(id, "_id", "contents", "blobname")
 	if err != nil {
 		return errgo.NoteMask(err, "cannot get README", errgo.Is(params.ErrNotFound))
 	}
@@ -81,7 +85,7 @@ func (h *Handler) serveReadMe(id *router.ResolvedURL, fullySpecified bool, w htt
 		// TODO propagate likely content type from file extension.
 		return allowedReadMe[name]
 	}
-	r, err := h.store.OpenCachedBlobFile(entity, mongodoc.FileReadMe, isReadMeFile)
+	r, err := store.OpenCachedBlobFile(entity, mongodoc.FileReadMe, isReadMeFile)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
@@ -98,14 +102,16 @@ func (h *Handler) serveIcon(id *router.ResolvedURL, fullySpecified bool, w http.
 		return errgo.WithCausef(nil, params.ErrNotFound, "icons not supported for bundles")
 	}
 
-	entity, err := h.store.FindEntity(id, "_id", "contents", "blobname")
+	store := h.pool.Store()
+	defer store.Close()
+	entity, err := store.FindEntity(id, "_id", "contents", "blobname")
 	if err != nil {
 		return errgo.NoteMask(err, "cannot get icon", errgo.Is(params.ErrNotFound))
 	}
 	isIconFile := func(f *zip.File) bool {
 		return path.Clean(f.Name) == "icon.svg"
 	}
-	r, err := h.store.OpenCachedBlobFile(entity, mongodoc.FileIcon, isIconFile)
+	r, err := store.OpenCachedBlobFile(entity, mongodoc.FileIcon, isIconFile)
 	if err != nil {
 		logger.Errorf("cannot open icon.svg file for %v: %v", id, err)
 		if errgo.Cause(err) != params.ErrNotFound {

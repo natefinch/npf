@@ -91,13 +91,21 @@ func (s *APISuite) SetUpTest(c *gc.C) {
 	s.srv_es, s.store_es = newServer(c, s.Session, si, serverParams)
 }
 
+func (s *APISuite) TearDownTest(c *gc.C) {
+	s.store.Close()
+	s.store_es.Close()
+	s.IsolatedMgoSuite.TearDownTest(c)
+}
+
+// newServer creates a new charmstore server. The store it returns must
+// be closed after use.
 func newServer(c *gc.C, session *mgo.Session, si *charmstore.SearchIndex, config charmstore.ServerParams) (http.Handler, *charmstore.Store) {
 	db := session.DB("charmstore")
-	store, err := charmstore.NewStore(db, si, &bakery.NewServiceParams{})
-	c.Assert(err, gc.IsNil)
 	srv, err := charmstore.NewServer(db, si, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v4.NewAPIHandler})
 	c.Assert(err, gc.IsNil)
-	return srv, store
+	pool, err := charmstore.NewPool(db, si, &bakery.NewServiceParams{})
+	c.Assert(err, gc.IsNil)
+	return srv, pool.Store()
 }
 
 func storeURL(path string) string {
@@ -566,7 +574,9 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	})
 	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
 	defer discharger.Close()
+	defer store.Close()
 	cookies := []*http.Cookie{dischargedAuthCookie(c, srv)}
+	s.store.Close()
 	s.srv, s.store = srv, store
 
 	s.addCharm(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-23", 23))
@@ -2092,10 +2102,11 @@ func (s *APISuite) TestMacaroon(c *gc.C) {
 	defer discharger.Close()
 	// Create a charmstore server that will use the test third party for
 	// its third party caveat.
-	srv, _ := newServer(c, s.store.DB.Session, nil, charmstore.ServerParams{
+	srv, store := newServer(c, s.store.DB.Session, nil, charmstore.ServerParams{
 		IdentityLocation: discharger.Location(),
 		PublicKeyLocator: discharger,
 	})
+	defer store.Close()
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: srv,
 		URL:     storeURL("macaroon"),
@@ -2443,6 +2454,7 @@ func (s *APISuite) TestPromulgate(c *gc.C) {
 			"http://0.1.2.3/": &testPublicKey,
 		},
 	})
+	defer store.Close()
 	for i, test := range promulgateTests {
 		c.Logf("%d. %s\n", i, test.about)
 		_, err := store.DB.Entities().RemoveAll(nil)

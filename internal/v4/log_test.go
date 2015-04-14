@@ -34,6 +34,11 @@ func (s *logSuite) SetUpTest(c *gc.C) {
 	s.srv, s.store = newServer(c, s.Session, nil, serverParams)
 }
 
+func (s *logSuite) TearDownTest(c *gc.C) {
+	s.store.Close()
+	s.IsolatedMgoSuite.TearDownTest(c)
+}
+
 var logResponses = map[string]*params.LogResponse{
 	"info1": {
 		Data:  rawMessage("info data 1"),

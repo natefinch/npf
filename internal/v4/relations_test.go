@@ -45,6 +45,11 @@ func (s *RelationsSuite) SetUpTest(c *gc.C) {
 	s.srv, s.store = newServer(c, s.Session, nil, serverParams)
 }
 
+func (s *RelationsSuite) TearDownTest(c *gc.C) {
+	s.store.Close()
+	s.IsolatedMgoSuite.TearDownTest(c)
+}
+
 // metaCharmRelatedCharms defines a bunch of charms to be used in
 // the relation tests.
 var metaCharmRelatedCharms = map[string]charm.Charm{

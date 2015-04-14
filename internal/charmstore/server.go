@@ -18,7 +18,7 @@ import (
 
 // NewAPIHandlerFunc is a function that returns a new API handler that uses
 // the given Store.
-type NewAPIHandlerFunc func(*Store, ServerParams) http.Handler
+type NewAPIHandlerFunc func(*Pool, ServerParams) http.Handler
 
 // ServerParams holds configuration for a new internal API server.
 type ServerParams struct {
@@ -55,21 +55,23 @@ func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions 
 		Location: "charmstore",
 		Locator:  config.PublicKeyLocator,
 	}
-	store, err := NewStore(db, si, &bparams)
+	pool, err := NewPool(db, si, &bparams)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot make store")
 	}
+	store := pool.Store()
+	defer store.Close()
 	if err := migrate(store.DB); err != nil {
 		return nil, errgo.Notef(err, "database migration failed")
 	}
-	go func() {
+	store.Go(func(store *Store) {
 		if err := store.syncSearch(); err != nil {
 			logger.Errorf("Cannot populate elasticsearch: %v", err)
 		}
-	}()
+	})
 	mux := router.NewServeMux()
 	for vers, newAPI := range versions {
-		handle(mux, "/"+vers, newAPI(store, config))
+		handle(mux, "/"+vers, newAPI(pool, config))
 	}
 	return mux, nil
 }

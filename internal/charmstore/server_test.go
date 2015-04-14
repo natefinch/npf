@@ -38,8 +38,7 @@ type versionResponse struct {
 func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	db := s.Session.DB("foo")
 	serveVersion := func(vers string) NewAPIHandlerFunc {
-		return func(store *Store, config ServerParams) http.Handler {
-			c.Assert(store.DB.Database, gc.Equals, db)
+		return func(p *Pool, config ServerParams) http.Handler {
 			return router.HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
 				return versionResponse{
 					Version: vers,
@@ -86,7 +85,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 }
 
 func (s *ServerSuite) TestNewServerWithConfig(c *gc.C) {
-	serveConfig := func(store *Store, config ServerParams) http.Handler {
+	serveConfig := func(p *Pool, config ServerParams) http.Handler {
 		return router.HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
 			return config, nil
 		})
@@ -103,7 +102,7 @@ func (s *ServerSuite) TestNewServerWithConfig(c *gc.C) {
 }
 
 func (s *ServerSuite) TestNewServerWithElasticSearch(c *gc.C) {
-	serveConfig := func(store *Store, config ServerParams) http.Handler {
+	serveConfig := func(p *Pool, config ServerParams) http.Handler {
 		return router.HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
 			return config, nil
 		})

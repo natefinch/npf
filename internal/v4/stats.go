@@ -77,7 +77,9 @@ func (h *Handler) serveStatsCounter(_ http.Header, r *http.Request) (interface{}
 			return nil, errgo.WithCausef(nil, params.ErrForbidden, "unknown key")
 		}
 	}
-	entries, err := h.store.Counters(&req)
+	store := h.pool.Store()
+	defer store.Close()
+	entries, err := store.Counters(&req)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot query counters")
 	}

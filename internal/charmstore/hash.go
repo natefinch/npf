@@ -35,7 +35,9 @@ func (s *Store) UpdateEntitySHA256(id *router.ResolvedURL) (string, error) {
 	// Update the entry asynchronously because it doesn't matter if it succeeds
 	// or fails, or if several instances of the charm store do it concurrently,
 	// and it doesn't need to be on the critical path for API endpoints.
-	go UpdateEntitySHA256(s, id, sum256)
+	s.Go(func(s *Store) {
+		UpdateEntitySHA256(s, id, sum256)
+	})
 
 	return sum256, nil
 }

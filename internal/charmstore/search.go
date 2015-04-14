@@ -69,11 +69,11 @@ type SearchDoc struct {
 // UpdateSearchAsync will update the search record for the entity
 // reference r in the backgroud.
 func (s *Store) UpdateSearchAsync(r *router.ResolvedURL) {
-	go func() {
+	s.Go(func(s *Store) {
 		if err := s.UpdateSearch(r); err != nil {
 			logger.Errorf("cannot update search record for %v: %s", r, err)
 		}
-	}()
+	})
 }
 
 // UpdateSearch updates the search record for the entity reference r.
