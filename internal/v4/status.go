@@ -21,10 +21,12 @@ import (
 // GET /debug/status
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-debugstatus
 func (h *Handler) serveDebugStatus(_ http.Header, req *http.Request) (interface{}, error) {
+	store := h.pool.Store()
+	defer store.Close()
 	return debugstatus.Check(
 		debugstatus.ServerStartTime,
-		debugstatus.Connection(h.store.DB.Session),
-		debugstatus.MongoCollections(h.store.DB),
+		debugstatus.Connection(store.DB.Session),
+		debugstatus.MongoCollections(store.DB),
 		h.checkElasticSearch,
 		h.checkEntities,
 		h.checkBaseEntities,
@@ -38,14 +40,16 @@ func (h *Handler) serveDebugStatus(_ http.Header, req *http.Request) (interface{
 }
 
 func (h *Handler) checkElasticSearch() (key string, result debugstatus.CheckResult) {
+	store := h.pool.Store()
+	defer store.Close()
 	key = "elasticsearch"
 	result.Name = "Elastic search is running"
-	if h.store.ES == nil || h.store.ES.Database == nil {
+	if store.ES == nil || store.ES.Database == nil {
 		result.Value = "Elastic search is not configured"
 		result.Passed = true
 		return key, result
 	}
-	health, err := h.store.ES.Health()
+	health, err := store.ES.Health()
 	if err != nil {
 		result.Value = "Connection issues to Elastic Search: " + err.Error()
 		return key, result
@@ -56,18 +60,20 @@ func (h *Handler) checkElasticSearch() (key string, result debugstatus.CheckResu
 }
 
 func (h *Handler) checkEntities() (key string, result debugstatus.CheckResult) {
+	store := h.pool.Store()
+	defer store.Close()
 	result.Name = "Entities in charm store"
-	charms, err := h.store.DB.Entities().Find(bson.D{{"series", bson.D{{"$ne", "bundle"}}}}).Count()
+	charms, err := store.DB.Entities().Find(bson.D{{"series", bson.D{{"$ne", "bundle"}}}}).Count()
 	if err != nil {
 		result.Value = "Cannot count charms for consistency check: " + err.Error()
 		return "entities", result
 	}
-	bundles, err := h.store.DB.Entities().Find(bson.D{{"series", "bundle"}}).Count()
+	bundles, err := store.DB.Entities().Find(bson.D{{"series", "bundle"}}).Count()
 	if err != nil {
 		result.Value = "Cannot count bundles for consistency check: " + err.Error()
 		return "entities", result
 	}
-	promulgated, err := h.store.DB.Entities().Find(bson.D{{"promulgated-url", bson.D{{"$exists", true}}}}).Count()
+	promulgated, err := store.DB.Entities().Find(bson.D{{"promulgated-url", bson.D{{"$exists", true}}}}).Count()
 	if err != nil {
 		result.Value = "Cannot count promulgated for consistency check: " + err.Error()
 		return "entities", result
@@ -80,16 +86,18 @@ func (h *Handler) checkEntities() (key string, result debugstatus.CheckResult) {
 func (h *Handler) checkBaseEntities() (key string, result debugstatus.CheckResult) {
 	resultKey := "base_entities"
 	result.Name = "Base entities in charm store"
+	store := h.pool.Store()
+	defer store.Close()
 
 	// Retrieve the number of base entities.
-	baseNum, err := h.store.DB.BaseEntities().Count()
+	baseNum, err := store.DB.BaseEntities().Count()
 	if err != nil {
 		result.Value = "Cannot count base entities: " + err.Error()
 		return resultKey, result
 	}
 
 	// Retrieve the number of entities.
-	num, err := h.store.DB.Entities().Count()
+	num, err := store.DB.Entities().Count()
 	if err != nil {
 		result.Value = "Cannot count entities for consistency check: " + err.Error()
 		return resultKey, result
@@ -118,7 +126,9 @@ func (h *Handler) checkLogs(resultKey, resultName string, logType mongodoc.LogTy
 // end messages were last added.
 func (h *Handler) findTimesInLogs(logType mongodoc.LogType, startPrefix, endPrefix string) (start, end time.Time, err error) {
 	var log mongodoc.Log
-	iter := h.store.DB.Logs().
+	store := h.pool.Store()
+	defer store.Close()
+	iter := store.DB.Logs().
 		Find(bson.D{
 		{"level", mongodoc.InfoLevel},
 		{"type", logType},

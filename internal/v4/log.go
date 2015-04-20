@@ -75,12 +75,14 @@ func (h *Handler) getLogs(w http.ResponseWriter, req *http.Request) error {
 		}
 		query = append(query, bson.DocElem{"type", logType})
 	}
+	store := h.pool.Store()
+	defer store.Close()
 
 	// Retrieve the logs.
 	outputStarted := false
 	closingContent := "[]"
 	var log mongodoc.Log
-	iter := h.store.DB.Logs().Find(query).Sort("-_id").Skip(offset).Limit(limit).Iter()
+	iter := store.DB.Logs().Find(query).Sort("-_id").Skip(offset).Limit(limit).Iter()
 	for iter.Next(&log) {
 		// Start writing the response body. The logs are streamed, but we wrap
 		// the output in square brackets and we separate entries with commas so
@@ -136,6 +138,8 @@ func (h *Handler) postLogs(w http.ResponseWriter, req *http.Request) error {
 		return badRequestf(err, "cannot unmarshal body")
 	}
 
+	store := h.pool.Store()
+	defer store.Close()
 	for _, log := range logs {
 		// Validate the provided level and type.
 		logLevel, ok := paramsLogLevels[log.Level]
@@ -148,7 +152,7 @@ func (h *Handler) postLogs(w http.ResponseWriter, req *http.Request) error {
 		}
 
 		// Add the log to the database.
-		if err := h.store.AddLog(log.Data, logLevel, logType, log.URLs); err != nil {
+		if err := store.AddLog(log.Data, logLevel, logType, log.URLs); err != nil {
 			return errgo.Notef(err, "cannot add log")
 		}
 	}

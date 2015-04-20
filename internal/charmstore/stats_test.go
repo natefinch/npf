@@ -25,12 +25,13 @@ var _ = gc.Suite(&StatsSuite{})
 
 func (s *StatsSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
-	store, err := charmstore.NewStore(s.Session.DB("foo"), nil, nil)
+	pool, err := charmstore.NewPool(s.Session.DB("foo"), nil, nil)
 	c.Assert(err, gc.IsNil)
-	s.store = store
+	s.store = pool.Store()
 }
 
 func (s *StatsSuite) TearDownTest(c *gc.C) {
+	s.store.Close()
 	s.IsolatedMgoSuite.TearDownTest(c)
 }
 
@@ -264,8 +265,10 @@ func (s *StatsSuite) TestListCounters(c *gc.C) {
 	}
 
 	// Use a different store to exercise cache filling.
-	st, err := charmstore.NewStore(s.store.DB.Database, nil, nil)
+	pool, err := charmstore.NewPool(s.store.DB.Database, nil, nil)
 	c.Assert(err, gc.IsNil)
+	st := pool.Store()
+	defer st.Close()
 
 	for i := range tests {
 		req := &charmstore.CounterRequest{Key: tests[i].prefix, Prefix: true, List: true}

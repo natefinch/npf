@@ -69,10 +69,12 @@ func run(confPath string) error {
 	db := session.DB("juju")
 
 	logger.Infof("instantiating the store")
-	store, err := charmstore.NewStore(db, nil, nil)
+	pool, err := charmstore.NewPool(db, nil, nil)
 	if err != nil {
 		return errgo.Notef(err, "cannot create a new store")
 	}
+	store := pool.Store()
+	defer store.Close()
 
 	logger.Infof("updating entities")
 	if err := update(store); err != nil {

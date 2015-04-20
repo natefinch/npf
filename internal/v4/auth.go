@@ -35,7 +35,7 @@ const (
 func (h *Handler) authorize(req *http.Request, acl []string, alwaysAuth bool, entityId *router.ResolvedURL) (authorization, error) {
 	logger.Infof(
 		"authorize, bakery %p, auth location %q, acl %q, path: %q, method: %q",
-		h.store.Bakery,
+		h.pool.Bakery,
 		h.config.IdentityLocation,
 		acl,
 		req.URL.Path,
@@ -86,10 +86,10 @@ func (h *Handler) checkRequest(req *http.Request, entityId *router.ResolvedURL) 
 		}
 		return authorization{Admin: true}, nil
 	}
-	if errgo.Cause(err) != errNoCreds || h.store.Bakery == nil || h.config.IdentityLocation == "" {
+	if errgo.Cause(err) != errNoCreds || h.pool.Bakery == nil || h.config.IdentityLocation == "" {
 		return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "authentication failed")
 	}
-	attrMap, err := httpbakery.CheckRequest(h.store.Bakery, req, nil, checkers.New(
+	attrMap, err := httpbakery.CheckRequest(h.pool.Bakery, req, nil, checkers.New(
 		checkers.CheckerFunc{
 			Condition_: "is-entity",
 			Check_: func(_, arg string) error {
@@ -117,7 +117,9 @@ func (h *Handler) checkRequest(req *http.Request, entityId *router.ResolvedURL) 
 }
 
 func (h *Handler) authorizeEntity(id *router.ResolvedURL, req *http.Request) error {
-	baseEntity, err := h.store.FindBaseEntity(&id.URL, "acls")
+	store := h.pool.Store()
+	defer store.Close()
+	baseEntity, err := store.FindBaseEntity(&id.URL, "acls")
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
 			return errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
@@ -178,7 +180,7 @@ func (h *Handler) newMacaroon() (*macaroon.Macaroon, error) {
 	// TODO generate different caveats depending on the requested operation
 	// and whether there's a charm id or not.
 	// Mint an appropriate macaroon and send it back to the client.
-	return h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
+	return h.pool.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
 		Location:  h.config.IdentityLocation,
 		Condition: "is-authenticated-user",
 	}, usernameAttr, groupsAttr)})

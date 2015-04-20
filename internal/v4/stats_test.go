@@ -32,6 +32,11 @@ func (s *StatsSuite) SetUpTest(c *gc.C) {
 	s.srv, s.store = newServer(c, s.Session, nil, serverParams)
 }
 
+func (s *StatsSuite) TearDownTest(c *gc.C) {
+	s.store.Close()
+	s.IsolatedMgoSuite.TearDownTest(c)
+}
+
 func (s *StatsSuite) TestServerStatsStatus(c *gc.C) {
 	tests := []struct {
 		path    string

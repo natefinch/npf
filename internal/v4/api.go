@@ -32,7 +32,7 @@ var logger = loggo.GetLogger("charmstore.internal.v4")
 
 type Handler struct {
 	*router.Router
-	store   *charmstore.Store
+	pool    *charmstore.Pool
 	config  charmstore.ServerParams
 	locator *bakery.PublicKeyRing
 }
@@ -40,9 +40,9 @@ type Handler struct {
 const delegatableMacaroonExpiry = time.Minute
 
 // New returns a new instance of the v4 API handler.
-func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
+func New(pool *charmstore.Pool, config charmstore.ServerParams) *Handler {
 	h := &Handler{
-		store:   store,
+		pool:    pool,
 		config:  config,
 		locator: bakery.NewPublicKeyRing(),
 	}
@@ -118,8 +118,8 @@ func New(store *charmstore.Store, config charmstore.ServerParams) *Handler {
 // NewAPIHandler returns a new Handler as an http Handler.
 // It is defined for the convenience of callers that require a
 // charmstore.NewAPIHandlerFunc.
-func NewAPIHandler(store *charmstore.Store, config charmstore.ServerParams) http.Handler {
-	return New(store, config)
+func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams) http.Handler {
+	return New(pool, config)
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -165,7 +165,9 @@ func noMatchingURLError(url *charm.Reference) error {
 }
 
 func (h *Handler) resolveURL(url *charm.Reference) (*router.ResolvedURL, error) {
-	return ResolveURL(h.store, url)
+	store := h.pool.Store()
+	defer store.Close()
+	return ResolveURL(store, url)
 }
 
 type entityHandlerFunc func(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error)
@@ -221,18 +223,22 @@ func (h *Handler) puttableBaseEntityHandler(get baseEntityHandlerFunc, handlePut
 }
 
 func (h *Handler) updateBaseEntity(id *router.ResolvedURL, fields map[string]interface{}) error {
-	if err := h.store.UpdateBaseEntity(id, bson.D{{"$set", fields}}); err != nil {
+	store := h.pool.Store()
+	defer store.Close()
+	if err := store.UpdateBaseEntity(id, bson.D{{"$set", fields}}); err != nil {
 		return errgo.Notef(err, "cannot update base entity %q", id)
 	}
 	return nil
 }
 
 func (h *Handler) updateEntity(id *router.ResolvedURL, fields map[string]interface{}) error {
-	err := h.store.UpdateEntity(id, bson.D{{"$set", fields}})
+	store := h.pool.Store()
+	defer store.Close()
+	err := store.UpdateEntity(id, bson.D{{"$set", fields}})
 	if err != nil {
 		return errgo.Notef(err, "cannot update %q", &id.URL)
 	}
-	err = h.store.UpdateSearchFields(id, fields)
+	err = store.UpdateSearchFields(id, fields)
 	if err != nil {
 		return errgo.Notef(err, "cannot update %q", &id.URL)
 	}
@@ -240,16 +246,20 @@ func (h *Handler) updateEntity(id *router.ResolvedURL, fields map[string]interfa
 }
 
 func (h *Handler) updateSearch(id *router.ResolvedURL, fields map[string]interface{}) error {
-	return h.store.UpdateSearch(id)
+	store := h.pool.Store()
+	defer store.Close()
+	return store.UpdateSearch(id)
 }
 
 // updateSearchBase updates the search records for all entities with
 // the same base URL as the given id.
 func (h *Handler) updateSearchBase(id *router.ResolvedURL, fields map[string]interface{}) error {
+	store := h.pool.Store()
+	defer store.Close()
 	baseURL := id.URL
 	baseURL.Series = ""
 	baseURL.Revision = -1
-	if err := h.store.UpdateSearchBaseURL(&baseURL); err != nil {
+	if err := store.UpdateSearchBaseURL(&baseURL); err != nil {
 		return errgo.Mask(err)
 	}
 	return nil
@@ -275,7 +285,9 @@ func (h *Handler) baseEntityQuery(id *router.ResolvedURL, selector map[string]in
 		}
 		fields = append(fields, k)
 	}
-	val, err := h.store.FindBaseEntity(&id.URL, fields...)
+	store := h.pool.Store()
+	defer store.Close()
+	val, err := store.FindBaseEntity(&id.URL, fields...)
 	if errgo.Cause(err) == params.ErrNotFound {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
@@ -286,7 +298,9 @@ func (h *Handler) baseEntityQuery(id *router.ResolvedURL, selector map[string]in
 }
 
 func (h *Handler) entityQuery(id *router.ResolvedURL, selector map[string]int, req *http.Request) (interface{}, error) {
-	val, err := h.store.FindEntity(id, fieldsFromSelector(selector)...)
+	store := h.pool.Store()
+	defer store.Close()
+	val, err := store.FindEntity(id, fieldsFromSelector(selector)...)
 	if errgo.Cause(err) == params.ErrNotFound {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
@@ -351,6 +365,8 @@ func (h *Handler) serveExpandId(id *router.ResolvedURL, _ bool, w http.ResponseW
 	baseURL := id.PreferredURL()
 	baseURL.Revision = -1
 	baseURL.Series = ""
+	store := h.pool.Store()
+	defer store.Close()
 
 	// baseURL now represents the base URL of the given id;
 	// it will be a promulgated URL iff the original URL was
@@ -358,7 +374,7 @@ func (h *Handler) serveExpandId(id *router.ResolvedURL, _ bool, w http.ResponseW
 	// to return entities that match appropriately.
 
 	// Retrieve all the entities with the same base URL.
-	q := h.store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}})
+	q := store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}})
 	if id.PromulgatedRevision != -1 {
 		q = q.Sort("-series", "-promulgated-revision")
 	} else {
@@ -430,7 +446,9 @@ func bundleCount(x *int) interface{} {
 // GET id/meta/manifest
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetamanifest
 func (h *Handler) metaManifest(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	r, size, err := h.store.BlobStore.Open(entity.BlobName)
+	store := h.pool.Store()
+	defer store.Close()
+	r, size, err := store.BlobStore.Open(entity.BlobName)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot open archive data for %s", id)
 	}
@@ -495,8 +513,10 @@ func (h *Handler) metaHash256(entity *mongodoc.Entity, id *router.ResolvedURL, p
 	// always have their blobhash256 field populated, and there is no
 	// need for this lazy evaluation anymore.
 	if entity.BlobHash256 == "" {
+		store := h.pool.Store()
+		defer store.Close()
 		var err error
-		if entity.BlobHash256, err = h.store.UpdateEntitySHA256(id); err != nil {
+		if entity.BlobHash256, err = store.UpdateEntitySHA256(id); err != nil {
 			return nil, errgo.Notef(err, "cannot retrieve the SHA256 hash for entity %s", entity.URL)
 		}
 	}
@@ -526,8 +546,10 @@ func (h *Handler) metaTags(entity *mongodoc.Entity, id *router.ResolvedURL, path
 // GET id/meta/stats/
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetastats
 func (h *Handler) metaStats(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	store := h.pool.Store()
+	defer store.Close()
 	// Retrieve the aggregated downloads count for the specific revision.
-	counts, countsAllRevisions, err := h.store.ArchiveDownloadCounts(id)
+	counts, countsAllRevisions, err := store.ArchiveDownloadCounts(id)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
@@ -555,7 +577,9 @@ func (h *Handler) metaRevisionInfo(id *router.ResolvedURL, path string, flags ur
 	searchURL := id.PreferredURL()
 	searchURL.Revision = -1
 
-	q := h.store.EntitiesQuery(searchURL)
+	store := h.pool.Store()
+	defer store.Close()
+	q := store.EntitiesQuery(searchURL)
 	if id.PromulgatedRevision != -1 {
 		q = q.Sort("-promulgated-revision")
 	} else {
@@ -811,7 +835,9 @@ func (h *Handler) serveChangesPublished(_ http.Header, r *http.Request) (interfa
 	if len(tquery) > 0 {
 		findQuery = bson.D{{"uploadtime", tquery}}
 	}
-	query := h.store.DB.Entities().
+	store := h.pool.Store()
+	defer store.Close()
+	query := store.DB.Entities().
 		Find(findQuery).
 		Sort("-uploadtime").
 		Select(bson.D{{"_id", 1}, {"uploadtime", 1}})
@@ -839,6 +865,8 @@ func (h *Handler) serveMacaroon(_ http.Header, _ *http.Request) (interface{}, er
 // GET /delegatable-macaroon
 // See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-delegatable-macaroon
 func (h *Handler) serveDelegatableMacaroon(_ http.Header, req *http.Request) (interface{}, error) {
+	store := h.pool.Store()
+	defer store.Close()
 	// Note that we require authorization even though we allow
 	// anyone to obtain a delegatable macaroon. This means
 	// that we will be able to add the declared caveats to
@@ -851,7 +879,7 @@ func (h *Handler) serveDelegatableMacaroon(_ http.Header, req *http.Request) (in
 		return nil, errgo.WithCausef(nil, params.ErrForbidden, "delegatable macaroon is not obtainable using admin credentials")
 	}
 	// TODO propagate expiry time from macaroons in request.
-	m, err := h.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
+	m, err := store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
 		checkers.DeclaredCaveat(usernameAttr, auth.Username),
 		checkers.DeclaredCaveat(groupsAttr, strings.Join(auth.Groups, " ")),
 		checkers.TimeBeforeCaveat(time.Now().Add(delegatableMacaroonExpiry)),
@@ -879,7 +907,9 @@ func (h *Handler) serveAdminPromulgate(id *router.ResolvedURL, _ bool, w http.Re
 	if err := json.Unmarshal(data, &promulgate); err != nil {
 		return errgo.WithCausef(err, params.ErrBadRequest, "")
 	}
-	if err := h.store.SetPromulgated(id, promulgate.Promulgated); err != nil {
+	store := h.pool.Store()
+	defer store.Close()
+	if err := store.SetPromulgated(id, promulgate.Promulgated); err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
 	return nil

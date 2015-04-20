@@ -53,9 +53,11 @@ func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *router.ResolvedU
 		{"promulgated-revision", 1},
 	}
 
+	store := h.pool.Store()
+	defer store.Close()
 	// Retrieve the entities from the database.
 	var entities []mongodoc.Entity
-	if err := h.store.DB.Entities().Find(query).Select(fields).Sort("_id").All(&entities); err != nil {
+	if err := store.DB.Entities().Find(query).Select(fields).Sort("_id").All(&entities); err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related charms")
 	}
 
@@ -179,9 +181,11 @@ func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *router.Reso
 		searchId.Series = ""
 	}
 
+	store := h.pool.Store()
+	defer store.Close()
 	// Retrieve the bundles containing the resulting charm id.
 	var entities []*mongodoc.Entity
-	if err := h.store.DB.Entities().
+	if err := store.DB.Entities().
 		Find(bson.D{{"bundlecharms", &searchId}}).
 		Select(bson.D{{"_id", 1}, {"bundlecharms", 1}, {"promulgated-url", 1}}).
 		All(&entities); err != nil {

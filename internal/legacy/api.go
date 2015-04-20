@@ -84,16 +84,16 @@ import (
 )
 
 type Handler struct {
-	v4    *router.Handlers
-	store *charmstore.Store
-	mux   *http.ServeMux
+	v4   *router.Handlers
+	pool *charmstore.Pool
+	mux  *http.ServeMux
 }
 
-func NewAPIHandler(store *charmstore.Store, config charmstore.ServerParams) http.Handler {
+func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams) http.Handler {
 	h := &Handler{
-		v4:    v4.New(store, config).Handlers(),
-		store: store,
-		mux:   http.NewServeMux(),
+		v4:   v4.New(pool, config).Handlers(),
+		pool: pool,
+		mux:  http.NewServeMux(),
 	}
 	h.handle("/charm-info", router.HandleJSON(h.serveCharmInfo))
 	h.handle("/charm/", router.HandleErrors(h.serveCharm))
@@ -134,6 +134,8 @@ var errNotFound = fmt.Errorf("entry not found")
 
 func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{}, error) {
 	response := make(map[string]*charmrepo.InfoResponse)
+	store := h.pool.Store()
+	defer store.Close()
 	for _, url := range req.Form["charms"] {
 		c := &charmrepo.InfoResponse{}
 		response[url] = c
@@ -143,7 +145,7 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 		}
 		var entity *mongodoc.Entity
 		if err == nil {
-			entity, err = h.store.FindBestEntity(curl)
+			entity, err = store.FindBestEntity(curl)
 			if errgo.Cause(err) == params.ErrNotFound {
 				// The old API actually returned "entry not found"
 				// on *any* error, but it seems reasonable to be
@@ -158,7 +160,7 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 			// command is run in the production db. At that point, entities
 			// always have their blobhash256 field populated, and there is no
 			// need for this lazy evaluation anymore.
-			entity.BlobHash256, err = h.store.UpdateEntitySHA256(charmstore.EntityResolvedURL(entity))
+			entity.BlobHash256, err = store.UpdateEntitySHA256(charmstore.EntityResolvedURL(entity))
 		}
 		// Prepare the response part for this charm.
 		if err == nil {
@@ -171,12 +173,12 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 				c.Errors = append(c.Errors, err.Error())
 			}
 			if v4.StatsEnabled(req) {
-				h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmInfo))
+				store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmInfo))
 			}
 		} else {
 			c.Errors = append(c.Errors, err.Error())
 			if curl != nil && v4.StatsEnabled(req) {
-				h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmMissing))
+				store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmMissing))
 			}
 		}
 	}
@@ -188,6 +190,8 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 // "published", required by the "juju publish" command.
 func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}, error) {
 	response := make(map[string]*charmrepo.EventResponse)
+	store := h.pool.Store()
+	defer store.Close()
 	for _, url := range req.Form["charms"] {
 		c := &charmrepo.EventResponse{}
 
@@ -211,7 +215,7 @@ func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}
 		}
 
 		// Retrieve the charm.
-		entity, err := h.store.FindBestEntity(id, "_id", "uploadtime", "extrainfo")
+		entity, err := store.FindBestEntity(id, "_id", "uploadtime", "extrainfo")
 		if err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				// The old API actually returned "entry not found"
@@ -255,7 +259,7 @@ func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}
 		}
 		c.Time = entity.UploadTime.UTC().Format(time.RFC3339)
 		if v4.StatsEnabled(req) {
-			h.store.IncCounterAsync(charmStatsKey(id, params.StatsCharmEvent))
+			store.IncCounterAsync(charmStatsKey(id, params.StatsCharmEvent))
 		}
 	}
 	return response, nil

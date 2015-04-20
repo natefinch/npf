@@ -35,7 +35,7 @@ func (s *migrationsSuite) SetUpTest(c *gc.C) {
 }
 
 func (s *migrationsSuite) newServer(c *gc.C) error {
-	apiHandler := func(store *Store, config ServerParams) http.Handler {
+	apiHandler := func(p *Pool, config ServerParams) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {})
 	}
 	_, err := NewServer(s.db.Database, nil, serverParams, map[string]NewAPIHandlerFunc{

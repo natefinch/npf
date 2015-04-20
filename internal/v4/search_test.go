@@ -74,6 +74,7 @@ func (s *SearchSuite) SetUpTest(c *gc.C) {
 }
 
 func (s *SearchSuite) TearDownTest(c *gc.C) {
+	s.store.Close()
 	s.IsolatedMgoESSuite.TearDownTest(c)
 }
 

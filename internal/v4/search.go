@@ -35,7 +35,9 @@ func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, er
 	}
 	sp.Groups = append(sp.Groups, auth.Groups...)
 	// perform query
-	results, err := h.store.Search(sp)
+	store := h.pool.Store()
+	defer store.Close()
+	results, err := store.Search(sp)
 	if err != nil {
 		return nil, errgo.Notef(err, "error performing search")
 	}

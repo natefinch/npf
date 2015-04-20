@@ -42,10 +42,16 @@ func (s *StoreSearchSuite) SetUpTest(c *gc.C) {
 
 	s.index = SearchIndex{s.ES, s.TestIndex}
 	s.ES.RefreshIndex(".versions")
-	store, err := NewStore(s.Session.DB("foo"), &s.index, nil)
-	s.addCharmsToStore(c, store)
+	pool, err := NewPool(s.Session.DB("foo"), &s.index, nil)
 	c.Assert(err, gc.IsNil)
-	s.store = store
+	s.store = pool.Store()
+	s.addCharmsToStore(c)
+	c.Assert(err, gc.IsNil)
+}
+
+func (s *StoreSearchSuite) TearDownTest(c *gc.C) {
+	s.store.Close()
+	s.IsolatedMgoESSuite.TearDownTest(c)
 }
 
 var newResolvedURL = router.MustNewResolvedURL
@@ -138,7 +144,7 @@ func (s *StoreSearchSuite) TestExportSearchDocument(c *gc.C) {
 	c.Assert(string(actual), jc.JSONEquals, doc)
 }
 
-func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
+func (s *StoreSearchSuite) addCharmsToStore(c *gc.C) {
 	for name, url := range exportTestCharms {
 		charmArchive := storetesting.Charms.CharmDir(name)
 		cats := strings.Split(name, "-")
@@ -148,29 +154,29 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C, store *Store) {
 			tags[i] = s + "TAG"
 		}
 		charmArchive.Meta().Tags = tags
-		err := store.AddCharmWithArchive(url, charmArchive)
+		err := s.store.AddCharmWithArchive(url, charmArchive)
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < charmDownloadCounts[name]; i++ {
-			err := store.IncrementDownloadCounts(url)
+			err := s.store.IncrementDownloadCounts(url)
 			c.Assert(err, gc.IsNil)
 		}
 	}
 	for name, url := range exportTestBundles {
 		bundleArchive := storetesting.Charms.BundleDir(name)
 		bundleArchive.Data().Tags = strings.Split(name, "-")
-		err := store.AddBundleWithArchive(url, bundleArchive)
+		err := s.store.AddBundleWithArchive(url, bundleArchive)
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < charmDownloadCounts[name]; i++ {
-			err := store.IncrementDownloadCounts(url)
+			err := s.store.IncrementDownloadCounts(url)
 			c.Assert(err, gc.IsNil)
 		}
 	}
-	baseEntity, err := store.FindBaseEntity(charm.MustParseReference("cs:riak"))
+	baseEntity, err := s.store.FindBaseEntity(charm.MustParseReference("cs:riak"))
 	c.Assert(err, gc.IsNil)
 	baseEntity.ACLs.Read = []string{"quux"}
-	err = store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
+	err = s.store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
 	c.Assert(err, gc.IsNil)
-	err = store.UpdateSearchBaseURL(baseEntity.URL)
+	err = s.store.UpdateSearchBaseURL(baseEntity.URL)
 	c.Assert(err, gc.IsNil)
 }
 

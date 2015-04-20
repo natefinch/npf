@@ -70,11 +70,14 @@ func populate(confPath string) error {
 	}
 	defer session.Close()
 	db := session.DB("juju")
-	s, err := charmstore.NewStore(db, si, nil)
+
+	pool, err := charmstore.NewPool(db, si, nil)
 	if err != nil {
-		return errgo.Notef(err, "cannot create store")
+		return errgo.Notef(err, "cannot create a new store")
 	}
-	if err := s.SynchroniseElasticsearch(); err != nil {
+	store := pool.Store()
+	defer store.Close()
+	if err := store.SynchroniseElasticsearch(); err != nil {
 		return errgo.Notef(err, "cannot synchronise elasticsearch")
 	}
 	return nil

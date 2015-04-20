@@ -50,6 +50,11 @@ func (s *ArchiveSuite) SetUpTest(c *gc.C) {
 	s.srv, s.store = newServer(c, s.Session, nil, serverParams)
 }
 
+func (s *ArchiveSuite) TearDownTest(c *gc.C) {
+	s.store.Close()
+	s.IsolatedMgoSuite.TearDownTest(c)
+}
+
 func (s *ArchiveSuite) TestGet(c *gc.C) {
 	patchArchiveCacheAges(s)
 	wordpress := s.assertUploadCharm(c, "POST", newResolvedURL("cs:~charmers/precise/wordpress-0", -1), "wordpress")
@@ -930,7 +935,7 @@ func (s *ArchiveSuite) TestBundleCharms(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Retrieve the bundleCharms method.
-	handler := v4.New(s.store, serverParams)
+	handler := v4.New(s.store.Pool(), serverParams)
 
 	tests := []struct {
 		about  string
@@ -1392,7 +1397,7 @@ func (s *ArchiveSuite) TestGetNewPromulgatedRevision(c *gc.C) {
 		})
 		c.Assert(err, gc.IsNil)
 	}
-	handler := v4.New(s.store, serverParams)
+	handler := v4.New(s.store.Pool(), serverParams)
 	for i, test := range getNewPromulgatedRevisionTests {
 		c.Logf("%d. %s", i, test.about)
 		rev, err := v4.GetNewPromulgatedRevision(handler, test.id)
@@ -1451,6 +1456,11 @@ func (s *ArchiveSearchSuite) SetUpTest(c *gc.C) {
 
 	si := charmstore.SearchIndex{s.ES, s.TestIndex}
 	s.srv, s.store = newServer(c, s.Session, &si, serverParams)
+}
+
+func (s *ArchiveSearchSuite) TearDownTest(c *gc.C) {
+	s.store.Close()
+	s.IsolatedMgoESSuite.TearDownTest(c)
 }
 
 func (s *ArchiveSearchSuite) TestGetSearchUpdate(c *gc.C) {

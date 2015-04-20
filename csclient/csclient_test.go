@@ -73,12 +73,12 @@ func (s *suite) startServer(c *gc.C, session *mgo.Session) {
 	}
 
 	db := session.DB("charmstore")
-	store, err := internalCharmstore.NewStore(db, nil, nil)
+	pool, err := internalCharmstore.NewPool(db, nil, nil)
 	c.Assert(err, gc.IsNil)
 	handler, err := charmstore.NewServer(db, nil, "", serverParams, charmstore.V4)
 	c.Assert(err, gc.IsNil)
 	s.srv = httptest.NewServer(handler)
-	s.store = store
+	s.store = pool.Store()
 	s.serverParams = serverParams
 
 }
@@ -95,6 +95,7 @@ func (s *suite) SetUpTest(c *gc.C) {
 
 func (s *suite) TearDownTest(c *gc.C) {
 	s.srv.Close()
+	s.store.Close()
 	s.IsolatedMgoSuite.TearDownTest(c)
 }
 
