@@ -125,6 +125,14 @@ func (s *Store) Close() {
 	s.DB.Close()
 }
 
+// SetReconnectTimeout sets the length of time that
+// mongo requests will block waiting to reconnect
+// to a disconnected mongo server. If it is zero,
+// requests may block forever.
+func (s *Store) SetReconnectTimeout(d time.Duration) {
+	s.DB.Session.SetSyncTimeout(d)
+}
+
 // Go runs the given function in a new goroutine,
 // passing it a copy of s, which will be closed
 // after the function returns.
@@ -171,7 +179,7 @@ func (s *Store) ensureIndexes() error {
 	for _, idx := range indexes {
 		err := idx.c.EnsureIndex(idx.i)
 		if err != nil {
-			return errgo.Mask(err)
+			return errgo.Notef(err, "cannot ensure index with keys %v on collection %s", idx.i, idx.c.Name)
 		}
 	}
 	return nil
@@ -182,15 +190,15 @@ func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (blobName, blobHash
 	hash256 := sha256.New()
 	size, err = io.Copy(io.MultiWriter(hash, hash256), archive)
 	if err != nil {
-		return "", "", "", 0, errgo.Mask(err)
+		return "", "", "", 0, errgo.Notef(err, "cannot copy archive")
 	}
 	if _, err = archive.Seek(0, 0); err != nil {
-		return "", "", "", 0, errgo.Mask(err)
+		return "", "", "", 0, errgo.Notef(err, "cannot seek in archive")
 	}
 	blobHash = fmt.Sprintf("%x", hash.Sum(nil))
 	blobName = bson.NewObjectId().Hex()
 	if err = s.BlobStore.PutUnchallenged(archive, blobName, size, blobHash); err != nil {
-		return "", "", "", 0, errgo.Mask(err)
+		return "", "", "", 0, errgo.Notef(err, "cannot put archive into blob store")
 	}
 	return blobName, blobHash, fmt.Sprintf("%x", hash256.Sum(nil)), size, nil
 }
@@ -205,7 +213,7 @@ func (s *Store) putArchive(archive blobstore.ReadSeekCloser) (blobName, blobHash
 func (s *Store) AddCharmWithArchive(url *router.ResolvedURL, ch charm.Charm) error {
 	blobName, blobHash, blobHash256, blobSize, err := s.uploadCharmOrBundle(ch)
 	if err != nil {
-		return errgo.Mask(err)
+		return errgo.Notef(err, "cannot upload charm")
 	}
 	return s.AddCharm(ch, AddParams{
 		URL:         url,
@@ -229,7 +237,7 @@ func (s *Store) AddCharmWithArchive(url *router.ResolvedURL, ch charm.Charm) err
 func (s *Store) AddBundleWithArchive(url *router.ResolvedURL, b charm.Bundle) error {
 	blobName, blobHash, blobHash256, size, err := s.uploadCharmOrBundle(b)
 	if err != nil {
-		return errgo.Mask(err)
+		return errgo.Notef(err, "cannot upload bundle")
 	}
 	return s.AddBundle(b, AddParams{
 		URL:         url,
@@ -243,7 +251,7 @@ func (s *Store) AddBundleWithArchive(url *router.ResolvedURL, b charm.Bundle) er
 func (s *Store) uploadCharmOrBundle(c interface{}) (blobName, blobHash, blobHash256 string, size int64, err error) {
 	archive, err := getArchive(c)
 	if err != nil {
-		return "", "", "", 0, errgo.Mask(err)
+		return "", "", "", 0, errgo.Notef(err, "cannot get archive")
 	}
 	defer archive.Close()
 	return s.putArchive(archive)
@@ -348,7 +356,7 @@ func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 	}
 	err = s.DB.BaseEntities().Insert(baseEntity)
 	if err != nil && !mgo.IsDup(err) {
-		return errgo.Mask(err)
+		return errgo.Notef(err, "cannot insert base entity")
 	}
 
 	// Add the entity to the database.
@@ -357,7 +365,7 @@ func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 		return params.ErrDuplicateUpload
 	}
 	if err != nil {
-		return errgo.Mask(err)
+		return errgo.Notef(err, "cannot insert entity")
 	}
 	// Ensure that if anything fails after this, that we delete
 	// the entity, otherwise we will be left in an internally
@@ -403,7 +411,7 @@ func (s *Store) FindEntities(url *charm.Reference, fields ...string) ([]*mongodo
 	var docs []*mongodoc.Entity
 	err := query.All(&docs)
 	if err != nil {
-		return nil, errgo.Mask(err)
+		return nil, errgo.Notef(err, "cannot find entities matching %s", url)
 	}
 	return docs, nil
 }
@@ -510,7 +518,7 @@ func (s *Store) FindBaseEntity(url *charm.Reference, fields ...string) (*mongodo
 		if err == mgo.ErrNotFound {
 			return nil, errgo.WithCausef(nil, params.ErrNotFound, "base entity not found")
 		}
-		return nil, errgo.Mask(err)
+		return nil, errgo.Notef(err, "cannot find base entity %v", url)
 	}
 	return &baseEntity, nil
 }
@@ -611,7 +619,7 @@ func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 		}
 	}
 	if err := iter.Close(); err != nil {
-		return errgo.Mask(err)
+		return errgo.Notef(err, "cannot close mgo iterator")
 	}
 
 	// Set the promulgated flag on the base entity.
@@ -635,7 +643,7 @@ func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 		{{"$group", bson.D{{"_id", "$series"}, {"revision", bson.D{{"$max", "$revision"}}}}}},
 	}).All(&latestOwned)
 	if err != nil {
-		return errgo.Mask(err)
+		return errgo.Notef(err, "cannot find latest revision for promulgated URL")
 	}
 
 	// Find the latest revision in each series of the promulgated entitities
@@ -657,7 +665,7 @@ func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 		latestPromulgated[res.Series] = res.Revision
 	}
 	if err := iter.Close(); err != nil {
-		return errgo.Mask(err)
+		return errgo.Notef(err, "cannot close mgo iterator")
 	}
 
 	// Update the newest entity in each series with a base URL that matches the newly promulgated
@@ -684,7 +692,7 @@ func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 		if err != nil && err != mgo.ErrNotFound {
 			// If we get NotFound it is most likely because the latest owned revision is
 			// already promulgated, so carry on.
-			return errgo.Mask(err)
+			return errgo.Notef(err, "cannot update promulgated URLs")
 		}
 	}
 
