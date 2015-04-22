@@ -20,6 +20,7 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v5"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
+	"gopkg.in/macaroon.v1"
 
 	"gopkg.in/juju/charmstore.v4/params"
 )
@@ -192,6 +193,22 @@ func (c *Client) UploadBundle(id *charm.Reference, b charm.Bundle) (*charm.Refer
 // entity reference. The given id should include the series and should not
 // include the revision.
 func (c *Client) uploadArchive(id *charm.Reference, body io.ReadSeeker, hash string, size int64) (*charm.Reference, error) {
+	// When uploading archives, it can be a problem that the
+	// an error response is returned while we are still writing
+	// the body data.
+	// To avoid this, we log in first so that we don't need to
+	// do the macaroon exchange after POST.
+	// Unfortunately this won't help matters if the user is logged in but
+	// doesn't have privileges to write to the stated charm.
+	// A better solution would be to fix https://github.com/golang/go/issues/3665
+	// and use the 100-Continue client functionality.
+	//
+	// We only need to do this when basic auth credentials are not provided.
+	if c.params.User == "" {
+		if err := c.Login(); err != nil {
+			return nil, errgo.Notef(err, "cannot log in")
+		}
+	}
 	// Validate the entity id.
 	if id.Series == "" {
 		return nil, errgo.Newf("no series specified in %q", id)
@@ -529,5 +546,27 @@ func (cs *Client) Log(typ params.LogType, level params.LogLevel, message string,
 		return errgo.NoteMask(err, "cannot send log message", errgo.Any)
 	}
 	resp.Body.Close()
+	return nil
+}
+
+// Login explicitly obtains authorization credentials
+// for the charm store and stores them in the client's
+// cookie jar.
+func (cs *Client) Login() error {
+	var m macaroon.Macaroon
+	if err := cs.Get("/macaroon", &m); err != nil {
+		return errgo.Notef(err, "cannot retrieve the authentication macaroon")
+	}
+	ms, err := httpbakery.DischargeAll(&m, cs.params.HTTPClient, cs.params.VisitWebPage)
+	if err != nil {
+		return errgo.Notef(err, "cannot discharge login macaroon")
+	}
+	u, err := url.Parse(cs.ServerURL())
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	if err := httpbakery.SetCookie(cs.params.HTTPClient.Jar, u, ms); err != nil {
+		return errgo.Notef(err, "cannot set cookie")
+	}
 	return nil
 }
