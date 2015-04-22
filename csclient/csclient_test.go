@@ -56,6 +56,22 @@ type suite struct {
 
 var _ = gc.Suite(&suite{})
 
+func (s *suite) SetUpTest(c *gc.C) {
+	s.IsolatedMgoSuite.SetUpTest(c)
+	s.startServer(c, s.Session)
+	s.client = csclient.New(csclient.Params{
+		URL:      s.srv.URL,
+		User:     s.serverParams.AuthUsername,
+		Password: s.serverParams.AuthPassword,
+	})
+}
+
+func (s *suite) TearDownTest(c *gc.C) {
+	s.srv.Close()
+	s.store.Close()
+	s.IsolatedMgoSuite.TearDownTest(c)
+}
+
 func (s *suite) startServer(c *gc.C, session *mgo.Session) {
 	s.discharge = func(cond, arg string) ([]checkers.Caveat, error) {
 		return nil, fmt.Errorf("no discharge")
@@ -81,22 +97,6 @@ func (s *suite) startServer(c *gc.C, session *mgo.Session) {
 	s.store = pool.Store()
 	s.serverParams = serverParams
 
-}
-
-func (s *suite) SetUpTest(c *gc.C) {
-	s.IsolatedMgoSuite.SetUpTest(c)
-	s.startServer(c, s.Session)
-	s.client = csclient.New(csclient.Params{
-		URL:      s.srv.URL,
-		User:     s.serverParams.AuthUsername,
-		Password: s.serverParams.AuthPassword,
-	})
-}
-
-func (s *suite) TearDownTest(c *gc.C) {
-	s.srv.Close()
-	s.store.Close()
-	s.IsolatedMgoSuite.TearDownTest(c)
 }
 
 func (s *suite) TestDefaultServerURL(c *gc.C) {
@@ -507,7 +507,8 @@ func (s *suite) TestUploadArchiveWithBadResponse(c *gc.C) {
 	for i, test := range uploadArchiveWithBadResponseTests {
 		c.Logf("test %d: %s", i, test.about)
 		cl := csclient.New(csclient.Params{
-			URL: "http://0.1.2.3",
+			URL:  "http://0.1.2.3",
+			User: "bob",
 			HTTPClient: &http.Client{
 				Transport: &cannedRoundTripper{
 					resp:  test.response,
@@ -1144,18 +1145,10 @@ func (s *suite) TestMacaroonAuthorization(c *gc.C) {
 	err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
 
-	req, err := http.NewRequest("PUT", "", nil)
-	c.Assert(err, gc.IsNil)
-	req.Header.Set("Content-Type", "application/json")
-
-	body, err := json.Marshal([]string{"bob"})
+	err = s.client.Put("/"+rurl.URL.Path()+"/meta/perm/read", []string{"bob"})
 	c.Assert(err, gc.IsNil)
 
-	resp, err := s.client.DoWithBody(req, "/"+rurl.URL.Path()+"/meta/perm/read", httpbakery.SeekerBody(bytes.NewReader(body)))
-	c.Assert(err, gc.IsNil)
-	defer resp.Body.Close()
-	c.Assert(resp.StatusCode, gc.Equals, http.StatusOK)
-
+	// Create a client without basic auth credentials
 	client := csclient.New(csclient.Params{
 		URL: s.srv.URL,
 	})
@@ -1195,4 +1188,41 @@ func (s *suite) TestMacaroonAuthorization(c *gc.C) {
 	c.Assert(err, gc.ErrorMatches, `cannot get "/utopic/wordpress-42/meta/any\?include=id-revision": cannot get discharge from ".*": cannot start interactive session: stopping interaction`)
 	c.Assert(result.IdRevision.Revision, gc.Equals, rurl.URL.Revision)
 	c.Assert(httpbakery.IsInteractionError(errgo.Cause(err)), gc.Equals, true)
+}
+
+func (s *suite) TestLogin(c *gc.C) {
+	rurl := newResolvedURL("~charmers/utopic/wordpress-42", 42)
+	err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
+	c.Assert(err, gc.IsNil)
+	err = s.client.Put("/"+rurl.URL.Path()+"/meta/perm/read", []string{"bob"})
+	c.Assert(err, gc.IsNil)
+	client := csclient.New(csclient.Params{
+		URL: s.srv.URL,
+	})
+
+	var result struct{ IdRevision struct{ Revision int } }
+	_, err = client.Meta(rurl.PromulgatedURL(), &result)
+	c.Assert(err, gc.NotNil)
+
+	// Try logging in when the discharger fails.
+	err = client.Login()
+	c.Assert(err, gc.ErrorMatches, `cannot discharge login macaroon: cannot get discharge from ".*": third party refused discharge: cannot discharge: no discharge`)
+
+	// Allow the discharge.
+	s.discharge = func(cond, arg string) ([]checkers.Caveat, error) {
+		return []checkers.Caveat{checkers.DeclaredCaveat("username", "bob")}, nil
+	}
+	err = client.Login()
+	c.Assert(err, gc.IsNil)
+
+	// Change discharge so that we're sure the cookies are being
+	// used rather than the discharge mechanism.
+	s.discharge = func(cond, arg string) ([]checkers.Caveat, error) {
+		return nil, fmt.Errorf("no discharge")
+	}
+
+	// Check that the request still works.
+	_, err = client.Meta(rurl.PromulgatedURL(), &result)
+	c.Assert(err, gc.IsNil)
+	c.Assert(result.IdRevision.Revision, gc.Equals, rurl.URL.Revision)
 }
