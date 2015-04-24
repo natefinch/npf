@@ -23,7 +23,6 @@ import (
 	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
 	"gopkg.in/macaroon.v1"
-	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v4/internal/storetesting"
 	"gopkg.in/juju/charmstore.v4/internal/v4"
@@ -312,12 +311,10 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 			storetesting.Charms.CharmDir("wordpress"),
 		)
 		c.Assert(err, gc.IsNil)
-		baseUrl := charm.MustParseReference("~charmers/wordpress")
+		baseURL := charm.MustParseReference("~charmers/wordpress")
 
 		// Change the ACLs for the testing charm.
-		err = s.store.DB.BaseEntities().UpdateId(baseUrl, bson.D{{"$set",
-			bson.D{{"acls.read", test.readPerm}},
-		}})
+		err = s.store.SetPerms(baseURL, "read", test.readPerm...)
 		c.Assert(err, gc.IsNil)
 
 		// Prepare the expected status.
@@ -446,12 +443,10 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 			newResolvedURL("~charmers/utopic/wordpress-42", -1),
 			storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
-		baseUrl := charm.MustParseReference("~charmers/wordpress")
+		baseURL := charm.MustParseReference("~charmers/wordpress")
 
 		// Change the ACLs for the testing charm.
-		err = s.store.DB.BaseEntities().UpdateId(baseUrl, bson.D{{"$set",
-			bson.D{{"acls.write", test.writePerm}},
-		}})
+		err = s.store.SetPerms(baseURL, "write", test.writePerm...)
 		c.Assert(err, gc.IsNil)
 
 		// Prepare the expected status.
@@ -676,9 +671,7 @@ func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
 	// Change the ACLs for the testing charm.
-	err = s.store.DB.BaseEntities().UpdateId("cs:~charmers/wordpress", bson.D{{"$set",
-		bson.D{{"acls.read", []string{"bob"}}},
-	}})
+	err = s.store.SetPerms(charm.MustParseReference("cs:~charmers/wordpress"), "read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	for i, test := range isEntityCaveatTests {
@@ -758,9 +751,7 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
 	// Change the ACLs for the testing charm.
-	err = s.store.DB.BaseEntities().UpdateId("cs:~charmers/wordpress", bson.D{{"$set",
-		bson.D{{"acls.read", []string{"bob"}}},
-	}})
+	err = s.store.SetPerms(charm.MustParseReference("cs:~charmers/wordpress"), "read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	// First check that we require authorization to access the charm.
