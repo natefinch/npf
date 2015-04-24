@@ -72,9 +72,12 @@ func serve(confPath string) error {
 
 	logger.Infof("setting up the API server")
 	cfg := charmstore.ServerParams{
-		AuthUsername:     conf.AuthUsername,
-		AuthPassword:     conf.AuthPassword,
-		IdentityLocation: conf.IdentityLocation,
+		AuthUsername:        conf.AuthUsername,
+		AuthPassword:        conf.AuthPassword,
+		IdentityLocation:    conf.IdentityLocation,
+		IdentityAPIURL:      conf.IdentityAPIURL,
+		IdentityAPIUsername: conf.IdentityAPIUsername,
+		IdentityAPIPassword: conf.IdentityAPIPassword,
 	}
 	var identityPublicKey bakery.PublicKey
 	err = identityPublicKey.UnmarshalText([]byte(conf.IdentityPublicKey))
