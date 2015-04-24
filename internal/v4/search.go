@@ -32,8 +32,12 @@ func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, er
 	sp.Admin = auth.Admin
 	if auth.Username != "" {
 		sp.Groups = append(sp.Groups, auth.Username)
+		groups, err := h.groupsForUser(auth.Username)
+		if err != nil {
+			logger.Infof("cannot get groups for user %q, assuming no groups: %v", auth.Username, err)
+		}
+		sp.Groups = append(sp.Groups, groups...)
 	}
-	sp.Groups = append(sp.Groups, auth.Groups...)
 	// perform query
 	store := h.pool.Store()
 	defer store.Close()

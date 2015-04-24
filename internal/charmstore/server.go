@@ -8,6 +8,7 @@ package charmstore
 
 import (
 	"net/http"
+	"strings"
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/macaroon-bakery.v0/bakery"
@@ -28,12 +29,23 @@ type ServerParams struct {
 	AuthPassword string
 
 	// IdentityLocation holds the location of the third party authorization
-	// service to use when creating third party caveats.
+	// service to use when creating third party caveats,
+	// for example: http://api.jujucharms.com/identity/v1/discharger
+	// If it is empty, IdentityURL+"/v1/discharger" will be used.
 	IdentityLocation string
 
 	// PublicKeyLocator holds a public key store.
 	// It may be nil.
 	PublicKeyLocator bakery.PublicKeyLocator
+
+	// IdentityAPIURL holds the URL of the identity manager,
+	// for example http://api.jujucharms.com/identity
+	IdentityAPIURL string
+
+	// IdentityAPIUsername and IdentityAPIPassword hold the credentials
+	// to be used when querying the identity manager API.
+	IdentityAPIUsername string
+	IdentityAPIPassword string
 }
 
 // NewServer returns a handler that serves the given charm store API
@@ -46,6 +58,13 @@ func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions 
 	if len(versions) == 0 {
 		return nil, errgo.Newf("charm store server must serve at least one version of the API")
 	}
+	config.IdentityLocation = strings.Trim(config.IdentityLocation, "/")
+	config.IdentityAPIURL = strings.Trim(config.IdentityAPIURL, "/")
+	if config.IdentityLocation == "" && config.IdentityAPIURL != "" {
+		config.IdentityLocation = config.IdentityAPIURL + "/v1/discharger"
+	}
+	logger.Infof("identity discharge location: %s", config.IdentityLocation)
+	logger.Infof("identity API location: %s", config.IdentityAPIURL)
 	bparams := bakery.NewServiceParams{
 		// TODO The location is attached to any macaroons that we
 		// mint. Currently we don't know the location of the current

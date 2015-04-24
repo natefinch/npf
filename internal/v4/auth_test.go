@@ -18,32 +18,25 @@ import (
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v5"
 	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
-	"gopkg.in/macaroon-bakery.v0/bakerytest"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
 	"gopkg.in/macaroon.v1"
-	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
-	"gopkg.in/juju/charmstore.v4/internal/charmstore"
 	"gopkg.in/juju/charmstore.v4/internal/storetesting"
 	"gopkg.in/juju/charmstore.v4/internal/v4"
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
-func AssertEndpointAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParams) {
-	testNonMacaroonAuth(c, session, p)
-	testMacaroonAuth(c, session, p)
+func (s *commonSuite) AssertEndpointAuth(c *gc.C, p httptesting.JSONCallParams) {
+	s.testNonMacaroonAuth(c, p)
+	s.testMacaroonAuth(c, p)
 }
 
-func testNonMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParams) {
-	srv, store := newServer(c, session, nil, charmstore.ServerParams{
-		AuthUsername: "test-user",
-		AuthPassword: "test-password",
-	})
-	defer store.Close()
-	p.Handler = srv
+func (s *commonSuite) testNonMacaroonAuth(c *gc.C, p httptesting.JSONCallParams) {
+	p.Handler = s.noMacaroonSrv
 	// Check that the request succeeds when provided with the
 	// correct credentials.
 	p.Username = "test-user"
@@ -81,12 +74,12 @@ func testNonMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallPa
 	httptesting.AssertJSONCall(c, p)
 }
 
-func testMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParams) {
+func (s *commonSuite) testMacaroonAuth(c *gc.C, p httptesting.JSONCallParams) {
 	// Make a test third party caveat discharger.
 	var checkedCaveats []string
 	var mu sync.Mutex
 	var dischargeError error
-	discharger := bakerytest.NewDischarger(nil, func(_ *http.Request, cond string, arg string) ([]checkers.Caveat, error) {
+	s.discharge = func(cond string, arg string) ([]checkers.Caveat, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		checkedCaveats = append(checkedCaveats, cond+" "+arg)
@@ -96,26 +89,13 @@ func testMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParam
 		return []checkers.Caveat{
 			checkers.DeclaredCaveat("username", "bob"),
 		}, nil
-	})
-	defer discharger.Close()
-
-	// Create a charmstore server that will use the test third party for
-	// its third party caveat.
-	srv, store := newServer(c, session, nil, charmstore.ServerParams{
-		AuthUsername:     "test-user",
-		AuthPassword:     "test-password",
-		IdentityLocation: discharger.Location(),
-		PublicKeyLocator: discharger,
-	})
-	defer store.Close()
-	p.Handler = srv
+	}
+	p.Handler = s.srv
 
 	client := httpbakery.NewHTTPClient()
 	cookieJar := &cookieJar{CookieJar: client.Jar}
 	client.Jar = cookieJar
-	p.Do = func(req *http.Request) (*http.Response, error) {
-		return httpbakery.Do(client, req, noInteraction)
-	}
+	p.Do = bakeryDo(client)
 
 	// Check that the call succeeds with simple auth.
 	c.Log("simple auth sucess")
@@ -159,6 +139,7 @@ func testMacaroonAuth(c *gc.C, session *mgo.Session, p httptesting.JSONCallParam
 	c.Log("macaroon discharge error")
 	client = httpbakery.NewHTTPClient()
 	dischargeError = fmt.Errorf("go away")
+	p.Do = bakeryDo(client) // clear cookies
 	p.Password = ""
 	p.Username = ""
 	p.ExpectError = `cannot get discharge from "http://[^"]*": third party refused discharge: cannot discharge: go away`
@@ -179,27 +160,6 @@ func (j *cookieJar) SetCookies(url *url.URL, cookies []*http.Cookie) {
 
 func noInteraction(*url.URL) error {
 	return fmt.Errorf("unexpected interaction required")
-}
-
-func newServerWithDischarger(c *gc.C, session *mgo.Session, username string, groups []string) (http.Handler, *charmstore.Store, *bakerytest.Discharger) {
-	discharger := bakerytest.NewDischarger(nil, func(_ *http.Request, cond string, arg string) ([]checkers.Caveat, error) {
-		if username == "" {
-			return nil, nil
-		}
-		return []checkers.Caveat{
-			checkers.DeclaredCaveat(v4.UsernameAttr, username),
-			checkers.DeclaredCaveat(v4.GroupsAttr, strings.Join(groups, " ")),
-		}, nil
-	})
-	// Create a charm store server that will use the test third party for
-	// its third party caveat.
-	srv, store := newServer(c, session, nil, charmstore.ServerParams{
-		AuthUsername:     serverParams.AuthUsername,
-		AuthPassword:     serverParams.AuthPassword,
-		IdentityLocation: discharger.Location(),
-		PublicKeyLocator: discharger,
-	})
-	return srv, store, discharger
 }
 
 // dischargedAuthCookie retrieves and discharges an authentication macaroon cookie. It adds the provided
@@ -225,10 +185,15 @@ func dischargedAuthCookie(c *gc.C, srv http.Handler, caveats ...string) *http.Co
 }
 
 type authSuite struct {
-	storetesting.IsolatedMgoSuite
+	commonSuite
 }
 
 var _ = gc.Suite(&authSuite{})
+
+func (s *authSuite) SetUpSuite(c *gc.C) {
+	s.enableIdentity = true
+	s.commonSuite.SetUpSuite(c)
+}
 
 var readAuthorizationTests = []struct {
 	// about holds the test description.
@@ -324,20 +289,25 @@ var readAuthorizationTests = []struct {
 	},
 }}
 
+func dischargeForUser(username string) func(_, _ string) ([]checkers.Caveat, error) {
+	return func(_, _ string) ([]checkers.Caveat, error) {
+		return []checkers.Caveat{
+			checkers.DeclaredCaveat(v4.UsernameAttr, username),
+		}, nil
+	}
+}
+
 func (s *authSuite) TestReadAuthorization(c *gc.C) {
 	for i, test := range readAuthorizationTests {
 		c.Logf("test %d: %s", i, test.about)
 
-		// Create a new server with a third party discharger.
-		srv, store, discharger := newServerWithDischarger(c, s.Session, test.username, test.groups)
-		defer discharger.Close()
-		defer store.Close()
-
-		// Retrieve the macaroon cookie.
-		cookies := []*http.Cookie{dischargedAuthCookie(c, srv)}
+		s.discharge = dischargeForUser(test.username)
+		s.idM.groups = map[string][]string{
+			test.username: test.groups,
+		}
 
 		// Add a charm to the store, used for testing.
-		err := store.AddCharmWithArchive(
+		err := s.store.AddCharmWithArchive(
 			newResolvedURL("~charmers/utopic/wordpress-42", -1),
 			storetesting.Charms.CharmDir("wordpress"),
 		)
@@ -345,7 +315,7 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		baseUrl := charm.MustParseReference("~charmers/wordpress")
 
 		// Change the ACLs for the testing charm.
-		err = store.DB.BaseEntities().UpdateId(baseUrl, bson.D{{"$set",
+		err = s.store.DB.BaseEntities().UpdateId(baseUrl, bson.D{{"$set",
 			bson.D{{"acls.read", test.readPerm}},
 		}})
 		c.Assert(err, gc.IsNil)
@@ -359,9 +329,9 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		// Define an helper function used to send requests and check responses.
 		makeRequest := func(path string) {
 			rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-				Handler: srv,
+				Handler: s.srv,
+				Do:      bakeryDo(nil),
 				URL:     storeURL(path),
-				Cookies: cookies,
 			})
 			c.Assert(rec.Code, gc.Equals, expectStatus, gc.Commentf("body: %s", rec.Body))
 			if test.expectBody != nil {
@@ -376,7 +346,7 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		makeRequest("~charmers/wordpress/expand-id")
 
 		// Remove all entities from the store.
-		_, err = store.DB.Entities().RemoveAll(nil)
+		_, err = s.store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -466,23 +436,20 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 	for i, test := range writeAuthorizationTests {
 		c.Logf("test %d: %s", i, test.about)
 
-		// Create a new server with a third party discharger.
-		srv, store, discharger := newServerWithDischarger(c, s.Session, test.username, test.groups)
-		defer discharger.Close()
-		defer store.Close()
-
-		// Retrieve the macaroon cookie.
-		cookies := []*http.Cookie{dischargedAuthCookie(c, srv)}
+		s.discharge = dischargeForUser(test.username)
+		s.idM.groups = map[string][]string{
+			test.username: test.groups,
+		}
 
 		// Add a charm to the store, used for testing.
-		err := store.AddCharmWithArchive(
+		err := s.store.AddCharmWithArchive(
 			newResolvedURL("~charmers/utopic/wordpress-42", -1),
 			storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
 		baseUrl := charm.MustParseReference("~charmers/wordpress")
 
 		// Change the ACLs for the testing charm.
-		err = store.DB.BaseEntities().UpdateId(baseUrl, bson.D{{"$set",
+		err = s.store.DB.BaseEntities().UpdateId(baseUrl, bson.D{{"$set",
 			bson.D{{"acls.write", test.writePerm}},
 		}})
 		c.Assert(err, gc.IsNil)
@@ -493,16 +460,17 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 			expectStatus = http.StatusOK
 		}
 
+		client := httpbakery.NewHTTPClient()
 		// Perform a meta PUT request.
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-			Handler: srv,
+			Handler: s.srv,
+			Do:      bakeryDo(client),
 			URL:     storeURL("~charmers/wordpress/meta/extra-info/key"),
 			Method:  "PUT",
 			Header: http.Header{
 				"Content-Type": {"application/json"},
 			},
-			Cookies: cookies,
-			Body:    strings.NewReader("42"),
+			Body: strings.NewReader("42"),
 		})
 		c.Assert(rec.Code, gc.Equals, expectStatus, gc.Commentf("body: %s", rec.Body))
 		if test.expectBody != nil {
@@ -510,7 +478,7 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 		}
 
 		// Remove all entities from the store.
-		_, err = store.DB.Entities().RemoveAll(nil)
+		_, err = s.store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -607,13 +575,10 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 	for i, test := range uploadEntityAuthorizationTests {
 		c.Logf("test %d: %s", i, test.about)
 
-		// Create a new server with a third party discharger.
-		srv, store, discharger := newServerWithDischarger(c, s.Session, test.username, test.groups)
-		defer discharger.Close()
-		defer store.Close()
-
-		// Retrieve the macaroon cookie.
-		cookies := []*http.Cookie{dischargedAuthCookie(c, srv)}
+		s.discharge = dischargeForUser(test.username)
+		s.idM.groups = map[string][]string{
+			test.username: test.groups,
+		}
 
 		// Prepare the expected status.
 		expectStatus := test.expectStatus
@@ -624,16 +589,18 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 		// Try to upload the entity.
 		body, hash, size := s.archiveInfo(c)
 		defer body.Close()
+
+		client := httpbakery.NewHTTPClient()
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-			Handler:       srv,
+			Handler:       s.srv,
+			Do:            bakeryDo(client),
 			URL:           storeURL(test.id + "/archive?hash=" + hash),
 			Method:        "POST",
 			ContentLength: size,
 			Header: http.Header{
 				"Content-Type": {"application/zip"},
 			},
-			Body:    body,
-			Cookies: cookies,
+			Body: body,
 		})
 		c.Assert(rec.Code, gc.Equals, expectStatus, gc.Commentf("body: %s", rec.Body))
 		if test.expectBody != nil {
@@ -641,7 +608,7 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 		}
 
 		// Remove all entities from the store.
-		_, err := store.DB.Entities().RemoveAll(nil)
+		_, err := s.store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -691,25 +658,25 @@ var isEntityCaveatTests = []struct {
 }}
 
 func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
-	// Create a new server with a third party discharger.
-	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
-	defer discharger.Close()
-	defer store.Close()
-
-	// Retrieve the macaroon cookie with an is-entity first party caveat.
-	cookies := []*http.Cookie{dischargedAuthCookie(c, srv, "is-entity cs:~charmers/utopic/wordpress-42")}
+	s.discharge = func(_, _ string) ([]checkers.Caveat, error) {
+		return []checkers.Caveat{{
+			Condition: "is-entity cs:~charmers/utopic/wordpress-42",
+		},
+			checkers.DeclaredCaveat(v4.UsernameAttr, "bob"),
+		}, nil
+	}
 
 	// Add a charm to the store, used for testing.
-	err := store.AddCharmWithArchive(
+	err := s.store.AddCharmWithArchive(
 		newResolvedURL("~charmers/utopic/wordpress-41", 9),
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
-	err = store.AddCharmWithArchive(
+	err = s.store.AddCharmWithArchive(
 		newResolvedURL("~charmers/utopic/wordpress-42", 10),
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
 	// Change the ACLs for the testing charm.
-	err = store.DB.BaseEntities().UpdateId("cs:~charmers/wordpress", bson.D{{"$set",
+	err = s.store.DB.BaseEntities().UpdateId("cs:~charmers/wordpress", bson.D{{"$set",
 		bson.D{{"acls.read", []string{"bob"}}},
 	}})
 	c.Assert(err, gc.IsNil)
@@ -717,10 +684,10 @@ func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
 	for i, test := range isEntityCaveatTests {
 		c.Logf("test %d: %s", i, test.url)
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-			Handler: srv,
+			Handler: s.srv,
+			Do:      bakeryDo(nil),
 			URL:     storeURL(test.url),
 			Method:  "GET",
-			Cookies: cookies,
 		})
 		if test.expectError != "" {
 			c.Assert(rec.Code, gc.Equals, http.StatusProxyAuthRequired)
@@ -730,20 +697,18 @@ func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
 			c.Assert(respErr.Message, gc.Matches, test.expectError)
 			continue
 		}
-		c.Assert(rec.Code, gc.Equals, http.StatusOK)
+		c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %s", rec.Body.Bytes()))
 	}
 }
 
 func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 	// Create a new server with a third party discharger.
-	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
-	defer discharger.Close()
-	defer store.Close()
+	s.discharge = dischargeForUser("bob")
 
 	// First check that we get a macaraq error when using a vanilla http do
 	// request.
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler: srv,
+		Handler: s.srv,
 		URL:     storeURL("delegatable-macaroon"),
 		ExpectBody: httptesting.BodyAsserter(func(c *gc.C, m json.RawMessage) {
 			// Allow any body - the next check will check that it's a valid macaroon.
@@ -756,14 +721,12 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 	now := time.Now()
 	var gotBody json.RawMessage
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler: srv,
+		Handler: s.srv,
 		URL:     storeURL("delegatable-macaroon"),
 		ExpectBody: httptesting.BodyAsserter(func(c *gc.C, m json.RawMessage) {
 			gotBody = m
 		}),
-		Do: func(req *http.Request) (*http.Response, error) {
-			return httpbakery.Do(client, req, noInteraction)
-		},
+		Do:           bakeryDo(client),
 		ExpectStatus: http.StatusOK,
 	})
 
@@ -790,19 +753,19 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 	// Now check that we can use the obtained macaroon to do stuff
 	// as the declared user.
 
-	err = store.AddCharmWithArchive(
+	err = s.store.AddCharmWithArchive(
 		newResolvedURL("~charmers/utopic/wordpress-41", 9),
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
 	// Change the ACLs for the testing charm.
-	err = store.DB.BaseEntities().UpdateId("cs:~charmers/wordpress", bson.D{{"$set",
+	err = s.store.DB.BaseEntities().UpdateId("cs:~charmers/wordpress", bson.D{{"$set",
 		bson.D{{"acls.read", []string{"bob"}}},
 	}})
 	c.Assert(err, gc.IsNil)
 
 	// First check that we require authorization to access the charm.
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: srv,
+		Handler: s.srv,
 		URL:     storeURL("~charmers/utopic/wordpress/meta/id-name"),
 		Method:  "GET",
 	})
@@ -818,31 +781,24 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler: srv,
+		Handler: s.srv,
 		URL:     storeURL("~charmers/utopic/wordpress/meta/id-name"),
 		ExpectBody: params.IdNameResponse{
 			Name: "wordpress",
 		},
 
 		ExpectStatus: http.StatusOK,
-		Do: func(req *http.Request) (*http.Response, error) {
-			return client.Do(req)
-		},
+		Do:           bakeryDo(client),
 	})
 }
 
 func (s *authSuite) TestDelegatableMacaroonWithBasicAuth(c *gc.C) {
-	// Create a new server with a third party discharger.
-	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
-	defer discharger.Close()
-	defer store.Close()
-
 	// First check that we get a macaraq error when using a vanilla http do
 	// request.
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:  srv,
-		Username: serverParams.AuthUsername,
-		Password: serverParams.AuthPassword,
+		Handler:  s.srv,
+		Username: testUsername,
+		Password: testPassword,
 		URL:      storeURL("delegatable-macaroon"),
 		ExpectBody: params.Error{
 			Code:    params.ErrForbidden,
@@ -850,4 +806,70 @@ func (s *authSuite) TestDelegatableMacaroonWithBasicAuth(c *gc.C) {
 		},
 		ExpectStatus: http.StatusForbidden,
 	})
+}
+
+func (s *authSuite) TestGroupsForUserSuccess(c *gc.C) {
+	h := v4.New(s.store.Pool(), s.srvParams)
+	s.idM.groups = map[string][]string{
+		"bob": {"one", "two"},
+	}
+	groups, err := v4.GroupsForUser(h, "bob")
+	c.Assert(err, gc.IsNil)
+	c.Assert(groups, jc.DeepEquals, []string{"one", "two"})
+}
+
+func (s *authSuite) TestGroupsForUserWithNoIdentity(c *gc.C) {
+	h := v4.New(s.store.Pool(), s.noMacaroonSrvParams)
+	groups, err := v4.GroupsForUser(h, "someone")
+	c.Assert(err, gc.IsNil)
+	c.Assert(groups, gc.HasLen, 0)
+}
+
+func (s *authSuite) TestGroupsForUserWithInvalidIdentityURL(c *gc.C) {
+	p := s.srvParams
+	p.IdentityAPIURL = ":::::"
+	h := v4.New(s.store.Pool(), p)
+	groups, err := v4.GroupsForUser(h, "someone")
+	c.Assert(err, gc.ErrorMatches, `parse :::::/v1/u/someone/idpgroups: missing protocol scheme`)
+	c.Assert(groups, gc.HasLen, 0)
+}
+
+func (s *authSuite) TestGroupsForUserWithDoFailure(c *gc.C) {
+	h := v4.New(s.store.Pool(), s.srvParams)
+	s.PatchValue(&http.DefaultClient.Transport, errorTransport("some error"))
+	groups, err := v4.GroupsForUser(h, "someone")
+	c.Assert(err, gc.ErrorMatches, `cannot get groups from http://.*/v1/u/someone/idpgroups: Get http://.*/v1/u/someone/idpgroups: some error`)
+	c.Assert(groups, gc.HasLen, 0)
+}
+
+func (s *authSuite) TestGroupsForUserWithInvalidBody(c *gc.C) {
+	h := v4.New(s.store.Pool(), s.srvParams)
+	s.idM.body = "bad"
+	groups, err := v4.GroupsForUser(h, "someone")
+	c.Assert(err, gc.ErrorMatches, `cannot unmarshal response from http://.*/v1/u/someone/idpgroups: .*`)
+	c.Assert(groups, gc.HasLen, 0)
+}
+
+func (s *authSuite) TestGroupsForUserWithErrorResponse(c *gc.C) {
+	h := v4.New(s.store.Pool(), s.srvParams)
+	s.idM.body = `{"message":"some error","code":"some code"}`
+	s.idM.status = http.StatusUnauthorized
+	groups, err := v4.GroupsForUser(h, "someone")
+	c.Assert(err, gc.ErrorMatches, `cannot get groups from http://.*/v1/u/someone/idpgroups: some error`)
+	c.Assert(groups, gc.HasLen, 0)
+}
+
+func (s *authSuite) TestGroupsForUserWithBadErrorResponse(c *gc.C) {
+	h := v4.New(s.store.Pool(), s.srvParams)
+	s.idM.body = `{"message":"some error"`
+	s.idM.status = http.StatusUnauthorized
+	groups, err := v4.GroupsForUser(h, "someone")
+	c.Assert(err, gc.ErrorMatches, `cannot unmarshal error response from http://.*/v1/u/someone/idpgroups: .*`)
+	c.Assert(groups, gc.HasLen, 0)
+}
+
+type errorTransport string
+
+func (e errorTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errgo.New(string(e))
 }

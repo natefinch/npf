@@ -110,18 +110,6 @@ func (s *APISuite) TestStatus(c *gc.C) {
 	})
 }
 
-func (s *APISuite) TestStatusWithElasticSearch(c *gc.C) {
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv_es,
-		URL:     storeURL("debug/status"),
-	})
-	var results map[string]params.DebugStatus
-	err := json.Unmarshal(rec.Body.Bytes(), &results)
-	c.Assert(err, gc.IsNil)
-	c.Assert(results["elasticsearch"].Name, gc.Equals, "Elastic search is running")
-	c.Assert(results["elasticsearch"].Value, jc.Contains, "cluster_name:")
-}
-
 func (s *APISuite) TestStatusWithoutCorrectCollections(c *gc.C) {
 	s.store.DB.Entities().DropCollection()
 	s.AssertDebugStatus(c, false, map[string]params.DebugStatus{
@@ -267,4 +255,27 @@ func (s *APISuite) AssertDebugStatus(c *gc.C, complete bool, status map[string]p
 		gotStatus[key] = r
 	}
 	c.Assert(gotStatus, jc.DeepEquals, status)
+}
+
+type statusWithElasticSearchSuite struct {
+	commonSuite
+}
+
+var _ = gc.Suite(&statusWithElasticSearchSuite{})
+
+func (s *statusWithElasticSearchSuite) SetUpSuite(c *gc.C) {
+	s.enableES = true
+	s.commonSuite.SetUpSuite(c)
+}
+
+func (s *statusWithElasticSearchSuite) TestStatusWithElasticSearch(c *gc.C) {
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("debug/status"),
+	})
+	var results map[string]params.DebugStatus
+	err := json.Unmarshal(rec.Body.Bytes(), &results)
+	c.Assert(err, gc.IsNil)
+	c.Assert(results["elasticsearch"].Name, gc.Equals, "Elastic search is running")
+	c.Assert(results["elasticsearch"].Value, jc.Contains, "cluster_name:")
 }

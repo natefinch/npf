@@ -20,7 +20,6 @@ import (
 	"gopkg.in/juju/charmstore.v4/internal/blobstore"
 	"gopkg.in/juju/charmstore.v4/internal/charmstore"
 	"gopkg.in/juju/charmstore.v4/internal/router"
-	"gopkg.in/juju/charmstore.v4/internal/storetesting"
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
@@ -33,22 +32,10 @@ var fakeBlobSize, fakeBlobHash = func() (int64, string) {
 }()
 
 type RelationsSuite struct {
-	storetesting.IsolatedMgoSuite
-	srv   http.Handler
-	store *charmstore.Store
+	commonSuite
 }
 
 var _ = gc.Suite(&RelationsSuite{})
-
-func (s *RelationsSuite) SetUpTest(c *gc.C) {
-	s.IsolatedMgoSuite.SetUpTest(c)
-	s.srv, s.store = newServer(c, s.Session, nil, serverParams)
-}
-
-func (s *RelationsSuite) TearDownTest(c *gc.C) {
-	s.store.Close()
-	s.IsolatedMgoSuite.TearDownTest(c)
-}
 
 // metaCharmRelatedCharms defines a bunch of charms to be used in
 // the relation tests.

@@ -5,9 +5,12 @@ package v4
 
 import (
 	"encoding/base64"
+	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"strings"
 
+	"github.com/juju/utils"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
@@ -112,7 +115,6 @@ func (h *Handler) checkRequest(req *http.Request, entityId *router.ResolvedURL) 
 	return authorization{
 		Admin:    false,
 		Username: attrMap[usernameAttr],
-		Groups:   strings.Fields(attrMap[groupsAttr]),
 	}, nil
 }
 
@@ -141,17 +143,50 @@ func (h *Handler) authorizeWithPerms(req *http.Request, read, write []string, en
 	return err
 }
 
-const (
-	usernameAttr = "username"
-	groupsAttr   = "groups"
-)
+const usernameAttr = "username"
 
 // authorization conatains authorization information extracted from an HTTP request.
 // The zero value for a authorization contains no privileges.
 type authorization struct {
 	Admin    bool
 	Username string
-	Groups   []string
+}
+
+func (h *Handler) groupsForUser(username string) ([]string, error) {
+	if h.config.IdentityAPIURL == "" {
+		return nil, nil
+	}
+	// TODO cache groups for a user
+	url := h.config.IdentityAPIURL + "/v1/u/" + username + "/idpgroups"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	req.Header = utils.BasicAuthHeader(h.config.IdentityAPIUsername, h.config.IdentityAPIPassword)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot get groups from %s", url)
+	}
+	defer resp.Body.Close()
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot read response from %s", url)
+	}
+	if resp.StatusCode == http.StatusOK {
+		var groups []string
+		if err := json.Unmarshal(data, &groups); err != nil {
+			return nil, errgo.Notef(err, "cannot unmarshal response from %s", url)
+		}
+		return groups, nil
+	}
+	var idmError struct {
+		Message string `json:"message,omitempty"`
+		Code    string `json:"code,omitempty"`
+	}
+	if err := json.Unmarshal(data, &idmError); err != nil {
+		return nil, errgo.Notef(err, "cannot unmarshal error response from %s", url)
+	}
+	return nil, errgo.Newf("cannot get groups from %s: %s", url, idmError.Message)
 }
 
 func (h *Handler) checkACLMembership(auth authorization, acl []string) error {
@@ -161,16 +196,22 @@ func (h *Handler) checkACLMembership(auth authorization, acl []string) error {
 	if auth.Username == "" {
 		return errgo.New("no username declared")
 	}
-	members := map[string]bool{
-		params.Everyone: true,
-		auth.Username:   true,
+	// First check if access is granted without querying for groups.
+	for _, name := range acl {
+		if name == auth.Username || name == params.Everyone {
+			return nil
+		}
 	}
-	for _, name := range auth.Groups {
-		members[name] = true
+	groups, err := h.groupsForUser(auth.Username)
+	if err != nil {
+		logger.Errorf("cannot get groups for %q: %v", auth.Username, err)
+		return errgo.Newf("access denied for user %q", auth.Username)
 	}
 	for _, name := range acl {
-		if members[name] {
-			return nil
+		for _, g := range groups {
+			if g == name {
+				return nil
+			}
 		}
 	}
 	return errgo.Newf("access denied for user %q", auth.Username)
@@ -183,7 +224,7 @@ func (h *Handler) newMacaroon() (*macaroon.Macaroon, error) {
 	return h.pool.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
 		Location:  h.config.IdentityLocation,
 		Condition: "is-authenticated-user",
-	}, usernameAttr, groupsAttr)})
+	}, usernameAttr)})
 }
 
 var errNoCreds = errgo.New("missing HTTP auth header")

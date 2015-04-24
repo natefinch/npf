@@ -46,12 +46,23 @@ type ServerParams struct {
 	AuthPassword string
 
 	// IdentityLocation holds the location of the third party authorization
-	// service to use when creating third party caveats.
+	// service to use when creating third party caveats,
+	// for example: http://api.jujucharms.com/identity/v1/discharger
+	// If it is empty, IdentityURL+"/v1/discharger" will be used.
 	IdentityLocation string
 
 	// PublicKeyLocator holds a public key store.
 	// It may be nil.
 	PublicKeyLocator bakery.PublicKeyLocator
+
+	// IdentityAPIURL holds the URL of the identity manager,
+	// for example http://api.jujucharms.com/identity
+	IdentityAPIURL string
+
+	// IdentityAPIUsername and IdentityAPIPassword hold the credentials
+	// to be used when querying the identity manager API.
+	IdentityAPIUsername string
+	IdentityAPIPassword string
 }
 
 // NewServer returns a new handler that handles charm store requests and stores

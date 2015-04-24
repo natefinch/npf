@@ -26,10 +26,8 @@ import (
 	"gopkg.in/juju/charm.v5"
 	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
-	"gopkg.in/macaroon-bakery.v0/bakerytest"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
 	"gopkg.in/macaroon.v1"
-	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v4/internal/charmstore"
@@ -51,10 +49,10 @@ var testPublicKey = bakery.PublicKey{
 	},
 }
 
-var serverParams = charmstore.ServerParams{
-	AuthUsername: "test-user",
-	AuthPassword: "test-password",
-}
+const (
+	testUsername = "test-user"
+	testPassword = "test-password"
+)
 
 var es *elasticsearch.Database = &elasticsearch.Database{"localhost:9200"}
 var si *charmstore.SearchIndex = &charmstore.SearchIndex{
@@ -63,11 +61,12 @@ var si *charmstore.SearchIndex = &charmstore.SearchIndex{
 }
 
 type APISuite struct {
-	storetesting.IsolatedMgoSuite
-	srv      http.Handler
-	store    *charmstore.Store
-	srv_es   http.Handler
-	store_es *charmstore.Store
+	commonSuite
+}
+
+func (s *APISuite) SetUpSuite(c *gc.C) {
+	s.enableIdentity = true
+	s.commonSuite.SetUpSuite(c)
 }
 
 var newResolvedURL = router.MustNewResolvedURL
@@ -83,33 +82,6 @@ func patchLegacyDownloadCountsEnabled(addCleanup func(jujutesting.CleanupFunc), 
 	addCleanup(func(*gc.C) {
 		charmstore.LegacyDownloadCountsEnabled = original
 	})
-}
-
-func (s *APISuite) SetUpTest(c *gc.C) {
-	s.IsolatedMgoSuite.SetUpTest(c)
-	s.srv, s.store = newServer(c, s.Session, nil, serverParams)
-	s.srv_es, s.store_es = newServer(c, s.Session, si, serverParams)
-}
-
-func (s *APISuite) TearDownTest(c *gc.C) {
-	s.store.Close()
-	s.store_es.Close()
-	s.IsolatedMgoSuite.TearDownTest(c)
-}
-
-// newServer creates a new charmstore server. The store it returns must
-// be closed after use.
-func newServer(c *gc.C, session *mgo.Session, si *charmstore.SearchIndex, config charmstore.ServerParams) (http.Handler, *charmstore.Store) {
-	db := session.DB("charmstore")
-	srv, err := charmstore.NewServer(db, si, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v4.NewAPIHandler})
-	c.Assert(err, gc.IsNil)
-	pool, err := charmstore.NewPool(db, si, &bakery.NewServiceParams{})
-	c.Assert(err, gc.IsNil)
-	return srv, pool.Store()
-}
-
-func storeURL(path string) string {
-	return "/v4/" + path
 }
 
 type metaEndpointExpectedValueGetter func(*charmstore.Store, *router.ResolvedURL) (interface{}, error)
@@ -569,15 +541,7 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 func (s *APISuite) TestMetaPerm(c *gc.C) {
 	// Create a charm store server that will use the test third party for
 	// its third party caveat.
-	discharger := bakerytest.NewDischarger(nil, func(_ *http.Request, cond string, arg string) ([]checkers.Caveat, error) {
-		return []checkers.Caveat{checkers.DeclaredCaveat("username", "bob")}, nil
-	})
-	srv, store, discharger := newServerWithDischarger(c, s.Session, "bob", nil)
-	defer discharger.Close()
-	defer store.Close()
-	cookies := []*http.Cookie{dischargedAuthCookie(c, srv)}
-	s.store.Close()
-	s.srv, s.store = srv, store
+	s.discharge = dischargeForUser("bob")
 
 	s.addCharm(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-23", 23))
 	s.addCharm(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-24", 24))
@@ -601,8 +565,8 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		c.Logf("id %d: %q", i, u)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: s.srv,
+			Do:      bakeryDo(nil),
 			URL:     storeURL(u + "/meta/perm"),
-			Cookies: cookies,
 			ExpectBody: params.PermResponse{
 				Read:  []string{"bob"},
 				Write: []string{"admin"},
@@ -637,8 +601,8 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	s.assertPut(c, "wordpress/meta/perm/write", []string{})
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
+		Do:           bakeryDo(nil),
 		URL:          storeURL("wordpress/meta/perm"),
-		Cookies:      cookies,
 		ExpectStatus: http.StatusUnauthorized,
 		ExpectBody: params.Error{
 			Code:    params.ErrUnauthorized,
@@ -681,7 +645,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 func (s *APISuite) TestMetaPermPutUnauthorized(c *gc.C) {
 	s.addCharm(c, "wordpress", newResolvedURL("~charmers/utopic/wordpress-23", 23))
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler: s.srv,
+		Handler: s.noMacaroonSrv,
 		URL:     storeURL("~charmers/precise/wordpress-23/meta/perm/read"),
 		Method:  "PUT",
 		Header: http.Header{
@@ -833,8 +797,8 @@ func (s *APISuite) TestExtraInfoBadPutRequests(c *gc.C) {
 			Header: http.Header{
 				"Content-Type": {contentType},
 			},
-			Username:     serverParams.AuthUsername,
-			Password:     serverParams.AuthPassword,
+			Username:     testUsername,
+			Password:     testPassword,
 			Body:         strings.NewReader(mustMarshalJSON(test.body)),
 			ExpectStatus: test.expectStatus,
 			ExpectBody:   test.expectBody,
@@ -854,11 +818,8 @@ func (s *APISuite) TestExtraInfoPutUnauthorized(c *gc.C) {
 		Body: strings.NewReader(mustMarshalJSON(map[string]string{
 			"bar": "value",
 		})),
-		ExpectStatus: http.StatusUnauthorized,
-		ExpectBody: params.Error{
-			Code:    params.ErrUnauthorized,
-			Message: "authentication failed: missing HTTP auth header",
-		},
+		ExpectStatus: http.StatusProxyAuthRequired,
+		ExpectBody:   dischargeRequiredBody,
 	})
 }
 
@@ -1933,7 +1894,7 @@ func (s *APISuite) TestDebugPprof(c *gc.C) {
 
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,
-			Header:  basicAuthHeader(serverParams.AuthUsername, serverParams.AuthPassword),
+			Header:  basicAuthHeader(testUsername, testPassword),
 			URL:     storeURL(test.path),
 		})
 		c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %s", rec.Body.String()))
@@ -1947,11 +1908,8 @@ func (s *APISuite) TestDebugPprofFailsWithoutAuth(c *gc.C) {
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL(test.path),
-			ExpectStatus: http.StatusUnauthorized,
-			ExpectBody: params.Error{
-				Message: "authentication failed: missing HTTP auth header",
-				Code:    params.ErrUnauthorized,
-			},
+			ExpectStatus: http.StatusProxyAuthRequired,
+			ExpectBody:   dischargeRequiredBody,
 		})
 	}
 }
@@ -2057,11 +2015,12 @@ func (s *APISuite) assertPut(c *gc.C, url string, val interface{}) {
 		Handler: s.srv,
 		URL:     storeURL(url),
 		Method:  "PUT",
+		Do:      bakeryDo(nil),
 		Header: http.Header{
 			"Content-Type": {"application/json"},
 		},
-		Username: serverParams.AuthUsername,
-		Password: serverParams.AuthPassword,
+		Username: testUsername,
+		Password: testPassword,
 		Body:     bytes.NewReader(body),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %s", rec.Body.String()))
@@ -2071,6 +2030,7 @@ func (s *APISuite) assertPut(c *gc.C, url string, val interface{}) {
 func (s *APISuite) assertGet(c *gc.C, url string, expectVal interface{}) {
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:    s.srv,
+		Do:         bakeryDo(nil),
 		URL:        storeURL(url),
 		ExpectBody: expectVal,
 	})
@@ -2093,22 +2053,14 @@ func (s *APISuite) TestMacaroon(c *gc.C) {
 	var checkedCaveats []string
 	var mu sync.Mutex
 	var dischargeError error
-	discharger := bakerytest.NewDischarger(nil, func(_ *http.Request, cond string, arg string) ([]checkers.Caveat, error) {
+	s.discharge = func(cond string, arg string) ([]checkers.Caveat, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		checkedCaveats = append(checkedCaveats, cond+" "+arg)
 		return []checkers.Caveat{checkers.DeclaredCaveat("username", "who")}, dischargeError
-	})
-	defer discharger.Close()
-	// Create a charmstore server that will use the test third party for
-	// its third party caveat.
-	srv, store := newServer(c, s.store.DB.Session, nil, charmstore.ServerParams{
-		IdentityLocation: discharger.Location(),
-		PublicKeyLocator: discharger,
-	})
-	defer store.Close()
+	}
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: srv,
+		Handler: s.srv,
 		URL:     storeURL("macaroon"),
 		Method:  "GET",
 	})
@@ -2123,25 +2075,26 @@ func (s *APISuite) TestMacaroon(c *gc.C) {
 	c.Assert(checkedCaveats, jc.DeepEquals, []string{
 		"is-authenticated-user ",
 	})
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:      s.srv,
-		URL:          storeURL("log"),
-		ExpectStatus: http.StatusUnauthorized,
-		ExpectBody: params.Error{
-			Message: "authentication failed: missing HTTP auth header",
-			Code:    params.ErrUnauthorized,
-		},
-	})
 	macaroonCookie, err := httpbakery.NewCookie(ms)
 	c.Assert(err, gc.IsNil)
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:      srv,
+		Handler:      s.srv,
 		URL:          storeURL("log"),
+		Do:           bakeryDo(nil),
 		Cookies:      []*http.Cookie{macaroonCookie},
 		ExpectStatus: http.StatusUnauthorized,
 		ExpectBody: params.Error{
 			Code:    params.ErrUnauthorized,
 			Message: `unauthorized: access denied for user "who"`,
+		},
+	})
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.noMacaroonSrv,
+		URL:          storeURL("log"),
+		ExpectStatus: http.StatusUnauthorized,
+		ExpectBody: params.Error{
+			Message: "authentication failed: missing HTTP auth header",
+			Code:    params.ErrUnauthorized,
 		},
 	})
 }
@@ -2151,8 +2104,10 @@ var promulgateTests = []struct {
 	entities           []*mongodoc.Entity
 	baseEntities       []*mongodoc.BaseEntity
 	id                 string
+	useHTTPDo          bool
 	method             string
 	caveats            []checkers.Caveat
+	groups             map[string][]string
 	body               io.Reader
 	username           string
 	password           string
@@ -2170,8 +2125,8 @@ var promulgateTests = []struct {
 	},
 	id:           "~charmers/wordpress",
 	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: false}),
-	username:     serverParams.AuthUsername,
-	password:     serverParams.AuthPassword,
+	username:     testUsername,
+	password:     testPassword,
 	expectStatus: http.StatusOK,
 	expectEntities: []*mongodoc.Entity{
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
@@ -2189,8 +2144,8 @@ var promulgateTests = []struct {
 	},
 	id:           "~charmers/wordpress",
 	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
-	username:     serverParams.AuthUsername,
-	password:     serverParams.AuthPassword,
+	username:     testUsername,
+	password:     testPassword,
 	expectStatus: http.StatusOK,
 	expectEntities: []*mongodoc.Entity{
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
@@ -2208,8 +2163,8 @@ var promulgateTests = []struct {
 	},
 	id:           "~charmers/mysql",
 	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: false}),
-	username:     serverParams.AuthUsername,
-	password:     serverParams.AuthPassword,
+	username:     testUsername,
+	password:     testPassword,
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
@@ -2231,8 +2186,8 @@ var promulgateTests = []struct {
 	},
 	id:           "~charmers/mysql",
 	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
-	username:     serverParams.AuthUsername,
-	password:     serverParams.AuthPassword,
+	username:     testUsername,
+	password:     testPassword,
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
@@ -2254,8 +2209,8 @@ var promulgateTests = []struct {
 	},
 	id:           "~charmers/precise/mysql-9",
 	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
-	username:     serverParams.AuthUsername,
-	password:     serverParams.AuthPassword,
+	username:     testUsername,
+	password:     testPassword,
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
@@ -2277,8 +2232,8 @@ var promulgateTests = []struct {
 	},
 	id:           "~charmers/precise/mysql-9",
 	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
-	username:     serverParams.AuthUsername,
-	password:     serverParams.AuthPassword,
+	username:     testUsername,
+	password:     testPassword,
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
@@ -2300,8 +2255,8 @@ var promulgateTests = []struct {
 	},
 	id:           "~charmers/wordpress",
 	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: false}),
-	username:     serverParams.AuthUsername,
-	password:     serverParams.AuthPassword,
+	username:     testUsername,
+	password:     testPassword,
 	method:       "POST",
 	expectStatus: http.StatusMethodNotAllowed,
 	expectBody: params.Error{
@@ -2324,8 +2279,8 @@ var promulgateTests = []struct {
 	},
 	id:           "~charmers/wordpress",
 	body:         bytes.NewReader([]byte("tru")),
-	username:     serverParams.AuthUsername,
-	password:     serverParams.AuthPassword,
+	username:     testUsername,
+	password:     testPassword,
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
@@ -2349,7 +2304,6 @@ var promulgateTests = []struct {
 	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: false}),
 	caveats: []checkers.Caveat{
 		checkers.DeclaredCaveat(v4.UsernameAttr, "promulgators"),
-		checkers.DeclaredCaveat(v4.GroupsAttr, ""),
 	},
 	expectStatus: http.StatusOK,
 	expectEntities: []*mongodoc.Entity{
@@ -2370,7 +2324,6 @@ var promulgateTests = []struct {
 	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
 	caveats: []checkers.Caveat{
 		checkers.DeclaredCaveat(v4.UsernameAttr, "promulgators"),
-		checkers.DeclaredCaveat(v4.GroupsAttr, ""),
 	},
 	expectStatus: http.StatusOK,
 	expectEntities: []*mongodoc.Entity{
@@ -2391,7 +2344,9 @@ var promulgateTests = []struct {
 	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
 	caveats: []checkers.Caveat{
 		checkers.DeclaredCaveat(v4.UsernameAttr, "bob"),
-		checkers.DeclaredCaveat(v4.GroupsAttr, "promulgators yellow"),
+	},
+	groups: map[string][]string{
+		"bob": []string{"promulgators", "yellow"},
 	},
 	expectStatus: http.StatusOK,
 	expectEntities: []*mongodoc.Entity{
@@ -2408,10 +2363,11 @@ var promulgateTests = []struct {
 	baseEntities: []*mongodoc.BaseEntity{
 		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
 	},
+	useHTTPDo:    true,
 	id:           "~charmers/wordpress",
 	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: false}),
 	expectStatus: http.StatusProxyAuthRequired,
-	expectBody:   dischargeRequiredBody("http://0.1.2.3/"),
+	expectBody:   dischargeRequiredBody,
 	expectEntities: []*mongodoc.Entity{
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
 	},
@@ -2430,7 +2386,9 @@ var promulgateTests = []struct {
 	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
 	caveats: []checkers.Caveat{
 		checkers.DeclaredCaveat(v4.UsernameAttr, "bob"),
-		checkers.DeclaredCaveat(v4.GroupsAttr, "yellow"),
+	},
+	groups: map[string][]string{
+		"bob": []string{"yellow"},
 	},
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -2446,65 +2404,54 @@ var promulgateTests = []struct {
 }}
 
 func (s *APISuite) TestPromulgate(c *gc.C) {
-	srv, store := newServer(c, s.Session, nil, charmstore.ServerParams{
-		AuthUsername:     serverParams.AuthUsername,
-		AuthPassword:     serverParams.AuthPassword,
-		IdentityLocation: "http://0.1.2.3/",
-		PublicKeyLocator: bakery.PublicKeyLocatorMap{
-			"http://0.1.2.3/": &testPublicKey,
-		},
-	})
-	defer store.Close()
 	for i, test := range promulgateTests {
 		c.Logf("%d. %s\n", i, test.about)
-		_, err := store.DB.Entities().RemoveAll(nil)
+		_, err := s.store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
-		_, err = store.DB.BaseEntities().RemoveAll(nil)
+		_, err = s.store.DB.BaseEntities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 		for _, e := range test.entities {
-			err := store.DB.Entities().Insert(e)
+			err := s.store.DB.Entities().Insert(e)
 			c.Assert(err, gc.IsNil)
 		}
 		for _, e := range test.baseEntities {
-			err := store.DB.BaseEntities().Insert(e)
+			err := s.store.DB.BaseEntities().Insert(e)
 			c.Assert(err, gc.IsNil)
 		}
 		if test.method == "" {
 			test.method = "PUT"
 		}
-		header := http.Header{"Content-Type": {"application/json"}}
-		if len(test.caveats) > 0 {
-			m, err := store.Bakery.NewMacaroon("", nil, test.caveats)
-			c.Assert(err, gc.IsNil)
-			cookie, err := httpbakery.NewCookie(macaroon.Slice{m})
-			c.Assert(err, gc.IsNil)
-			header.Set("Cookie", (&http.Cookie{
-				Name:  cookie.Name,
-				Value: cookie.Value,
-			}).String())
+		client := httpbakery.NewHTTPClient()
+		s.discharge = func(_, _ string) ([]checkers.Caveat, error) {
+			return test.caveats, nil
 		}
-		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-			Handler:      srv,
+		s.idM.groups = test.groups
+		p := httptesting.JSONCallParams{
+			Handler:      s.srv,
 			URL:          storeURL(test.id + "/promulgate"),
 			Method:       test.method,
 			Body:         test.body,
-			Header:       header,
+			Header:       http.Header{"Content-Type": {"application/json"}},
 			Username:     test.username,
 			Password:     test.password,
 			ExpectStatus: test.expectStatus,
 			ExpectBody:   test.expectBody,
-		})
-		n, err := store.DB.Entities().Count()
+		}
+		if !test.useHTTPDo {
+			p.Do = bakeryDo(client)
+		}
+		httptesting.AssertJSONCall(c, p)
+		n, err := s.store.DB.Entities().Count()
 		c.Assert(err, gc.IsNil)
 		c.Assert(n, gc.Equals, len(test.expectEntities))
 		for _, e := range test.expectEntities {
-			storetesting.AssertEntity(c, store.DB.Entities(), e)
+			storetesting.AssertEntity(c, s.store.DB.Entities(), e)
 		}
-		n, err = store.DB.BaseEntities().Count()
+		n, err = s.store.DB.BaseEntities().Count()
 		c.Assert(err, gc.IsNil)
 		c.Assert(n, gc.Equals, len(test.expectBaseEntities))
 		for _, e := range test.expectBaseEntities {
-			storetesting.AssertBaseEntity(c, store.DB.BaseEntities(), e)
+			storetesting.AssertBaseEntity(c, s.store.DB.BaseEntities(), e)
 		}
 	}
 }
@@ -2532,19 +2479,17 @@ func (s *APISuite) TestEndpointRequiringBaseEntityWithPromulgatedId(c *gc.C) {
 // dischargeRequiredBody returns a httptesting.BodyAsserter that checks
 // that the response body contains a discharge required error holding a macaroon
 // with a third-party caveat addressed to expectedEntityLocation.
-func dischargeRequiredBody(expectIdentityLocation string) httptesting.BodyAsserter {
-	return func(c *gc.C, body json.RawMessage) {
-		var response httpbakery.Error
-		err := json.Unmarshal(body, &response)
-		c.Assert(err, gc.IsNil)
-		c.Assert(response.Code, gc.Equals, httpbakery.ErrDischargeRequired)
-		c.Assert(response.Message, gc.Equals, "verification failed: no macaroon cookies in request")
-		c.Assert(response.Info.Macaroon, gc.NotNil)
-		for _, cav := range response.Info.Macaroon.Caveats() {
-			if cav.Location == expectIdentityLocation {
-				return
-			}
+var dischargeRequiredBody httptesting.BodyAsserter = func(c *gc.C, body json.RawMessage) {
+	var response httpbakery.Error
+	err := json.Unmarshal(body, &response)
+	c.Assert(err, gc.IsNil)
+	c.Assert(response.Code, gc.Equals, httpbakery.ErrDischargeRequired)
+	c.Assert(response.Message, gc.Equals, "verification failed: no macaroon cookies in request")
+	c.Assert(response.Info.Macaroon, gc.NotNil)
+	for _, cav := range response.Info.Macaroon.Caveats() {
+		if cav.Location != "" {
+			return
 		}
-		c.Fatalf("no third party caveat found in response macaroon; caveats %#v", response.Info.Macaroon.Caveats())
 	}
+	c.Fatalf("no third party caveat found in response macaroon; caveats %#v", response.Info.Macaroon.Caveats())
 }
