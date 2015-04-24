@@ -14,7 +14,7 @@ var (
 	ProcessIcon                    = processIcon
 	ErrProbablyNotXML              = errProbablyNotXML
 	UsernameAttr                   = usernameAttr
-	GroupsAttr                     = groupsAttr
 	GetNewPromulgatedRevision      = (*Handler).getNewPromulgatedRevision
 	DelegatableMacaroonExpiry      = delegatableMacaroonExpiry
+	GroupsForUser                  = (*Handler).groupsForUser
 )

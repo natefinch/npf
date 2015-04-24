@@ -25,14 +25,12 @@ import (
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v4/internal/router"
 	"gopkg.in/juju/charmstore.v4/internal/storetesting"
-	. "gopkg.in/juju/charmstore.v4/internal/v4"
+	"gopkg.in/juju/charmstore.v4/internal/v4"
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
 type SearchSuite struct {
-	storetesting.IsolatedMgoESSuite
-	srv   http.Handler
-	store *charmstore.Store
+	commonSuite
 }
 
 var _ = gc.Suite(&SearchSuite{})
@@ -48,15 +46,15 @@ var exportTestBundles = map[string]*router.ResolvedURL{
 	"wordpress-simple": newResolvedURL("cs:~charmers/bundle/wordpress-simple-4", 4),
 }
 
+func (s *SearchSuite) SetUpSuite(c *gc.C) {
+	s.enableES = true
+	s.enableIdentity = true
+	s.commonSuite.SetUpSuite(c)
+}
+
 func (s *SearchSuite) SetUpTest(c *gc.C) {
-	s.IsolatedMgoESSuite.SetUpTest(c)
-	si := &charmstore.SearchIndex{s.ES, s.TestIndex}
-	s.srv, s.store = newServer(c, s.Session, si, charmstore.ServerParams{
-		AuthUsername:     serverParams.AuthUsername,
-		AuthPassword:     serverParams.AuthPassword,
-		IdentityLocation: "charmstore-test",
-	})
-	s.addCharmsToStore(c, s.store)
+	s.commonSuite.SetUpTest(c)
+	s.addCharmsToStore(c)
 	// hide the riak charm
 	err := s.store.DB.BaseEntities().UpdateId(
 		charm.MustParseReference("cs:~charmers/riak"),
@@ -69,22 +67,17 @@ func (s *SearchSuite) SetUpTest(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	err = s.store.UpdateSearch(newResolvedURL("~charmers/trusty/riak-0", 0))
 	c.Assert(err, gc.IsNil)
-	err = s.ES.RefreshIndex(s.TestIndex)
+	err = s.esSuite.ES.RefreshIndex(s.esSuite.TestIndex)
 	c.Assert(err, gc.IsNil)
 }
 
-func (s *SearchSuite) TearDownTest(c *gc.C) {
-	s.store.Close()
-	s.IsolatedMgoESSuite.TearDownTest(c)
-}
-
-func (s *SearchSuite) addCharmsToStore(c *gc.C, store *charmstore.Store) {
+func (s *SearchSuite) addCharmsToStore(c *gc.C) {
 	for name, id := range exportTestCharms {
-		err := store.AddCharmWithArchive(id, getCharm(name))
+		err := s.store.AddCharmWithArchive(id, getCharm(name))
 		c.Assert(err, gc.IsNil)
 	}
 	for name, id := range exportTestBundles {
-		err := store.AddBundleWithArchive(id, getBundle(name))
+		err := s.store.AddBundleWithArchive(id, getBundle(name))
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -269,7 +262,7 @@ func (s *SearchSuite) TestParseSearchParams(c *gc.C) {
 		var err error
 		req.Form, err = url.ParseQuery(test.query)
 		c.Assert(err, gc.IsNil)
-		sp, err := ParseSearchParams(&req)
+		sp, err := v4.ParseSearchParams(&req)
 		if test.expectError != "" {
 			c.Assert(err, gc.Not(gc.IsNil))
 			c.Assert(err.Error(), gc.Equals, test.expectError)
@@ -562,7 +555,7 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 }
 
 func (s *SearchSuite) TestSearchError(c *gc.C) {
-	err := s.ES.DeleteIndex(s.TestIndex)
+	err := s.esSuite.ES.DeleteIndex(s.esSuite.TestIndex)
 	c.Assert(err, gc.Equals, nil)
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
@@ -724,7 +717,7 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 			c.Assert(err, gc.IsNil)
 		}
 	}
-	err := s.ES.RefreshIndex(s.TestIndex)
+	err := s.esSuite.ES.RefreshIndex(s.esSuite.TestIndex)
 	c.Assert(err, gc.IsNil)
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
@@ -762,8 +755,8 @@ func (s *SearchSuite) assertPut(c *gc.C, url string, val interface{}) {
 		Header: http.Header{
 			"Content-Type": {"application/json"},
 		},
-		Username: serverParams.AuthUsername,
-		Password: serverParams.AuthPassword,
+		Username: testUsername,
+		Password: testPassword,
 		Body:     bytes.NewReader(body),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("headers: %v, body: %s", rec.HeaderMap, rec.Body.String()))
@@ -774,8 +767,8 @@ func (s *SearchSuite) TestSearchWithAdminCredentials(c *gc.C) {
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler:  s.srv,
 		URL:      storeURL("search"),
-		Username: serverParams.AuthUsername,
-		Password: serverParams.AuthPassword,
+		Username: testUsername,
+		Password: testPassword,
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	expected := []*router.ResolvedURL{
@@ -817,13 +810,16 @@ func (s *SearchSuite) TestSearchWithUserMacaroon(c *gc.C) {
 	assertResultSet(c, sr, expected)
 }
 
-func (s *SearchSuite) TestSearchWithGroupMacaroon(c *gc.C) {
+func (s *SearchSuite) TestSearchWithUserInGroups(c *gc.C) {
 	m, err := s.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
-		checkers.DeclaredCaveat("groups", "test-user test-user2"),
+		checkers.DeclaredCaveat(v4.UsernameAttr, "bob"),
 	})
 	c.Assert(err, gc.IsNil)
 	macaroonCookie, err := httpbakery.NewCookie(macaroon.Slice{m})
 	c.Assert(err, gc.IsNil)
+	s.idM.groups = map[string][]string{
+		"bob": {"test-user", "test-user2"},
+	}
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("search"),
@@ -854,7 +850,7 @@ func (s *SearchSuite) TestSearchWithBadAdminCredentialsAndACookie(c *gc.C) {
 		Handler:  s.srv,
 		URL:      storeURL("search"),
 		Cookies:  []*http.Cookie{macaroonCookie},
-		Username: serverParams.AuthUsername,
+		Username: testUsername,
 		Password: "bad-password",
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)

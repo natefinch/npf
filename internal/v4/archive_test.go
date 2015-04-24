@@ -38,22 +38,10 @@ import (
 )
 
 type ArchiveSuite struct {
-	storetesting.IsolatedMgoSuite
-	srv   http.Handler
-	store *charmstore.Store
+	commonSuite
 }
 
 var _ = gc.Suite(&ArchiveSuite{})
-
-func (s *ArchiveSuite) SetUpTest(c *gc.C) {
-	s.IsolatedMgoSuite.SetUpTest(c)
-	s.srv, s.store = newServer(c, s.Session, nil, serverParams)
-}
-
-func (s *ArchiveSuite) TearDownTest(c *gc.C) {
-	s.store.Close()
-	s.IsolatedMgoSuite.TearDownTest(c)
-}
 
 func (s *ArchiveSuite) TestGet(c *gc.C) {
 	patchArchiveCacheAges(s)
@@ -219,8 +207,8 @@ func (s *ArchiveSuite) TestPostErrors(c *gc.C) {
 				"Content-Type": {"application/zip"},
 			},
 			Body:         body,
-			Username:     serverParams.AuthUsername,
-			Password:     serverParams.AuthPassword,
+			Username:     testUsername,
+			Password:     testPassword,
 			ExpectStatus: test.expectStatus,
 			ExpectBody: params.Error{
 				Message: test.expectMessage,
@@ -263,7 +251,7 @@ func (s *ArchiveSuite) TestConcurrentUploads(c *gc.C) {
 		req, err := http.NewRequest("POST", url, body)
 		c.Assert(err, gc.IsNil)
 		req.Header.Set("Content-Type", "application/zip")
-		req.SetBasicAuth(serverParams.AuthUsername, serverParams.AuthPassword)
+		req.SetBasicAuth(testUsername, testPassword)
 		resp, err := http.DefaultClient.Do(req)
 		if !c.Check(err, gc.IsNil) {
 			return
@@ -469,8 +457,8 @@ func (s *ArchiveSuite) TestPostHashMismatch(c *gc.C) {
 			"Content-Type": {"application/zip"},
 		},
 		Body:         bytes.NewReader(content),
-		Username:     serverParams.AuthUsername,
-		Password:     serverParams.AuthPassword,
+		Username:     testUsername,
+		Password:     testPassword,
 		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: "cannot put archive blob: hash mismatch",
@@ -624,10 +612,10 @@ func (s *ArchiveSuite) TestPostFailureCounters(c *gc.C) {
 				"Content-Type": {"application/zip"},
 			},
 			Body:     invalidZip(),
-			Username: serverParams.AuthUsername,
-			Password: serverParams.AuthPassword,
+			Username: testUsername,
+			Password: testPassword,
 		})
-		c.Assert(rec.Code, gc.Equals, expectCode)
+		c.Assert(rec.Code, gc.Equals, expectCode, gc.Commentf("body: %s", rec.Body.Bytes()))
 	}
 
 	// Send a first invalid request (revision specified).
@@ -657,8 +645,8 @@ func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSee
 			"Content-Type": {"application/zip"},
 		},
 		Body:         content,
-		Username:     serverParams.AuthUsername,
-		Password:     serverParams.AuthPassword,
+		Username:     testUsername,
+		Password:     testPassword,
 		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: errorMessage,
@@ -739,8 +727,8 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *router.Resolved
 			"Content-Type": {"application/zip"},
 		},
 		Body:     f,
-		Username: serverParams.AuthUsername,
-		Password: serverParams.AuthPassword,
+		Username: testUsername,
+		Password: testPassword,
 		ExpectBody: params.ArchiveUploadResponse{
 			Id:            &url.URL,
 			PromulgatedId: url.PromulgatedURL(),
@@ -807,8 +795,8 @@ func (s *ArchiveSuite) assertUploadError(c *gc.C, method string, url, purl *char
 			"Content-Type": {"application/zip"},
 		},
 		Body:         f,
-		Username:     serverParams.AuthUsername,
-		Password:     serverParams.AuthPassword,
+		Username:     testUsername,
+		Password:     testPassword,
 		ExpectStatus: expectStatus,
 		ExpectBody:   expectBody,
 	})
@@ -934,8 +922,9 @@ func (s *ArchiveSuite) TestBundleCharms(c *gc.C) {
 	)
 	c.Assert(err, gc.IsNil)
 
-	// Retrieve the bundleCharms method.
-	handler := v4.New(s.store.Pool(), serverParams)
+	// Retrieve the base handler so that we can invoke the
+	// bundleCharms method on it.
+	handler := v4.New(s.store.Pool(), s.srvParams)
 
 	tests := []struct {
 		about  string
@@ -1027,8 +1016,8 @@ func (s *ArchiveSuite) TestDelete(c *gc.C) {
 		Handler:      s.srv,
 		URL:          storeURL(id + "/archive"),
 		Method:       "DELETE",
-		Username:     serverParams.AuthUsername,
-		Password:     serverParams.AuthPassword,
+		Username:     testUsername,
+		Password:     testPassword,
 		ExpectStatus: http.StatusOK,
 	})
 
@@ -1056,8 +1045,8 @@ func (s *ArchiveSuite) TestDeleteSpecificCharm(c *gc.C) {
 		Handler:      s.srv,
 		URL:          storeURL("~charmers/utopic/mysql-42/archive"),
 		Method:       "DELETE",
-		Username:     serverParams.AuthUsername,
-		Password:     serverParams.AuthPassword,
+		Username:     testUsername,
+		Password:     testPassword,
 		ExpectStatus: http.StatusOK,
 	})
 
@@ -1079,8 +1068,8 @@ func (s *ArchiveSuite) TestDeleteNotFound(c *gc.C) {
 		Handler:      s.srv,
 		URL:          storeURL("~charmers/utopic/no-such-0/archive"),
 		Method:       "DELETE",
-		Username:     serverParams.AuthUsername,
-		Password:     serverParams.AuthPassword,
+		Username:     testUsername,
+		Password:     testPassword,
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
 			Message: `entity "cs:~charmers/utopic/no-such-0" not found`,
@@ -1107,8 +1096,8 @@ func (s *ArchiveSuite) TestDeleteError(c *gc.C) {
 		Handler:      s.srv,
 		URL:          storeURL(id + "/archive"),
 		Method:       "DELETE",
-		Username:     serverParams.AuthUsername,
-		Password:     serverParams.AuthPassword,
+		Username:     testUsername,
+		Password:     testPassword,
 		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: `cannot remove blob no-such-name: resource at path "global/no-such-name" not found`,
@@ -1133,8 +1122,8 @@ func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 		Handler:  s.srv,
 		Method:   "DELETE",
 		URL:      storeURL(id + "/archive"),
-		Username: serverParams.AuthUsername,
-		Password: serverParams.AuthPassword,
+		Username: testUsername,
+		Password: testPassword,
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 
@@ -1397,7 +1386,7 @@ func (s *ArchiveSuite) TestGetNewPromulgatedRevision(c *gc.C) {
 		})
 		c.Assert(err, gc.IsNil)
 	}
-	handler := v4.New(s.store.Pool(), serverParams)
+	handler := v4.New(s.store.Pool(), s.srvParams)
 	for i, test := range getNewPromulgatedRevisionTests {
 		c.Logf("%d. %s", i, test.about)
 		rev, err := v4.GetNewPromulgatedRevision(handler, test.id)
@@ -1442,25 +1431,20 @@ func assertCacheControl(c *gc.C, h http.Header, idFullySpecified bool) {
 }
 
 type ArchiveSearchSuite struct {
-	storetesting.IsolatedMgoESSuite
-	srv   http.Handler
-	store *charmstore.Store
+	commonSuite
 }
 
 var _ = gc.Suite(&ArchiveSearchSuite{})
 
-func (s *ArchiveSearchSuite) SetUpTest(c *gc.C) {
-	s.IsolatedMgoESSuite.SetUpTest(c)
-	// TODO (frankban): remove this call when removing the legacy counts logic.
-	patchLegacyDownloadCountsEnabled(s.AddCleanup, false)
-
-	si := charmstore.SearchIndex{s.ES, s.TestIndex}
-	s.srv, s.store = newServer(c, s.Session, &si, serverParams)
+func (s *ArchiveSearchSuite) SetUpSuite(c *gc.C) {
+	s.enableES = true
+	s.commonSuite.SetUpSuite(c)
 }
 
-func (s *ArchiveSearchSuite) TearDownTest(c *gc.C) {
-	s.store.Close()
-	s.IsolatedMgoESSuite.TearDownTest(c)
+func (s *ArchiveSearchSuite) SetUpTest(c *gc.C) {
+	s.commonSuite.SetUpTest(c)
+	// TODO (frankban): remove this call when removing the legacy counts logic.
+	patchLegacyDownloadCountsEnabled(s.AddCleanup, false)
 }
 
 func (s *ArchiveSearchSuite) TestGetSearchUpdate(c *gc.C) {

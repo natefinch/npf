@@ -14,29 +14,20 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v5"
 
-	"gopkg.in/juju/charmstore.v4/internal/charmstore"
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
-	"gopkg.in/juju/charmstore.v4/internal/storetesting"
 	"gopkg.in/juju/charmstore.v4/internal/v4"
 	"gopkg.in/juju/charmstore.v4/params"
 )
 
 type logSuite struct {
-	storetesting.IsolatedMgoSuite
-	srv   http.Handler
-	store *charmstore.Store
+	commonSuite
 }
 
 var _ = gc.Suite(&logSuite{})
 
-func (s *logSuite) SetUpTest(c *gc.C) {
-	s.IsolatedMgoSuite.SetUpTest(c)
-	s.srv, s.store = newServer(c, s.Session, nil, serverParams)
-}
-
-func (s *logSuite) TearDownTest(c *gc.C) {
-	s.store.Close()
-	s.IsolatedMgoSuite.TearDownTest(c)
+func (s *logSuite) SetUpSuite(c *gc.C) {
+	s.enableIdentity = true
+	s.commonSuite.SetUpSuite(c)
 }
 
 var logResponses = map[string]*params.LogResponse{
@@ -234,8 +225,8 @@ func (s *logSuite) TestGetLogs(c *gc.C) {
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler:  s.srv,
 			URL:      storeURL("log" + test.querystring),
-			Username: serverParams.AuthUsername,
-			Password: serverParams.AuthPassword,
+			Username: testUsername,
+			Password: testPassword,
 		})
 
 		// Ensure the response is what we expect.
@@ -330,8 +321,8 @@ func (s *logSuite) TestGetLogsErrors(c *gc.C) {
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL("log" + test.querystring),
-			Username:     serverParams.AuthUsername,
-			Password:     serverParams.AuthPassword,
+			Username:     testUsername,
+			Password:     testPassword,
 			ExpectStatus: test.expectStatus,
 			ExpectBody: params.Error{
 				Message: test.expectMessage,
@@ -354,8 +345,8 @@ func (s *logSuite) TestGetLogsErrorInvalidLog(c *gc.C) {
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL("log"),
-		Username:     serverParams.AuthUsername,
-		Password:     serverParams.AuthPassword,
+		Username:     testUsername,
+		Password:     testPassword,
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   []params.LogResponse{},
 	})
@@ -373,8 +364,8 @@ func (s *logSuite) TestPostLogs(c *gc.C) {
 		Handler:  s.srv,
 		URL:      storeURL("log"),
 		Method:   "POST",
-		Username: serverParams.AuthUsername,
-		Password: serverParams.AuthPassword,
+		Username: testUsername,
+		Password: testPassword,
 		Header: http.Header{
 			"Content-Type": {"application/json"},
 		},
@@ -418,8 +409,8 @@ func (s *logSuite) TestPostLogsMultipleEntries(c *gc.C) {
 		Handler:  s.srv,
 		URL:      storeURL("log"),
 		Method:   "POST",
-		Username: serverParams.AuthUsername,
-		Password: serverParams.AuthPassword,
+		Username: testUsername,
+		Password: testPassword,
 		Header: http.Header{
 			"Content-Type": {"application/json"},
 		},
@@ -486,8 +477,8 @@ func (s *logSuite) TestPostLogsErrors(c *gc.C) {
 				"Content-Type": {test.contentType},
 			},
 			Body:         bytes.NewReader(test.body),
-			Username:     serverParams.AuthUsername,
-			Password:     serverParams.AuthPassword,
+			Username:     testUsername,
+			Password:     testPassword,
 			ExpectStatus: test.expectStatus,
 			ExpectBody: params.Error{
 				Message: test.expectMessage,
@@ -498,7 +489,7 @@ func (s *logSuite) TestPostLogsErrors(c *gc.C) {
 }
 
 func (s *logSuite) TestGetLogsUnauthorizedError(c *gc.C) {
-	AssertEndpointAuth(c, s.Session, httptesting.JSONCallParams{
+	s.AssertEndpointAuth(c, httptesting.JSONCallParams{
 		URL:          storeURL("log"),
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   []params.LogResponse{},
@@ -508,7 +499,7 @@ func (s *logSuite) TestGetLogsUnauthorizedError(c *gc.C) {
 func (s *logSuite) TestPostLogsUnauthorizedError(c *gc.C) {
 	// Add a non-parsable log message to the db.
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler: s.srv,
+		Handler: s.noMacaroonSrv,
 		URL:     storeURL("log"),
 		Method:  "POST",
 		Header: http.Header{

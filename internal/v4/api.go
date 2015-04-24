@@ -880,7 +880,6 @@ func (h *Handler) serveDelegatableMacaroon(_ http.Header, req *http.Request) (in
 	// TODO propagate expiry time from macaroons in request.
 	m, err := store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
 		checkers.DeclaredCaveat(usernameAttr, auth.Username),
-		checkers.DeclaredCaveat(groupsAttr, strings.Join(auth.Groups, " ")),
 		checkers.TimeBeforeCaveat(time.Now().Add(delegatableMacaroonExpiry)),
 	})
 	if err != nil {
