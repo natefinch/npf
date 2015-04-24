@@ -136,7 +136,7 @@ func (s *APISuite) TestCharmInfoNotFound(c *gc.C) {
 	})
 }
 
-func (s *APISuite) TestServerCharmInfo(c *gc.C) {
+func (s *APISuite) TestServeCharmInfo(c *gc.C) {
 	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-1")
 	hashSum := fileSHA256(c, wordpress.Path)
 	digest, err := json.Marshal("who@canonical.com-bzr-digest")
@@ -277,6 +277,21 @@ func (s *APISuite) TestCharmInfoCounters(c *gc.C) {
 	// The charm-info count for the missing charm is still zero.
 	key = []string{params.StatsCharmInfo, "precise", "django"}
 	stats.CheckCounterSum(c, s.store, key, false, 0)
+}
+
+func (s *APISuite) TestAPIInfoWithGatedCharm(c *gc.C) {
+	wordpressURL, _ := s.addCharm(c, "wordpress", "cs:precise/wordpress-0")
+	s.store.SetPerms(&wordpressURL.URL, "read", "bob")
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          "/charm-info?charms=" + wordpressURL.URL.String(),
+		ExpectStatus: http.StatusOK,
+		ExpectBody: map[string]charmrepo.InfoResponse{
+			wordpressURL.URL.String(): {
+				Errors: []string{"entry not found"},
+			},
+		},
+	})
 }
 
 func fileSHA256(c *gc.C, path string) string {

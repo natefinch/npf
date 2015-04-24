@@ -110,7 +110,7 @@ func New(pool *charmstore.Pool, config charmstore.ServerParams) *Handler {
 			// endpoints not yet implemented:
 			// "color": router.SingleIncludeHandler(h.metaColor),
 		},
-	}, h.resolveURL, h.authorizeEntity, h.entityExists)
+	}, h.resolveURL, h.AuthorizeEntity, h.entityExists)
 	return h
 }
 
@@ -920,7 +920,7 @@ type resolvedIdHandler func(id *router.ResolvedURL, fullySpecified bool, w http.
 // invoking f.
 func (h *Handler) authId(f resolvedIdHandler) resolvedIdHandler {
 	return func(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
-		if err := h.authorizeEntity(id, req); err != nil {
+		if err := h.AuthorizeEntity(id, req); err != nil {
 			return errgo.Mask(err, errgo.Any)
 		}
 		if err := f(id, fullySpecified, w, req); err != nil {

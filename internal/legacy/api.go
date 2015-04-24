@@ -84,14 +84,14 @@ import (
 )
 
 type Handler struct {
-	v4   *router.Handlers
+	v4   *v4.Handler
 	pool *charmstore.Pool
 	mux  *http.ServeMux
 }
 
 func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams) http.Handler {
 	h := &Handler{
-		v4:   v4.New(pool, config).Handlers(),
+		v4:   v4.New(pool, config),
 		pool: pool,
 		mux:  http.NewServeMux(),
 	}
@@ -119,7 +119,7 @@ func (h *Handler) serveCharm(w http.ResponseWriter, req *http.Request) error {
 	if err != nil {
 		return errgo.WithCausef(err, params.ErrNotFound, "")
 	}
-	return h.v4.Id["archive"](curl, w, req)
+	return h.v4.Handlers().Id["archive"](curl, w, req)
 }
 
 // charmStatsKey returns a stats key for the given charm reference and kind.
@@ -153,6 +153,16 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 				err = errNotFound
 			}
 		}
+		var rurl *router.ResolvedURL
+		if err == nil {
+			rurl = charmstore.EntityResolvedURL(entity)
+			if h.v4.AuthorizeEntity(rurl, req) != nil {
+				// The charm is unauthorized and there's no way to
+				// authorize it as part of the legacy API so we
+				// just treat it as a not-found error.
+				err = errNotFound
+			}
+		}
 		if err == nil && entity.BlobHash256 == "" {
 			// Lazily calculate SHA256 so that we don't burden
 			// non-legacy code with that task.
@@ -160,7 +170,7 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 			// command is run in the production db. At that point, entities
 			// always have their blobhash256 field populated, and there is no
 			// need for this lazy evaluation anymore.
-			entity.BlobHash256, err = store.UpdateEntitySHA256(charmstore.EntityResolvedURL(entity))
+			entity.BlobHash256, err = store.UpdateEntitySHA256(rurl)
 		}
 		// Prepare the response part for this charm.
 		if err == nil {
