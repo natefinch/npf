@@ -895,6 +895,15 @@ func (s *Store) findZipFile(blob io.ReadSeeker, size int64, isFile func(f *zip.F
 	return mongodoc.ZipFile{}, params.ErrNotFound
 }
 
+// SetPerms sets the permissions for the base entity with
+// the given id for "which" operations ("read" or "write")
+// to the given ACL. This is mostly provided for testing.
+func (s *Store) SetPerms(id *charm.Reference, which string, acl ...string) error {
+	return s.DB.BaseEntities().UpdateId(baseURL(id), bson.D{{"$set",
+		bson.D{{"acls." + which, acl}},
+	}})
+}
+
 func newInt(x int) *int {
 	return &x
 }
