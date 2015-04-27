@@ -118,7 +118,9 @@ func (h *Handler) checkRequest(req *http.Request, entityId *router.ResolvedURL) 
 	}, nil
 }
 
-func (h *Handler) authorizeEntity(id *router.ResolvedURL, req *http.Request) error {
+// AuthorizeEntity checks that the given HTTP request
+// can access the entity with the given id.
+func (h *Handler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) error {
 	store := h.pool.Store()
 	defer store.Close()
 	baseEntity, err := store.FindBaseEntity(&id.URL, "acls")
