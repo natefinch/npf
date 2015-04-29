@@ -516,7 +516,7 @@ func (s *suite) TestUploadArchiveWithBadResponse(c *gc.C) {
 				},
 			},
 		})
-		id, err := csclient.UploadArchive(cl, id, fakeReader, fakeHash, fakeSize)
+		id, err := csclient.UploadArchive(cl, id, fakeReader, fakeHash, fakeSize, -1)
 		c.Assert(id, gc.IsNil)
 		c.Assert(err, gc.ErrorMatches, test.expectError)
 	}
@@ -526,7 +526,7 @@ func (s *suite) TestUploadArchiveWithNoSeries(c *gc.C) {
 	id, err := csclient.UploadArchive(
 		s.client,
 		charm.MustParseReference("wordpress"),
-		fakeReader, fakeHash, fakeSize)
+		fakeReader, fakeHash, fakeSize, -1)
 	c.Assert(id, gc.IsNil)
 	c.Assert(err, gc.ErrorMatches, `no series specified in "cs:wordpress"`)
 }
@@ -538,7 +538,7 @@ func (s *suite) TestUploadArchiveWithServerError(c *gc.C) {
 
 	// Send an invalid hash so that the server returns an error.
 	url := charm.MustParseReference("~charmers/trusty/wordpress")
-	id, err := csclient.UploadArchive(s.client, url, body, hash+"mismatch", size)
+	id, err := csclient.UploadArchive(s.client, url, body, hash+"mismatch", size, -1)
 	c.Assert(id, gc.IsNil)
 	c.Assert(err, gc.ErrorMatches, "cannot post archive: cannot put archive blob: hash mismatch")
 }
@@ -549,7 +549,7 @@ func (s *suite) checkUploadArchive(c *gc.C, path, url, expectId string) {
 	defer body.Close()
 
 	// Post the archive.
-	id, err := csclient.UploadArchive(s.client, charm.MustParseReference(url), body, hash, size)
+	id, err := csclient.UploadArchive(s.client, charm.MustParseReference(url), body, hash, size, -1)
 	c.Assert(err, gc.IsNil)
 	c.Assert(id.String(), gc.Equals, expectId)
 
@@ -590,17 +590,24 @@ func (s *suite) TestUploadCharmArchive(c *gc.C) {
 }
 
 func (s *suite) TestUploadCharmArchiveWithRevision(c *gc.C) {
-	// Uploading a specific revision should return an error.
-	// Note that the possible upload errors are already extensively exercised
-	// as part of the client.uploadArchive tests.
-	id, err := s.client.UploadCharm(
-		charm.MustParseReference("~charmers/trusty/wordpress-42"),
+	id := charm.MustParseReference("~charmers/trusty/wordpress-42")
+	err := s.client.UploadCharmWithRevision(
+		id,
 		storetesting.Charms.CharmDir("wordpress"),
+		10,
 	)
 	c.Assert(err, gc.IsNil)
-	c.Assert(id.String(), gc.Equals, "cs:~charmers/trusty/wordpress-42")
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	s.checkUploadCharm(c, id, ch)
+	id.User = ""
+	id.Revision = 10
+	s.checkUploadCharm(c, id, ch)
+}
+
+func (s *suite) TestUploadCharmArchiveWithUnwantedRevision(c *gc.C) {
+	ch := storetesting.Charms.CharmDir("wordpress")
+	_, err := s.client.UploadCharm(charm.MustParseReference("~charmers/bundle/wp-20"), ch)
+	c.Assert(err, gc.ErrorMatches, `revision specified in "cs:~charmers/bundle/wp-20", but should not be specified`)
 }
 
 func (s *suite) TestUploadCharmErrorUnknownType(c *gc.C) {
@@ -671,14 +678,26 @@ func (s *suite) TestUploadBundleArchive(c *gc.C) {
 	s.checkUploadBundle(c, id, b)
 }
 
+func (s *suite) TestUploadBundleArchiveWithUnwantedRevision(c *gc.C) {
+	s.prepareBundleCharms(c)
+	path := storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple")
+	b, err := charm.ReadBundleArchive(path)
+	c.Assert(err, gc.IsNil)
+	_, err = s.client.UploadBundle(charm.MustParseReference("~charmers/bundle/wp-20"), b)
+	c.Assert(err, gc.ErrorMatches, `revision specified in "cs:~charmers/bundle/wp-20", but should not be specified`)
+}
+
 func (s *suite) TestUploadBundleArchiveWithRevision(c *gc.C) {
 	s.prepareBundleCharms(c)
 	path := storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple")
 	b, err := charm.ReadBundleArchive(path)
 	c.Assert(err, gc.IsNil)
-	id, err := s.client.UploadBundle(charm.MustParseReference("~charmers/bundle/wp-22"), b)
+	id := charm.MustParseReference("~charmers/bundle/wp-22")
+	err = s.client.UploadBundleWithRevision(id, b, 34)
 	c.Assert(err, gc.IsNil)
-	c.Assert(id.String(), gc.Equals, "cs:~charmers/bundle/wp-22")
+	s.checkUploadBundle(c, id, b)
+	id.User = ""
+	id.Revision = 34
 	s.checkUploadBundle(c, id, b)
 }
 

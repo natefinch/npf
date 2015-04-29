@@ -163,53 +163,89 @@ func (c *Client) GetArchive(id *charm.Reference) (r io.ReadCloser, eid *charm.Re
 	return resp.Body, eid, hash, resp.ContentLength, nil
 }
 
-// UploadCharm uploads the given charm to the charm store with the given id.
+// UploadCharm uploads the given charm to the charm store with the given id,
+// which must not specify a revision.
 // The accepted charm implementations are charm.CharmDir and
 // charm.CharmArchive.
 //
-// The id should include the series. If the revision is omitted,
-// a new revision will be chosen, otherwise the specified revision
-// will be uploaded. In general, specifying a revision should
-// be avoided - it is provided for tests, and will probably be prohibited
-// for non-privileged clients in the future.
-//
 // UploadCharm returns the id that the charm has been given in the
-// store - this will be the same as id except the revision when unspecified.
+// store - this will be the same as id except the revision.
 func (c *Client) UploadCharm(id *charm.Reference, ch charm.Charm) (*charm.Reference, error) {
+	if id.Revision != -1 {
+		return nil, errgo.Newf("revision specified in %q, but should not be specified", id)
+	}
 	r, hash, size, err := openArchive(ch)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot open charm archive")
 	}
 	defer r.Close()
-	return c.uploadArchive(id, r, hash, size)
+	return c.uploadArchive(id, r, hash, size, -1)
 }
 
-// UploadBundle uploads the given bundle to the charm store with the given id.
+// UploadCharmWithRevision uploads the given charm to the
+// given id in the charm store, which must contain a revision.
+// If promulgatedRevision is not -1, it specifies that the charm
+// should be marked as promulgated with that revision.
+//
+// This method is provided only for testing and should not
+// generally be used otherwise.
+func (c *Client) UploadCharmWithRevision(id *charm.Reference, ch charm.Charm, promulgatedRevision int) error {
+	if id.Revision == -1 {
+		return errgo.Newf("revision not specified in %q", id)
+	}
+	r, hash, size, err := openArchive(ch)
+	if err != nil {
+		return errgo.Notef(err, "cannot open charm archive")
+	}
+	defer r.Close()
+	_, err = c.uploadArchive(id, r, hash, size, promulgatedRevision)
+	return errgo.Mask(err)
+}
+
+// UploadBundle uploads the given charm to the charm store with the given id,
+// which must not specify a revision.
 // The accepted bundle implementations are charm.BundleDir and
 // charm.BundleArchive.
 //
-// The id should include the "bundle" series. If the revision is omitted,
-// a new revision will be chosen, otherwise the specified revision
-// will be uploaded. In general, specifying a revision should
-// be avoided - it is provided for tests, and will probably be prohibited
-// for non-privileged clients in the future.
-//
 // UploadBundle returns the id that the bundle has been given in the
-// store - this will be the same as id except the revision when unspecified.
+// store - this will be the same as id except the revision.
 func (c *Client) UploadBundle(id *charm.Reference, b charm.Bundle) (*charm.Reference, error) {
+	if id.Revision != -1 {
+		return nil, errgo.Newf("revision specified in %q, but should not be specified", id)
+	}
 	r, hash, size, err := openArchive(b)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot open bundle archive")
 	}
 	defer r.Close()
-	return c.uploadArchive(id, r, hash, size)
+	return c.uploadArchive(id, r, hash, size, -1)
+}
+
+// UploadBundleWithRevision uploads the given bundle to the
+// given id in the charm store, which must contain a revision.
+// If promulgatedRevision is not -1, it specifies that the charm
+// should be marked as promulgated with that revision.
+//
+// This method is provided only for testing and should not
+// generally be used otherwise.
+func (c *Client) UploadBundleWithRevision(id *charm.Reference, b charm.Bundle, promulgatedRevision int) error {
+	if id.Revision == -1 {
+		return errgo.Newf("revision not specified in %q", id)
+	}
+	r, hash, size, err := openArchive(b)
+	if err != nil {
+		return errgo.Notef(err, "cannot open charm archive")
+	}
+	defer r.Close()
+	_, err = c.uploadArchive(id, r, hash, size, promulgatedRevision)
+	return errgo.Mask(err)
 }
 
 // uploadArchive pushes the archive for the charm or bundle represented by
 // the given body, its SHA384 hash and its size. It returns the resulting
 // entity reference. The given id should include the series and should not
 // include the revision.
-func (c *Client) uploadArchive(id *charm.Reference, body io.ReadSeeker, hash string, size int64) (*charm.Reference, error) {
+func (c *Client) uploadArchive(id *charm.Reference, body io.ReadSeeker, hash string, size int64, promulgatedRevision int) (*charm.Reference, error) {
 	// When uploading archives, it can be a problem that the
 	// an error response is returned while we are still writing
 	// the body data.
@@ -231,8 +267,15 @@ func (c *Client) uploadArchive(id *charm.Reference, body io.ReadSeeker, hash str
 		return nil, errgo.Newf("no series specified in %q", id)
 	}
 	method := "POST"
+	promulgatedArg := ""
 	if id.Revision != -1 {
 		method = "PUT"
+		if promulgatedRevision != -1 {
+			pr := *id
+			pr.User = ""
+			pr.Revision = promulgatedRevision
+			promulgatedArg = "&promulgated=" + pr.Path()
+		}
 	}
 
 	// Prepare the request.
@@ -244,7 +287,11 @@ func (c *Client) uploadArchive(id *charm.Reference, body io.ReadSeeker, hash str
 	req.ContentLength = size
 
 	// Send the request.
-	resp, err := c.DoWithBody(req, "/"+id.Path()+"/archive?hash="+hash, httpbakery.SeekerBody(body))
+	resp, err := c.DoWithBody(
+		req,
+		"/"+id.Path()+"/archive?hash="+hash+promulgatedArg,
+		httpbakery.SeekerBody(body),
+	)
 	if err != nil {
 		return nil, errgo.NoteMask(err, "cannot post archive", errgo.Any)
 	}
