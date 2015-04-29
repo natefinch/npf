@@ -164,8 +164,17 @@ func (c *Client) GetArchive(id *charm.Reference) (r io.ReadCloser, eid *charm.Re
 }
 
 // UploadCharm uploads the given charm to the charm store with the given id.
-// The id should include the series and should not include the revision. The
-// accepted charm implementations are charm.CharmDir and charm.CharmArchive.
+// The accepted charm implementations are charm.CharmDir and
+// charm.CharmArchive.
+//
+// The id should include the series. If the revision is omitted,
+// a new revision will be chosen, otherwise the specified revision
+// will be uploaded. In general, specifying a revision should
+// be avoided - it is provided for tests, and will probably be prohibited
+// for non-privileged clients in the future.
+//
+// UploadCharm returns the id that the charm has been given in the
+// store - this will be the same as id except the revision when unspecified.
 func (c *Client) UploadCharm(id *charm.Reference, ch charm.Charm) (*charm.Reference, error) {
 	r, hash, size, err := openArchive(ch)
 	if err != nil {
@@ -176,9 +185,17 @@ func (c *Client) UploadCharm(id *charm.Reference, ch charm.Charm) (*charm.Refere
 }
 
 // UploadBundle uploads the given bundle to the charm store with the given id.
-// The id should include the "bundle" series and should not include the
-// revision. The accepted bundle implementations are charm.BundleDir and
+// The accepted bundle implementations are charm.BundleDir and
 // charm.BundleArchive.
+//
+// The id should include the "bundle" series. If the revision is omitted,
+// a new revision will be chosen, otherwise the specified revision
+// will be uploaded. In general, specifying a revision should
+// be avoided - it is provided for tests, and will probably be prohibited
+// for non-privileged clients in the future.
+//
+// UploadBundle returns the id that the bundle has been given in the
+// store - this will be the same as id except the revision when unspecified.
 func (c *Client) UploadBundle(id *charm.Reference, b charm.Bundle) (*charm.Reference, error) {
 	r, hash, size, err := openArchive(b)
 	if err != nil {
@@ -213,12 +230,13 @@ func (c *Client) uploadArchive(id *charm.Reference, body io.ReadSeeker, hash str
 	if id.Series == "" {
 		return nil, errgo.Newf("no series specified in %q", id)
 	}
+	method := "POST"
 	if id.Revision != -1 {
-		return nil, errgo.Newf("revision specified in %q, but should not be specified", id)
+		method = "PUT"
 	}
 
 	// Prepare the request.
-	req, err := http.NewRequest("POST", "", nil)
+	req, err := http.NewRequest(method, "", nil)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot make new request")
 	}
