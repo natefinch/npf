@@ -73,14 +73,14 @@ import (
 	"time"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v5"
-	"gopkg.in/juju/charm.v5/charmrepo"
+	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charmrepo.v0"
+	"gopkg.in/juju/charmrepo.v0/csclient/params"
 
-	"gopkg.in/juju/charmstore.v4/internal/charmstore"
-	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
-	"gopkg.in/juju/charmstore.v4/internal/router"
-	"gopkg.in/juju/charmstore.v4/internal/v4"
-	"gopkg.in/juju/charmstore.v4/params"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 )
 
 type Handler struct {

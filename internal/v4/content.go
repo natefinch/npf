@@ -15,11 +15,11 @@ import (
 	"github.com/juju/jujusvg"
 	"github.com/juju/xml"
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v5"
+	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charmrepo.v0/csclient/params"
 
-	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
-	"gopkg.in/juju/charmstore.v4/internal/router"
-	"gopkg.in/juju/charmstore.v4/params"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
 
 // GET id/diagram.svg
@@ -46,7 +46,7 @@ func (h *Handler) serveDiagram(id *router.ResolvedURL, fullySpecified bool, w ht
 			urlErr = errgo.Notef(err, "cannot make relative URL from %q and %q", req.RequestURI, absPath)
 		}
 		return p
-	})
+	}, nil)
 	if err != nil {
 		return errgo.Notef(err, "cannot create canvas")
 	}

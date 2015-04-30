@@ -5,11 +5,11 @@ package charmstore
 
 import (
 	"gopkg.in/errgo.v1"
+	"gopkg.in/juju/charmrepo.v0/csclient/params"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
-	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
-	"gopkg.in/juju/charmstore.v4/params"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 )
 
 // migrations holds all the migration functions that are executed in the order

@@ -12,8 +12,8 @@ import (
 	"github.com/juju/utils"
 	gc "gopkg.in/check.v1"
 
-	es "gopkg.in/juju/charmstore.v4/internal/elasticsearch"
-	"gopkg.in/juju/charmstore.v4/internal/storetesting"
+	es "gopkg.in/juju/charmstore.v5-unstable/internal/elasticsearch"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 )
 
 func TestPackage(t *testing.T) {

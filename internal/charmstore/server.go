@@ -14,7 +14,7 @@ import (
 	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/mgo.v2"
 
-	"gopkg.in/juju/charmstore.v4/internal/router"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
 
 // NewAPIHandlerFunc is a function that returns a new API handler that uses

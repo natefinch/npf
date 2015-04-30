@@ -7,9 +7,9 @@ import (
 	"time"
 
 	gc "gopkg.in/check.v1"
-	"gopkg.in/juju/charm.v5"
+	"gopkg.in/juju/charm.v6-unstable"
 
-	"gopkg.in/juju/charmstore.v4/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 )
 
 // CheckCounterSum checks that statistics are properly collected.

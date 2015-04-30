@@ -15,10 +15,10 @@ import (
 	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/mgo.v2"
 
-	"gopkg.in/juju/charmstore.v4"
-	"gopkg.in/juju/charmstore.v4/config"
-	"gopkg.in/juju/charmstore.v4/internal/debug"
-	"gopkg.in/juju/charmstore.v4/internal/elasticsearch"
+	"gopkg.in/juju/charmstore.v5-unstable"
+	"gopkg.in/juju/charmstore.v5-unstable/config"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/debug"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/elasticsearch"
 )
 
 var (

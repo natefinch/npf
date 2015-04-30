@@ -12,7 +12,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 
-	"gopkg.in/juju/charmstore.v4/config"
+	"gopkg.in/juju/charmstore.v5-unstable/config"
 )
 
 func TestPackage(t *testing.T) {

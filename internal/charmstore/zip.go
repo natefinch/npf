@@ -10,7 +10,7 @@ import (
 
 	"gopkg.in/errgo.v1"
 
-	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 )
 
 // ZipFileReader returns a reader that will read

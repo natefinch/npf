@@ -10,7 +10,7 @@ import (
 	"github.com/juju/utils"
 	gc "gopkg.in/check.v1"
 
-	"gopkg.in/juju/charmstore.v4/internal/elasticsearch"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/elasticsearch"
 )
 
 // ElasticSearchSuite defines a test suite that connects to an

@@ -18,10 +18,9 @@ import (
 	"github.com/juju/utils/jsonhttp"
 	"github.com/juju/utils/parallel"
 	"gopkg.in/errgo.v1"
-	charm "gopkg.in/juju/charm.v5"
+	charm "gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charmrepo.v0/csclient/params"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
-
-	"gopkg.in/juju/charmstore.v4/params"
 )
 
 // Implementation note on error handling:
