@@ -492,25 +492,35 @@ var LegacyDownloadCountsEnabled = true
 
 // ArchiveDownloadCounts calculates the aggregated download counts for
 // a charm or bundle.
-func (s *Store) ArchiveDownloadCounts(id *router.ResolvedURL) (thisRevision, allRevisions AggregatedCounts, err error) {
-	// TODO (frankban): remove this condition when removing the legacy counts
-	// logic.
-	if LegacyDownloadCountsEnabled {
-		return s.legacyDownloadCounts(id)
-	}
-
+func (s *Store) ArchiveDownloadCounts(id *charm.Reference) (thisRevision, allRevisions AggregatedCounts, err error) {
 	// Retrieve the aggregated stats.
-	thisRevision, err = s.aggregateStats(EntityStatsKey(&id.URL, params.StatsArchiveDownload), false)
+	thisRevision, err = s.aggregateStats(EntityStatsKey(id, params.StatsArchiveDownload), false)
 	if err != nil {
 		err = errgo.Notef(err, "cannot get aggregated count for the specific revision")
 		return
 	}
-	noRevisionId := id.URL
+	noRevisionId := *id
 	noRevisionId.Revision = -1
 	allRevisions, err = s.aggregateStats(EntityStatsKey(&noRevisionId, params.StatsArchiveDownload), true)
 	if err != nil {
 		err = errgo.Notef(err, "cannot get aggregated count for all revisions")
 		return
+	}
+	// TODO (frankban): remove this condition when removing the legacy counts
+	// logic.
+	if LegacyDownloadCountsEnabled {
+		legacyRevision, legacyAll, err := s.legacyDownloadCounts(id)
+		if err != nil {
+			return AggregatedCounts{}, AggregatedCounts{}, err
+		}
+		thisRevision.LastDay += legacyRevision.LastDay
+		thisRevision.LastWeek += legacyRevision.LastWeek
+		thisRevision.LastMonth += legacyRevision.LastMonth
+		thisRevision.Total += legacyRevision.Total
+		allRevisions.LastDay += legacyAll.LastDay
+		allRevisions.LastWeek += legacyAll.LastWeek
+		allRevisions.LastMonth += legacyAll.LastMonth
+		allRevisions.Total += legacyAll.Total
 	}
 	return
 }
@@ -518,12 +528,16 @@ func (s *Store) ArchiveDownloadCounts(id *router.ResolvedURL) (thisRevision, all
 // legacyDownloadCounts retrieves the aggregated stats from the entity
 // extra-info. This is used when LegacyDownloadCountsEnabled is true.
 // TODO (frankban): remove this method when removing the legacy counts logic.
-func (s *Store) legacyDownloadCounts(id *router.ResolvedURL) (AggregatedCounts, AggregatedCounts, error) {
+func (s *Store) legacyDownloadCounts(id *charm.Reference) (AggregatedCounts, AggregatedCounts, error) {
 	counts := AggregatedCounts{}
-	entity, err := s.FindEntity(id, "extrainfo")
+	entities, err := s.FindEntities(id, "extrainfo")
 	if err != nil {
 		return counts, counts, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
+	if len(entities) == 0 {
+		return counts, counts, errgo.WithCausef(nil, params.ErrNotFound, "entity not found")
+	}
+	entity := entities[0]
 	data, ok := entity.ExtraInfo[params.LegacyDownloadStats]
 	if ok {
 		if err := json.Unmarshal(data, &counts.Total); err != nil {
@@ -569,7 +583,7 @@ func (s *Store) aggregateStats(key []string, prefix bool) (AggregatedCounts, err
 	return counts, nil
 }
 
-// IncrementDownloadCounts updates the download statistics for entity id in both
+// IncrementDownloadCountsAsync updates the download statistics for entity id in both
 // the statistics database and the search database. The action is done in the
 // background using a separate goroutine.
 func (s *Store) IncrementDownloadCountsAsync(id *router.ResolvedURL) {
@@ -586,6 +600,23 @@ func (s *Store) IncrementDownloadCounts(id *router.ResolvedURL) error {
 	key := EntityStatsKey(&id.URL, params.StatsArchiveDownload)
 	if err := s.IncCounter(key); err != nil {
 		return errgo.Notef(err, "cannot increase stats counter for %v", key)
+	}
+	if id.PromulgatedRevision == -1 {
+		// Check that the id really is for an unpromulgated entity.
+		// This unfortunately adds an extra round trip to the database,
+		// but as incrementing statistics is performed asynchronously
+		// it will not be in the critical path.
+		entity, err := s.FindEntity(id, "promulgated-revision")
+		if err != nil {
+			return errgo.Notef(err, "cannot find entity %v", &id.URL)
+		}
+		id.PromulgatedRevision = entity.PromulgatedRevision
+	}
+	if id.PromulgatedRevision != -1 {
+		key := EntityStatsKey(id.PreferredURL(), params.StatsArchiveDownload)
+		if err := s.IncCounter(key); err != nil {
+			return errgo.Notef(err, "cannot increase stats counter for %v", key)
+		}
 	}
 	// TODO(mhilton) when this charmstore is being used by juju, find a more
 	// efficient way to update the download statistics for search.

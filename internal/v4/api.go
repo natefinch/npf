@@ -548,7 +548,7 @@ func (h *Handler) metaStats(entity *mongodoc.Entity, id *router.ResolvedURL, pat
 	store := h.pool.Store()
 	defer store.Close()
 	// Retrieve the aggregated downloads count for the specific revision.
-	counts, countsAllRevisions, err := store.ArchiveDownloadCounts(id)
+	counts, countsAllRevisions, err := store.ArchiveDownloadCounts(id.PreferredURL())
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
