@@ -107,7 +107,10 @@ func (s *suite) TestDefaultServerURL(c *gc.C) {
 	s.PatchValue(&csclient.ServerURL, s.srv.URL)
 
 	// Instantiate a client using the default server URL.
-	client := csclient.New(csclient.Params{})
+	client := csclient.New(csclient.Params{
+		User:     s.serverParams.AuthUsername,
+		Password: s.serverParams.AuthPassword,
+	})
 	c.Assert(client.ServerURL(), gc.Equals, s.srv.URL)
 
 	// Check that the request succeeds.
@@ -793,7 +796,7 @@ func (s *suite) TestDoAuthorization(c *gc.C) {
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrUnauthorized)
 
 	// Check that it's still there.
-	err = client.Get("/~charmers/utopic/wordpress-42/expand-id", nil)
+	err = s.client.Get("/~charmers/utopic/wordpress-42/expand-id", nil)
 	c.Assert(err, gc.IsNil)
 
 	// Then check that when we use the correct authorization,
@@ -810,7 +813,7 @@ func (s *suite) TestDoAuthorization(c *gc.C) {
 	resp.Body.Close()
 
 	// Check that it's now really gone.
-	err = client.Get("/utopic/wordpress-42/expand-id", nil)
+	err = s.client.Get("/utopic/wordpress-42/expand-id", nil)
 	c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for "cs:utopic/wordpress-42"`)
 }
 

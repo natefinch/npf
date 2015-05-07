@@ -335,22 +335,16 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 var everyonePerm = []string{params.Everyone}
 
 func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
-	readPerm := everyonePerm
-	var writePerm []string
-	if entity.User != "" {
-		readPerm = []string{params.Everyone, entity.User}
-		writePerm = []string{entity.User}
-	}
 	// Add the base entity to the database.
+	perms := []string{entity.User}
 	baseEntity := &mongodoc.BaseEntity{
-		URL:  entity.BaseURL,
-		User: entity.User,
-		Name: entity.Name,
-		// TODO frankban: allow specifying non-public charms on initial upload.
-		Public: true,
+		URL:    entity.BaseURL,
+		User:   entity.User,
+		Name:   entity.Name,
+		Public: false,
 		ACLs: mongodoc.ACL{
-			Read:  readPerm,
-			Write: writePerm,
+			Read:  perms,
+			Write: perms,
 		},
 		Promulgated: entity.PromulgatedURL != nil,
 	}

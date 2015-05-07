@@ -31,9 +31,9 @@ func (s *APISuite) TestStatus(c *gc.C) {
 		newResolvedURL("cs:~bar/bundle/oflaughs-4", -1),
 	} {
 		if id.URL.Series == "bundle" {
-			s.addBundle(c, "wordpress-simple", id)
+			s.addPublicBundle(c, "wordpress-simple", id)
 		} else {
-			s.addCharm(c, "wordpress", id)
+			s.addPublicCharm(c, "wordpress", id)
 		}
 	}
 	now := time.Now()

@@ -223,18 +223,14 @@ func assertBaseEntity(c *gc.C, store *Store, url *charm.Reference, promulgated b
 	baseEntity, err := store.FindBaseEntity(url)
 	c.Assert(err, gc.IsNil)
 	expectACLs := mongodoc.ACL{
-		Read:  []string{params.Everyone},
-		Write: []string{},
-	}
-	if url.User != "" {
-		expectACLs.Read = append(expectACLs.Read, url.User)
-		expectACLs.Write = append(expectACLs.Write, url.User)
+		Read:  []string{url.User},
+		Write: []string{url.User},
 	}
 	c.Assert(baseEntity, jc.DeepEquals, &mongodoc.BaseEntity{
 		URL:         url,
 		User:        url.User,
 		Name:        url.Name,
-		Public:      true,
+		Public:      false,
 		ACLs:        expectACLs,
 		Promulgated: mongodoc.IntBool(promulgated),
 	})
@@ -394,10 +390,10 @@ var findBaseEntityTests = []struct {
 		URL:         charm.MustParseReference("~charmers/django"),
 		User:        "charmers",
 		Name:        "django",
-		Public:      true,
+		Public:      false,
 		Promulgated: true,
 		ACLs: mongodoc.ACL{
-			Read:  []string{"everyone", "charmers"},
+			Read:  []string{"charmers"},
 			Write: []string{"charmers"},
 		},
 	},
@@ -409,7 +405,7 @@ var findBaseEntityTests = []struct {
 	expect: &mongodoc.BaseEntity{
 		URL:    charm.MustParseReference("~who/django"),
 		User:   "who",
-		Public: true,
+		Public: false,
 	},
 }, {
 	about:  "entity found, partial url, only the ACLs",
@@ -419,7 +415,7 @@ var findBaseEntityTests = []struct {
 	expect: &mongodoc.BaseEntity{
 		URL: charm.MustParseReference("~who/django"),
 		ACLs: mongodoc.ACL{
-			Read:  []string{"everyone", "who"},
+			Read:  []string{"who"},
 			Write: []string{"who"},
 		},
 	},
