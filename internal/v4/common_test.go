@@ -2,10 +2,11 @@ package v4_test
 
 import (
 	"encoding/json"
-	gc "gopkg.in/check.v1"
 	"io"
 	"net/http"
 	"net/http/httptest"
+
+	gc "gopkg.in/check.v1"
 
 	"github.com/julienschmidt/httprouter"
 	"gopkg.in/errgo.v1"

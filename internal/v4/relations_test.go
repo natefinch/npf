@@ -379,6 +379,8 @@ func (s *RelationsSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
 			BlobSize: fakeBlobSize,
 		})
 		c.Assert(err, gc.IsNil, gc.Commentf("id %q", id))
+		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+		c.Assert(err, gc.IsNil)
 	}
 }
 
@@ -745,6 +747,8 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 			BlobHash: fakeBlobHash,
 			BlobSize: fakeBlobSize,
 		})
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
 		c.Assert(err, gc.IsNil)
 
 		// Perform the request and ensure the response is what we expect.

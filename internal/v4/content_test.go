@@ -56,8 +56,11 @@ var serveDiagramErrorsTests = []struct {
 }}
 
 func (s *APISuite) TestServeDiagramErrors(c *gc.C) {
-	s.addCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-42", 42))
-	s.addBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/nopositionbundle-42", 42))
+	id := newResolvedURL("cs:~charmers/trusty/wordpress-42", 42)
+	s.addPublicCharm(c, "wordpress", id)
+	id = newResolvedURL("cs:~charmers/bundle/nopositionbundle-42", 42)
+	s.addPublicBundle(c, "wordpress-simple", id)
+
 	for i, test := range serveDiagramErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
@@ -92,12 +95,15 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 		},
 	}
 
+	url := newResolvedURL("cs:~charmers/bundle/wordpressbundle-42", 42)
 	err := s.store.AddBundle(bundle, charmstore.AddParams{
-		URL:      newResolvedURL("cs:~charmers/bundle/wordpressbundle-42", 42),
+		URL:      url,
 		BlobName: "blobName",
 		BlobHash: fakeBlobHash,
 		BlobSize: fakeBlobSize,
 	})
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -186,6 +192,8 @@ func (s *APISuite) TestServeReadMe(c *gc.C) {
 		url.URL.Revision = i
 		err := s.store.AddCharmWithArchive(url, wordpress)
 		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+		c.Assert(err, gc.IsNil)		
 
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,
@@ -210,7 +218,8 @@ func (s *APISuite) TestServeReadMeEntityNotFound(c *gc.C) {
 	// actually get through to the code we're wanting to test.
 	// (if the base entity does not exist, the authorization code
 	// will fail).
-	s.addCharm(c, "wordpress", newResolvedURL("~charmers/precise/nothingatall-1", -1))
+	url := newResolvedURL("~charmers/precise/nothingatall-1", -1)
+	s.addPublicCharm(c, "wordpress", url)
 
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
@@ -228,7 +237,8 @@ func (s *APISuite) TestServeIconEntityNotFound(c *gc.C) {
 	// actually get through to the code we're wanting to test.
 	// (if the base entity does not exist, the authorization code
 	// will fail).
-	s.addCharm(c, "wordpress", newResolvedURL("~charmers/precise/nothingatall-1", -1))
+	id := newResolvedURL("~charmers/precise/nothingatall-1", -1)
+	s.addPublicCharm(c, "wordpress", id)
 
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
@@ -256,6 +266,8 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 
 	url := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
 	err := s.store.AddCharmWithArchive(url, wordpress)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -299,7 +311,7 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 }
 
 func (s *APISuite) TestServeBundleIcon(c *gc.C) {
-	s.addBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/something-32", 32))
+	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/something-32", 32))
 
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
@@ -318,6 +330,8 @@ func (s *APISuite) TestServeDefaultIcon(c *gc.C) {
 
 	url := newResolvedURL("cs:~charmers/precise/wordpress-0", 0)
 	err := s.store.AddCharmWithArchive(url, wordpress)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -345,6 +359,8 @@ func (s *APISuite) TestServeDefaultIconForBadXML(c *gc.C) {
 		url := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
 		url.URL.Revision = i
 		err := s.store.AddCharmWithArchive(url, wordpress)
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
 
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{

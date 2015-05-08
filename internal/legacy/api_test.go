@@ -64,7 +64,7 @@ func newServer(c *gc.C, session *mgo.Session, config charmstore.ServerParams) (h
 }
 
 func (s *APISuite) TestCharmArchive(c *gc.C) {
-	_, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-0")
+	_, wordpress := s.addPublicCharm(c, "wordpress", "cs:precise/wordpress-0")
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
 	c.Assert(err, gc.IsNil)
 
@@ -137,7 +137,7 @@ func (s *APISuite) TestCharmInfoNotFound(c *gc.C) {
 }
 
 func (s *APISuite) TestServeCharmInfo(c *gc.C) {
-	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-1")
+	wordpressURL, wordpress := s.addPublicCharm(c, "wordpress", "cs:precise/wordpress-1")
 	hashSum := fileSHA256(c, wordpress.Path)
 	digest, err := json.Marshal("who@canonical.com-bzr-digest")
 	c.Assert(err, gc.IsNil)
@@ -243,8 +243,8 @@ func (s *APISuite) TestCharmInfoCounters(c *gc.C) {
 	}
 
 	// Add two charms to the database, a promulgated one and a user owned one.
-	s.addCharm(c, "wordpress", "cs:utopic/wordpress-42")
-	s.addCharm(c, "wordpress", "cs:~who/trusty/wordpress-47")
+	s.addPublicCharm(c, "wordpress", "cs:utopic/wordpress-42")
+	s.addPublicCharm(c, "wordpress", "cs:~who/trusty/wordpress-47")
 
 	requestInfo := func(id string, times int) {
 		for i := 0; i < times; i++ {
@@ -280,7 +280,7 @@ func (s *APISuite) TestCharmInfoCounters(c *gc.C) {
 }
 
 func (s *APISuite) TestAPIInfoWithGatedCharm(c *gc.C) {
-	wordpressURL, _ := s.addCharm(c, "wordpress", "cs:precise/wordpress-0")
+	wordpressURL, _ := s.addPublicCharm(c, "wordpress", "cs:precise/wordpress-0")
 	s.store.SetPerms(&wordpressURL.URL, "read", "bob")
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
@@ -304,7 +304,7 @@ func fileSHA256(c *gc.C, path string) string {
 }
 
 func (s *APISuite) TestCharmPackageGet(c *gc.C) {
-	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-0")
+	wordpressURL, wordpress := s.addPublicCharm(c, "wordpress", "cs:precise/wordpress-0")
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
 	c.Assert(err, gc.IsNil)
 
@@ -325,9 +325,9 @@ func (s *APISuite) TestCharmPackageGet(c *gc.C) {
 }
 
 func (s *APISuite) TestCharmPackageCharmInfo(c *gc.C) {
-	wordpressURL, wordpress := s.addCharm(c, "wordpress", "cs:precise/wordpress-0")
+	wordpressURL, wordpress := s.addPublicCharm(c, "wordpress", "cs:precise/wordpress-0")
 	wordpressSHA256 := fileSHA256(c, wordpress.Path)
-	mysqlURL, mySQL := s.addCharm(c, "wordpress", "cs:precise/mysql-2")
+	mysqlURL, mySQL := s.addPublicCharm(c, "wordpress", "cs:precise/mysql-2")
 	mysqlSHA256 := fileSHA256(c, mySQL.Path)
 	notFoundURL := charm.MustParseReference("cs:precise/not-found-3")
 
@@ -354,7 +354,7 @@ func (s *APISuite) TestSHA256Laziness(c *gc.C) {
 	// TODO frankban: remove this test after updating entities in the
 	// production db with their SHA256 hash value. Entities are updated by
 	// running the cshash256 command.
-	id, ch := s.addCharm(c, "wordpress", "cs:~who/precise/wordpress-0")
+	id, ch := s.addPublicCharm(c, "wordpress", "cs:~who/precise/wordpress-0")
 	url := id.String()
 	sum256 := fileSHA256(c, ch.Path)
 
@@ -396,7 +396,7 @@ func (s *APISuite) TestServerStatus(c *gc.C) {
 	}
 }
 
-func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*router.ResolvedURL, *charm.CharmArchive) {
+func (s *APISuite) addPublicCharm(c *gc.C, charmName, curl string) (*router.ResolvedURL, *charm.CharmArchive) {
 	rurl := &router.ResolvedURL{
 		URL:                 *charm.MustParseReference(curl),
 		PromulgatedRevision: -1,
@@ -407,6 +407,8 @@ func (s *APISuite) addCharm(c *gc.C, charmName, curl string) (*router.ResolvedUR
 	}
 	archive := storetesting.Charms.CharmArchive(c.MkDir(), charmName)
 	err := s.store.AddCharmWithArchive(rurl, archive)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
 	c.Assert(err, gc.IsNil)
 	return rurl, archive
 }
@@ -456,8 +458,8 @@ func (s *APISuite) TestServeCharmEventErrors(c *gc.C) {
 
 func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 	// Add three charms to the charm store.
-	mysqlUrl, _ := s.addCharm(c, "mysql", "cs:trusty/mysql-2")
-	riakUrl, _ := s.addCharm(c, "riak", "cs:utopic/riak-3")
+	mysqlUrl, _ := s.addPublicCharm(c, "mysql", "cs:trusty/mysql-2")
+	riakUrl, _ := s.addPublicCharm(c, "riak", "cs:utopic/riak-3")
 
 	// Update the mysql charm with a valid digest extra-info.
 	s.addExtraInfoDigest(c, mysqlUrl, "who@canonical.com-bzr-digest")
@@ -556,7 +558,7 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 
 func (s *APISuite) TestServeCharmEventDigestNotFound(c *gc.C) {
 	// Add a charm without a Bazaar digest.
-	url, _ := s.addCharm(c, "wordpress", "cs:trusty/wordpress-42")
+	url, _ := s.addPublicCharm(c, "wordpress", "cs:trusty/wordpress-42")
 
 	// Pretend the entity has been uploaded right now, and assume the test does
 	// not take more than two minutes to run.
@@ -588,8 +590,8 @@ func (s *APISuite) TestServeCharmEventDigestNotFound(c *gc.C) {
 
 func (s *APISuite) TestServeCharmEventLastRevision(c *gc.C) {
 	// Add two revisions of the same charm.
-	url1, _ := s.addCharm(c, "wordpress", "cs:trusty/wordpress-1")
-	url2, _ := s.addCharm(c, "wordpress", "cs:trusty/wordpress-2")
+	url1, _ := s.addPublicCharm(c, "wordpress", "cs:trusty/wordpress-1")
+	url2, _ := s.addPublicCharm(c, "wordpress", "cs:trusty/wordpress-2")
 
 	// Update the resulting entities with Bazaar digests.
 	s.addExtraInfoDigest(c, url1, "digest-1")

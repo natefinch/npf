@@ -11,7 +11,6 @@ import (
 
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
-	"gopkg.in/juju/charm.v5"
 
 	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v4/internal/router"
@@ -81,9 +80,9 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 		var actual json.RawMessage
 		err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL), &actual)
 		c.Assert(err, gc.IsNil)
-		readACLs := []string{params.Everyone, ref.URL.User}
+		readACLs := []string{ref.URL.User, params.Everyone}
 		if ref.URL.Name == "riak" {
-			readACLs = []string{"quux"}
+			readACLs = []string{ref.URL.User}
 		}
 		doc := SearchDoc{
 			Entity:         entity,
@@ -127,7 +126,7 @@ func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(old.URL), &actual)
 	c.Assert(err, gc.IsNil)
-	doc := SearchDoc{Entity: expected, ReadACLs: []string{params.Everyone, "charmers"}}
+	doc := SearchDoc{Entity: expected, ReadACLs: []string{"charmers", params.Everyone}}
 	c.Assert(string(actual), jc.JSONEquals, doc)
 }
 
@@ -160,6 +159,16 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C) {
 			err := s.store.IncrementDownloadCounts(url)
 			c.Assert(err, gc.IsNil)
 		}
+		if url.URL.Name == "riak" {
+			continue
+		}
+		bURL := baseURL(&url.URL)
+		baseEntity, err := s.store.FindBaseEntity(bURL)
+		baseEntity.ACLs.Read = append(baseEntity.ACLs.Read, params.Everyone)
+		err = s.store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
+		c.Assert(err, gc.IsNil)
+		err = s.store.UpdateSearchBaseURL(baseEntity.URL)
+		c.Assert(err, gc.IsNil)
 	}
 	for name, url := range exportTestBundles {
 		bundleArchive := storetesting.Charms.BundleDir(name)
@@ -170,14 +179,14 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C) {
 			err := s.store.IncrementDownloadCounts(url)
 			c.Assert(err, gc.IsNil)
 		}
+		bURL := baseURL(&url.URL)
+		baseEntity, err := s.store.FindBaseEntity(bURL)
+		baseEntity.ACLs.Read = append(baseEntity.ACLs.Read, params.Everyone)
+		err = s.store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
+		c.Assert(err, gc.IsNil)
+		err = s.store.UpdateSearchBaseURL(baseEntity.URL)
+		c.Assert(err, gc.IsNil)
 	}
-	baseEntity, err := s.store.FindBaseEntity(charm.MustParseReference("cs:riak"))
-	c.Assert(err, gc.IsNil)
-	baseEntity.ACLs.Read = []string{"quux"}
-	err = s.store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
-	c.Assert(err, gc.IsNil)
-	err = s.store.UpdateSearchBaseURL(baseEntity.URL)
-	c.Assert(err, gc.IsNil)
 }
 
 var searchTests = []struct {
@@ -385,7 +394,7 @@ var searchTests = []struct {
 	}, {
 		about: "additional groups",
 		sp: SearchParams{
-			Groups: []string{"quux"},
+			Groups: []string{"charmers"},
 		},
 		results: []*router.ResolvedURL{
 			exportTestCharms["riak"],
@@ -526,6 +535,13 @@ func (s *StoreSearchSuite) TestPromulgatedRank(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("varnish")
 	url := newResolvedURL("cs:~charmers/trusty/varnish-1", 1)
 	s.store.AddCharmWithArchive(url, charmArchive)
+	bURL := baseURL(&url.URL)
+	baseEntity, err := s.store.FindBaseEntity(bURL)
+	baseEntity.ACLs.Read = append(baseEntity.ACLs.Read, params.Everyone)
+	err = s.store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
+	c.Assert(err, gc.IsNil)
+	err = s.store.UpdateSearchBaseURL(baseEntity.URL)
+	c.Assert(err, gc.IsNil)
 	s.store.ES.Database.RefreshIndex(s.TestIndex)
 	sp := SearchParams{
 		Filters: map[string][]string{

@@ -60,7 +60,7 @@ func (s *SearchSuite) SetUpTest(c *gc.C) {
 		charm.MustParseReference("cs:~charmers/riak"),
 		bson.D{{"$set", map[string]mongodoc.ACL{
 			"acls": {
-				Read: []string{"test-user"},
+				Read: []string{"charmers", "test-user"},
 			},
 		}}},
 	)
@@ -75,9 +75,17 @@ func (s *SearchSuite) addCharmsToStore(c *gc.C) {
 	for name, id := range exportTestCharms {
 		err := s.store.AddCharmWithArchive(id, getCharm(name))
 		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+		c.Assert(err, gc.IsNil)
+		err = s.store.UpdateSearch(id)
+		c.Assert(err, gc.IsNil)
 	}
 	for name, id := range exportTestBundles {
 		err := s.store.AddBundleWithArchive(id, getBundle(name))
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+		c.Assert(err, gc.IsNil)
+		err = s.store.UpdateSearch(id)
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -711,6 +719,10 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 		url := newResolvedURL("cs:~downloads-test/trusty/x-1", -1)
 		url.URL.Name = n
 		err := s.store.AddCharmWithArchive(url, getCharm(n))
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+		c.Assert(err, gc.IsNil)
+		err = s.store.UpdateSearch(url)
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < cnt; i++ {
 			err := s.store.IncrementDownloadCounts(url)
