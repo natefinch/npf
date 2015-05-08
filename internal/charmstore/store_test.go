@@ -109,6 +109,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, url *r
 	// The charm archive has been properly added to the blob store.
 	r, obtainedSize, err := store.BlobStore.Open(blobName)
 	c.Assert(err, gc.IsNil)
+	defer r.Close()
 	c.Assert(obtainedSize, gc.Equals, size)
 	data, err := ioutil.ReadAll(r)
 	c.Assert(err, gc.IsNil)
@@ -200,6 +201,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool, 
 	// The bundle archive has been properly added to the blob store.
 	r, obtainedSize, err := store.BlobStore.Open(blobName)
 	c.Assert(err, gc.IsNil)
+	defer r.Close()
 	c.Assert(obtainedSize, gc.Equals, size)
 	data, err := ioutil.ReadAll(r)
 	c.Assert(err, gc.IsNil)
@@ -306,12 +308,12 @@ func (s *StoreSuite) testURLFinding(c *gc.C, check func(store *Store, expand *ch
 		c.Logf("test %d: %q from %q", i, test.expand, test.inStore)
 		_, err := store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
-		urls := mustParseResolvedURLs(test.inStore)
+		urls := MustParseResolvedURLs(test.inStore)
 		for _, url := range urls {
 			err := store.AddCharmWithArchive(url, wordpress)
 			c.Assert(err, gc.IsNil)
 		}
-		check(store, charm.MustParseReference(test.expand), mustParseResolvedURLs(test.expect))
+		check(store, charm.MustParseReference(test.expand), MustParseResolvedURLs(test.expect))
 	}
 }
 
@@ -440,7 +442,7 @@ func (s *StoreSuite) TestFindBaseEntity(c *gc.C) {
 		c.Logf("test %d: %s", i, test.about)
 
 		// Add initial charms to the store.
-		for _, url := range mustParseResolvedURLs(test.stored) {
+		for _, url := range MustParseResolvedURLs(test.stored) {
 			err := store.AddCharmWithArchive(url, ch)
 			c.Assert(err, gc.IsNil)
 		}
@@ -942,10 +944,10 @@ func urlStrings(urls []*charm.Reference) []string {
 	return urlStrs
 }
 
-// mustParseResolvedURL parses a resolved URL in string form, with
+// MustParseResolvedURL parses a resolved URL in string form, with
 // the optional promulgated revision preceding the entity URL
 // separated by a space.
-func mustParseResolvedURL(urlStr string) *router.ResolvedURL {
+func MustParseResolvedURL(urlStr string) *router.ResolvedURL {
 	s := strings.Fields(urlStr)
 	promRev := -1
 	switch len(s) {
@@ -965,10 +967,10 @@ func mustParseResolvedURL(urlStr string) *router.ResolvedURL {
 	}
 }
 
-func mustParseResolvedURLs(urlStrs []string) []*router.ResolvedURL {
+func MustParseResolvedURLs(urlStrs []string) []*router.ResolvedURL {
 	urls := make([]*router.ResolvedURL, len(urlStrs))
 	for i, u := range urlStrs {
-		urls[i] = mustParseResolvedURL(u)
+		urls[i] = MustParseResolvedURL(u)
 	}
 	return urls
 }
@@ -1354,6 +1356,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithFoundContent(c *gc.C) {
 		return path.Clean(f.Name) == "metadata.yaml"
 	})
 	c.Assert(err, gc.IsNil)
+	defer r.Close()
 	data, err = ioutil.ReadAll(r)
 	c.Assert(err, gc.IsNil)
 	c.Assert(string(data), gc.Equals, expectContent)
@@ -1371,6 +1374,8 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithFoundContent(c *gc.C) {
 		c.Errorf("isFile called unexpectedly")
 		return false
 	})
+	c.Assert(err, gc.IsNil)
+	defer r.Close()
 	data, err = ioutil.ReadAll(r)
 	c.Assert(err, gc.IsNil)
 	c.Assert(string(data), gc.Equals, expectContent)

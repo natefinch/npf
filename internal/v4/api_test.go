@@ -1641,6 +1641,13 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 					err := s.store.IncCounterAtTime(key, date)
 					c.Assert(err, gc.IsNil)
 				}
+				if url.PromulgatedRevision > -1 {
+					key := []string{params.StatsArchiveDownload, url.URL.Series, url.URL.Name, "", strconv.Itoa(url.PromulgatedRevision)}
+					for i := 0; i < downloads; i++ {
+						err := s.store.IncCounterAtTime(key, date)
+						c.Assert(err, gc.IsNil)
+					}
+				}
 			}
 		}
 
@@ -2346,7 +2353,7 @@ var promulgateTests = []struct {
 		checkers.DeclaredCaveat(v4.UsernameAttr, "bob"),
 	},
 	groups: map[string][]string{
-		"bob": []string{"promulgators", "yellow"},
+		"bob": {"promulgators", "yellow"},
 	},
 	expectStatus: http.StatusOK,
 	expectEntities: []*mongodoc.Entity{
@@ -2388,7 +2395,7 @@ var promulgateTests = []struct {
 		checkers.DeclaredCaveat(v4.UsernameAttr, "bob"),
 	},
 	groups: map[string][]string{
-		"bob": []string{"yellow"},
+		"bob": {"yellow"},
 	},
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
