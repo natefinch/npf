@@ -48,7 +48,7 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	id := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
 	wordpress := s.assertUploadCharm(c, "POST", id, "wordpress")
 	err := s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
-	c.Assert(err, gc.IsNil)	
+	c.Assert(err, gc.IsNil)
 
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
 	c.Assert(err, gc.IsNil)
