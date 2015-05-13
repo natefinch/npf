@@ -88,6 +88,12 @@ map if the id "precise/wordpress-34" refers to a bundle rather than a charm.
 For the singular forms of these endpoints, a 404 "metadata not found" error
 will be returned when this happens.
 
+In the `meta/any` GET bulk request, if some data requires authorization, the
+default behavior is to return an authorization required response. Clients not
+interested in non-public data can include a `ignore-auth=1` query so that only
+public information is returned. In this case, results requiring authorization
+(if any) will be omitted.
+
 ### Versioning
 
 The version of the API is indicated by an initial "vN" prefix to the path.
@@ -232,7 +238,7 @@ entity must exist that matches the id).
 
 If Promulgate is true, it means that any new charms published
 to ~*user*/*x*/*name* will also be given the alias
-*x*/*name*. The latest revision for all ids ~*user*/*anyseries*/*name* 
+*x*/*name*. The latest revision for all ids ~*user*/*anyseries*/*name*
 will also be aliased likewise.
 
 If Promulgate is false, any new charms published

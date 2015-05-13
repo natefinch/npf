@@ -19,6 +19,7 @@ import (
 	"github.com/juju/utils/parallel"
 	"gopkg.in/errgo.v1"
 	charm "gopkg.in/juju/charm.v5"
+	"gopkg.in/macaroon-bakery.v0/httpbakery"
 
 	"gopkg.in/juju/charmstore.v4/params"
 )
@@ -543,6 +544,8 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 		return nil, errgo.WithCausef(nil, params.ErrBadRequest, "no ids specified in meta request")
 	}
 	delete(req.Form, "id")
+	ignoreAuth := req.Form.Get("ignore-auth") == "1"
+	delete(req.Form, "ignore-auth")
 	result := make(map[string]interface{})
 	for _, id := range ids {
 		url, err := charm.ParseReference(id)
@@ -560,8 +563,9 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 			return nil, errgo.Mask(err, errgo.Any)
 		}
 		meta, err := r.serveMetaGet(rurl, req)
-		if cause := errgo.Cause(err); cause == params.ErrNotFound || cause == params.ErrMetadataNotFound {
-			// The relevant data does not exist.
+		if cause := errgo.Cause(err); cause == params.ErrNotFound || cause == params.ErrMetadataNotFound || (ignoreAuth && isBakeryError(cause)) {
+			// The relevant data does not exist, or it is not public and client
+			// asked not to authorize.
 			// https://github.com/juju/charmstore/blob/v4/docs/API.md#bulk-requests-and-missing-metadata
 			continue
 		}
@@ -571,6 +575,11 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 		result[id] = meta
 	}
 	return result, nil
+}
+
+func isBakeryError(cause error) bool {
+	_, ok := cause.(*httpbakery.Error)
+	return ok
 }
 
 // serveBulkMetaPut serves a bulk PUT request to several ids.
