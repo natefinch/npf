@@ -132,7 +132,8 @@ func (s *Server) UploadCharm(c *gc.C, ch charm.Charm, id *charm.Reference, promu
 	}
 
 	// Upload the charm.
-	resp, err := s.NewClient().DoWithBody(req, url, httpbakery.SeekerBody(body))
+	client := s.NewClient()
+	resp, err := client.DoWithBody(req, url, httpbakery.SeekerBody(body))
 	c.Assert(err, jc.ErrorIsNil)
 	defer resp.Body.Close()
 	c.Assert(resp.StatusCode, gc.Equals, http.StatusOK)
@@ -142,8 +143,16 @@ func (s *Server) UploadCharm(c *gc.C, ch charm.Charm, id *charm.Reference, promu
 	dec := json.NewDecoder(resp.Body)
 	err = dec.Decode(&result)
 	c.Assert(err, jc.ErrorIsNil)
+	curl := result.Id
 	if promulgated {
-		return result.PromulgatedId
+		curl = result.PromulgatedId
 	}
-	return result.Id
+
+	// Set permissions for the charm.
+	err = client.Put(
+		"/"+curl.Path()+"/meta/perm/read",
+		[]string{params.Everyone, id.User})
+	c.Assert(err, jc.ErrorIsNil)
+
+	return curl
 }

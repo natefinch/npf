@@ -89,8 +89,8 @@ For the singular forms of these endpoints, a 404 "metadata not found" error
 will be returned when this happens.
 
 In the `meta/any` GET bulk request, if some data requires authorization, the
-default behavior is to return an authorization required response. Clients not
-interested in non-public data can include a `ignore-auth=1` query so that only
+default behavior is to return an authorization required response. Clients
+interested in public data only can include a `ignore-auth=1` query so that only
 public information is returned. In this case, results requiring authorization
 (if any) will be omitted.
 
