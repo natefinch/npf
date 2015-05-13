@@ -22,6 +22,7 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v5"
+	"gopkg.in/macaroon-bakery.v0/httpbakery"
 
 	"gopkg.in/juju/charmstore.v4/params"
 )
@@ -663,6 +664,50 @@ var routerGetTests = []struct {
 				"bar/something": metaHandlerTestResp{
 					CharmURL: "cs:utopic/foo-32",
 					Path:     "/something",
+				},
+			},
+		},
+	},
+}, {
+	about:  "bulk meta/any handler, unauthorized",
+	urlStr: "/meta/any?id=precise/wordpress-42&include=foo",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	authorize:    dischargeRequiredAuthorize,
+	expectStatus: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "bad wolf",
+	},
+}, {
+	about:  "bulk meta/any handler, unauthorized, ignore authorization",
+	urlStr: "/meta/any?id=precise/wordpress-42&include=foo&ignore-auth=1",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	authorize:    dischargeRequiredAuthorize,
+	expectStatus: http.StatusOK,
+	expectBody:   map[string]params.MetaAnyResponse{},
+}, {
+	about:  "bulk meta/any handler, some unauthorized, ignore authorization",
+	urlStr: "/meta/any?id=precise/wordpress-42&id=utopic/foo-32&include=foo&ignore-auth=1",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	authorize:    dischargeRequiredAuthorize,
+	expectStatus: http.StatusOK,
+	expectBody: map[string]params.MetaAnyResponse{
+		"utopic/foo-32": {
+			Id: charm.MustParseReference("cs:utopic/foo-32"),
+			Meta: map[string]interface{}{
+				"foo": metaHandlerTestResp{
+					CharmURL: "cs:utopic/foo-32",
 				},
 			},
 		},
@@ -1586,6 +1631,13 @@ func alwaysAuthorize(id *ResolvedURL, req *http.Request) error {
 
 func neverAuthorize(id *ResolvedURL, req *http.Request) error {
 	return errgo.WithCausef(nil, params.ErrUnauthorized, "bad wolf")
+}
+
+func dischargeRequiredAuthorize(id *ResolvedURL, req *http.Request) error {
+	if id.String() == "cs:utopic/foo-32" {
+		return nil
+	}
+	return httpbakery.NewDischargeRequiredError(nil, "/", errgo.New("bad wolf"))
 }
 
 var getMetadataTests = []struct {
