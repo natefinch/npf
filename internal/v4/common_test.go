@@ -6,18 +6,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	gc "gopkg.in/check.v1"
-
 	"github.com/julienschmidt/httprouter"
+	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/macaroon-bakery.v0/bakery"
 	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v0/bakerytest"
 	"gopkg.in/macaroon-bakery.v0/httpbakery"
 
-	"gopkg.in/juju/charmstore.v4/internal/charmstore"
-	"gopkg.in/juju/charmstore.v4/internal/storetesting"
-	"gopkg.in/juju/charmstore.v4/internal/v4"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 )
 
 type commonSuite struct {

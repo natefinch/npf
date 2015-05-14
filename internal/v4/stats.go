@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"gopkg.in/errgo.v1"
+	"gopkg.in/juju/charmrepo.v0/csclient/params"
 
-	"gopkg.in/juju/charmstore.v4/internal/charmstore"
-	"gopkg.in/juju/charmstore.v4/params"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 )
 
 const dateFormat = "2006-01-02"

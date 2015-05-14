@@ -7,7 +7,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 
-	. "gopkg.in/juju/charmstore.v4/internal/elasticsearch"
+	. "gopkg.in/juju/charmstore.v5-unstable/internal/elasticsearch"
 )
 
 type QuerySuite struct{}

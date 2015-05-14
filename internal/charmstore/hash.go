@@ -16,7 +16,7 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
-	"gopkg.in/juju/charmstore.v4/internal/router"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
 
 // UpdateEntitySHA256 calculates and return the SHA256 hash of the archive of

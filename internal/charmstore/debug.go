@@ -16,11 +16,11 @@ import (
 
 	"github.com/juju/utils"
 	"gopkg.in/errgo.v1"
+	"gopkg.in/juju/charmrepo.v0/csclient/params"
 	"gopkg.in/mgo.v2"
 
-	"gopkg.in/juju/charmstore.v4/internal/router"
-	"gopkg.in/juju/charmstore.v4/params"
-	appver "gopkg.in/juju/charmstore.v4/version"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
+	appver "gopkg.in/juju/charmstore.v5-unstable/version"
 )
 
 // GET /debug/info .

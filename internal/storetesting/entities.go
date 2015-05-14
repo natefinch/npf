@@ -6,10 +6,10 @@ package storetesting
 import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
-	"gopkg.in/juju/charm.v5"
+	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/mgo.v2"
 
-	"gopkg.in/juju/charmstore.v4/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 )
 
 // EntityBuilder provides a convenient way to describe a mongodoc.Entity

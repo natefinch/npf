@@ -11,10 +11,10 @@ import (
 	jujutesting "github.com/juju/testing"
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
+	"gopkg.in/juju/charmrepo.v0/csclient/params"
 
-	"gopkg.in/juju/charmstore.v4"
-	"gopkg.in/juju/charmstore.v4/internal/storetesting"
-	"gopkg.in/juju/charmstore.v4/params"
+	"gopkg.in/juju/charmstore.v5-unstable"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 )
 
 // These tests are copied (almost) verbatim from internal/charmstore/server_test.go

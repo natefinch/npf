@@ -12,11 +12,11 @@ import (
 
 	jujutesting "github.com/juju/testing"
 	gc "gopkg.in/check.v1"
-	"gopkg.in/juju/charm.v5"
+	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/mgo.v2/bson"
 
-	"gopkg.in/juju/charmstore.v4/internal/charmstore"
-	"gopkg.in/juju/charmstore.v4/internal/router"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
 
 func CheckSHA256Laziness(c *gc.C, store *charmstore.Store, id *charm.Reference, check func()) {
