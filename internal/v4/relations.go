@@ -160,15 +160,15 @@ func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *router.Reso
 	}
 
 	// Validate the URL query values.
-	anySeries, err := parseBool(flags.Get("any-series"))
+	anySeries, err := router.ParseBool(flags.Get("any-series"))
 	if err != nil {
 		return nil, badRequestf(err, "invalid value for any-series")
 	}
-	anyRevision, err := parseBool(flags.Get("any-revision"))
+	anyRevision, err := router.ParseBool(flags.Get("any-revision"))
 	if err != nil {
 		return nil, badRequestf(err, "invalid value for any-revision")
 	}
-	allResults, err := parseBool(flags.Get("all-results"))
+	allResults, err := router.ParseBool(flags.Get("all-results"))
 	if err != nil {
 		return nil, badRequestf(err, "invalid value for all-results")
 	}

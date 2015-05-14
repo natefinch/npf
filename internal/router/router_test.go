@@ -669,7 +669,7 @@ var routerGetTests = []struct {
 		},
 	},
 }, {
-	about:  "bulk meta/any handler, unauthorized",
+	about:  "bulk meta/any handler, discharge required",
 	urlStr: "/meta/any?id=precise/wordpress-42&include=foo",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
@@ -679,10 +679,10 @@ var routerGetTests = []struct {
 	authorize:    dischargeRequiredAuthorize,
 	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
-		Message: "bad wolf",
+		Message: "discharge required",
 	},
 }, {
-	about:  "bulk meta/any handler, unauthorized, ignore authorization",
+	about:  "bulk meta/any handler, discharge required, ignore authorization",
 	urlStr: "/meta/any?id=precise/wordpress-42&include=foo&ignore-auth=1",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
@@ -711,6 +711,38 @@ var routerGetTests = []struct {
 				},
 			},
 		},
+	},
+}, {
+	about:  "bulk meta/any handler, unauthorized",
+	urlStr: "/meta/any?id=precise/wordpress-42&include=foo",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	authorize:    neverAuthorize,
+	expectStatus: http.StatusInternalServerError,
+	expectBody: params.Error{
+		Message: "bad wolf",
+	},
+}, {
+	about:  "bulk meta/any handler, unauthorized, ignore authorization",
+	urlStr: "/meta/any?id=precise/wordpress-42&include=foo&ignore-auth=1",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	authorize:    neverAuthorize,
+	expectStatus: http.StatusOK,
+	expectBody:   map[string]params.MetaAnyResponse{},
+}, {
+	about:        "bulk meta/any handler, invalid ignore-auth flag",
+	urlStr:       "/meta/any?id=precise/wordpress-42&include=foo&ignore-auth=meh",
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: `bad request: unexpected bool value "meh" (must be "0" or "1")`,
 	},
 }, {
 	about:  "bulk meta handler with unresolved id",
@@ -919,6 +951,35 @@ func (s *RouterSuite) TestRouterGet(c *gc.C) {
 			ExpectBody:   test.expectBody,
 		})
 		c.Assert(queryCount, gc.Equals, test.expectQueryCount)
+	}
+}
+
+var parseBoolTests = []struct {
+	value  string
+	result bool
+	err    bool
+}{{
+	value: "0",
+}, {
+	value: "",
+}, {
+	value:  "1",
+	result: true,
+}, {
+	value: "invalid",
+	err:   true,
+}}
+
+func (s *RouterSuite) TestParseBool(c *gc.C) {
+	for i, test := range parseBoolTests {
+		c.Logf("test %d: %s", i, test.value)
+		result, err := ParseBool(test.value)
+		c.Assert(result, gc.Equals, test.result)
+		if test.err {
+			c.Assert(err, gc.ErrorMatches, "unexpected bool value .*")
+			continue
+		}
+		c.Assert(err, jc.ErrorIsNil)
 	}
 }
 
@@ -1637,7 +1698,7 @@ func dischargeRequiredAuthorize(id *ResolvedURL, req *http.Request) error {
 	if id.String() == "cs:utopic/foo-32" {
 		return nil
 	}
-	return httpbakery.NewDischargeRequiredError(nil, "/", errgo.New("bad wolf"))
+	return httpbakery.NewDischargeRequiredError(nil, "/", errgo.New("discharge required"))
 }
 
 var getMetadataTests = []struct {
