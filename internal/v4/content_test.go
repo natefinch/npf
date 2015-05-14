@@ -193,7 +193,7 @@ func (s *APISuite) TestServeReadMe(c *gc.C) {
 		err := s.store.AddCharmWithArchive(url, wordpress)
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)		
+		c.Assert(err, gc.IsNil)
 
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,

@@ -1002,7 +1002,7 @@ func (s *APISuite) TestMetaCharmTags(c *gc.C) {
 		})
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)		
+		c.Assert(err, gc.IsNil)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL(url.URL.Path() + "/meta/tags"),
