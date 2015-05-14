@@ -544,7 +544,10 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 		return nil, errgo.WithCausef(nil, params.ErrBadRequest, "no ids specified in meta request")
 	}
 	delete(req.Form, "id")
-	ignoreAuth := req.Form.Get("ignore-auth") == "1"
+	ignoreAuth, err := ParseBool(req.Form.Get("ignore-auth"))
+	if err != nil {
+		return nil, errgo.WithCausef(err, params.ErrBadRequest, "")
+	}
 	delete(req.Form, "ignore-auth")
 	result := make(map[string]interface{})
 	for _, id := range ids {
@@ -563,7 +566,7 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 			return nil, errgo.Mask(err, errgo.Any)
 		}
 		meta, err := r.serveMetaGet(rurl, req)
-		if cause := errgo.Cause(err); cause == params.ErrNotFound || cause == params.ErrMetadataNotFound || (ignoreAuth && isBakeryError(cause)) {
+		if cause := errgo.Cause(err); cause == params.ErrNotFound || cause == params.ErrMetadataNotFound || (ignoreAuth && isAuthorizationError(cause)) {
 			// The relevant data does not exist, or it is not public and client
 			// asked not to authorize.
 			// https://github.com/juju/charmstore/blob/v4/docs/API.md#bulk-requests-and-missing-metadata
@@ -577,7 +580,24 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 	return result, nil
 }
 
-func isBakeryError(cause error) bool {
+// ParseBool returns the boolean value represented by the string.
+// It accepts "1" or "0". Any other value returns an error.
+func ParseBool(value string) (bool, error) {
+	switch value {
+	case "0", "":
+		return false, nil
+	case "1":
+		return true, nil
+	}
+	return false, errgo.Newf(`unexpected bool value %q (must be "0" or "1")`, value)
+}
+
+// isAuthorizationError reports whether the given error cause is an
+// authorization error.
+func isAuthorizationError(cause error) bool {
+	if cause == params.ErrUnauthorized {
+		return true
+	}
 	_, ok := cause.(*httpbakery.Error)
 	return ok
 }

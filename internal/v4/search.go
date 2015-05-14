@@ -105,7 +105,7 @@ func parseSearchParams(req *http.Request) (charmstore.SearchParams, error) {
 		case "text":
 			sp.Text = v[0]
 		case "autocomplete":
-			sp.AutoComplete, err = parseBool(v[0])
+			sp.AutoComplete, err = router.ParseBool(v[0])
 			if err != nil {
 				return charmstore.SearchParams{}, badRequestf(err, "invalid autocomplete parameter")
 			}
@@ -129,7 +129,7 @@ func parseSearchParams(req *http.Request) (charmstore.SearchParams, error) {
 			}
 			sp.Filters[k] = v
 		case "promulgated":
-			promulgated, err := parseBool(v[0])
+			promulgated, err := router.ParseBool(v[0])
 			if err != nil {
 				return charmstore.SearchParams{}, badRequestf(err, "invalid promulgated filter parameter")
 			}

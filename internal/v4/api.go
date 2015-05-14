@@ -326,18 +326,6 @@ func fieldsFromSelector(selector map[string]int) []string {
 	return fields
 }
 
-// parseBool returns the boolean value represented by the string.
-// It accepts "1" or "0". Any other value returns an error.
-func parseBool(value string) (bool, error) {
-	switch value {
-	case "0", "":
-		return false, nil
-	case "1":
-		return true, nil
-	}
-	return false, errgo.Newf(`unexpected bool value %q (must be "0" or "1")`, value)
-}
-
 var errNotImplemented = errgo.Newf("method not implemented")
 
 // GET /debug
