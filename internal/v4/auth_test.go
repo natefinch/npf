@@ -21,8 +21,8 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v0/csclient/params"
-	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
-	"gopkg.in/macaroon-bakery.v0/httpbakery"
+	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
+	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/macaroon.v1"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
@@ -176,7 +176,8 @@ func dischargedAuthCookie(c *gc.C, srv http.Handler, caveats ...string) *http.Co
 		err := m.AddFirstPartyCaveat(cav)
 		c.Assert(err, gc.IsNil)
 	}
-	ms, err := httpbakery.DischargeAll(&m, httpbakery.NewHTTPClient(), noInteraction)
+	client := httpbakery.NewClient()
+	ms, err := client.DischargeAll(&m)
 	c.Assert(err, gc.IsNil)
 	macaroonCookie, err := httpbakery.NewCookie(ms)
 	c.Assert(err, gc.IsNil)
@@ -608,9 +609,14 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 	}
 }
 
+type readSeekCloser interface {
+	io.ReadCloser
+	io.Seeker
+}
+
 // archiveInfo prepares a zip archive of an entity and return a reader for the
 // archive, its blob hash and size.
-func (s *authSuite) archiveInfo(c *gc.C) (r io.ReadCloser, hashSum string, size int64) {
+func (s *authSuite) archiveInfo(c *gc.C) (r readSeekCloser, hashSum string, size int64) {
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	f, err := os.Open(ch.Path)
 	c.Assert(err, gc.IsNil)

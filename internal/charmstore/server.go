@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/macaroon-bakery.v0/bakery"
+	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/mgo.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"

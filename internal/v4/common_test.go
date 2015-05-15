@@ -9,10 +9,10 @@ import (
 	"github.com/julienschmidt/httprouter"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
-	"gopkg.in/macaroon-bakery.v0/bakery"
-	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
-	"gopkg.in/macaroon-bakery.v0/bakerytest"
-	"gopkg.in/macaroon-bakery.v0/httpbakery"
+	"gopkg.in/macaroon-bakery.v1/bakery"
+	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
+	"gopkg.in/macaroon-bakery.v1/bakerytest"
+	"gopkg.in/macaroon-bakery.v1/httpbakery"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
@@ -165,11 +165,15 @@ func bakeryDo(client *http.Client) func(*http.Request) (*http.Response, error) {
 	if client == nil {
 		client = httpbakery.NewHTTPClient()
 	}
+	bclient := httpbakery.NewClient()
+	bclient.Client = client
 	return func(req *http.Request) (*http.Response, error) {
 		if req.Body != nil {
-			return httpbakery.DoWithBody(client, req, httpbakery.SeekerBody(req.Body.(io.ReadSeeker)), noInteraction)
+			body := req.Body.(io.ReadSeeker)
+			req.Body = nil
+			return bclient.DoWithBody(req, body)
 		}
-		return httpbakery.Do(client, req, noInteraction)
+		return bclient.Do(req)
 	}
 }
 

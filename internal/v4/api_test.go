@@ -25,9 +25,9 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v0/csclient/params"
-	"gopkg.in/macaroon-bakery.v0/bakery"
-	"gopkg.in/macaroon-bakery.v0/bakery/checkers"
-	"gopkg.in/macaroon-bakery.v0/httpbakery"
+	"gopkg.in/macaroon-bakery.v1/bakery"
+	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
+	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/macaroon.v1"
 	"gopkg.in/mgo.v2/bson"
 
@@ -2087,7 +2087,8 @@ func (s *APISuite) TestMacaroon(c *gc.C) {
 	err := json.Unmarshal(rec.Body.Bytes(), &m)
 	c.Assert(err, gc.IsNil)
 	c.Assert(m.Location(), gc.Equals, "charmstore")
-	ms, err := httpbakery.DischargeAll(&m, httpbakery.NewHTTPClient(), noInteraction)
+	client := httpbakery.NewClient()
+	ms, err := client.DischargeAll(&m)
 	c.Assert(err, gc.IsNil)
 	sort.Strings(checkedCaveats)
 	c.Assert(checkedCaveats, jc.DeepEquals, []string{
