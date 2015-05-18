@@ -4,7 +4,7 @@ ifndef GOPATH
 $(warning You need to set up a GOPATH.)
 endif
 
-PROJECT := gopkg.in/juju/charmstore.v4
+PROJECT := gopkg.in/juju/charmstore.v5-unstable
 PROJECT_DIR := $(shell go list -e -f '{{.Dir}}' $(PROJECT))
 
 ifeq ($(shell uname -p | sed -r 's/.*(x86|armel|armhf).*/golang/'), golang)
