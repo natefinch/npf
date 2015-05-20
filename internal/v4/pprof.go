@@ -1,4 +1,4 @@
-package v4
+package v4	// import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 import (
 	"net/http"

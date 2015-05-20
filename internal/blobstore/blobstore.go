@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package blobstore
+package blobstore	// import "gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
 
 import (
 	"crypto/sha512"

@@ -4,7 +4,7 @@
 // The debug package holds various functions that may
 // be used for debugging but should not be included
 // in production code.
-package debug
+package debug	// import "gopkg.in/juju/charmstore.v5-unstable/internal/debug"
 
 import (
 	"log"
