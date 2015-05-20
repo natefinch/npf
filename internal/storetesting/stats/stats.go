@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package stats
+package stats	// import "gopkg.in/juju/charmstore.v5-unstable/internal/storetesting/stats"
 
 import (
 	"time"

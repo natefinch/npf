@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package elasticsearch_test
+package elasticsearch_test	// import "gopkg.in/juju/charmstore.v5-unstable/internal/elasticsearch"
 
 import (
 	"encoding/json"

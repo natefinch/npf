@@ -3,7 +3,7 @@
 
 // The config package defines configuration parameters for
 // the charm store.
-package config
+package config	// import "gopkg.in/juju/charmstore.v5-unstable/config"
 
 import (
 	"fmt"

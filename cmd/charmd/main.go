@@ -1,7 +1,7 @@
 // Copyright 2012, 2013, 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package main
+package main	// import "gopkg.in/juju/charmstore.v5-unstable/cmd/charmd"
 
 import (
 	"flag"

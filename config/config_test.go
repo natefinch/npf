@@ -1,7 +1,7 @@
 // Copyright 2012, 2013, 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package config_test
+package config_test	// import "gopkg.in/juju/charmstore.v5-unstable/config"
 
 import (
 	"io/ioutil"

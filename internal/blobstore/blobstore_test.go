@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package blobstore_test
+package blobstore_test	// import "gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
 
 import (
 	"fmt"

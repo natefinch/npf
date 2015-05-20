@@ -1,4 +1,4 @@
-package v4_test
+package v4_test	// import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 import (
 	"encoding/json"

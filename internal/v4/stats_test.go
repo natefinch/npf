@@ -1,7 +1,7 @@
 // Copyright 2012 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package v4_test
+package v4_test	// import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 import (
 	"encoding/json"
