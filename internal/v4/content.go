@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package v4	// import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 import (
 	"archive/zip"
@@ -12,7 +12,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/juju/jujusvg"
+	"gopkg.in/juju/jujusvg.v1"
 	"github.com/juju/xml"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"

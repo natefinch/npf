@@ -5,7 +5,7 @@
 // with their SHA256 hash value. Entities are updated by running the cshash256
 // command.
 
-package charmstore	// import "gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 
 import (
 	"crypto/sha256"

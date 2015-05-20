@@ -4,7 +4,7 @@
 // This is the internal version of the charmstore package.
 // It exposes details to the various API packages
 // that we do not wish to expose to the world at large.
-package charmstore	// import "gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 
 import (
 	"net/http"

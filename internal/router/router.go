@@ -3,7 +3,7 @@
 
 // The router package implements an HTTP request router for charm store
 // HTTP requests.
-package router	// import "gopkg.in/juju/charmstore.v5-unstable/internal/router"
+package router // import "gopkg.in/juju/charmstore.v5-unstable/internal/router"
 
 import (
 	"encoding/json"

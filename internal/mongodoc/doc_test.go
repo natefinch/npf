@@ -1,7 +1,7 @@
 // Copyright 2015 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package mongodoc_test	// import "gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
+package mongodoc_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 
 import (
 	"testing"

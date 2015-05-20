@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package router	// import "gopkg.in/juju/charmstore.v5-unstable/internal/router"
+package router // import "gopkg.in/juju/charmstore.v5-unstable/internal/router"
 
 import (
 	"fmt"
