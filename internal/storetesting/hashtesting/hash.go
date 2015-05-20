@@ -5,7 +5,7 @@
 // db with their SHA256 hash value. Entities are updated by running the
 // cshash256 command.
 
-package hashtesting	// import "gopkg.in/juju/charmstore.v5-unstable/internal/storetesting/hashtesting"
+package hashtesting // import "gopkg.in/juju/charmstore.v5-unstable/internal/storetesting/hashtesting"
 
 import (
 	"time"

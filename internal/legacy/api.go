@@ -63,7 +63,7 @@
 //
 //     charm-bundle:trusty:juju-gui  2014-06-17  5
 //     charm-bundle:trusty:mysql     2014-06-17  1
-package legacy	// import "gopkg.in/juju/charmstore.v5-unstable/internal/legacy"
+package legacy // import "gopkg.in/juju/charmstore.v5-unstable/internal/legacy"
 
 import (
 	"encoding/json"

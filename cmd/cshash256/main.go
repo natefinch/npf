@@ -6,7 +6,7 @@
 // The first time this command is executed, all the entities are updated.
 // Subsequent runs have no effect.
 
-package main	// import "gopkg.in/juju/charmstore.v5-unstable/cmd/cshash256"
+package main // import "gopkg.in/juju/charmstore.v5-unstable/cmd/cshash256"
 
 import (
 	"crypto/sha256"
