@@ -692,7 +692,7 @@ func (s *StoreSearchSuite) TestEnsureConcurrent(c *gc.C) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		err = s.store.ES.ensureIndexes(false)
+		err := s.store.ES.ensureIndexes(false)
 		c.Check(err, gc.Equals, nil)
 		wg.Done()
 	}()
