@@ -1,7 +1,6 @@
 +++
 date = "2014-11-21T06:26:13-05:00"
 title = "keep"
-menu = "code"
 repo = "keep.v0"
 pkg = "keep"
 norss = true

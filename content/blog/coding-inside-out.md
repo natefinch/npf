@@ -14,8 +14,8 @@ tags = ["go", "golang", "programming", "interfaces"]
 Interfaces are one of the best features of Go, and the one most confusing to
 people who have used interfaces in other languages.  This is not an introduction
 to interfaces, I'm going to assume you know how they work, more or less. This is
-more of a post about how to effectively use interfaces and avoid the mistake of
-assuming they should be used like they are in other languages.
+more of a post about how to effectively use interfaces in Go and avoid the
+mistake of assuming they should be used like they are in other languages.
 
 Interfaces in Go are different than those in most other statically typed
 languages like C++, Java, or C# - Go's interfaces are *implicitly* fulfilled,
@@ -28,19 +28,19 @@ In other languages, you write an interface for a type. For example, you might
 have an interface to abstract away a document store, so that you can use a
 database, filesystem, network, or in-memory storage.  Since these languages
 require interfaces to be explicitly implemented by types, each of the types that
-implement the interface must be explicitly marked as doing so.  Interfaces tend
-to end up very wide (having lots of methods), because if you miss exposing a
-method in the interface, you can't access that method unless you go back and add
-it to the interface, and then add the implementation of the method to each of
-the implementations of the concrete types. 
+implement the interface must know about the interface and be explicitly marked
+as doing so.  Interfaces tend to end up very wide (having lots of methods),
+because if you miss exposing a method in the interface, you can't access that
+method unless you go back and add it to the interface, and then add the
+implementation of the method to each of the implementations of the concrete
+types.
 
 While you can do similar things in Go, this is often not the best way to
-leverage Go's interfaces.  In fact, using Go's interfaces in the most efficient
-way possible often involves turning your code inside out.
+leverage Go's interfaces.  
 
 There are two rules to keep in mind when using Go with interfaces:
 
-1. Go's interfaces work best when they are very small.
+1. Go's interfaces work best when they are very small (1-3 methods).
 
 2. Design interfaces for functions, not for types.
 
@@ -71,11 +71,14 @@ wrapper that wraps another io.Writer, and you now have a writer that can, for
 example, gzip the data before it gets written, or strip out newlines, or encrypt
 it, or all three.  And this kind of transformation can be easily inserted into a
 pipeline of data without any of the rest of the parts of the system even being
-aware of it.
+aware of it.  This composition of logic is where go interfaces shine.
 
-And it's all possible because io.Writer is a tiny little interface written in a
-very basic way, so a whole bunch of functions and types can implement it and use
-it in their own way.
+When people first start programming in Go, they often lament the lack of
+generics, but this is because it's the only way they've ever known how to make
+reusable logic.  In Go, you often need to turn your code inside out to get the
+same reusability.... but it also means you get a lot more flexibility in putting
+logic together.
+
 
 
 
