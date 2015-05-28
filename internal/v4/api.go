@@ -23,7 +23,9 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
+	"gopkg.in/juju/charmstore.v5-unstable/internal/agent"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/identity"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
@@ -32,9 +34,10 @@ var logger = loggo.GetLogger("charmstore.internal.v4")
 
 type Handler struct {
 	*router.Router
-	pool    *charmstore.Pool
-	config  charmstore.ServerParams
-	locator *bakery.PublicKeyRing
+	pool           *charmstore.Pool
+	config         charmstore.ServerParams
+	locator        *bakery.PublicKeyRing
+	identityClient *identity.Client
 }
 
 const delegatableMacaroonExpiry = time.Minute
@@ -45,8 +48,11 @@ func New(pool *charmstore.Pool, config charmstore.ServerParams) *Handler {
 		pool:    pool,
 		config:  config,
 		locator: bakery.NewPublicKeyRing(),
+		identityClient: identity.NewClient(&identity.Params{
+			URL:    config.IdentityAPIURL,
+			Client: agent.NewClient(config.AgentUsername, config.AgentKey),
+		}),
 	}
-
 	h.Router = router.New(&router.Handlers{
 		Global: map[string]http.Handler{
 			"changes/published":    router.HandleJSON(h.serveChangesPublished),

@@ -12,22 +12,23 @@ import (
 	"strings"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/yaml.v1"
+	"gopkg.in/macaroon-bakery.v1/bakery"
+	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
 	// TODO(rog) rename this to MongoAddr - it's not a URL.
-	MongoURL          string `yaml:"mongo-url"`
-	APIAddr           string `yaml:"api-addr"`
-	AuthUsername      string `yaml:"auth-username"`
-	AuthPassword      string `yaml:"auth-password"`
-	ESAddr            string `yaml:"elasticsearch-addr"` // elasticsearch is optional
-	IdentityPublicKey string `yaml:"identity-public-key"`
-	IdentityLocation  string `yaml:"identity-location"`
+	MongoURL          string            `yaml:"mongo-url"`
+	APIAddr           string            `yaml:"api-addr"`
+	AuthUsername      string            `yaml:"auth-username"`
+	AuthPassword      string            `yaml:"auth-password"`
+	ESAddr            string            `yaml:"elasticsearch-addr"` // elasticsearch is optional
+	IdentityPublicKey *bakery.PublicKey `yaml:"identity-public-key"`
+	IdentityLocation  string            `yaml:"identity-location"`
 	// The identity API is optional
-	IdentityAPIURL      string `yaml:"identity-api-url"`
-	IdentityAPIUsername string `yaml:"identity-api-username"`
-	IdentityAPIPassword string `yaml:"identity-api-password"`
+	IdentityAPIURL string          `yaml:"identity-api-url"`
+	AgentUsername  string          `yaml:"agent-username"`
+	AgentKey       *bakery.KeyPair `yaml:"agent-key"`
 }
 
 func (c *Config) validate() error {

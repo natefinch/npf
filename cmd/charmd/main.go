@@ -72,20 +72,15 @@ func serve(confPath string) error {
 
 	logger.Infof("setting up the API server")
 	cfg := charmstore.ServerParams{
-		AuthUsername:        conf.AuthUsername,
-		AuthPassword:        conf.AuthPassword,
-		IdentityLocation:    conf.IdentityLocation,
-		IdentityAPIURL:      conf.IdentityAPIURL,
-		IdentityAPIUsername: conf.IdentityAPIUsername,
-		IdentityAPIPassword: conf.IdentityAPIPassword,
-	}
-	var identityPublicKey bakery.PublicKey
-	err = identityPublicKey.UnmarshalText([]byte(conf.IdentityPublicKey))
-	if err != nil {
-		return errgo.Notef(err, "cannot create new server at %q", conf.APIAddr)
+		AuthUsername:     conf.AuthUsername,
+		AuthPassword:     conf.AuthPassword,
+		IdentityLocation: conf.IdentityLocation,
+		IdentityAPIURL:   conf.IdentityAPIURL,
+		AgentUsername:    conf.AgentUsername,
+		AgentKey:         conf.AgentKey,
 	}
 	ring := bakery.NewPublicKeyRing()
-	ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, &identityPublicKey)
+	ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, conf.IdentityPublicKey)
 	cfg.PublicKeyLocator = ring
 	server, err := charmstore.NewServer(db, es, "cs", cfg, charmstore.Legacy, charmstore.V4)
 	if err != nil {

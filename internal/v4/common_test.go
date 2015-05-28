@@ -186,6 +186,9 @@ type idM struct {
 	// an arbitrary HTTP response body.
 	body string
 
+	// contentType is the contentType to use when body is not ""
+	contentType string
+
 	// status may be set to indicate the HTTP status code
 	// when body is not nil.
 	status int
@@ -198,6 +201,7 @@ func newIdM() *idM {
 		groups: make(map[string][]string),
 		router: httprouter.New(),
 	}
+	idM.router.GET("/v1/u/:user/groups", idM.serveGroups)
 	idM.router.GET("/v1/u/:user/idpgroups", idM.serveGroups)
 	return idM
 }
@@ -208,6 +212,9 @@ func (idM *idM) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 func (idM *idM) serveGroups(w http.ResponseWriter, req *http.Request, p httprouter.Params) {
 	if idM.body != "" {
+		if idM.contentType != "" {
+			w.Header().Set("Content-Type", idM.contentType)
+		}
 		if idM.status != 0 {
 			w.WriteHeader(idM.status)
 		}
@@ -218,6 +225,7 @@ func (idM *idM) serveGroups(w http.ResponseWriter, req *http.Request, p httprout
 	if u == "" {
 		panic("no user")
 	}
+	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	if err := enc.Encode(idM.groups[u]); err != nil {
 		panic(err)

@@ -827,23 +827,16 @@ func (s *authSuite) TestGroupsForUserWithInvalidIdentityURL(c *gc.C) {
 	p.IdentityAPIURL = ":::::"
 	h := v4.New(s.store.Pool(), p)
 	groups, err := v4.GroupsForUser(h, "someone")
-	c.Assert(err, gc.ErrorMatches, `parse :::::/v1/u/someone/idpgroups: missing protocol scheme`)
-	c.Assert(groups, gc.HasLen, 0)
-}
-
-func (s *authSuite) TestGroupsForUserWithDoFailure(c *gc.C) {
-	h := v4.New(s.store.Pool(), s.srvParams)
-	s.PatchValue(&http.DefaultClient.Transport, errorTransport("some error"))
-	groups, err := v4.GroupsForUser(h, "someone")
-	c.Assert(err, gc.ErrorMatches, `cannot get groups from http://.*/v1/u/someone/idpgroups: Get http://.*/v1/u/someone/idpgroups: some error`)
+	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: cannot GET \"/v1/u/someone/groups\": cannot create request for \":::::/v1/u/someone/groups\": parse :::::/v1/u/someone/groups: missing protocol scheme`)
 	c.Assert(groups, gc.HasLen, 0)
 }
 
 func (s *authSuite) TestGroupsForUserWithInvalidBody(c *gc.C) {
 	h := v4.New(s.store.Pool(), s.srvParams)
 	s.idM.body = "bad"
+	s.idM.contentType = "application/json"
 	groups, err := v4.GroupsForUser(h, "someone")
-	c.Assert(err, gc.ErrorMatches, `cannot unmarshal response from http://.*/v1/u/someone/idpgroups: .*`)
+	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: cannot unmarshal response: invalid character 'b' looking for beginning of value`)
 	c.Assert(groups, gc.HasLen, 0)
 }
 
@@ -851,8 +844,9 @@ func (s *authSuite) TestGroupsForUserWithErrorResponse(c *gc.C) {
 	h := v4.New(s.store.Pool(), s.srvParams)
 	s.idM.body = `{"message":"some error","code":"some code"}`
 	s.idM.status = http.StatusUnauthorized
+	s.idM.contentType = "application/json"
 	groups, err := v4.GroupsForUser(h, "someone")
-	c.Assert(err, gc.ErrorMatches, `cannot get groups from http://.*/v1/u/someone/idpgroups: some error`)
+	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: some error`)
 	c.Assert(groups, gc.HasLen, 0)
 }
 
@@ -860,8 +854,9 @@ func (s *authSuite) TestGroupsForUserWithBadErrorResponse(c *gc.C) {
 	h := v4.New(s.store.Pool(), s.srvParams)
 	s.idM.body = `{"message":"some error"`
 	s.idM.status = http.StatusUnauthorized
+	s.idM.contentType = "application/json"
 	groups, err := v4.GroupsForUser(h, "someone")
-	c.Assert(err, gc.ErrorMatches, `cannot unmarshal error response from http://.*/v1/u/someone/idpgroups: .*`)
+	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: bad status "401 Unauthorized"`)
 	c.Assert(groups, gc.HasLen, 0)
 }
 

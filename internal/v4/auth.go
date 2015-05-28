@@ -5,12 +5,9 @@ package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 import (
 	"encoding/base64"
-	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"strings"
 
-	"github.com/juju/utils"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charmrepo.v0/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
@@ -156,39 +153,11 @@ type authorization struct {
 
 func (h *Handler) groupsForUser(username string) ([]string, error) {
 	if h.config.IdentityAPIURL == "" {
+		logger.Debugf("IdentityAPIURL not configured, not retrieving groups for %s", username)
 		return nil, nil
 	}
 	// TODO cache groups for a user
-	url := h.config.IdentityAPIURL + "/v1/u/" + username + "/idpgroups"
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, errgo.Mask(err)
-	}
-	req.Header = utils.BasicAuthHeader(h.config.IdentityAPIUsername, h.config.IdentityAPIPassword)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, errgo.Notef(err, "cannot get groups from %s", url)
-	}
-	defer resp.Body.Close()
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, errgo.Notef(err, "cannot read response from %s", url)
-	}
-	if resp.StatusCode == http.StatusOK {
-		var groups []string
-		if err := json.Unmarshal(data, &groups); err != nil {
-			return nil, errgo.Notef(err, "cannot unmarshal response from %s", url)
-		}
-		return groups, nil
-	}
-	var idmError struct {
-		Message string `json:"message,omitempty"`
-		Code    string `json:"code,omitempty"`
-	}
-	if err := json.Unmarshal(data, &idmError); err != nil {
-		return nil, errgo.Notef(err, "cannot unmarshal error response from %s", url)
-	}
-	return nil, errgo.Newf("cannot get groups from %s: %s", url, idmError.Message)
+	return h.identityClient.GroupsForUser(username)
 }
 
 func (h *Handler) checkACLMembership(auth authorization, acl []string) error {
