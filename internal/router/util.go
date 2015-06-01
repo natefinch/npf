@@ -4,7 +4,10 @@
 package router // import "gopkg.in/juju/charmstore.v5-unstable/internal/router"
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"mime"
 	"net/http"
 	"strings"
 
@@ -170,4 +173,31 @@ func RelativeURLPath(basePath, targPath string) (string, error) {
 	result = append(result, targOnly...)
 	result = append(result, lastElem)
 	return strings.Join(result, "/"), nil
+}
+
+// TODO(mhilton) This is not an ideal place for UnmarshalJSONResponse,
+// maybe it should be in httprequest somewhere?
+
+// UnmarshalJSONResponse unmarshals resp.Body into v. If errorF is not
+// nil and resp.StatusCode indicates an error has occured (>= 400) then
+// the result of calling errorF with resp is returned.
+func UnmarshalJSONResponse(resp *http.Response, v interface{}, errorF func(*http.Response) error) error {
+	if errorF != nil && resp.StatusCode >= http.StatusBadRequest {
+		return errgo.Mask(errorF(resp), errgo.Any)
+	}
+	mt, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if err != nil {
+		return errgo.Notef(err, "cannot parse content type")
+	}
+	if mt != "application/json" {
+		return errgo.Newf("unexpected content type %q", mt)
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return errgo.Notef(err, "cannot read response body")
+	}
+	if err := json.Unmarshal(body, v); err != nil {
+		return errgo.Notef(err, "cannot unmarshal response")
+	}
+	return nil
 }

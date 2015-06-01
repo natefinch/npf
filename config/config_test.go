@@ -11,6 +11,7 @@ import (
 	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
+	"gopkg.in/macaroon-bakery.v1/bakery"
 
 	"gopkg.in/juju/charmstore.v5-unstable/config"
 )
@@ -33,7 +34,12 @@ bar: false
 auth-username: myuser
 auth-password: mypasswd
 identity-location: localhost:18082
-identity-public-key: 0000
+identity-public-key: +qNbDWly3kRTDVv2UN03hrv/CBt4W6nxY5dHdw+KJFA=
+identity-api-url: "http://example.com/identity"
+agent-username: agentuser
+agent-key:
+  private: lsvcDkapKoFxIyjX9/eQgb3s41KVwPMISFwAJdVCZ70=
+  public: +qNbDWly3kRTDVv2UN03hrv/CBt4W6nxY5dHdw+KJFA=
 `
 
 func (s *ConfigSuite) readConfig(c *gc.C, content string) (*config.Config, error) {
@@ -50,12 +56,24 @@ func (s *ConfigSuite) TestRead(c *gc.C) {
 	conf, err := s.readConfig(c, testConfig)
 	c.Assert(err, gc.IsNil)
 	c.Assert(conf, jc.DeepEquals, &config.Config{
-		MongoURL:          "localhost:23456",
-		APIAddr:           "blah:2324",
-		AuthUsername:      "myuser",
-		AuthPassword:      "mypasswd",
-		IdentityLocation:  "localhost:18082",
-		IdentityPublicKey: "0000",
+		MongoURL:         "localhost:23456",
+		APIAddr:          "blah:2324",
+		AuthUsername:     "myuser",
+		AuthPassword:     "mypasswd",
+		IdentityLocation: "localhost:18082",
+		IdentityPublicKey: &bakery.PublicKey{
+			Key: mustParseKey("+qNbDWly3kRTDVv2UN03hrv/CBt4W6nxY5dHdw+KJFA="),
+		},
+		IdentityAPIURL: "http://example.com/identity",
+		AgentUsername:  "agentuser",
+		AgentKey: &bakery.KeyPair{
+			Public: bakery.PublicKey{
+				Key: mustParseKey("+qNbDWly3kRTDVv2UN03hrv/CBt4W6nxY5dHdw+KJFA="),
+			},
+			Private: bakery.PrivateKey{
+				mustParseKey("lsvcDkapKoFxIyjX9/eQgb3s41KVwPMISFwAJdVCZ70="),
+			},
+		},
 	})
 }
 
@@ -69,4 +87,13 @@ func (s *ConfigSuite) TestValidateConfigError(c *gc.C) {
 	cfg, err := s.readConfig(c, "")
 	c.Assert(err, gc.ErrorMatches, "missing fields mongo-url, api-addr, auth-username, auth-password in config file")
 	c.Assert(cfg, gc.IsNil)
+}
+
+func mustParseKey(s string) bakery.Key {
+	var k bakery.Key
+	err := k.UnmarshalText([]byte(s))
+	if err != nil {
+		panic(err)
+	}
+	return k
 }

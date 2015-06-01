@@ -7,8 +7,11 @@ auth-password: example-passwd
 identity-public-key: CIdWcEUN+0OZnKW9KwruRQnQDY/qqzVdD30CijwiWCk=
 identity-location: http://localhost:8081/v1/discharger
 identity-api-url: http://localhost:8081
-identity-api-username: admin
-identity-api-password: password
 # For production identity manager.
 #identity-public-key: hmHaPgCC1UfuhYHUSX5+aihSAZesqpVdjRv0mgfIwjo=
 #identity-location: https://api.jujucharms.com/identity/v1/discharger
+# Agent credentials.
+#agent-name: charmstore@admin@idm
+#agent-key:
+#  private: 85ZQqTnqiNdEggFVy7TGjRDGMulJHHz8UKkfVl5tTu8=
+#  public: X3Yj/aThvG20FoBhRAIX+JbFk300r9Roc2D78r/37iw=

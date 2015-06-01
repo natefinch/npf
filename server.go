@@ -59,10 +59,10 @@ type ServerParams struct {
 	// for example http://api.jujucharms.com/identity
 	IdentityAPIURL string
 
-	// IdentityAPIUsername and IdentityAPIPassword hold the credentials
-	// to be used when querying the identity manager API.
-	IdentityAPIUsername string
-	IdentityAPIPassword string
+	// AgentUsername and AgentKey hold the credentials used for agent
+	// authentication.
+	AgentUsername string
+	AgentKey      *bakery.KeyPair
 }
 
 // NewServer returns a new handler that handles charm store requests and stores
