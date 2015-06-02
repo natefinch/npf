@@ -15,7 +15,7 @@ repo = "pie"
 
 +++
 
-#### Pie isa Go package that provides a toolkit for creating plugins for Go applications.
+#### Pie is a Go package that provides a toolkit for creating plugins for Go applications.
 
     import "github.com/natefinch/pie"
 
