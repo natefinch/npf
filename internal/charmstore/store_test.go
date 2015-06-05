@@ -1030,7 +1030,7 @@ func (s *StoreSuite) newStore(c *gc.C, withES bool) *Store {
 	if withES {
 		si = &SearchIndex{s.ES, s.TestIndex}
 	}
-	p, err := NewPool(s.Session.DB("juju_test"), si, nil)
+	p, err := NewPool(s.Session.DB("juju_test"), si, nil, ServerParams{})
 	c.Assert(err, gc.IsNil)
 	return p.Store()
 }

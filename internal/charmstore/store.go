@@ -21,6 +21,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/cache"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
@@ -32,22 +33,28 @@ var logger = loggo.GetLogger("charmstore.internal.charmstore")
 // from the pool that can be used to process short-lived requests
 // to access and modify the store.
 type Pool struct {
-	db        StoreDatabase
-	blobStore *blobstore.Store
-	es        *SearchIndex
-	Bakery    *bakery.Service
-	stats     stats
+	db         StoreDatabase
+	blobStore  *blobstore.Store
+	es         *SearchIndex
+	Bakery     *bakery.Service
+	stats      stats
+	statsCache *cache.Cache
 }
 
 // NewPool returns a Pool that uses the given database
 // and search index. If bakeryParams is not nil,
 // the Bakery field in the resulting Store will be set
 // to a new Service that stores macaroons in mongo.
-func NewPool(db *mgo.Database, si *SearchIndex, bakeryParams *bakery.NewServiceParams) (*Pool, error) {
+func NewPool(db *mgo.Database, si *SearchIndex, bakeryParams *bakery.NewServiceParams, config ServerParams) (*Pool, error) {
+	maxAge := config.StatsCacheMaxAge
+	if maxAge == 0 {
+		maxAge = time.Hour
+	}
 	p := &Pool{
-		db:        StoreDatabase{db},
-		blobStore: blobstore.New(db, "entitystore"),
-		es:        si,
+		db:         StoreDatabase{db},
+		blobStore:  blobstore.New(db, "entitystore"),
+		es:         si,
+		statsCache: cache.New(maxAge),
 	}
 	store := p.Store()
 	defer store.Close()

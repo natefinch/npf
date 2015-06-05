@@ -41,7 +41,7 @@ func (s *StoreSearchSuite) SetUpTest(c *gc.C) {
 
 	s.index = SearchIndex{s.ES, s.TestIndex}
 	s.ES.RefreshIndex(".versions")
-	pool, err := NewPool(s.Session.DB("foo"), &s.index, nil)
+	pool, err := NewPool(s.Session.DB("foo"), &s.index, nil, ServerParams{})
 	c.Assert(err, gc.IsNil)
 	s.store = pool.Store()
 	s.addCharmsToStore(c)
@@ -74,6 +74,7 @@ var charmDownloadCounts = map[string]int{
 }
 
 func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
+	s.store.pool.statsCache.EvictAll()
 	for name, ref := range exportTestCharms {
 		entity, err := s.store.FindEntity(ref)
 		c.Assert(err, gc.IsNil)
@@ -167,8 +168,6 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C) {
 		baseEntity.ACLs.Read = append(baseEntity.ACLs.Read, params.Everyone)
 		err = s.store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
 		c.Assert(err, gc.IsNil)
-		err = s.store.UpdateSearchBaseURL(baseEntity.URL)
-		c.Assert(err, gc.IsNil)
 	}
 	for name, url := range exportTestBundles {
 		bundleArchive := storetesting.Charms.BundleDir(name)
@@ -184,9 +183,10 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C) {
 		baseEntity.ACLs.Read = append(baseEntity.ACLs.Read, params.Everyone)
 		err = s.store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
 		c.Assert(err, gc.IsNil)
-		err = s.store.UpdateSearchBaseURL(baseEntity.URL)
-		c.Assert(err, gc.IsNil)
 	}
+	s.store.pool.statsCache.EvictAll()
+	err := s.store.syncSearch()
+	c.Assert(err, gc.IsNil)
 }
 
 var searchTests = []struct {

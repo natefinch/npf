@@ -15,3 +15,5 @@ identity-api-url: http://localhost:8081
 #agent-key:
 #  private: 85ZQqTnqiNdEggFVy7TGjRDGMulJHHz8UKkfVl5tTu8=
 #  public: X3Yj/aThvG20FoBhRAIX+JbFk300r9Roc2D78r/37iw=
+# Statistics Cache maximum age, default 3600s (1 hour).
+#stats-cache-max-age: 3600

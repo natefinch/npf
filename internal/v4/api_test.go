@@ -1657,7 +1657,6 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 				}
 			}
 		}
-
 		// Ensure the meta/stats response reports the correct downloads count.
 		s.assertGet(c, test.url+"/meta/stats", test.expectResponse)
 

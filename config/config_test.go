@@ -40,6 +40,7 @@ agent-username: agentuser
 agent-key:
   private: lsvcDkapKoFxIyjX9/eQgb3s41KVwPMISFwAJdVCZ70=
   public: +qNbDWly3kRTDVv2UN03hrv/CBt4W6nxY5dHdw+KJFA=
+stats-cache-max-age: 3600
 `
 
 func (s *ConfigSuite) readConfig(c *gc.C, content string) (*config.Config, error) {
@@ -74,6 +75,7 @@ func (s *ConfigSuite) TestRead(c *gc.C) {
 				mustParseKey("lsvcDkapKoFxIyjX9/eQgb3s41KVwPMISFwAJdVCZ70="),
 			},
 		},
+		StatsCacheMaxAge: 3600,
 	})
 }
 

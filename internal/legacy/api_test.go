@@ -56,7 +56,7 @@ func (s *APISuite) TearDownTest(c *gc.C) {
 
 func newServer(c *gc.C, session *mgo.Session, config charmstore.ServerParams) (http.Handler, *charmstore.Store) {
 	db := session.DB("charmstore")
-	pool, err := charmstore.NewPool(db, nil, nil)
+	pool, err := charmstore.NewPool(db, nil, nil, config)
 	c.Assert(err, gc.IsNil)
 	srv, err := charmstore.NewServer(db, nil, config, map[string]charmstore.NewAPIHandlerFunc{"": legacy.NewAPIHandler})
 	c.Assert(err, gc.IsNil)

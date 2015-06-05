@@ -29,7 +29,7 @@ var _ = gc.Suite(&StatsSuite{})
 
 func (s *StatsSuite) SetUpTest(c *gc.C) {
 	s.IsolatedMgoSuite.SetUpTest(c)
-	pool, err := charmstore.NewPool(s.Session.DB("foo"), nil, nil)
+	pool, err := charmstore.NewPool(s.Session.DB("foo"), nil, nil, charmstore.ServerParams{})
 	c.Assert(err, gc.IsNil)
 	s.store = pool.Store()
 }
@@ -269,7 +269,7 @@ func (s *StatsSuite) TestListCounters(c *gc.C) {
 	}
 
 	// Use a different store to exercise cache filling.
-	pool, err := charmstore.NewPool(s.store.DB.Database, nil, nil)
+	pool, err := charmstore.NewPool(s.store.DB.Database, nil, nil, charmstore.ServerParams{})
 	c.Assert(err, gc.IsNil)
 	st := pool.Store()
 	defer st.Close()
@@ -527,7 +527,7 @@ var archiveDownloadCountsTests = []struct {
 		lastWeek:    2,
 		lastMonth:   3,
 		total:       4,
-		legacyTotal: 0,
+		legacyTotal: 100,
 	}, {
 		id:          charmstore.MustParseResolvedURL("~charmers/trusty/wordpress-1"),
 		lastDay:     2,
@@ -646,6 +646,7 @@ func (s *StatsSuite) TestArchiveDownloadCounts(c *gc.C) {
 	for i, test := range archiveDownloadCountsTests {
 		c.Logf("%d: %s", i, test.about)
 		// Clear everything
+		charmstore.StatsCacheEvictAll(s.store)
 		s.store.DB.Entities().RemoveAll(nil)
 		s.store.DB.StatCounters().RemoveAll(nil)
 		for _, charm := range test.charms {

@@ -71,7 +71,7 @@ func populate(confPath string) error {
 	defer session.Close()
 	db := session.DB("juju")
 
-	pool, err := charmstore.NewPool(db, si, nil)
+	pool, err := charmstore.NewPool(db, si, nil, charmstore.ServerParams{})
 	if err != nil {
 		return errgo.Notef(err, "cannot create a new store")
 	}
