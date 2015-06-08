@@ -35,6 +35,13 @@ type Cache struct {
 // New returns a new Cache that will cache items for
 // at most maxAge.
 func New(maxAge time.Duration) *Cache {
+	// A maxAge is < 2ns then the expiry code will panic because the
+	// actual expiry time will be maxAge - a random value in the
+	// interval [0. maxAge/2). If maxAge is < 2ns then this requires
+	// a random interval in [0, 0) which causes a panic.
+	if maxAge < 2*time.Nanosecond {
+		maxAge = 2 * time.Nanosecond
+	}
 	// The returned cache will have a zero-valued expire
 	// time, so will expire immediately, causing the new
 	// map to be created.
@@ -45,7 +52,17 @@ func New(maxAge time.Duration) *Cache {
 
 // Len returns the total number of cached entries.
 func (c *Cache) Len() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return len(c.old) + len(c.new)
+}
+
+// EvictAll removes all entries from the cache.
+func (c *Cache) EvictAll() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.new = make(map[string]entry)
+	c.old = nil
 }
 
 // Get returns the value for the given key, using fetch to fetch
@@ -115,7 +132,7 @@ func (c *Cache) cachedValue(key string, now time.Time) (interface{}, bool) {
 }
 
 // entry returns an entry from the map and whether it
-// was found. If the entry had expired 
+// was found. If the entry has expired, it is deleted from the map.
 func (c *Cache) entry(m map[string]entry, key string, now time.Time) (entry, bool) {
 	e, ok := m[key]
 	if !ok {

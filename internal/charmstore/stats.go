@@ -494,57 +494,66 @@ var LegacyDownloadCountsEnabled = true
 // a charm or bundle.
 func (s *Store) ArchiveDownloadCounts(id *charm.Reference) (thisRevision, allRevisions AggregatedCounts, err error) {
 	// Retrieve the aggregated stats.
-	thisRevision, err = s.aggregateStats(EntityStatsKey(id, params.StatsArchiveDownload), false)
+	fetchId := *id
+	fetch := func() (interface{}, error) {
+		return s.statsCacheFetch(&fetchId)
+	}
+	v, err := s.pool.statsCache.Get(fetchId.String(), fetch)
 	if err != nil {
-		err = errgo.Notef(err, "cannot get aggregated count for the specific revision")
-		return
+		return AggregatedCounts{}, AggregatedCounts{}, errgo.Mask(err)
 	}
-	noRevisionId := *id
-	noRevisionId.Revision = -1
-	allRevisions, err = s.aggregateStats(EntityStatsKey(&noRevisionId, params.StatsArchiveDownload), true)
+	thisRevision = v.(AggregatedCounts)
+
+	fetchId.Revision = -1
+	v, err = s.pool.statsCache.Get(fetchId.String(), fetch)
 	if err != nil {
-		err = errgo.Notef(err, "cannot get aggregated count for all revisions")
-		return
+		return AggregatedCounts{}, AggregatedCounts{}, errgo.Mask(err)
 	}
-	// TODO (frankban): remove this condition when removing the legacy counts
-	// logic.
-	if LegacyDownloadCountsEnabled {
-		legacyRevision, legacyAll, err := s.legacyDownloadCounts(id)
-		if err != nil {
-			return AggregatedCounts{}, AggregatedCounts{}, err
-		}
-		thisRevision.LastDay += legacyRevision.LastDay
-		thisRevision.LastWeek += legacyRevision.LastWeek
-		thisRevision.LastMonth += legacyRevision.LastMonth
-		thisRevision.Total += legacyRevision.Total
-		allRevisions.LastDay += legacyAll.LastDay
-		allRevisions.LastWeek += legacyAll.LastWeek
-		allRevisions.LastMonth += legacyAll.LastMonth
-		allRevisions.Total += legacyAll.Total
-	}
+	allRevisions = v.(AggregatedCounts)
 	return
+}
+
+func (s *Store) statsCacheFetch(id *charm.Reference) (interface{}, error) {
+	prefix := id.Revision == -1
+	counts, err := s.aggregateStats(EntityStatsKey(id, params.StatsArchiveDownload), prefix)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot get aggregated count for %q", id)
+	}
+	if !LegacyDownloadCountsEnabled {
+		return counts, nil
+	}
+	// TODO (frankban): remove this code when removing the legacy counts logic.
+	legacy, err := s.legacyDownloadCounts(id)
+	if err != nil {
+		return nil, err
+	}
+	counts.LastDay += legacy.LastDay
+	counts.LastWeek += legacy.LastWeek
+	counts.LastMonth += legacy.LastMonth
+	counts.Total += legacy.Total
+	return counts, nil
 }
 
 // legacyDownloadCounts retrieves the aggregated stats from the entity
 // extra-info. This is used when LegacyDownloadCountsEnabled is true.
 // TODO (frankban): remove this method when removing the legacy counts logic.
-func (s *Store) legacyDownloadCounts(id *charm.Reference) (AggregatedCounts, AggregatedCounts, error) {
+func (s *Store) legacyDownloadCounts(id *charm.Reference) (AggregatedCounts, error) {
 	counts := AggregatedCounts{}
 	entities, err := s.FindEntities(id, "extrainfo")
 	if err != nil {
-		return counts, counts, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+		return counts, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	if len(entities) == 0 {
-		return counts, counts, errgo.WithCausef(nil, params.ErrNotFound, "entity not found")
+		return counts, errgo.WithCausef(nil, params.ErrNotFound, "entity not found")
 	}
 	entity := entities[0]
 	data, ok := entity.ExtraInfo[params.LegacyDownloadStats]
 	if ok {
 		if err := json.Unmarshal(data, &counts.Total); err != nil {
-			return counts, counts, errgo.Notef(err, "cannot unmarshal extra-info value")
+			return counts, errgo.Notef(err, "cannot unmarshal extra-info value")
 		}
 	}
-	return counts, counts, nil
+	return counts, nil
 }
 
 // aggregatedStats returns the aggregated downloads counts for the given stats

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	gc "gopkg.in/check.v1"
@@ -114,8 +115,9 @@ func (s *commonSuite) TearDownTest(c *gc.C) {
 // startServer creates a new charmstore server.
 func (s *commonSuite) startServer(c *gc.C) {
 	config := charmstore.ServerParams{
-		AuthUsername: testUsername,
-		AuthPassword: testPassword,
+		AuthUsername:     testUsername,
+		AuthPassword:     testPassword,
+		StatsCacheMaxAge: time.Nanosecond,
 	}
 	if s.enableIdentity {
 		s.discharge = func(_, _ string) ([]checkers.Caveat, error) {
@@ -152,7 +154,7 @@ func (s *commonSuite) startServer(c *gc.C) {
 	}
 	s.noMacaroonSrvParams = config
 
-	pool, err := charmstore.NewPool(db, si, &bakery.NewServiceParams{})
+	pool, err := charmstore.NewPool(db, si, &bakery.NewServiceParams{}, config)
 	c.Assert(err, gc.IsNil)
 	s.store = pool.Store()
 }

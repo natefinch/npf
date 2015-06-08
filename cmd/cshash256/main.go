@@ -69,7 +69,7 @@ func run(confPath string) error {
 	db := session.DB("juju")
 
 	logger.Infof("instantiating the store")
-	pool, err := charmstore.NewPool(db, nil, nil)
+	pool, err := charmstore.NewPool(db, nil, nil, charmstore.ServerParams{})
 	if err != nil {
 		return errgo.Notef(err, "cannot create a new store")
 	}

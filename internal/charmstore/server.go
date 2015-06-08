@@ -9,6 +9,7 @@ package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/char
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/macaroon-bakery.v1/bakery"
@@ -46,6 +47,11 @@ type ServerParams struct {
 	// authentication.
 	AgentUsername string
 	AgentKey      *bakery.KeyPair
+
+	// StatsCacheMaxAge is the maximum length of time between
+	// refreshes of entities in the stats cache. If this left as the
+	// zero value then the default of 1 hour will be used.
+	StatsCacheMaxAge time.Duration
 }
 
 // NewServer returns a handler that serves the given charm store API
@@ -74,7 +80,7 @@ func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions 
 		Location: "charmstore",
 		Locator:  config.PublicKeyLocator,
 	}
-	pool, err := NewPool(db, si, &bparams)
+	pool, err := NewPool(db, si, &bparams, config)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot make store")
 	}

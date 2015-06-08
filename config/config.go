@@ -26,9 +26,10 @@ type Config struct {
 	IdentityPublicKey *bakery.PublicKey `yaml:"identity-public-key"`
 	IdentityLocation  string            `yaml:"identity-location"`
 	// The identity API is optional
-	IdentityAPIURL string          `yaml:"identity-api-url"`
-	AgentUsername  string          `yaml:"agent-username"`
-	AgentKey       *bakery.KeyPair `yaml:"agent-key"`
+	IdentityAPIURL   string          `yaml:"identity-api-url"`
+	AgentUsername    string          `yaml:"agent-username"`
+	AgentKey         *bakery.KeyPair `yaml:"agent-key"`
+	StatsCacheMaxAge int             `yaml:"stats-cache-max-age"` // optional
 }
 
 func (c *Config) validate() error {

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/juju/loggo"
 	"gopkg.in/errgo.v1"
@@ -78,6 +79,7 @@ func serve(confPath string) error {
 		IdentityAPIURL:   conf.IdentityAPIURL,
 		AgentUsername:    conf.AgentUsername,
 		AgentKey:         conf.AgentKey,
+		StatsCacheMaxAge: time.Duration(conf.StatsCacheMaxAge) * time.Second,
 	}
 	ring := bakery.NewPublicKeyRing()
 	ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, conf.IdentityPublicKey)

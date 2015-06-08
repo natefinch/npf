@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"time"
 
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/mgo.v2"
@@ -63,6 +64,10 @@ type ServerParams struct {
 	// authentication.
 	AgentUsername string
 	AgentKey      *bakery.KeyPair
+
+	// StatsCacheMaxAge is the maximum length of time between
+	// refreshes of entities in the stats cache.
+	StatsCacheMaxAge time.Duration
 }
 
 // NewServer returns a new handler that handles charm store requests and stores
