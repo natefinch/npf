@@ -20,6 +20,9 @@ import (
 type Config struct {
 	// TODO(rog) rename this to MongoAddr - it's not a URL.
 	MongoURL          string            `yaml:"mongo-url"`
+	AuditLogFile      string            `yaml:"audit-log-file"`
+	AuditLogMaxSize   int               `yaml:"audit-log-max-size"`
+	AuditLogMaxAge    int               `yaml:"audit-log-max-age"`
 	APIAddr           string            `yaml:"api-addr"`
 	AuthUsername      string            `yaml:"auth-username"`
 	AuthPassword      string            `yaml:"auth-password"`

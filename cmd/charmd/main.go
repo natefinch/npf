@@ -14,6 +14,7 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/mgo.v2"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable"
 	"gopkg.in/juju/charmstore.v5-unstable/config"
@@ -83,6 +84,15 @@ func serve(confPath string) error {
 		HTTPRequestWaitDuration: conf.RequestTimeout.Duration,
 		SearchCacheMaxAge:       conf.SearchCacheMaxAge.Duration,
 	}
+
+	if conf.AuditLogFile != "" {
+		cfg.Audit = &lumberjack.Logger{
+			Filename: conf.AuditLogFile,
+			MaxSize:  conf.AuditLogMaxSize,
+			MaxAge:   conf.AuditLogMaxAge,
+		}
+	}
+
 	ring := bakery.NewPublicKeyRing()
 	ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, conf.IdentityPublicKey)
 	cfg.PublicKeyLocator = ring

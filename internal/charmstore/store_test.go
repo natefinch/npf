@@ -27,11 +27,13 @@ import (
 	"gopkg.in/juju/charmrepo.v0/csclient/params"
 	"gopkg.in/mgo.v2/bson"
 
+	"gopkg.in/juju/charmstore.v5-unstable/audit"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/elasticsearch"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 type StoreSuite struct {
@@ -2285,6 +2287,68 @@ func (s *StoreSuite) TestCopyCopiesSessions(c *gc.C) {
 	r, _, err := store1.BlobStore.Open(entity.BlobName)
 	c.Assert(err, gc.IsNil)
 	r.Close()
+
+func (s *StoreSuite) TestAddAudit(c *gc.C) {
+	filename := filepath.Join(c.MkDir(), "audit.log")
+	config := ServerParams{
+		Audit: &lumberjack.Logger{
+			Filename: filename,
+		},
+	}
+
+	p, err := NewPool(s.Session.DB("juju_test"), nil, nil, config)
+	c.Assert(err, gc.IsNil)
+	defer p.Close()
+
+	store := p.Store()
+	defer store.Close()
+
+	entries := []audit.Entry{{
+		User:   "George Clooney",
+		Op:     audit.OpSetPerm,
+		Entity: charm.MustParseReference("cs:mycharm"),
+		ACL: &audit.ACL{
+			Read:  []string{"eleven", "ocean"},
+			Write: []string{"brad", "pitt"},
+		},
+	}, {
+		User: "Julia Roberts",
+		Op:   audit.OpSetPerm,
+	}}
+
+	now := time.Now()
+	for _, e := range entries {
+		store.addAuditAtTime(e, now)
+	}
+	data, err := ioutil.ReadFile(filename)
+	c.Assert(err, gc.IsNil)
+
+	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	c.Assert(lines, gc.HasLen, len(entries))
+	for i, e := range entries {
+		e.Time = now
+		c.Assert(lines[i], jc.JSONEquals, e)
+	}
+}
+
+func (s *StoreSuite) TestAddAuditWithNoLumberjack(c *gc.C) {
+	p, err := NewPool(s.Session.DB("juju_test"), nil, nil, ServerParams{})
+	c.Assert(err, gc.IsNil)
+	defer p.Close()
+
+	store := p.Store()
+	defer store.Close()
+
+	// Check that it does not panic.
+	store.AddAudit(audit.Entry{
+		User:   "George Clooney",
+		Op:     audit.OpSetPerm,
+		Entity: charm.MustParseReference("cs:mycharm"),
+		ACL: &audit.ACL{
+			Read:  []string{"eleven", "ocean"},
+			Write: []string{"brad", "pitt"},
+		},
+	})
 }
 
 func entity(url, purl string) *mongodoc.Entity {

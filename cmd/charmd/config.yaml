@@ -1,3 +1,4 @@
+audit-log-file: audit.log
 mongo-url: localhost:27017
 api-addr: localhost:8080
 auth-username: admin

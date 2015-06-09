@@ -283,7 +283,7 @@ func (s *ArchiveSuite) TestConcurrentUploads(c *gc.C) {
 	// by closing errorBodies.
 	try := make(chan struct{})
 	go func(try chan struct{}) {
-		for _ = range try {
+		for range try {
 			var wg sync.WaitGroup
 			for p := 0; p < 5; p++ {
 				wg.Add(1)

@@ -16,6 +16,7 @@ import (
 	"gopkg.in/mgo.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // NewAPIHandlerFunc is a function that returns a new API handler that uses
@@ -72,6 +73,10 @@ type ServerParams struct {
 	// that an HTTP request will wait for a free connection
 	// when the MaxConcurrentHTTPRequests limit is reached.
 	HTTPRequestWaitDuration time.Duration
+
+	// Audit optionally holds the logger which will be used to
+	// write audit log entries.
+	Audit *lumberjack.Logger
 }
 
 // NewServer returns a handler that serves the given charm store API
@@ -128,6 +133,7 @@ func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions 
 		handle(srv.mux, "/"+vers, h)
 		srv.handlers = append(srv.handlers, h)
 	}
+
 	return srv, nil
 }
 
