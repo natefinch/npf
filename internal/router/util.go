@@ -55,6 +55,8 @@ func errorToResp1(err error) (int, interface{}) {
 		// response.
 		// Perhaps we should not ever return StatusMethodNotAllowed.
 		status = http.StatusMethodNotAllowed
+	case params.ErrServiceUnavailable:
+		status = http.StatusServiceUnavailable
 	}
 	return status, errorBody
 }

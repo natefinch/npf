@@ -20,7 +20,7 @@ const maxConcurrency = 20
 
 // GET search[?text=text][&autocomplete=1][&filter=value…][&limit=limit][&include=meta][&skip=count][&sort=field[+dir]]
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-search
-func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, error) {
+func (h *ReqHandler) serveSearch(_ http.Header, req *http.Request) (interface{}, error) {
 	sp, err := parseSearchParams(req)
 	if err != nil {
 		return "", err
@@ -39,9 +39,7 @@ func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, er
 		sp.Groups = append(sp.Groups, groups...)
 	}
 	// perform query
-	store := h.pool.Store()
-	defer store.Close()
-	results, err := store.Search(sp)
+	results, err := h.Store.Search(sp)
 	if err != nil {
 		return nil, errgo.Notef(err, "error performing search")
 	}
@@ -92,7 +90,7 @@ func (h *Handler) serveSearch(_ http.Header, req *http.Request) (interface{}, er
 
 // GET search/interesting[?limit=limit][&include=meta]
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-searchinteresting
-func (h *Handler) serveSearchInteresting(w http.ResponseWriter, req *http.Request) {
+func (h *ReqHandler) serveSearchInteresting(w http.ResponseWriter, req *http.Request) {
 	router.WriteError(w, errNotImplemented)
 }
 

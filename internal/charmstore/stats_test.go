@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
@@ -21,7 +22,7 @@ import (
 )
 
 type StatsSuite struct {
-	storetesting.IsolatedMgoSuite
+	jujutesting.IsolatedMgoSuite
 	store *charmstore.Store
 }
 
@@ -32,6 +33,7 @@ func (s *StatsSuite) SetUpTest(c *gc.C) {
 	pool, err := charmstore.NewPool(s.Session.DB("foo"), nil, nil, charmstore.ServerParams{})
 	c.Assert(err, gc.IsNil)
 	s.store = pool.Store()
+	pool.Close()
 }
 
 func (s *StatsSuite) TearDownTest(c *gc.C) {
@@ -273,6 +275,7 @@ func (s *StatsSuite) TestListCounters(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	st := pool.Store()
 	defer st.Close()
+	pool.Close()
 
 	for i := range tests {
 		req := &charmstore.CounterRequest{Key: tests[i].prefix, Prefix: true, List: true}

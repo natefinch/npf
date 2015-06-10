@@ -2494,6 +2494,35 @@ func (s *APISuite) TestEndpointRequiringBaseEntityWithPromulgatedId(c *gc.C) {
 	})
 }
 
+func (s *APISuite) TestTooManyConcurrentRequests(c *gc.C) {
+	// We don't have any control over the number of concurrent
+	// connections allowed by s.srv, so we make our own
+	// server here with custom config.
+	config := charmstore.ServerParams{
+		MaxMgoSessions: 1,
+	}
+	db := s.Session.DB("charmstore")
+	srv, err := charmstore.NewServer(db, nil, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v4.NewAPIHandler})
+	c.Assert(err, gc.IsNil)
+	defer srv.Close()
+
+	// Get a store from the pool so that we'll be
+	// at the concurrent request limit.
+	store := srv.Pool().Store()
+	defer store.Close()
+
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      srv,
+		Do:           bakeryDo(nil),
+		URL:          storeURL("debug/status"),
+		ExpectStatus: http.StatusServiceUnavailable,
+		ExpectBody: params.Error{
+			Message: "service unavailable: too many mongo sessions in use",
+			Code:    params.ErrServiceUnavailable,
+		},
+	})
+}
+
 // dischargeRequiredBody returns a httptesting.BodyAsserter that checks
 // that the response body contains a discharge required error holding a macaroon
 // with a third-party caveat addressed to expectedEntityLocation.

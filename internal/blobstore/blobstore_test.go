@@ -15,7 +15,6 @@ import (
 	gc "gopkg.in/check.v1"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 )
 
 func TestPackage(t *testing.T) {
@@ -23,7 +22,7 @@ func TestPackage(t *testing.T) {
 }
 
 type BlobStoreSuite struct {
-	storetesting.IsolatedMgoSuite
+	jujutesting.IsolatedMgoSuite
 }
 
 var _ = gc.Suite(&BlobStoreSuite{})

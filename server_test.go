@@ -24,7 +24,7 @@ func TestPackage(t *testing.T) {
 }
 
 type ServerSuite struct {
-	storetesting.IsolatedMgoSuite
+	jujutesting.IsolatedMgoSuite
 	config charmstore.ServerParams
 }
 
@@ -64,6 +64,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 
 	h, err := charmstore.NewServer(db, nil, "", s.config, charmstore.V4)
 	c.Assert(err, gc.IsNil)
+	defer h.Close()
 
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      h,
@@ -118,6 +119,7 @@ func (s *ServerESSuite) SetUpSuite(c *gc.C) {
 func (s *ServerESSuite) TestNewServerWithElasticsearch(c *gc.C) {
 	db := s.Session.DB("foo")
 
-	_, err := charmstore.NewServer(db, s.ES, s.TestIndex, s.config, charmstore.V4)
+	srv, err := charmstore.NewServer(db, s.ES, s.TestIndex, s.config, charmstore.V4)
 	c.Assert(err, gc.IsNil)
+	srv.Close()
 }

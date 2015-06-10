@@ -78,22 +78,66 @@ import (
 	"gopkg.in/juju/charmrepo.v0/csclient/params"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mempool"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 )
 
 type Handler struct {
-	v4   *v4.Handler
-	pool *charmstore.Pool
-	mux  *http.ServeMux
+	v4 *v4.Handler
 }
 
-func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams) http.Handler {
-	h := &Handler{
-		v4:   v4.New(pool, config),
-		pool: pool,
-		mux:  http.NewServeMux(),
+type reqHandler struct {
+	v4    *v4.ReqHandler
+	mux   *http.ServeMux
+	store *charmstore.Store
+}
+
+// reqHandlerPool holds a cache of ReqHandlers to save
+// on allocation time.
+var reqHandlerPool = mempool.Pool{
+	New: func() interface{} {
+		return newReqHandler()
+	},
+}
+
+func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams) charmstore.HTTPCloseHandler {
+	return &Handler{
+		v4: v4.New(pool, config),
+	}
+}
+
+func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	req.ParseForm()
+	rh, err := h.newReqHandler()
+	if err != nil {
+		router.WriteError(w, err)
+		return
+	}
+	defer rh.close()
+	rh.mux.ServeHTTP(w, req)
+}
+
+func (h *Handler) Close() {
+}
+
+func (h *Handler) newReqHandler() (*reqHandler, error) {
+	v4h, err := h.v4.NewReqHandler()
+	if err != nil {
+		return nil, errgo.Mask(err, errgo.Is(charmstore.ErrTooManySessions))
+	}
+	rh := reqHandlerPool.Get().(*reqHandler)
+	rh.v4 = v4h
+	rh.store = v4h.Store
+	return rh, nil
+}
+
+// newReqHandler returns a new instance of the legacy API handler.
+// The returned value has a nil v4 field.
+func newReqHandler() *reqHandler {
+	h := &reqHandler{
+		mux: http.NewServeMux(),
 	}
 	h.handle("/charm-info", router.HandleJSON(h.serveCharmInfo))
 	h.handle("/charm/", router.HandleErrors(h.serveCharm))
@@ -101,17 +145,18 @@ func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams) http.H
 	return h
 }
 
-func (h *Handler) handle(path string, handler http.Handler) {
+func (h *reqHandler) handle(path string, handler http.Handler) {
 	prefix := strings.TrimSuffix(path, "/")
 	h.mux.Handle(path, http.StripPrefix(prefix, handler))
 }
 
-func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	req.ParseForm()
-	h.mux.ServeHTTP(w, req)
+func (h *reqHandler) close() {
+	h.v4.Close()
+	h.v4 = nil
+	reqHandlerPool.Put(h)
 }
 
-func (h *Handler) serveCharm(w http.ResponseWriter, req *http.Request) error {
+func (h *reqHandler) serveCharm(w http.ResponseWriter, req *http.Request) error {
 	if req.Method != "GET" && req.Method != "HEAD" {
 		return params.ErrMethodNotAllowed
 	}
@@ -132,10 +177,8 @@ func charmStatsKey(url *charm.Reference, kind string) []string {
 
 var errNotFound = fmt.Errorf("entry not found")
 
-func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{}, error) {
+func (h *reqHandler) serveCharmInfo(_ http.Header, req *http.Request) (interface{}, error) {
 	response := make(map[string]*charmrepo.InfoResponse)
-	store := h.pool.Store()
-	defer store.Close()
 	for _, url := range req.Form["charms"] {
 		c := &charmrepo.InfoResponse{}
 		response[url] = c
@@ -145,7 +188,7 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 		}
 		var entity *mongodoc.Entity
 		if err == nil {
-			entity, err = store.FindBestEntity(curl)
+			entity, err = h.store.FindBestEntity(curl)
 			if errgo.Cause(err) == params.ErrNotFound {
 				// The old API actually returned "entry not found"
 				// on *any* error, but it seems reasonable to be
@@ -170,7 +213,7 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 			// command is run in the production db. At that point, entities
 			// always have their blobhash256 field populated, and there is no
 			// need for this lazy evaluation anymore.
-			entity.BlobHash256, err = store.UpdateEntitySHA256(rurl)
+			entity.BlobHash256, err = h.store.UpdateEntitySHA256(rurl)
 		}
 		// Prepare the response part for this charm.
 		if err == nil {
@@ -183,12 +226,12 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 				c.Errors = append(c.Errors, err.Error())
 			}
 			if v4.StatsEnabled(req) {
-				store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmInfo))
+				h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmInfo))
 			}
 		} else {
 			c.Errors = append(c.Errors, err.Error())
 			if curl != nil && v4.StatsEnabled(req) {
-				store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmMissing))
+				h.store.IncCounterAsync(charmStatsKey(curl, params.StatsCharmMissing))
 			}
 		}
 	}
@@ -198,10 +241,8 @@ func (h *Handler) serveCharmInfo(_ http.Header, req *http.Request) (interface{},
 // serveCharmEvent returns events related to the charms specified in the
 // "charms" query. In this implementation, the only supported event is
 // "published", required by the "juju publish" command.
-func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}, error) {
+func (h *reqHandler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}, error) {
 	response := make(map[string]*charmrepo.EventResponse)
-	store := h.pool.Store()
-	defer store.Close()
 	for _, url := range req.Form["charms"] {
 		c := &charmrepo.EventResponse{}
 
@@ -225,7 +266,7 @@ func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}
 		}
 
 		// Retrieve the charm.
-		entity, err := store.FindBestEntity(id, "_id", "uploadtime", "extrainfo")
+		entity, err := h.store.FindBestEntity(id, "_id", "uploadtime", "extrainfo")
 		if err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				// The old API actually returned "entry not found"
@@ -269,7 +310,7 @@ func (h *Handler) serveCharmEvent(_ http.Header, req *http.Request) (interface{}
 		}
 		c.Time = entity.UploadTime.UTC().Format(time.RFC3339)
 		if v4.StatsEnabled(req) {
-			store.IncCounterAsync(charmStatsKey(id, params.StatsCharmEvent))
+			h.store.IncCounterAsync(charmStatsKey(id, params.StatsCharmEvent))
 		}
 	}
 	return response, nil

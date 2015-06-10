@@ -806,7 +806,8 @@ func (s *authSuite) TestDelegatableMacaroonWithBasicAuth(c *gc.C) {
 }
 
 func (s *authSuite) TestGroupsForUserSuccess(c *gc.C) {
-	h := v4.New(s.store.Pool(), s.srvParams)
+	h := s.handler(c)
+	defer h.Close()
 	s.idM.groups = map[string][]string{
 		"bob": {"one", "two"},
 	}
@@ -816,23 +817,25 @@ func (s *authSuite) TestGroupsForUserSuccess(c *gc.C) {
 }
 
 func (s *authSuite) TestGroupsForUserWithNoIdentity(c *gc.C) {
-	h := v4.New(s.store.Pool(), s.noMacaroonSrvParams)
+	h := s.handler(c)
+	defer h.Close()
 	groups, err := v4.GroupsForUser(h, "someone")
 	c.Assert(err, gc.IsNil)
 	c.Assert(groups, gc.HasLen, 0)
 }
 
 func (s *authSuite) TestGroupsForUserWithInvalidIdentityURL(c *gc.C) {
-	p := s.srvParams
-	p.IdentityAPIURL = ":::::"
-	h := v4.New(s.store.Pool(), p)
+	s.PatchValue(&s.srvParams.IdentityAPIURL, ":::::")
+	h := s.handler(c)
+	defer h.Close()
 	groups, err := v4.GroupsForUser(h, "someone")
 	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: cannot GET \"/v1/u/someone/groups\": cannot create request for \":::::/v1/u/someone/groups\": parse :::::/v1/u/someone/groups: missing protocol scheme`)
 	c.Assert(groups, gc.HasLen, 0)
 }
 
 func (s *authSuite) TestGroupsForUserWithInvalidBody(c *gc.C) {
-	h := v4.New(s.store.Pool(), s.srvParams)
+	h := s.handler(c)
+	defer h.Close()
 	s.idM.body = "bad"
 	s.idM.contentType = "application/json"
 	groups, err := v4.GroupsForUser(h, "someone")
@@ -841,7 +844,8 @@ func (s *authSuite) TestGroupsForUserWithInvalidBody(c *gc.C) {
 }
 
 func (s *authSuite) TestGroupsForUserWithErrorResponse(c *gc.C) {
-	h := v4.New(s.store.Pool(), s.srvParams)
+	h := s.handler(c)
+	defer h.Close()
 	s.idM.body = `{"message":"some error","code":"some code"}`
 	s.idM.status = http.StatusUnauthorized
 	s.idM.contentType = "application/json"
@@ -851,7 +855,8 @@ func (s *authSuite) TestGroupsForUserWithErrorResponse(c *gc.C) {
 }
 
 func (s *authSuite) TestGroupsForUserWithBadErrorResponse(c *gc.C) {
-	h := v4.New(s.store.Pool(), s.srvParams)
+	h := s.handler(c)
+	defer h.Close()
 	s.idM.body = `{"message":"some error"`
 	s.idM.status = http.StatusUnauthorized
 	s.idM.contentType = "application/json"

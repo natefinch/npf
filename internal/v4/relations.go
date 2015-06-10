@@ -19,7 +19,7 @@ import (
 
 // GET id/meta/charm-related[?include=meta[&include=meta…]]
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacharm-related
-func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *ReqHandler) metaCharmRelated(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	if id.URL.Series == "bundle" {
 		return nil, nil
 	}
@@ -53,11 +53,9 @@ func (h *Handler) metaCharmRelated(entity *mongodoc.Entity, id *router.ResolvedU
 		{"promulgated-revision", 1},
 	}
 
-	store := h.pool.Store()
-	defer store.Close()
 	// Retrieve the entities from the database.
 	var entities []mongodoc.Entity
-	if err := store.DB.Entities().Find(query).Select(fields).Sort("_id").All(&entities); err != nil {
+	if err := h.Store.DB.Entities().Find(query).Select(fields).Sort("_id").All(&entities); err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related charms")
 	}
 
@@ -103,7 +101,7 @@ type entityRelatedInterfacesGetter func(mongodoc.Entity) []string
 //           {Id: "cs:utopic/memcached-0", Meta: ...},
 //       },
 //   }
-func (h *Handler) getRelatedCharmsResponse(
+func (h *ReqHandler) getRelatedCharmsResponse(
 	ifaces []string,
 	entities []mongodoc.Entity,
 	getInterfaces entityRelatedInterfacesGetter,
@@ -123,7 +121,7 @@ func (h *Handler) getRelatedCharmsResponse(
 	return results, nil
 }
 
-func (h *Handler) getRelatedIfaceResponses(
+func (h *ReqHandler) getRelatedIfaceResponses(
 	iface string,
 	entities []mongodoc.Entity,
 	getInterfaces entityRelatedInterfacesGetter,
@@ -154,7 +152,7 @@ func (h *Handler) getRelatedIfaceResponses(
 
 // GET id/meta/bundles-containing[?include=meta[&include=meta…]][&any-series=1][&any-revision=1][&all-results=1]
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetabundles-containing
-func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h *ReqHandler) metaBundlesContaining(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	if id.URL.Series == "bundle" {
 		return nil, nil
 	}
@@ -181,11 +179,9 @@ func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *router.Reso
 		searchId.Series = ""
 	}
 
-	store := h.pool.Store()
-	defer store.Close()
 	// Retrieve the bundles containing the resulting charm id.
 	var entities []*mongodoc.Entity
-	if err := store.DB.Entities().
+	if err := h.Store.DB.Entities().
 		Find(bson.D{{"bundlecharms", &searchId}}).
 		Select(bson.D{{"_id", 1}, {"bundlecharms", 1}, {"promulgated-url", 1}}).
 		All(&entities); err != nil {
@@ -280,7 +276,7 @@ func (h *Handler) metaBundlesContaining(entity *mongodoc.Entity, id *router.Reso
 	return response, nil
 }
 
-func (h *Handler) getMetadataForEntity(e *mongodoc.Entity, includes []string, req *http.Request) (map[string]interface{}, error) {
+func (h *ReqHandler) getMetadataForEntity(e *mongodoc.Entity, includes []string, req *http.Request) (map[string]interface{}, error) {
 	return h.GetMetadata(charmstore.EntityResolvedURL(e), includes, req)
 }
 

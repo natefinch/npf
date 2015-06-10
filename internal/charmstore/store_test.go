@@ -313,6 +313,134 @@ func (s *StoreSuite) testURLFinding(c *gc.C, check func(store *Store, expand *ch
 	}
 }
 
+func (s *StoreSuite) TestRequestStore(c *gc.C) {
+	config := ServerParams{
+		HTTPRequestWaitDuration: time.Millisecond,
+		MaxMgoSessions:          1,
+	}
+	p, err := NewPool(s.Session.DB("juju_test"), nil, nil, config)
+	c.Assert(err, gc.IsNil)
+	defer p.Close()
+
+	// Instances within the limit can be acquired
+	// instantly without error.
+	store, err := p.RequestStore()
+	c.Assert(err, gc.IsNil)
+	store.Close()
+
+	// Check that when we get another instance,
+	// we reuse the original.
+	store1, err := p.RequestStore()
+	c.Assert(err, gc.IsNil)
+	defer store1.Close()
+	c.Assert(store1, gc.Equals, store)
+
+	// If we try to exceed the limit, we'll wait for a while,
+	// then return an error.
+	t0 := time.Now()
+	store2, err := p.RequestStore()
+	c.Assert(err, gc.ErrorMatches, "too many mongo sessions in use")
+	c.Assert(errgo.Cause(err), gc.Equals, ErrTooManySessions)
+	c.Assert(store2, gc.IsNil)
+	if d := time.Since(t0); d < config.HTTPRequestWaitDuration {
+		c.Errorf("got wait of %v; want at least %v", d, config.HTTPRequestWaitDuration)
+	}
+}
+
+func (s *StoreSuite) TestRequestStoreSatisfiedWithinTimeout(c *gc.C) {
+	config := ServerParams{
+		HTTPRequestWaitDuration: 5 * time.Second,
+		MaxMgoSessions:          1,
+	}
+	p, err := NewPool(s.Session.DB("juju_test"), nil, nil, config)
+	c.Assert(err, gc.IsNil)
+	defer p.Close()
+	store, err := p.RequestStore()
+	c.Assert(err, gc.IsNil)
+
+	// Start a goroutine that will close the Store after a short period.
+	go func() {
+		time.Sleep(time.Millisecond)
+		store.Close()
+	}()
+	store1, err := p.RequestStore()
+	c.Assert(err, gc.IsNil)
+	c.Assert(store1, gc.Equals, store)
+	store1.Close()
+}
+
+func (s *StoreSuite) TestRequestStoreLimitCanBeExceeded(c *gc.C) {
+	config := ServerParams{
+		HTTPRequestWaitDuration: 5 * time.Second,
+		MaxMgoSessions:          1,
+	}
+	p, err := NewPool(s.Session.DB("juju_test"), nil, nil, config)
+	c.Assert(err, gc.IsNil)
+	defer p.Close()
+	store, err := p.RequestStore()
+	c.Assert(err, gc.IsNil)
+	defer store.Close()
+
+	store1 := store.Copy()
+	defer store1.Close()
+	c.Assert(store1.Pool(), gc.Equals, store.Pool())
+
+	store2 := p.Store()
+	defer store2.Close()
+	c.Assert(store2.Pool(), gc.Equals, store.Pool())
+}
+
+func (s *StoreSuite) TestRequestStoreFailsWhenPoolIsClosed(c *gc.C) {
+	config := ServerParams{
+		HTTPRequestWaitDuration: 5 * time.Second,
+		MaxMgoSessions:          1,
+	}
+	p, err := NewPool(s.Session.DB("juju_test"), nil, nil, config)
+	c.Assert(err, gc.IsNil)
+	p.Close()
+	store, err := p.RequestStore()
+	c.Assert(err, gc.ErrorMatches, "charm store has been closed")
+	c.Assert(store, gc.IsNil)
+}
+
+func (s *StoreSuite) TestRequestStoreLimitMaintained(c *gc.C) {
+	config := ServerParams{
+		HTTPRequestWaitDuration: time.Millisecond,
+		MaxMgoSessions:          1,
+	}
+	p, err := NewPool(s.Session.DB("juju_test"), nil, nil, config)
+	c.Assert(err, gc.IsNil)
+	defer p.Close()
+
+	// Acquire an instance.
+	store, err := p.RequestStore()
+	c.Assert(err, gc.IsNil)
+	defer store.Close()
+
+	// Acquire another instance, exceeding the limit,
+	// and put it back.
+	store1 := p.Store()
+	c.Assert(err, gc.IsNil)
+	store1.Close()
+
+	// We should still be unable to acquire another
+	// store for a request because we're still
+	// at the request limit.
+	_, err = p.RequestStore()
+	c.Assert(errgo.Cause(err), gc.Equals, ErrTooManySessions)
+}
+
+func (s *StoreSuite) TestPoolDoubleClose(c *gc.C) {
+	p, err := NewPool(s.Session.DB("juju_test"), nil, nil, ServerParams{})
+	c.Assert(err, gc.IsNil)
+	p.Close()
+	p.Close()
+
+	// Close a third time to ensure that the lock has properly
+	// been released.
+	p.Close()
+}
+
 func (s *StoreSuite) TestFindEntities(c *gc.C) {
 	s.testURLFinding(c, func(store *Store, expand *charm.Reference, expect []*router.ResolvedURL) {
 		// Check FindEntities works when just retrieving the id and promulgated id.
@@ -1032,7 +1160,9 @@ func (s *StoreSuite) newStore(c *gc.C, withES bool) *Store {
 	}
 	p, err := NewPool(s.Session.DB("juju_test"), si, nil, ServerParams{})
 	c.Assert(err, gc.IsNil)
-	return p.Store()
+	store := p.Store()
+	p.Close()
+	return store
 }
 
 func (s *StoreSuite) TestAddCharmWithBundleSeries(c *gc.C) {

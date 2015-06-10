@@ -265,13 +265,10 @@ type Counter struct {
 
 // Counters aggregates and returns counter values according to the provided request.
 func (s *Store) Counters(req *CounterRequest) ([]Counter, error) {
-	db := s.DB.Copy()
-	defer db.Close()
+	tokensColl := s.DB.StatTokens()
+	countersColl := s.DB.StatCounters()
 
-	tokensColl := db.StatTokens()
-	countersColl := db.StatCounters()
-
-	searchKey, err := s.stats.key(db, req.Key, false)
+	searchKey, err := s.stats.key(s.DB, req.Key, false)
 	if errgo.Cause(err) == params.ErrNotFound {
 		if !req.List {
 			return []Counter{{

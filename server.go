@@ -29,6 +29,13 @@ var versions = map[string]charmstore.NewAPIHandlerFunc{
 	Legacy: legacy.NewAPIHandler,
 }
 
+// HTTPCloseHandler represents a HTTP handler that
+// must be closed after use.
+type HTTPCloseHandler interface {
+	Close()
+	http.Handler
+}
+
 // Versions returns all known API version strings in alphabetical order.
 func Versions() []string {
 	vs := make([]string, 0, len(versions))
@@ -68,12 +75,22 @@ type ServerParams struct {
 	// StatsCacheMaxAge is the maximum length of time between
 	// refreshes of entities in the stats cache.
 	StatsCacheMaxAge time.Duration
+
+	// MaxMgoSessions specifies a soft limit on the maximum
+	// number of mongo sessions used. Each concurrent
+	// HTTP request will use one session.
+	MaxMgoSessions int
+
+	// HTTPRequestWaitDuration holds the amount of time
+	// that an HTTP request will wait for a free connection
+	// when the MaxConcurrentHTTPRequests limit is reached.
+	HTTPRequestWaitDuration time.Duration
 }
 
 // NewServer returns a new handler that handles charm store requests and stores
 // its data in the given database. The handler will serve the specified
 // versions of the API using the given configuration.
-func NewServer(db *mgo.Database, es *elasticsearch.Database, idx string, config ServerParams, serveVersions ...string) (http.Handler, error) {
+func NewServer(db *mgo.Database, es *elasticsearch.Database, idx string, config ServerParams, serveVersions ...string) (HTTPCloseHandler, error) {
 	newAPIs := make(map[string]charmstore.NewAPIHandlerFunc)
 	for _, vers := range serveVersions {
 		newAPI := versions[vers]

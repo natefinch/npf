@@ -38,13 +38,15 @@ type versionResponse struct {
 func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 	db := s.Session.DB("foo")
 	serveVersion := func(vers string) NewAPIHandlerFunc {
-		return func(p *Pool, config ServerParams) http.Handler {
-			return router.HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
-				return versionResponse{
-					Version: vers,
-					Path:    req.URL.Path,
-				}, nil
-			})
+		return func(p *Pool, config ServerParams) HTTPCloseHandler {
+			return nopCloseHandler{
+				router.HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
+					return versionResponse{
+						Version: vers,
+						Path:    req.URL.Path,
+					}, nil
+				}),
+			}
 		}
 	}
 
@@ -52,6 +54,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 		"version1": serveVersion("version1"),
 	})
 	c.Assert(err, gc.IsNil)
+	defer h.Close()
 	assertServesVersion(c, h, "version1")
 	assertDoesNotServeVersion(c, h, "version2")
 	assertDoesNotServeVersion(c, h, "version3")
@@ -61,6 +64,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 		"version2": serveVersion("version2"),
 	})
 	c.Assert(err, gc.IsNil)
+	defer h.Close()
 	assertServesVersion(c, h, "version1")
 	assertServesVersion(c, h, "version2")
 	assertDoesNotServeVersion(c, h, "version3")
@@ -71,6 +75,7 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 		"version3": serveVersion("version3"),
 	})
 	c.Assert(err, gc.IsNil)
+	defer h.Close()
 	assertServesVersion(c, h, "version1")
 	assertServesVersion(c, h, "version2")
 	assertServesVersion(c, h, "version3")
@@ -80,20 +85,24 @@ func (s *ServerSuite) TestNewServerWithVersions(c *gc.C) {
 		"":         serveVersion(""),
 	})
 	c.Assert(err, gc.IsNil)
+	defer h.Close()
 	assertServesVersion(c, h, "")
 	assertServesVersion(c, h, "version1")
 }
 
 func (s *ServerSuite) TestNewServerWithConfig(c *gc.C) {
-	serveConfig := func(p *Pool, config ServerParams) http.Handler {
-		return router.HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
-			return config, nil
-		})
+	serveConfig := func(p *Pool, config ServerParams) HTTPCloseHandler {
+		return nopCloseHandler{
+			router.HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
+				return config, nil
+			}),
+		}
 	}
 	h, err := NewServer(s.Session.DB("foo"), nil, serverParams, map[string]NewAPIHandlerFunc{
 		"version1": serveConfig,
 	})
 	c.Assert(err, gc.IsNil)
+	defer h.Close()
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:    h,
 		URL:        "/version1/some/path",
@@ -102,16 +111,19 @@ func (s *ServerSuite) TestNewServerWithConfig(c *gc.C) {
 }
 
 func (s *ServerSuite) TestNewServerWithElasticSearch(c *gc.C) {
-	serveConfig := func(p *Pool, config ServerParams) http.Handler {
-		return router.HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
-			return config, nil
-		})
+	serveConfig := func(p *Pool, config ServerParams) HTTPCloseHandler {
+		return nopCloseHandler{
+			router.HandleJSON(func(_ http.Header, req *http.Request) (interface{}, error) {
+				return config, nil
+			}),
+		}
 	}
 	h, err := NewServer(s.Session.DB("foo"), &SearchIndex{s.ES, s.TestIndex}, serverParams,
 		map[string]NewAPIHandlerFunc{
 			"version1": serveConfig,
 		})
 	c.Assert(err, gc.IsNil)
+	defer h.Close()
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:    h,
 		URL:        "/version1/some/path",
@@ -140,4 +152,11 @@ func assertDoesNotServeVersion(c *gc.C, h http.Handler, vers string) {
 		URL:     "/" + vers + "/some/path",
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusNotFound)
+}
+
+type nopCloseHandler struct {
+	http.Handler
+}
+
+func (nopCloseHandler) Close() {
 }

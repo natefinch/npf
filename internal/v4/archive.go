@@ -44,7 +44,7 @@ import (
 // rather than choosing a new one. As this feature is to support legacy
 // ingestion methods, and will be removed in the future, it has no entry
 // in the specification.
-func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
 	case "DELETE":
 		return h.resolveId(h.authId(h.serveDeleteArchive))(id, w, req)
@@ -63,12 +63,10 @@ func (h *Handler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *
 	return errgo.Newf("method not allowed")
 }
 
-func (h *Handler) authorizeUpload(id *charm.Reference, req *http.Request) error {
+func (h *ReqHandler) authorizeUpload(id *charm.Reference, req *http.Request) error {
 	if id.User == "" {
 		return badRequestf(nil, "user not specified in entity upload URL %q", id)
 	}
-	store := h.pool.Store()
-	defer store.Close()
 	// Note that we pass a nil entity URL to authorizeWithPerms, because
 	// we haven't got a resolved URL at this point. At some
 	// point in the future, we may want to be able to allow
@@ -77,7 +75,7 @@ func (h *Handler) authorizeUpload(id *charm.Reference, req *http.Request) error 
 	baseURL := *id
 	baseURL.Revision = -1
 	baseURL.Series = ""
-	baseEntity, err := store.FindBaseEntity(id, "acls")
+	baseEntity, err := h.Store.FindBaseEntity(id, "acls")
 	if err == nil {
 		return h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write, nil)
 	}
@@ -89,10 +87,8 @@ func (h *Handler) authorizeUpload(id *charm.Reference, req *http.Request) error 
 	return h.authorizeWithPerms(req, nil, []string{id.User}, nil)
 }
 
-func (h *Handler) serveGetArchive(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
-	store := h.pool.Store()
-	defer store.Close()
-	r, size, hash, err := store.OpenBlob(id)
+func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+	r, size, hash, err := h.Store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
@@ -103,7 +99,7 @@ func (h *Handler) serveGetArchive(id *router.ResolvedURL, fullySpecified bool, w
 	header.Set(params.EntityIdHeader, id.String())
 
 	if StatsEnabled(req) {
-		store.IncrementDownloadCountsAsync(id)
+		h.Store.IncrementDownloadCountsAsync(id)
 	}
 	// TODO(rog) should we set connection=close here?
 	// See https://codereview.appspot.com/5958045
@@ -111,29 +107,25 @@ func (h *Handler) serveGetArchive(id *router.ResolvedURL, fullySpecified bool, w
 	return nil
 }
 
-func (h *Handler) serveDeleteArchive(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
-	store := h.pool.Store()
-	defer store.Close()
+func (h *ReqHandler) serveDeleteArchive(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
 	// Retrieve the entity blob name from the database.
-	blobName, _, err := store.BlobNameAndHash(id)
+	blobName, _, err := h.Store.BlobNameAndHash(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	// Remove the entity.
-	if err := store.DB.Entities().RemoveId(&id.URL); err != nil {
+	if err := h.Store.DB.Entities().RemoveId(&id.URL); err != nil {
 		return errgo.Notef(err, "cannot remove %s", id)
 	}
 	// Remove the reference to the archive from the blob store.
-	if err := store.BlobStore.Remove(blobName); err != nil {
+	if err := h.Store.BlobStore.Remove(blobName); err != nil {
 		return errgo.Notef(err, "cannot remove blob %s", blobName)
 	}
-	store.IncCounterAsync(charmstore.EntityStatsKey(&id.URL, params.StatsArchiveDelete))
+	h.Store.IncCounterAsync(charmstore.EntityStatsKey(&id.URL, params.StatsArchiveDelete))
 	return nil
 }
 
-func (h *Handler) updateStatsArchiveUpload(id *charm.Reference, err *error) {
-	store := h.pool.Store()
-	defer store.Close()
+func (h *ReqHandler) updateStatsArchiveUpload(id *charm.Reference, err *error) {
 	// Upload stats don't include revision: it is assumed that each
 	// entity revision is only uploaded once.
 	id.Revision = -1
@@ -141,10 +133,10 @@ func (h *Handler) updateStatsArchiveUpload(id *charm.Reference, err *error) {
 	if *err != nil {
 		kind = params.StatsArchiveFailedUpload
 	}
-	store.IncCounterAsync(charmstore.EntityStatsKey(id, kind))
+	h.Store.IncCounterAsync(charmstore.EntityStatsKey(id, kind))
 }
 
-func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
+func (h *ReqHandler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
 	defer h.updateStatsArchiveUpload(id, &err)
 
 	if id.Series == "" {
@@ -198,7 +190,7 @@ func (h *Handler) servePostArchive(id *charm.Reference, w http.ResponseWriter, r
 	})
 }
 
-func (h *Handler) servePutArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
+func (h *ReqHandler) servePutArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
 	defer h.updateStatsArchiveUpload(id, &err)
 	if id.Series == "" {
 		return badRequestf(nil, "series not specified")
@@ -259,29 +251,27 @@ func (h *Handler) servePutArchive(id *charm.Reference, w http.ResponseWriter, re
 // to the blob store and adds an entity record for it.
 // The hash and contentLength parameters hold
 // the content hash and the content length respectively.
-func (h *Handler) addBlobAndEntity(id *router.ResolvedURL, body io.Reader, hash string, contentLength int64) (err error) {
+func (h *ReqHandler) addBlobAndEntity(id *router.ResolvedURL, body io.Reader, hash string, contentLength int64) (err error) {
 	name := bson.NewObjectId().Hex()
 
 	// Calculate the SHA256 hash while uploading the blob in the blob store.
 	hash256 := sha256.New()
 	body = io.TeeReader(body, hash256)
 
-	store := h.pool.Store()
-	defer store.Close()
 	// Upload the actual blob, and make sure that it is removed
 	// if we fail later.
-	err = store.BlobStore.PutUnchallenged(body, name, contentLength, hash)
+	err = h.Store.BlobStore.PutUnchallenged(body, name, contentLength, hash)
 	if err != nil {
 		return errgo.Notef(err, "cannot put archive blob")
 	}
-	r, _, err := store.BlobStore.Open(name)
+	r, _, err := h.Store.BlobStore.Open(name)
 	if err != nil {
 		return errgo.Notef(err, "cannot open newly created blob")
 	}
 	defer r.Close()
 	defer func() {
 		if err != nil {
-			store.BlobStore.Remove(name)
+			h.Store.BlobStore.Remove(name)
 			// TODO(rog) log if remove fails.
 		}
 	}()
@@ -296,9 +286,7 @@ func (h *Handler) addBlobAndEntity(id *router.ResolvedURL, body io.Reader, hash 
 
 // addEntity adds the entity represented by the contents
 // of the given reader, associating it with the given id.
-func (h *Handler) addEntity(id *router.ResolvedURL, r io.ReadSeeker, blobName, hash, hash256 string, contentLength int64) error {
-	store := h.pool.Store()
-	defer store.Close()
+func (h *ReqHandler) addEntity(id *router.ResolvedURL, r io.ReadSeeker, blobName, hash, hash256 string, contentLength int64) error {
 	readerAt := charmstore.ReaderAtSeeker(r)
 	p := charmstore.AddParams{
 		URL:         id,
@@ -321,7 +309,7 @@ func (h *Handler) addEntity(id *router.ResolvedURL, r io.ReadSeeker, blobName, h
 			// TODO frankban: use multiError (defined in internal/router).
 			return errgo.Notef(verificationError(err), "bundle verification failed")
 		}
-		if err := store.AddBundle(b, p); err != nil {
+		if err := h.Store.AddBundle(b, p); err != nil {
 			return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 		}
 		return nil
@@ -333,7 +321,7 @@ func (h *Handler) addEntity(id *router.ResolvedURL, r io.ReadSeeker, blobName, h
 	if err := checkCharmIsValid(ch); err != nil {
 		return errgo.Mask(err)
 	}
-	if err := store.AddCharm(ch, p); err != nil {
+	if err := h.Store.AddCharm(ch, p); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 	}
 	return nil
@@ -361,10 +349,8 @@ func checkRelationsAreValid(rels map[string]charm.Relation) error {
 	return nil
 }
 
-func (h *Handler) latestRevisionInfo(id *charm.Reference) (*charm.Reference, string, error) {
-	store := h.pool.Store()
-	defer store.Close()
-	entities, err := store.FindEntities(id, "_id", "blobhash")
+func (h *ReqHandler) latestRevisionInfo(id *charm.Reference) (*charm.Reference, string, error) {
+	entities, err := h.Store.FindEntities(id, "_id", "blobhash")
 	if err != nil {
 		return nil, "", errgo.Mask(err)
 	}
@@ -387,10 +373,8 @@ func verifyConstraints(s string) error {
 
 // GET id/archive/path
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idarchivepath
-func (h *Handler) serveArchiveFile(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
-	store := h.pool.Store()
-	defer store.Close()
-	r, size, _, err := store.OpenBlob(id)
+func (h *ReqHandler) serveArchiveFile(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+	r, size, _, err := h.Store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
@@ -430,9 +414,7 @@ func (h *Handler) serveArchiveFile(id *router.ResolvedURL, fullySpecified bool, 
 	return errgo.WithCausef(nil, params.ErrNotFound, "file %q not found in the archive", filePath)
 }
 
-func (h *Handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
-	store := h.pool.Store()
-	defer store.Close()
+func (h *ReqHandler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 	numIds := len(ids)
 	urls := make([]*charm.Reference, 0, numIds)
 	idKeys := make([]string, 0, numIds)
@@ -445,7 +427,7 @@ func (h *Handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 			// be returned to the user along with other bundle errors.
 			continue
 		}
-		e, err := store.FindBestEntity(url)
+		e, err := h.Store.FindBestEntity(url)
 		if err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				// Ignore this error too, for the same reasons
@@ -458,7 +440,7 @@ func (h *Handler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 		idKeys = append(idKeys, id)
 	}
 	var entities []mongodoc.Entity
-	if err := store.DB.Entities().
+	if err := h.Store.DB.Entities().
 		Find(bson.D{{"_id", bson.D{{"$in", urls}}}}).
 		All(&entities); err != nil {
 		return nil, err
@@ -549,17 +531,15 @@ func setArchiveCacheControl(h http.Header, idFullySpecified bool) {
 // getNewPromulgatedRevision returns the promulgated revision
 // to give to a newly uploaded charm with the given id.
 // It returns -1 if the charm is not promulgated.
-func (h *Handler) getNewPromulgatedRevision(id *charm.Reference) (int, error) {
-	store := h.pool.Store()
-	defer store.Close()
-	baseEntity, err := store.FindBaseEntity(id, "promulgated")
+func (h *ReqHandler) getNewPromulgatedRevision(id *charm.Reference) (int, error) {
+	baseEntity, err := h.Store.FindBaseEntity(id, "promulgated")
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return 0, errgo.Mask(err)
 	}
 	if baseEntity == nil || !baseEntity.Promulgated {
 		return -1, nil
 	}
-	query := store.EntitiesQuery(&charm.Reference{
+	query := h.Store.EntitiesQuery(&charm.Reference{
 		Series:   id.Series,
 		Name:     id.Name,
 		Revision: -1,

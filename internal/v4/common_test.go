@@ -7,24 +7,39 @@ import (
 	"net/http/httptest"
 	"time"
 
+	"github.com/juju/loggo"
+	jujutesting "github.com/juju/testing"
 	"github.com/julienschmidt/httprouter"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
-	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/bakerytest"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
+	"gopkg.in/mgo.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 )
 
+var mgoLogger = loggo.GetLogger("mgo")
+
+func init() {
+	mgo.SetLogger(mgoLog{})
+}
+
+type mgoLog struct{}
+
+func (mgoLog) Output(calldepth int, s string) error {
+	mgoLogger.LogCallf(calldepth+1, loggo.INFO, "%s", s)
+	return nil
+}
+
 type commonSuite struct {
-	storetesting.IsolatedMgoSuite
+	jujutesting.IsolatedMgoSuite
 
 	// srv holds the store HTTP handler.
-	srv http.Handler
+	srv *charmstore.Server
 
 	// srvParams holds the parameters that the
 	// srv handler was started with
@@ -34,7 +49,7 @@ type commonSuite struct {
 	// for an instance of the store without identity
 	// enabled. If enableIdentity is false, this is
 	// the same as srv.
-	noMacaroonSrv http.Handler
+	noMacaroonSrv *charmstore.Server
 
 	// noMacaroonSrvParams holds the parameters that the
 	// noMacaroonSrv handler was started with
@@ -72,6 +87,10 @@ type commonSuite struct {
 	// enableES holds whether the charmstore server will be
 	// started with Elastic Search enabled.
 	enableES bool
+
+	// maxMgoSessions specifies the value that will be given
+	// to config.MaxMgoSessions when calling charmstore.NewServer.
+	maxMgoSessions int
 }
 
 func (s *commonSuite) SetUpSuite(c *gc.C) {
@@ -101,7 +120,10 @@ func (s *commonSuite) SetUpTest(c *gc.C) {
 }
 
 func (s *commonSuite) TearDownTest(c *gc.C) {
+	s.store.Pool().Close()
 	s.store.Close()
+	s.srv.Close()
+	s.noMacaroonSrv.Close()
 	if s.esSuite != nil {
 		s.esSuite.TearDownTest(c)
 	}
@@ -118,6 +140,7 @@ func (s *commonSuite) startServer(c *gc.C) {
 		AuthUsername:     testUsername,
 		AuthPassword:     testPassword,
 		StatsCacheMaxAge: time.Nanosecond,
+		MaxMgoSessions:   s.maxMgoSessions,
 	}
 	if s.enableIdentity {
 		s.discharge = func(_, _ string) ([]checkers.Caveat, error) {
@@ -153,10 +176,22 @@ func (s *commonSuite) startServer(c *gc.C) {
 		s.noMacaroonSrv = s.srv
 	}
 	s.noMacaroonSrvParams = config
+	s.store = s.srv.Pool().Store()
+}
 
-	pool, err := charmstore.NewPool(db, si, &bakery.NewServiceParams{}, config)
+// handler returns a request handler that can be
+// used to invoke private methods. The caller
+// is responsible for calling Put on the returned handler.
+func (s *commonSuite) handler(c *gc.C) *v4.ReqHandler {
+	h := v4.New(s.store.Pool(), s.srvParams)
+	defer h.Close()
+	rh, err := h.NewReqHandler()
 	c.Assert(err, gc.IsNil)
-	s.store = pool.Store()
+	// It would be nice if we could call s.AddCleanup here
+	// to call rh.Put when the test has completed, but
+	// unfortunately CleanupSuite.TearDownTest runs
+	// after MgoSuite.TearDownTest, so that's not an option.
+	return rh
 }
 
 func storeURL(path string) string {

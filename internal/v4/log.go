@@ -22,7 +22,7 @@ import (
 //
 // POST /log
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#post-log
-func (h *Handler) serveLog(w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveLog(w http.ResponseWriter, req *http.Request) error {
 	if _, err := h.authorize(req, nil, true, nil); err != nil {
 		return err
 	}
@@ -35,7 +35,7 @@ func (h *Handler) serveLog(w http.ResponseWriter, req *http.Request) error {
 	return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s method not allowed", req.Method)
 }
 
-func (h *Handler) getLogs(w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) getLogs(w http.ResponseWriter, req *http.Request) error {
 	w.Header().Set("content-type", "application/json")
 	encoder := json.NewEncoder(w)
 
@@ -75,14 +75,11 @@ func (h *Handler) getLogs(w http.ResponseWriter, req *http.Request) error {
 		}
 		query = append(query, bson.DocElem{"type", logType})
 	}
-	store := h.pool.Store()
-	defer store.Close()
-
 	// Retrieve the logs.
 	outputStarted := false
 	closingContent := "[]"
 	var log mongodoc.Log
-	iter := store.DB.Logs().Find(query).Sort("-_id").Skip(offset).Limit(limit).Iter()
+	iter := h.Store.DB.Logs().Find(query).Sort("-_id").Skip(offset).Limit(limit).Iter()
 	for iter.Next(&log) {
 		// Start writing the response body. The logs are streamed, but we wrap
 		// the output in square brackets and we separate entries with commas so
@@ -125,7 +122,7 @@ func (h *Handler) getLogs(w http.ResponseWriter, req *http.Request) error {
 	return nil
 }
 
-func (h *Handler) postLogs(w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) postLogs(w http.ResponseWriter, req *http.Request) error {
 	// Check the request content type.
 	if ctype := req.Header.Get("Content-Type"); ctype != "application/json" {
 		return badRequestf(nil, "unexpected Content-Type %q; expected 'application/json'", ctype)
@@ -138,8 +135,6 @@ func (h *Handler) postLogs(w http.ResponseWriter, req *http.Request) error {
 		return badRequestf(err, "cannot unmarshal body")
 	}
 
-	store := h.pool.Store()
-	defer store.Close()
 	for _, log := range logs {
 		// Validate the provided level and type.
 		logLevel, ok := paramsLogLevels[log.Level]
@@ -152,7 +147,7 @@ func (h *Handler) postLogs(w http.ResponseWriter, req *http.Request) error {
 		}
 
 		// Add the log to the database.
-		if err := store.AddLog(log.Data, logLevel, logType, log.URLs); err != nil {
+		if err := h.Store.AddLog(log.Data, logLevel, logType, log.URLs); err != nil {
 			return errgo.Notef(err, "cannot add log")
 		}
 	}

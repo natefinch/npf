@@ -32,11 +32,11 @@ const (
 // A params.ErrUnauthorized error is returned if superuser credentials fail;
 // otherwise a macaroon is minted and a httpbakery discharge-required
 // error is returned holding the macaroon.
-func (h *Handler) authorize(req *http.Request, acl []string, alwaysAuth bool, entityId *router.ResolvedURL) (authorization, error) {
+func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool, entityId *router.ResolvedURL) (authorization, error) {
 	logger.Infof(
 		"authorize, bakery %p, auth location %q, acl %q, path: %q, method: %q",
-		h.pool.Bakery,
-		h.config.IdentityLocation,
+		h.handler.pool.Bakery,
+		h.handler.config.IdentityLocation,
 		acl,
 		req.URL.Path,
 		req.Method)
@@ -78,18 +78,19 @@ func (h *Handler) authorize(req *http.Request, acl []string, alwaysAuth bool, en
 // then a zero valued authorization is returned.
 // It also checks any first party caveats. If the entityId is provided, it will
 // be used to check any "is-entity" first party caveat.
-func (h *Handler) checkRequest(req *http.Request, entityId *router.ResolvedURL) (authorization, error) {
+func (h *ReqHandler) checkRequest(req *http.Request, entityId *router.ResolvedURL) (authorization, error) {
 	user, passwd, err := parseCredentials(req)
 	if err == nil {
-		if user != h.config.AuthUsername || passwd != h.config.AuthPassword {
+		if user != h.handler.config.AuthUsername || passwd != h.handler.config.AuthPassword {
 			return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "invalid user name or password")
 		}
 		return authorization{Admin: true}, nil
 	}
-	if errgo.Cause(err) != errNoCreds || h.pool.Bakery == nil || h.config.IdentityLocation == "" {
+	bk := h.handler.pool.Bakery
+	if errgo.Cause(err) != errNoCreds || bk == nil || h.handler.config.IdentityLocation == "" {
 		return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "authentication failed")
 	}
-	attrMap, err := httpbakery.CheckRequest(h.pool.Bakery, req, nil, checkers.New(
+	attrMap, err := httpbakery.CheckRequest(bk, req, nil, checkers.New(
 		checkers.CheckerFunc{
 			Condition_: "is-entity",
 			Check_: func(_, arg string) error {
@@ -117,10 +118,8 @@ func (h *Handler) checkRequest(req *http.Request, entityId *router.ResolvedURL) 
 
 // AuthorizeEntity checks that the given HTTP request
 // can access the entity with the given id.
-func (h *Handler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) error {
-	store := h.pool.Store()
-	defer store.Close()
-	baseEntity, err := store.FindBaseEntity(&id.URL, "acls")
+func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) error {
+	baseEntity, err := h.Store.FindBaseEntity(&id.URL, "acls")
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
 			return errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
@@ -130,7 +129,7 @@ func (h *Handler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) err
 	return h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write, id)
 }
 
-func (h *Handler) authorizeWithPerms(req *http.Request, read, write []string, entityId *router.ResolvedURL) error {
+func (h *ReqHandler) authorizeWithPerms(req *http.Request, read, write []string, entityId *router.ResolvedURL) error {
 	var acl []string
 	switch req.Method {
 	case "DELETE", "PATCH", "POST", "PUT":
@@ -151,16 +150,16 @@ type authorization struct {
 	Username string
 }
 
-func (h *Handler) groupsForUser(username string) ([]string, error) {
-	if h.config.IdentityAPIURL == "" {
+func (h *ReqHandler) groupsForUser(username string) ([]string, error) {
+	if h.handler.config.IdentityAPIURL == "" {
 		logger.Debugf("IdentityAPIURL not configured, not retrieving groups for %s", username)
 		return nil, nil
 	}
 	// TODO cache groups for a user
-	return h.identityClient.GroupsForUser(username)
+	return h.handler.identityClient.GroupsForUser(username)
 }
 
-func (h *Handler) checkACLMembership(auth authorization, acl []string) error {
+func (h *ReqHandler) checkACLMembership(auth authorization, acl []string) error {
 	if auth.Admin {
 		return nil
 	}
@@ -188,12 +187,12 @@ func (h *Handler) checkACLMembership(auth authorization, acl []string) error {
 	return errgo.Newf("access denied for user %q", auth.Username)
 }
 
-func (h *Handler) newMacaroon() (*macaroon.Macaroon, error) {
+func (h *ReqHandler) newMacaroon() (*macaroon.Macaroon, error) {
 	// TODO generate different caveats depending on the requested operation
 	// and whether there's a charm id or not.
 	// Mint an appropriate macaroon and send it back to the client.
-	return h.pool.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
-		Location:  h.config.IdentityLocation,
+	return h.handler.pool.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
+		Location:  h.handler.config.IdentityLocation,
 		Condition: "is-authenticated-user",
 	}, usernameAttr)})
 }

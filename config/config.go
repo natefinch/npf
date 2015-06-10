@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/macaroon-bakery.v1/bakery"
@@ -29,7 +30,9 @@ type Config struct {
 	IdentityAPIURL   string          `yaml:"identity-api-url"`
 	AgentUsername    string          `yaml:"agent-username"`
 	AgentKey         *bakery.KeyPair `yaml:"agent-key"`
-	StatsCacheMaxAge int             `yaml:"stats-cache-max-age"` // optional
+	MaxMgoSessions   int             `yaml:"max-mgo-sessions"`
+	RequestTimeout   DurationString  `yaml:"request-timeout"`
+	StatsCacheMaxAge DurationString  `yaml:"stats-cache-max-age"`
 }
 
 func (c *Config) validate() error {
@@ -76,4 +79,19 @@ func Read(path string) (*Config, error) {
 		return nil, errgo.Mask(err)
 	}
 	return &conf, nil
+}
+
+// DurationString holds a duration that marshals and
+// unmarshals as a friendly string.
+type DurationString struct {
+	time.Duration
+}
+
+func (dp *DurationString) UnmarshalText(data []byte) error {
+	d, err := time.ParseDuration(string(data))
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	dp.Duration = d
+	return nil
 }
