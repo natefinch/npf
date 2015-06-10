@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/juju/loggo"
 	"gopkg.in/errgo.v1"
@@ -73,13 +72,15 @@ func serve(confPath string) error {
 
 	logger.Infof("setting up the API server")
 	cfg := charmstore.ServerParams{
-		AuthUsername:     conf.AuthUsername,
-		AuthPassword:     conf.AuthPassword,
-		IdentityLocation: conf.IdentityLocation,
-		IdentityAPIURL:   conf.IdentityAPIURL,
-		AgentUsername:    conf.AgentUsername,
-		AgentKey:         conf.AgentKey,
-		StatsCacheMaxAge: time.Duration(conf.StatsCacheMaxAge) * time.Second,
+		AuthUsername:            conf.AuthUsername,
+		AuthPassword:            conf.AuthPassword,
+		IdentityLocation:        conf.IdentityLocation,
+		IdentityAPIURL:          conf.IdentityAPIURL,
+		AgentUsername:           conf.AgentUsername,
+		AgentKey:                conf.AgentKey,
+		StatsCacheMaxAge:        conf.StatsCacheMaxAge.Duration,
+		MaxMgoSessions:          conf.MaxMgoSessions,
+		HTTPRequestWaitDuration: conf.RequestTimeout.Duration,
 	}
 	ring := bakery.NewPublicKeyRing()
 	ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, conf.IdentityPublicKey)
@@ -91,4 +92,17 @@ func serve(confPath string) error {
 
 	logger.Infof("starting the API server")
 	return http.ListenAndServe(conf.APIAddr, debug.Handler("", server))
+}
+
+var mgoLogger = loggo.GetLogger("mgo")
+
+func init() {
+	mgo.SetLogger(mgoLog{})
+}
+
+type mgoLog struct{}
+
+func (mgoLog) Output(calldepth int, s string) error {
+	mgoLogger.LogCallf(calldepth+1, loggo.DEBUG, "%s", s)
+	return nil
 }

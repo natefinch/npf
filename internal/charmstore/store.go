@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/juju/loggo"
@@ -28,6 +29,11 @@ import (
 
 var logger = loggo.GetLogger("charmstore.internal.charmstore")
 
+var (
+	errClosed          = errgo.New("charm store has been closed")
+	ErrTooManySessions = errgo.New("too many mongo sessions in use")
+)
+
 // Pool holds a connection to the underlying charm and blob
 // data stores. Calling its Store method returns a new Store
 // from the pool that can be used to process short-lived requests
@@ -39,30 +45,50 @@ type Pool struct {
 	Bakery     *bakery.Service
 	stats      stats
 	statsCache *cache.Cache
+	config     ServerParams
+
+	// reqStoreC is a buffered channel that contains allocated
+	// stores that are not currently in use.
+	reqStoreC chan *Store
+
+	// mu guards the fields following it.
+	mu sync.Mutex
+
+	// storeCount holds the number of stores currently allocated.
+	storeCount int
+
+	// closed holds whether the handler has been closed.
+	closed bool
 }
+
+// reqStoreCacheSize holds the maximum number of store
+// instances to keep around cached when there is no
+// limit specified by config.MaxMgoSessions.
+const reqStoreCacheSize = 50
 
 // NewPool returns a Pool that uses the given database
 // and search index. If bakeryParams is not nil,
 // the Bakery field in the resulting Store will be set
 // to a new Service that stores macaroons in mongo.
+//
+// The pool must be closed (with the Close method)
+// after use.
 func NewPool(db *mgo.Database, si *SearchIndex, bakeryParams *bakery.NewServiceParams, config ServerParams) (*Pool, error) {
 	maxAge := config.StatsCacheMaxAge
 	if maxAge == 0 {
 		maxAge = time.Hour
 	}
 	p := &Pool{
-		db:         StoreDatabase{db},
+		db:         StoreDatabase{db}.Copy(),
 		blobStore:  blobstore.New(db, "entitystore"),
 		es:         si,
 		statsCache: cache.New(maxAge),
+		config:     config,
 	}
-	store := p.Store()
-	defer store.Close()
-	if err := store.ensureIndexes(); err != nil {
-		return nil, errgo.Notef(err, "cannot ensure indexes")
-	}
-	if err := store.ES.ensureIndexes(false); err != nil {
-		return nil, errgo.Notef(err, "cannot ensure elasticsearch indexes")
+	if config.MaxMgoSessions > 0 {
+		p.reqStoreC = make(chan *Store, config.MaxMgoSessions)
+	} else {
+		p.reqStoreC = make(chan *Store, reqStoreCacheSize)
 	}
 	if bakeryParams != nil {
 		// NB we use the pool database here because its lifetime
@@ -79,23 +105,99 @@ func NewPool(db *mgo.Database, si *SearchIndex, bakeryParams *bakery.NewServiceP
 		}
 		p.Bakery = bsvc
 	}
+	store := p.Store()
+	defer store.Close()
+	if err := store.ensureIndexes(); err != nil {
+		return nil, errgo.Notef(err, "cannot ensure indexes")
+	}
+	if err := store.ES.ensureIndexes(false); err != nil {
+		return nil, errgo.Notef(err, "cannot ensure elasticsearch indexes")
+	}
 	return p, nil
 }
 
-// Store returns a Store that can be used to access the data base.
+// Close closes the pool. This must be called when the pool
+// is finished with.
+func (p *Pool) Close() {
+	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		return
+	}
+	p.closed = true
+	p.mu.Unlock()
+	p.db.Close()
+	// Close all cached stores. Any used by
+	// outstanding requests will be closed when the
+	// requests complete.
+	for {
+		select {
+		case s := <-p.reqStoreC:
+			s.DB.Close()
+		default:
+			return
+		}
+	}
+}
+
+// RequestStore returns a store for a client request. It returns
+// an error with a ErrTooManySessions cause
+// if too many mongo sessions are in use.
+func (p *Pool) RequestStore() (*Store, error) {
+	store, err := p.requestStoreNB(false)
+	if store != nil {
+		return store, nil
+	}
+	if errgo.Cause(err) != ErrTooManySessions {
+		return nil, errgo.Mask(err)
+	}
+	// No handlers currently available - we've exceeded our concurrency limit
+	// so wait for a handler to become available.
+	select {
+	case store := <-p.reqStoreC:
+		return store, nil
+	case <-time.After(p.config.HTTPRequestWaitDuration):
+		return nil, errgo.Mask(err, errgo.Is(ErrTooManySessions))
+	}
+}
+
+// Store returns a Store that can be used to access the database.
 //
 // It must be closed (with the Close method) after use.
 func (p *Pool) Store() *Store {
-	s := &Store{
+	store, _ := p.requestStoreNB(true)
+	return store
+}
+
+// requestStoreNB is like RequestStore except that it
+// does not block when a Store is not immediately
+// available, in which case it returns an error with
+// a ErrTooManySessions cause.
+//
+// If always is true, it will never return an error.
+func (p *Pool) requestStoreNB(always bool) (*Store, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed && !always {
+		return nil, errClosed
+	}
+	select {
+	case store := <-p.reqStoreC:
+		return store, nil
+	default:
+	}
+	if !always && p.config.MaxMgoSessions > 0 && p.storeCount >= p.config.MaxMgoSessions {
+		return nil, ErrTooManySessions
+	}
+	p.storeCount++
+	return &Store{
 		DB:        p.db.Copy(),
 		BlobStore: p.blobStore,
 		ES:        p.es,
 		Bakery:    p.Bakery,
 		stats:     &p.stats,
 		pool:      p,
-	}
-	logger.Tracef("pool %p -> copy %p", p.db.Session, s.DB.Session)
-	return s
+	}, nil
 }
 
 // Store holds a connection to the underlying charm and blob
@@ -107,7 +209,6 @@ type Store struct {
 	Bakery    *bakery.Service
 	stats     *stats
 	pool      *Pool
-	closed    bool
 }
 
 // Copy returns a new store with a lifetime
@@ -118,18 +219,41 @@ type Store struct {
 func (s *Store) Copy() *Store {
 	s1 := *s
 	s1.DB = s.DB.Copy()
-	logger.Tracef("store %p -> copy %p", s.DB.Session, s1.DB.Session)
+
+	s.pool.mu.Lock()
+	s.pool.storeCount++
+	s.pool.mu.Unlock()
+
 	return &s1
 }
 
 // Close closes the store instance.
 func (s *Store) Close() {
-	logger.Tracef("store %p closed", s.DB.Session)
-	if s.closed {
-		logger.Errorf("session closed twice")
-		return
+	// Refresh the mongodb session so that the
+	// next time the Store is used, it will acquire
+	// a new connection from the pool as if the
+	// session had been copied.
+	s.DB.Session.Refresh()
+
+	s.pool.mu.Lock()
+	defer s.pool.mu.Unlock()
+	if !s.pool.closed && (s.pool.config.MaxMgoSessions == 0 || s.pool.storeCount <= s.pool.config.MaxMgoSessions) {
+		// The pool isn't overloaded, so put the store
+		// back. Note that the default case should
+		// never happen when MaxMgoSessions > 0.
+		select {
+		case s.pool.reqStoreC <- s:
+			return
+		default:
+			// No space for handler - this may happen when
+			// the number of actual sessions has exceeded
+			// the requested maximum (for example when
+			// a request already at the limit uses another session,
+			// or when we are imposing no limit).
+		}
 	}
 	s.DB.Close()
+	s.pool.storeCount--
 }
 
 // SetReconnectTimeout sets the length of time that

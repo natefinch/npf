@@ -8,6 +8,7 @@ import (
 	"sort"
 	"sync"
 
+	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
@@ -17,11 +18,10 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 )
 
 type migrationsSuite struct {
-	storetesting.IsolatedMgoSuite
+	jujutesting.IsolatedMgoSuite
 	db       StoreDatabase
 	executed []string
 }
@@ -35,12 +35,15 @@ func (s *migrationsSuite) SetUpTest(c *gc.C) {
 }
 
 func (s *migrationsSuite) newServer(c *gc.C) error {
-	apiHandler := func(p *Pool, config ServerParams) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {})
+	apiHandler := func(p *Pool, config ServerParams) HTTPCloseHandler {
+		return nopCloseHandler{http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {})}
 	}
-	_, err := NewServer(s.db.Database, nil, serverParams, map[string]NewAPIHandlerFunc{
+	srv, err := NewServer(s.db.Database, nil, serverParams, map[string]NewAPIHandlerFunc{
 		"version1": apiHandler,
 	})
+	if err == nil {
+		srv.Close()
+	}
 	return err
 }
 

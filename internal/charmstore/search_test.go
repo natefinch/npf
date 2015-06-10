@@ -20,6 +20,7 @@ import (
 
 type StoreSearchSuite struct {
 	storetesting.IsolatedMgoESSuite
+	pool  *Pool
 	store *Store
 	index SearchIndex
 }
@@ -43,6 +44,7 @@ func (s *StoreSearchSuite) SetUpTest(c *gc.C) {
 	s.ES.RefreshIndex(".versions")
 	pool, err := NewPool(s.Session.DB("foo"), &s.index, nil, ServerParams{})
 	c.Assert(err, gc.IsNil)
+	s.pool = pool
 	s.store = pool.Store()
 	s.addCharmsToStore(c)
 	c.Assert(err, gc.IsNil)
@@ -50,6 +52,7 @@ func (s *StoreSearchSuite) SetUpTest(c *gc.C) {
 
 func (s *StoreSearchSuite) TearDownTest(c *gc.C) {
 	s.store.Close()
+	s.pool.Close()
 	s.IsolatedMgoESSuite.TearDownTest(c)
 }
 

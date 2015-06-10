@@ -282,22 +282,20 @@ func (s *ArchiveSuite) TestConcurrentUploads(c *gc.C) {
 	// channel). It then signals that it has terminated
 	// by closing errorBodies.
 	try := make(chan struct{})
-	go func() {
-		for {
-			for _ = range try {
-				var wg sync.WaitGroup
-				for p := 0; p < 5; p++ {
-					wg.Add(1)
-					go func() {
-						upload()
-						wg.Done()
-					}()
-				}
-				wg.Wait()
+	go func(try chan struct{}) {
+		for _ = range try {
+			var wg sync.WaitGroup
+			for p := 0; p < 5; p++ {
+				wg.Add(1)
+				go func() {
+					upload()
+					wg.Done()
+				}()
 			}
-			close(errorBodies)
+			wg.Wait()
 		}
-	}()
+		close(errorBodies)
+	}(try)
 
 	// We continue the loop until we have found an
 	// error (or the maximum iteration count has
@@ -943,7 +941,8 @@ func (s *ArchiveSuite) TestBundleCharms(c *gc.C) {
 
 	// Retrieve the base handler so that we can invoke the
 	// bundleCharms method on it.
-	handler := v4.New(s.store.Pool(), s.srvParams)
+	handler := s.handler(c)
+	defer handler.Close()
 
 	tests := []struct {
 		about  string
@@ -1407,7 +1406,8 @@ func (s *ArchiveSuite) TestGetNewPromulgatedRevision(c *gc.C) {
 		})
 		c.Assert(err, gc.IsNil)
 	}
-	handler := v4.New(s.store.Pool(), s.srvParams)
+	handler := s.handler(c)
+	defer handler.Close()
 	for i, test := range getNewPromulgatedRevisionTests {
 		c.Logf("%d. %s", i, test.about)
 		rev, err := v4.GetNewPromulgatedRevision(handler, test.id)

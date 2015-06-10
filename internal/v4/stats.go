@@ -41,7 +41,7 @@ func parseDateRange(form url.Values) (start, stop time.Time, err error) {
 
 // GET stats/counter/key[:key]...?[by=unit]&start=date][&stop=date][&list=1]
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-statscounter
-func (h *Handler) serveStatsCounter(_ http.Header, r *http.Request) (interface{}, error) {
+func (h *ReqHandler) serveStatsCounter(_ http.Header, r *http.Request) (interface{}, error) {
 	base := strings.TrimPrefix(r.URL.Path, "/")
 	if strings.Index(base, "/") > 0 {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "invalid key")
@@ -77,9 +77,7 @@ func (h *Handler) serveStatsCounter(_ http.Header, r *http.Request) (interface{}
 			return nil, errgo.WithCausef(nil, params.ErrForbidden, "unknown key")
 		}
 	}
-	store := h.pool.Store()
-	defer store.Close()
-	entries, err := store.Counters(&req)
+	entries, err := h.Store.Counters(&req)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot query counters")
 	}

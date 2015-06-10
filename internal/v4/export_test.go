@@ -4,7 +4,6 @@
 package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 var (
-	BundleCharms                   = (*Handler).bundleCharms
 	ParseSearchParams              = parseSearchParams
 	DefaultIcon                    = defaultIcon
 	ArchiveCacheVersionedMaxAge    = &archiveCacheVersionedMaxAge
@@ -14,7 +13,9 @@ var (
 	ProcessIcon                    = processIcon
 	ErrProbablyNotXML              = errProbablyNotXML
 	UsernameAttr                   = usernameAttr
-	GetNewPromulgatedRevision      = (*Handler).getNewPromulgatedRevision
 	DelegatableMacaroonExpiry      = delegatableMacaroonExpiry
-	GroupsForUser                  = (*Handler).groupsForUser
+
+	BundleCharms              = (*ReqHandler).bundleCharms
+	GetNewPromulgatedRevision = (*ReqHandler).getNewPromulgatedRevision
+	GroupsForUser             = (*ReqHandler).groupsForUser
 )

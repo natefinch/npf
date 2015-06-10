@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"path"
 	"testing"
+	"time"
 
 	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
@@ -40,7 +41,9 @@ agent-username: agentuser
 agent-key:
   private: lsvcDkapKoFxIyjX9/eQgb3s41KVwPMISFwAJdVCZ70=
   public: +qNbDWly3kRTDVv2UN03hrv/CBt4W6nxY5dHdw+KJFA=
-stats-cache-max-age: 3600
+stats-cache-max-age: 1h
+request-timeout: 500ms
+max-mgo-sessions: 10
 `
 
 func (s *ConfigSuite) readConfig(c *gc.C, content string) (*config.Config, error) {
@@ -75,7 +78,9 @@ func (s *ConfigSuite) TestRead(c *gc.C) {
 				mustParseKey("lsvcDkapKoFxIyjX9/eQgb3s41KVwPMISFwAJdVCZ70="),
 			},
 		},
-		StatsCacheMaxAge: 3600,
+		StatsCacheMaxAge: config.DurationString{time.Hour},
+		RequestTimeout:   config.DurationString{500 * time.Millisecond},
+		MaxMgoSessions:   10,
 	})
 }
 

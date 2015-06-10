@@ -14,6 +14,7 @@ import (
 	"os"
 	"time"
 
+	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
@@ -37,8 +38,8 @@ var serverParams = charmstore.ServerParams{
 }
 
 type APISuite struct {
-	storetesting.IsolatedMgoSuite
-	srv   http.Handler
+	jujutesting.IsolatedMgoSuite
+	srv   *charmstore.Server
 	store *charmstore.Store
 }
 
@@ -51,10 +52,12 @@ func (s *APISuite) SetUpTest(c *gc.C) {
 
 func (s *APISuite) TearDownTest(c *gc.C) {
 	s.store.Close()
+	s.store.Pool().Close()
+	s.srv.Close()
 	s.IsolatedMgoSuite.TearDownTest(c)
 }
 
-func newServer(c *gc.C, session *mgo.Session, config charmstore.ServerParams) (http.Handler, *charmstore.Store) {
+func newServer(c *gc.C, session *mgo.Session, config charmstore.ServerParams) (*charmstore.Server, *charmstore.Store) {
 	db := session.DB("charmstore")
 	pool, err := charmstore.NewPool(db, nil, nil, config)
 	c.Assert(err, gc.IsNil)

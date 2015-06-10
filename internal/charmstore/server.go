@@ -20,7 +20,14 @@ import (
 
 // NewAPIHandlerFunc is a function that returns a new API handler that uses
 // the given Store.
-type NewAPIHandlerFunc func(*Pool, ServerParams) http.Handler
+type NewAPIHandlerFunc func(*Pool, ServerParams) HTTPCloseHandler
+
+// HTTPCloseHandler represents a HTTP handler that
+// must be closed after use.
+type HTTPCloseHandler interface {
+	Close()
+	http.Handler
+}
 
 // ServerParams holds configuration for a new internal API server.
 type ServerParams struct {
@@ -49,9 +56,18 @@ type ServerParams struct {
 	AgentKey      *bakery.KeyPair
 
 	// StatsCacheMaxAge is the maximum length of time between
-	// refreshes of entities in the stats cache. If this left as the
-	// zero value then the default of 1 hour will be used.
+	// refreshes of entities in the stats cache.
 	StatsCacheMaxAge time.Duration
+
+	// MaxMgoSessions specifies a soft limit on the maximum
+	// number of mongo sessions used. Each concurrent
+	// HTTP request will use one session.
+	MaxMgoSessions int
+
+	// HTTPRequestWaitDuration holds the amount of time
+	// that an HTTP request will wait for a free connection
+	// when the MaxConcurrentHTTPRequests limit is reached.
+	HTTPRequestWaitDuration time.Duration
 }
 
 // NewServer returns a handler that serves the given charm store API
@@ -60,7 +76,9 @@ type ServerParams struct {
 // elasticsearch is not being used then si can be set to nil.
 // The key of the versions map is the version name.
 // The handler configuration is provided to all version handlers.
-func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions map[string]NewAPIHandlerFunc) (http.Handler, error) {
+//
+// The returned Server should be closed after use.
+func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions map[string]NewAPIHandlerFunc) (*Server, error) {
 	if len(versions) == 0 {
 		return nil, errgo.Newf("charm store server must serve at least one version of the API")
 	}
@@ -87,6 +105,7 @@ func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions 
 	store := pool.Store()
 	defer store.Close()
 	if err := migrate(store.DB); err != nil {
+		pool.Close()
 		return nil, errgo.Notef(err, "database migration failed")
 	}
 	store.Go(func(store *Store) {
@@ -94,13 +113,44 @@ func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions 
 			logger.Errorf("Cannot populate elasticsearch: %v", err)
 		}
 	})
-	mux := router.NewServeMux()
-	// Version independent API.
-	handle(mux, "/debug", newServiceDebugHandler(pool, config, mux))
-	for vers, newAPI := range versions {
-		handle(mux, "/"+vers, newAPI(pool, config))
+	srv := &Server{
+		pool: pool,
+		mux:  router.NewServeMux(),
 	}
-	return mux, nil
+	// Version independent API.
+	handle(srv.mux, "/debug", newServiceDebugHandler(pool, config, srv.mux))
+	for vers, newAPI := range versions {
+		h := newAPI(pool, config)
+		handle(srv.mux, "/"+vers, h)
+		srv.handlers = append(srv.handlers, h)
+	}
+	return srv, nil
+}
+
+type Server struct {
+	pool     *Pool
+	mux      *router.ServeMux
+	handlers []HTTPCloseHandler
+}
+
+// ServeHTTP implements http.Handler.ServeHTTP.
+func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	s.mux.ServeHTTP(w, req)
+}
+
+// Close closes the server. It must be called when the server
+// is finished with.
+func (s *Server) Close() {
+	s.pool.Close()
+	for _, h := range s.handlers {
+		h.Close()
+	}
+	s.handlers = nil
+}
+
+// Pool returns the Pool used by the server.
+func (s *Server) Pool() *Pool {
+	return s.pool
 }
 
 func handle(mux *router.ServeMux, path string, handler http.Handler) {
