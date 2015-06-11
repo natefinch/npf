@@ -34,8 +34,7 @@ const (
 // error is returned holding the macaroon.
 func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool, entityId *router.ResolvedURL) (authorization, error) {
 	logger.Infof(
-		"authorize, bakery %p, auth location %q, acl %q, path: %q, method: %q",
-		h.handler.pool.Bakery,
+		"authorize, auth location %q, acl %q, path: %q, method: %q",
 		h.handler.config.IdentityLocation,
 		acl,
 		req.URL.Path,
@@ -86,7 +85,7 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityId *router.ResolvedUR
 		}
 		return authorization{Admin: true}, nil
 	}
-	bk := h.handler.pool.Bakery
+	bk := h.Store.Bakery
 	if errgo.Cause(err) != errNoCreds || bk == nil || h.handler.config.IdentityLocation == "" {
 		return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "authentication failed")
 	}
@@ -191,7 +190,7 @@ func (h *ReqHandler) newMacaroon() (*macaroon.Macaroon, error) {
 	// TODO generate different caveats depending on the requested operation
 	// and whether there's a charm id or not.
 	// Mint an appropriate macaroon and send it back to the client.
-	return h.handler.pool.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
+	return h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
 		Location:  h.handler.config.IdentityLocation,
 		Condition: "is-authenticated-user",
 	}, usernameAttr)})
