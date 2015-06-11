@@ -2264,6 +2264,29 @@ func (s *StoreSuite) TestEntityResolvedURL(c *gc.C) {
 	})
 }
 
+func (s *StoreSuite) TestCopyCopiesSessions(c *gc.C) {
+	store := s.newStore(c, false)
+
+	wordpress := storetesting.Charms.CharmDir("wordpress")
+	url := MustParseResolvedURL("23 cs:~charmers/precise/wordpress-23")
+	err := store.AddCharmWithArchive(url, wordpress)
+	c.Assert(err, gc.IsNil)
+
+	store1 := store.Copy()
+	defer store1.Close()
+
+	// Close the store we copied from. The copy should be unaffected.
+	store.Close()
+
+	entity, err := store1.FindEntity(url)
+	c.Assert(err, gc.IsNil)
+
+	// Also check the blob store, as it has its own session reference.
+	r, _, err := store1.BlobStore.Open(entity.BlobName)
+	c.Assert(err, gc.IsNil)
+	r.Close()
+}
+
 func entity(url, purl string) *mongodoc.Entity {
 	id := charm.MustParseReference(url)
 	var pid *charm.Reference

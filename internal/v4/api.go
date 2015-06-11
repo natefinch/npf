@@ -52,7 +52,7 @@ type Handler struct {
 	// searchCache is a cache of search results keyed on the query
 	// parameters of the search. It should only be used for searches
 	// from unauthenticated users.
-	searchCache    *cache.Cache
+	searchCache *cache.Cache
 }
 
 // ReqHandler holds the context for a single HTTP request.
