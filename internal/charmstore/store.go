@@ -39,13 +39,18 @@ var (
 // from the pool that can be used to process short-lived requests
 // to access and modify the store.
 type Pool struct {
-	db         StoreDatabase
-	blobStore  *blobstore.Store
-	es         *SearchIndex
-	Bakery     *bakery.Service
-	stats      stats
+	db           StoreDatabase
+	es           *SearchIndex
+	bakeryParams *bakery.NewServiceParams
+	stats        stats
+
+	// statsCache holds a cache of AggregatedCounts
+	// values, keyed by entity id. When the id has no
+	// revision, the counts apply to all revisions of the
+	// entity.
 	statsCache *cache.Cache
-	config     ServerParams
+
+	config ServerParams
 
 	// reqStoreC is a buffered channel that contains allocated
 	// stores that are not currently in use.
@@ -79,8 +84,7 @@ func NewPool(db *mgo.Database, si *SearchIndex, bakeryParams *bakery.NewServiceP
 		maxAge = time.Hour
 	}
 	p := &Pool{
-		db:         StoreDatabase{db}.Copy(),
-		blobStore:  blobstore.New(db, "entitystore"),
+		db:         StoreDatabase{db}.copy(),
 		es:         si,
 		statsCache: cache.New(maxAge),
 		config:     config,
@@ -91,19 +95,23 @@ func NewPool(db *mgo.Database, si *SearchIndex, bakeryParams *bakery.NewServiceP
 		p.reqStoreC = make(chan *Store, reqStoreCacheSize)
 	}
 	if bakeryParams != nil {
-		// NB we use the pool database here because its lifetime
-		// is indefinite.
-		macStore, err := mgostorage.New(p.db.Macaroons())
-		if err != nil {
-			return nil, errgo.Notef(err, "cannot create macaroon store")
-		}
 		bp := *bakeryParams
-		bp.Store = macStore
-		bsvc, err := bakery.NewService(bp)
-		if err != nil {
-			return nil, errgo.Notef(err, "cannot make bakery service")
+		// Fill out any bakery parameters explicitly here so
+		// that we use the same values when each Store is
+		// created. We don't fill out bp.Store field though, as
+		// that needs to hold the correct mongo session which we
+		// only know when the Store is created from the Pool.
+		if bp.Key == nil {
+			var err error
+			bp.Key, err = bakery.GenerateKey()
+			if err != nil {
+				return nil, errgo.Notef(err, "cannot generate bakery key")
+			}
 		}
-		p.Bakery = bsvc
+		if bp.Locator == nil {
+			bp.Locator = bakery.PublicKeyLocatorMap(nil)
+		}
+		p.bakeryParams = &bp
 	}
 	store := p.Store()
 	defer store.Close()
@@ -190,14 +198,28 @@ func (p *Pool) requestStoreNB(always bool) (*Store, error) {
 		return nil, ErrTooManySessions
 	}
 	p.storeCount++
-	return &Store{
-		DB:        p.db.Copy(),
-		BlobStore: p.blobStore,
+	db := p.db.copy()
+	store := &Store{
+		DB:        db,
+		BlobStore: blobstore.New(db.Database, "entitystore"),
 		ES:        p.es,
-		Bakery:    p.Bakery,
 		stats:     &p.stats,
 		pool:      p,
-	}, nil
+	}
+	if p.bakeryParams != nil {
+		macStore, err := mgostorage.New(db.Macaroons())
+		if err != nil {
+			return nil, errgo.Notef(err, "cannot create macaroon store")
+		}
+		bp := *p.bakeryParams
+		bp.Store = macStore
+		bsvc, err := bakery.NewService(bp)
+		if err != nil {
+			return nil, errgo.Notef(err, "cannot make bakery service")
+		}
+		store.Bakery = bsvc
+	}
+	return store, nil
 }
 
 // Store holds a connection to the underlying charm and blob
@@ -218,7 +240,7 @@ type Store struct {
 // It must be closed (with the Close method) after use.
 func (s *Store) Copy() *Store {
 	s1 := *s
-	s1.DB = s.DB.Copy()
+	s1.DB = s.DB.clone()
 
 	s.pool.mu.Lock()
 	s.pool.storeCount++
@@ -1144,8 +1166,18 @@ type StoreDatabase struct {
 	*mgo.Database
 }
 
-// Copy copies the StoreDatabase and its underlying mgo session.
-func (s StoreDatabase) Copy() StoreDatabase {
+// clone copies the StoreDatabase, cloning the underlying mgo session.
+func (s StoreDatabase) clone() StoreDatabase {
+	return StoreDatabase{
+		&mgo.Database{
+			Name:    s.Name,
+			Session: s.Session.Clone(),
+		},
+	}
+}
+
+// copy copies the StoreDatabase, copying the underlying mgo session.
+func (s StoreDatabase) copy() StoreDatabase {
 	return StoreDatabase{
 		&mgo.Database{
 			Name:    s.Name,
