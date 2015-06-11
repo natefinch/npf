@@ -24,6 +24,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/agent"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/cache"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/identity"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mempool"
@@ -47,6 +48,11 @@ type Handler struct {
 	locator        *bakery.PublicKeyRing
 	identityClient *identity.Client
 	pool           *charmstore.Pool
+
+	// searchCache is a cache of search results keyed on the query
+	// parameters of the search. It should only be used for searches
+	// from unauthenticated users.
+	searchCache    *cache.Cache
 }
 
 // ReqHandler holds the context for a single HTTP request.
@@ -66,12 +72,12 @@ const (
 	reqHandlerCacheSize       = 50
 )
 
-// New returns a new instance of the v4 API handler.
 func New(pool *charmstore.Pool, config charmstore.ServerParams) *Handler {
 	h := &Handler{
-		pool:    pool,
-		config:  config,
-		locator: bakery.NewPublicKeyRing(),
+		pool:        pool,
+		config:      config,
+		searchCache: cache.New(config.SearchCacheMaxAge),
+		locator:     bakery.NewPublicKeyRing(),
 		identityClient: identity.NewClient(&identity.Params{
 			URL:    config.IdentityAPIURL,
 			Client: agent.NewClient(config.AgentUsername, config.AgentKey),

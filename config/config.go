@@ -27,12 +27,13 @@ type Config struct {
 	IdentityPublicKey *bakery.PublicKey `yaml:"identity-public-key"`
 	IdentityLocation  string            `yaml:"identity-location"`
 	// The identity API is optional
-	IdentityAPIURL   string          `yaml:"identity-api-url"`
-	AgentUsername    string          `yaml:"agent-username"`
-	AgentKey         *bakery.KeyPair `yaml:"agent-key"`
-	MaxMgoSessions   int             `yaml:"max-mgo-sessions"`
-	RequestTimeout   DurationString  `yaml:"request-timeout"`
-	StatsCacheMaxAge DurationString  `yaml:"stats-cache-max-age"`
+	IdentityAPIURL    string          `yaml:"identity-api-url"`
+	AgentUsername     string          `yaml:"agent-username"`
+	AgentKey          *bakery.KeyPair `yaml:"agent-key"`
+	MaxMgoSessions    int             `yaml:"max-mgo-sessions"`
+	RequestTimeout    DurationString  `yaml:"request-timeout"`
+	StatsCacheMaxAge  DurationString  `yaml:"stats-cache-max-age"`
+	SearchCacheMaxAge DurationString  `yaml:"search-cache-max-age"`
 }
 
 func (c *Config) validate() error {

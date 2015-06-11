@@ -42,6 +42,7 @@ agent-key:
   private: lsvcDkapKoFxIyjX9/eQgb3s41KVwPMISFwAJdVCZ70=
   public: +qNbDWly3kRTDVv2UN03hrv/CBt4W6nxY5dHdw+KJFA=
 stats-cache-max-age: 1h
+search-cache-max-age: 15m
 request-timeout: 500ms
 max-mgo-sessions: 10
 `
@@ -78,9 +79,10 @@ func (s *ConfigSuite) TestRead(c *gc.C) {
 				mustParseKey("lsvcDkapKoFxIyjX9/eQgb3s41KVwPMISFwAJdVCZ70="),
 			},
 		},
-		StatsCacheMaxAge: config.DurationString{time.Hour},
-		RequestTimeout:   config.DurationString{500 * time.Millisecond},
-		MaxMgoSessions:   10,
+		StatsCacheMaxAge:  config.DurationString{time.Hour},
+		RequestTimeout:    config.DurationString{500 * time.Millisecond},
+		MaxMgoSessions:    10,
+		SearchCacheMaxAge: config.DurationString{15 * time.Minute},
 	})
 }
 

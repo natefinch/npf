@@ -81,6 +81,7 @@ func serve(confPath string) error {
 		StatsCacheMaxAge:        conf.StatsCacheMaxAge.Duration,
 		MaxMgoSessions:          conf.MaxMgoSessions,
 		HTTPRequestWaitDuration: conf.RequestTimeout.Duration,
+		SearchCacheMaxAge:       conf.SearchCacheMaxAge.Duration,
 	}
 	ring := bakery.NewPublicKeyRing()
 	ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, conf.IdentityPublicKey)

@@ -59,6 +59,10 @@ type ServerParams struct {
 	// refreshes of entities in the stats cache.
 	StatsCacheMaxAge time.Duration
 
+	// SearchCacheMaxAge is the maximum length of time between
+	// refreshes of entities in the search cache.
+	SearchCacheMaxAge time.Duration
+
 	// MaxMgoSessions specifies a soft limit on the maximum
 	// number of mongo sessions used. Each concurrent
 	// HTTP request will use one session.
