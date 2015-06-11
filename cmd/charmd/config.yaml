@@ -18,3 +18,4 @@ identity-api-url: http://localhost:8081
 # Statistics Cache maximum age, default 1 hour
 #stats-cache-max-age: 1h
 #request-timeout: 500ms
+#search-cache-max-age: 0s

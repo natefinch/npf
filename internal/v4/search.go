@@ -38,6 +38,20 @@ func (h *ReqHandler) serveSearch(_ http.Header, req *http.Request) (interface{},
 		}
 		sp.Groups = append(sp.Groups, groups...)
 	}
+	search := func() (interface{}, error) {
+		return h.doSearch(sp, req)
+	}
+	if sp.Admin || len(sp.Groups) > 0 {
+		// Don't use the cache if the request has elevated privileges.
+		return search()
+	}
+	return h.handler.searchCache.Get(req.URL.RawQuery, search)
+}
+
+// doSearch performs the search specified by SearchParams. If sp
+// specifies that additional metadata needs to be added to the results,
+// then it is added.
+func (h *ReqHandler) doSearch(sp charmstore.SearchParams, req *http.Request) (interface{}, error) {
 	// perform query
 	results, err := h.Store.Search(sp)
 	if err != nil {
