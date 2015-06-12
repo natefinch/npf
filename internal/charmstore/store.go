@@ -328,6 +328,36 @@ func (s *Store) ensureIndexes() error {
 	}, {
 		s.DB.Logs(),
 		mgo.Index{Key: []string{"urls"}},
+	}, {
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"user"}},
+	}, {
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"user", "name"}},
+	}, {
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"user", "name", "series"}},
+	}, {
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"series"}},
+	}, {
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"blobhash256"}},
+	}, {
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"_id", "name"}},
+	}, {
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"charmrequiredinterfaces"}},
+	}, {
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"charmprovidedinterfaces"}},
+	}, {
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"bundlecharms"}},
+	}, {
+		s.DB.BaseEntities(),
+		mgo.Index{Key: []string{"name"}},
 	}}
 	for _, idx := range indexes {
 		err := idx.c.EnsureIndex(idx.i)
