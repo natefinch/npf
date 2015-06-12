@@ -32,6 +32,8 @@ const (
 // A params.ErrUnauthorized error is returned if superuser credentials fail;
 // otherwise a macaroon is minted and a httpbakery discharge-required
 // error is returned holding the macaroon.
+//
+// This method also sets h.auth to the returned authorization info.
 func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool, entityId *router.ResolvedURL) (authorization, error) {
 	logger.Infof(
 		"authorize, auth location %q, acl %q, path: %q, method: %q",
@@ -54,6 +56,7 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 		if err := h.checkACLMembership(auth, acl); err != nil {
 			return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "")
 		}
+		h.auth = auth
 		return auth, nil
 	}
 	if _, ok := errgo.Cause(verr).(*bakery.VerificationError); !ok {

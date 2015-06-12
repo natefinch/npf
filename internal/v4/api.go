@@ -52,7 +52,7 @@ type Handler struct {
 	// searchCache is a cache of search results keyed on the query
 	// parameters of the search. It should only be used for searches
 	// from unauthenticated users.
-	searchCache    *cache.Cache
+	searchCache *cache.Cache
 }
 
 // ReqHandler holds the context for a single HTTP request.
@@ -65,6 +65,10 @@ type ReqHandler struct {
 	// Store holds the charmstore Store instance
 	// for the request.
 	Store *charmstore.Store
+
+	// auth holds the results of any authorization that
+	// has been done on this request.
+	auth authorization
 }
 
 const (
@@ -210,6 +214,7 @@ func (h *ReqHandler) Close() {
 	h.Store.Close()
 	h.Store = nil
 	h.handler = nil
+	h.auth = authorization{}
 	reqHandlerPool.Put(h)
 }
 
