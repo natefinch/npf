@@ -74,9 +74,9 @@ type ServerParams struct {
 	// when the MaxConcurrentHTTPRequests limit is reached.
 	HTTPRequestWaitDuration time.Duration
 
-	// Audit optionally holds the logger which will be used to
+	// AuditLogger optionally holds the logger which will be used to
 	// write audit log entries.
-	Audit *lumberjack.Logger
+	AuditLogger *lumberjack.Logger
 }
 
 // NewServer returns a handler that serves the given charm store API

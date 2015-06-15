@@ -473,11 +473,11 @@ func (s *Store) AddAudit(entry audit.Entry) {
 	s.addAuditAtTime(entry, time.Now())
 }
 
-func (s *Store) addAuditAtTime(entry audit.Entry, now time.Time) {
+func (s *Store) addAuditAtTime(entry audit.Entry, t time.Time) {
 	if s.pool.auditEncoder == nil {
 		return
 	}
-	entry.Time = now
+	entry.Time = t
 	err := s.pool.auditEncoder.Encode(entry)
 	if err != nil {
 		logger.Errorf("Cannot write audit log entry: %v", err)
