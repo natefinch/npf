@@ -2287,6 +2287,7 @@ func (s *StoreSuite) TestCopyCopiesSessions(c *gc.C) {
 	r, _, err := store1.BlobStore.Open(entity.BlobName)
 	c.Assert(err, gc.IsNil)
 	r.Close()
+}
 
 func (s *StoreSuite) TestAddAudit(c *gc.C) {
 	filename := filepath.Join(c.MkDir(), "audit.log")
