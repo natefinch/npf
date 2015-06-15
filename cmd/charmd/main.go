@@ -86,7 +86,7 @@ func serve(confPath string) error {
 	}
 
 	if conf.AuditLogFile != "" {
-		cfg.Audit = &lumberjack.Logger{
+		cfg.AuditLogger = &lumberjack.Logger{
 			Filename: conf.AuditLogFile,
 			MaxSize:  conf.AuditLogMaxSize,
 			MaxAge:   conf.AuditLogMaxAge,

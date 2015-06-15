@@ -101,7 +101,7 @@ func NewPool(db *mgo.Database, si *SearchIndex, bakeryParams *bakery.NewServiceP
 		statsCache:  cache.New(config.StatsCacheMaxAge),
 		config:      config,
 		run:         parallel.NewRun(maxAsyncGoroutines),
-		auditLogger: config.Audit,
+		auditLogger: config.AuditLogger,
 	}
 	if config.MaxMgoSessions > 0 {
 		p.reqStoreC = make(chan *Store, config.MaxMgoSessions)
@@ -128,8 +128,8 @@ func NewPool(db *mgo.Database, si *SearchIndex, bakeryParams *bakery.NewServiceP
 		p.bakeryParams = &bp
 	}
 
-	if config.Audit != nil {
-		p.auditLogger = config.Audit
+	if config.AuditLogger != nil {
+		p.auditLogger = config.AuditLogger
 		p.auditEncoder = json.NewEncoder(p.auditLogger)
 	}
 

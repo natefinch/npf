@@ -2292,7 +2292,7 @@ func (s *StoreSuite) TestCopyCopiesSessions(c *gc.C) {
 func (s *StoreSuite) TestAddAudit(c *gc.C) {
 	filename := filepath.Join(c.MkDir(), "audit.log")
 	config := ServerParams{
-		Audit: &lumberjack.Logger{
+		AuditLogger: &lumberjack.Logger{
 			Filename: filename,
 		},
 	}
