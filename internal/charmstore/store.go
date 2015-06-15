@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/juju/loggo"
+	"github.com/juju/utils/parallel"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v0/csclient/params"
@@ -43,6 +44,7 @@ type Pool struct {
 	es           *SearchIndex
 	bakeryParams *bakery.NewServiceParams
 	stats        stats
+	run          *parallel.Run
 
 	// statsCache holds a cache of AggregatedCounts
 	// values, keyed by entity id. When the id has no
@@ -71,6 +73,10 @@ type Pool struct {
 // limit specified by config.MaxMgoSessions.
 const reqStoreCacheSize = 50
 
+// maxAsyncGoroutines holds the maximum number
+// of goroutines that will be started by Store.Go.
+const maxAsyncGoroutines = 50
+
 // NewPool returns a Pool that uses the given database
 // and search index. If bakeryParams is not nil,
 // the Bakery field in the resulting Store will be set
@@ -79,15 +85,15 @@ const reqStoreCacheSize = 50
 // The pool must be closed (with the Close method)
 // after use.
 func NewPool(db *mgo.Database, si *SearchIndex, bakeryParams *bakery.NewServiceParams, config ServerParams) (*Pool, error) {
-	maxAge := config.StatsCacheMaxAge
-	if maxAge == 0 {
-		maxAge = time.Hour
+	if config.StatsCacheMaxAge == 0 {
+		config.StatsCacheMaxAge = time.Hour
 	}
 	p := &Pool{
 		db:         StoreDatabase{db}.copy(),
 		es:         si,
-		statsCache: cache.New(maxAge),
+		statsCache: cache.New(config.StatsCacheMaxAge),
 		config:     config,
+		run:        parallel.NewRun(maxAsyncGoroutines),
 	}
 	if config.MaxMgoSessions > 0 {
 		p.reqStoreC = make(chan *Store, config.MaxMgoSessions)
@@ -134,6 +140,7 @@ func (p *Pool) Close() {
 	}
 	p.closed = true
 	p.mu.Unlock()
+	p.run.Wait()
 	p.db.Close()
 	// Close all cached stores. Any used by
 	// outstanding requests will be closed when the
@@ -215,7 +222,10 @@ func (p *Pool) requestStoreNB(always bool) (*Store, error) {
 		bp.Store = macStore
 		bsvc, err := bakery.NewService(bp)
 		if err != nil {
-			return nil, errgo.Notef(err, "cannot make bakery service")
+			// This should never happen because the only reason bakery.NewService
+			// can fail is if it can't generate a key, and we have already made
+			// sure that the key is generated.
+			panic(errgo.Notef(err, "cannot make bakery service"))
 		}
 		store.Bakery = bsvc
 	}
@@ -241,6 +251,7 @@ type Store struct {
 func (s *Store) Copy() *Store {
 	s1 := *s
 	s1.DB = s.DB.clone()
+	s1.BlobStore = blobstore.New(s1.DB.Database, "entitystore")
 
 	s.pool.mu.Lock()
 	s.pool.storeCount++
@@ -291,10 +302,11 @@ func (s *Store) SetReconnectTimeout(d time.Duration) {
 // after the function returns.
 func (s *Store) Go(f func(*Store)) {
 	s = s.Copy()
-	go func() {
+	s.pool.run.Do(func() error {
 		defer s.Close()
 		f(s)
-	}()
+		return nil
+	})
 }
 
 // Pool returns the pool that the store originally

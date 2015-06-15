@@ -5,10 +5,9 @@
 // Pool is no-op under race detector, so all these tests do not work.
 // +build !race
 
-package mempool_test
+package mempool
 
 import (
-	. "sync"
 	"testing"
 )
 
@@ -24,10 +23,10 @@ func TestPool(t *testing.T) {
 	}
 	p.Put("a")
 	p.Put("b")
-	if g := p.Get(); g != "a" {
+	if g := p.Get(); g != "b" {
 		t.Fatalf("got %#v; want a", g)
 	}
-	if g := p.Get(); g != "b" {
+	if g := p.Get(); g != "a" {
 		t.Fatalf("got %#v; want b", g)
 	}
 	if g := p.Get(); g != nil {
@@ -87,28 +86,4 @@ func TestPoolStress(t *testing.T) {
 	for i := 0; i < P; i++ {
 		<-done
 	}
-}
-
-func BenchmarkPool(b *testing.B) {
-	var p Pool
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			p.Put(1)
-			p.Get()
-		}
-	})
-}
-
-func BenchmarkPoolOverflow(b *testing.B) {
-	var p Pool
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			for b := 0; b < 100; b++ {
-				p.Put(1)
-			}
-			for b := 0; b < 100; b++ {
-				p.Get()
-			}
-		}
-	})
 }
