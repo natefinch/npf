@@ -28,6 +28,9 @@ type ConfigSuite struct {
 var _ = gc.Suite(&ConfigSuite{})
 
 const testConfig = `
+audit-log-file: /var/log/charmstore/audit.log
+audit-log-max-size: 500
+audit-log-max-age: 1
 mongo-url: localhost:23456
 api-addr: blah:2324
 foo: 1
@@ -61,6 +64,9 @@ func (s *ConfigSuite) TestRead(c *gc.C) {
 	conf, err := s.readConfig(c, testConfig)
 	c.Assert(err, gc.IsNil)
 	c.Assert(conf, jc.DeepEquals, &config.Config{
+		AuditLogFile:     "/var/log/charmstore/audit.log",
+		AuditLogMaxAge:   1,
+		AuditLogMaxSize:  500,
 		MongoURL:         "localhost:23456",
 		APIAddr:          "blah:2324",
 		AuthUsername:     "myuser",

@@ -16,6 +16,7 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/elasticsearch"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/legacy"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 // Versions of the API that can be served.
@@ -89,6 +90,10 @@ type ServerParams struct {
 	// that an HTTP request will wait for a free connection
 	// when the MaxConcurrentHTTPRequests limit is reached.
 	HTTPRequestWaitDuration time.Duration
+
+	// AuditLogger optionally holds the logger which will be used to
+	// write audit log entries.
+	AuditLogger *lumberjack.Logger
 }
 
 // NewServer returns a new handler that handles charm store requests and stores

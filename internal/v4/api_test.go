@@ -31,6 +31,7 @@ import (
 	"gopkg.in/macaroon.v1"
 	"gopkg.in/mgo.v2/bson"
 
+	"gopkg.in/juju/charmstore.v5-unstable/audit"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/elasticsearch"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
@@ -536,6 +537,52 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 			c.Errorf("endpoint %q is null for all endpoints, so is not properly tested", ep.name)
 		}
 	}
+}
+
+func (s *APISuite) TestMetaPermAudit(c *gc.C) {
+	var calledEntity *audit.Entry
+	s.PatchValue(v4.TestAddAuditCallback, func(e audit.Entry) {
+		calledEntity = &e
+	})
+	s.discharge = dischargeForUser("bob")
+
+	url := newResolvedURL("~bob/precise/wordpress-23", 23)
+	s.addPublicCharm(c, "wordpress", url)
+	s.assertPutNonAdmin(c, "precise/wordpress-23/meta/perm/read", []string{"charlie"})
+	c.Assert(calledEntity, jc.DeepEquals, &audit.Entry{
+		User: "bob",
+		Op:   audit.OpSetPerm,
+		ACL: &audit.ACL{
+			Read: []string{"charlie"},
+		},
+		Entity: charm.MustParseReference("~bob/precise/wordpress-23"),
+	})
+	calledEntity = nil
+
+	s.assertPut(c, "precise/wordpress-23/meta/perm/write", []string{"bob", "foo"})
+	c.Assert(calledEntity, jc.DeepEquals, &audit.Entry{
+		User: "admin",
+		Op:   audit.OpSetPerm,
+		ACL: &audit.ACL{
+			Write: []string{"bob", "foo"},
+		},
+		Entity: charm.MustParseReference("~bob/precise/wordpress-23"),
+	})
+	calledEntity = nil
+
+	s.assertPutNonAdmin(c, "precise/wordpress-23/meta/perm", params.PermRequest{
+		Read:  []string{"a"},
+		Write: []string{"b", "c"},
+	})
+	c.Assert(calledEntity, jc.DeepEquals, &audit.Entry{
+		User: "bob",
+		Op:   audit.OpSetPerm,
+		ACL: &audit.ACL{
+			Read:  []string{"a"},
+			Write: []string{"b", "c"},
+		},
+		Entity: charm.MustParseReference("~bob/precise/wordpress-23"),
+	})
 }
 
 func (s *APISuite) TestMetaPerm(c *gc.C) {
@@ -2025,10 +2072,18 @@ func (s *APISuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.Reso
 	return rurl, bundle
 }
 
+func (s *APISuite) assertPutNonAdmin(c *gc.C, url string, val interface{}) {
+	s.assertPut0(c, url, val, false)
+}
+
 func (s *APISuite) assertPut(c *gc.C, url string, val interface{}) {
+	s.assertPut0(c, url, val, true)
+}
+
+func (s *APISuite) assertPut0(c *gc.C, url string, val interface{}, asAdmin bool) {
 	body, err := json.Marshal(val)
 	c.Assert(err, gc.IsNil)
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+	p := httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL(url),
 		Method:  "PUT",
@@ -2036,10 +2091,13 @@ func (s *APISuite) assertPut(c *gc.C, url string, val interface{}) {
 		Header: http.Header{
 			"Content-Type": {"application/json"},
 		},
-		Username: testUsername,
-		Password: testPassword,
-		Body:     bytes.NewReader(body),
-	})
+		Body: bytes.NewReader(body),
+	}
+	if asAdmin {
+		p.Username = testUsername
+		p.Password = testPassword
+	}
+	rec := httptesting.DoRequest(c, p)
 	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %s", rec.Body.String()))
 	c.Assert(rec.Body.String(), gc.HasLen, 0)
 }
