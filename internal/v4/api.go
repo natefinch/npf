@@ -310,21 +310,17 @@ func (h *ReqHandler) puttableBaseEntityHandler(get baseEntityHandlerFunc, handle
 
 var testAddAuditCallback func(e audit.Entry)
 
-func (h *ReqHandler) processEntries(entries []interface{}) {
-	for _, v := range entries {
-		if e, err := v.(audit.Entry); err {
-			h.Store.AddAudit(e)
+func (h *ReqHandler) processEntries(entries []audit.Entry) {
+	for _, e := range entries {
+		h.Store.AddAudit(e)
 
-			if testAddAuditCallback != nil {
-				testAddAuditCallback(e)
-			}
-		} else {
-			logger.Errorf("Cannot process audit log entry as wrong type: %T", v)
+		if testAddAuditCallback != nil {
+			testAddAuditCallback(e)
 		}
 	}
 }
 
-func (h *ReqHandler) updateBaseEntity(id *router.ResolvedURL, fields map[string]interface{}, entries []interface{}) error {
+func (h *ReqHandler) updateBaseEntity(id *router.ResolvedURL, fields map[string]interface{}, entries []audit.Entry) error {
 	if err := h.Store.UpdateBaseEntity(id, bson.D{{"$set", fields}}); err != nil {
 		return errgo.Notef(err, "cannot update base entity %q", id)
 	}
@@ -334,7 +330,7 @@ func (h *ReqHandler) updateBaseEntity(id *router.ResolvedURL, fields map[string]
 	return nil
 }
 
-func (h *ReqHandler) updateEntity(id *router.ResolvedURL, fields map[string]interface{}, entries []interface{}) error {
+func (h *ReqHandler) updateEntity(id *router.ResolvedURL, fields map[string]interface{}, entries []audit.Entry) error {
 	err := h.Store.UpdateEntity(id, bson.D{{"$set", fields}})
 	if err != nil {
 		return errgo.Notef(err, "cannot update %q", &id.URL)

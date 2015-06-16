@@ -19,7 +19,7 @@ type FieldQueryFunc func(id *ResolvedURL, selector map[string]int, req *http.Req
 // FieldUpdater records field changes made by a FieldUpdateFunc.
 type FieldUpdater struct {
 	fields  map[string]interface{}
-	entries []interface{}
+	entries []audit.Entry
 	search  bool
 }
 
@@ -40,7 +40,7 @@ func (u *FieldUpdater) UpdateSearch() {
 // A FieldUpdateFunc is used to update a metadata document for the
 // given id. For each field in fields, it should set that field to
 // its corresponding value in the metadata document.
-type FieldUpdateFunc func(id *ResolvedURL, fields map[string]interface{}, entries []interface{}) error
+type FieldUpdateFunc func(id *ResolvedURL, fields map[string]interface{}, entries []audit.Entry) error
 
 // A FieldUpdateSearchFunc is used to update a search document for the
 // given id. For each field in fields, it should set that field to
@@ -109,7 +109,7 @@ func (h *fieldIncludeHandler) Key() interface{} {
 func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *ResolvedURL, paths []string, values []*json.RawMessage, req *http.Request) []error {
 	updater := &FieldUpdater{
 		fields:  make(map[string]interface{}),
-		entries: make([]interface{}, 0),
+		entries: make([]audit.Entry, 0),
 	}
 	var errs []error
 	errCount := 0
