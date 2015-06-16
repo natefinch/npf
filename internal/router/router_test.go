@@ -24,6 +24,7 @@ import (
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v0/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
+	"gopkg.in/juju/charmstore.v5-unstable/audit"
 )
 
 type RouterSuite struct {
@@ -1024,7 +1025,7 @@ func (s *RouterSuite) TestHTTPRequestPassedThroughToMeta(c *gc.C) {
 		donePut = true
 		return nil
 	}
-	update := func(id *ResolvedURL, fields map[string]interface{}) error {
+	update := func(id *ResolvedURL, fields map[string]interface{}, entries []audit.Entry) error {
 		return nil
 	}
 	h := New(&Handlers{
@@ -1421,7 +1422,7 @@ var routerPutTests = []struct {
 					}
 					return nil
 				},
-				Update: func(id *ResolvedURL, fields map[string]interface{}) error {
+				Update: func(id *ResolvedURL, fields map[string]interface{}, entries []audit.Entry) error {
 					return params.ErrBadRequest
 				},
 			}),
@@ -1583,7 +1584,7 @@ var routerPutTests = []struct {
 	},
 }}
 
-func nopUpdate(id *ResolvedURL, fields map[string]interface{}) error {
+func nopUpdate(id *ResolvedURL, fields map[string]interface{}, entries []audit.Entry) error {
 	return nil
 }
 
@@ -2323,12 +2324,12 @@ func fieldSelectHandler(handlerId string, key interface{}, fields ...string) Bul
 			updater.UpdateField(field+path, fieldSelectHandlePutInfo{
 				Id:    id.String(),
 				Value: vali,
-			})
+			}, nil)
 		}
 		return nil
 	}
 
-	update := func(id *ResolvedURL, fields map[string]interface{}) error {
+	update := func(id *ResolvedURL, fields map[string]interface{}, entries []audit.Entry) error {
 		// We make information on how update and handlePut have
 		// been called by calling SetCallRecord with the above
 		// parameters. The fields will have been created by
