@@ -811,22 +811,17 @@ func (h *ReqHandler) putMetaPerm(id *router.ResolvedURL, path string, val *json.
 		}
 	}
 
-	// This is currently wrong as the updater will fire later and might fail.
-	// TODO: Associate the audit entry with the FieldUpdater
-	auditRead := h.getAuditSetPerms(id, perms.Read, nil)
-	auditWrite := h.getAuditSetPerms(id, nil, perms.Write)
-
-	updater.UpdateField("acls.read", perms.Read, &auditRead)
+	updater.UpdateField("acls.read", perms.Read, h.auditSetPerms(id, perms.Read, nil))
 	updater.UpdateField("public", isPublic, nil)
-	updater.UpdateField("acls.write", perms.Write, &auditWrite)
+	updater.UpdateField("acls.write", perms.Write, h.auditSetPerms(id, nil, perms.Write))
 
 	updater.UpdateSearch()
 	return nil
 }
 
-// getAuditSetPerms adds an audit entry recording that the permissions of the given
+// auditSetPerms returns an audit entry to record later that the permissions of the given
 // entity have been set to the given ACLs.
-func (h *ReqHandler) getAuditSetPerms(id *router.ResolvedURL, read, write []string) audit.Entry {
+func (h *ReqHandler) auditSetPerms(id *router.ResolvedURL, read, write []string) *audit.Entry {
 	if h.auth.Username == "" && !h.auth.Admin {
 		panic("No auth set in ReqHandler")
 	}
@@ -842,7 +837,7 @@ func (h *ReqHandler) getAuditSetPerms(id *router.ResolvedURL, read, write []stri
 	if h.auth.Admin && e.User == "" {
 		e.User = "admin"
 	}
-	return e
+	return &e
 }
 
 // GET id/meta/promulgated
@@ -881,14 +876,12 @@ func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val
 	}
 	switch path {
 	case "/read":
-		e := h.getAuditSetPerms(id, perms, nil)
-		updater.UpdateField("acls.read", perms, &e)
+		updater.UpdateField("acls.read", perms, h.auditSetPerms(id, perms, nil))
 		updater.UpdateField("public", isPublic, nil)
 		updater.UpdateSearch()
 		return nil
 	case "/write":
-		e := h.getAuditSetPerms(id, nil, perms)
-		updater.UpdateField("acls.write", perms, &e)
+		updater.UpdateField("acls.write", perms, h.auditSetPerms(id, nil, perms))
 		return nil
 	}
 	return errgo.WithCausef(nil, params.ErrNotFound, "unknown permission")

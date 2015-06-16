@@ -9,7 +9,6 @@ import (
 	"net/url"
 
 	"gopkg.in/errgo.v1"
-	//	"gopkg.in/juju/charmstore.v5-unstable/audit"
 	"gopkg.in/juju/charmstore.v5-unstable/audit"
 )
 
