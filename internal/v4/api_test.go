@@ -540,49 +540,55 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 }
 
 func (s *APISuite) TestMetaPermAudit(c *gc.C) {
-	var calledEntity *audit.Entry
+	var calledEntities []audit.Entry
 	s.PatchValue(v4.TestAddAuditCallback, func(e audit.Entry) {
-		calledEntity = &e
+		calledEntities = append(calledEntities, e)
 	})
 	s.discharge = dischargeForUser("bob")
 
 	url := newResolvedURL("~bob/precise/wordpress-23", 23)
 	s.addPublicCharm(c, "wordpress", url)
 	s.assertPutNonAdmin(c, "precise/wordpress-23/meta/perm/read", []string{"charlie"})
-	c.Assert(calledEntity, jc.DeepEquals, &audit.Entry{
+	c.Assert(calledEntities, jc.DeepEquals, []audit.Entry{{
 		User: "bob",
 		Op:   audit.OpSetPerm,
 		ACL: &audit.ACL{
 			Read: []string{"charlie"},
 		},
 		Entity: charm.MustParseReference("~bob/precise/wordpress-23"),
-	})
-	calledEntity = nil
+	}})
+	calledEntities = []audit.Entry{}
 
 	s.assertPut(c, "precise/wordpress-23/meta/perm/write", []string{"bob", "foo"})
-	c.Assert(calledEntity, jc.DeepEquals, &audit.Entry{
+	c.Assert(calledEntities, jc.DeepEquals, []audit.Entry{{
 		User: "admin",
 		Op:   audit.OpSetPerm,
 		ACL: &audit.ACL{
 			Write: []string{"bob", "foo"},
 		},
 		Entity: charm.MustParseReference("~bob/precise/wordpress-23"),
-	})
-	calledEntity = nil
+	}})
+	calledEntities = []audit.Entry{}
 
 	s.assertPutNonAdmin(c, "precise/wordpress-23/meta/perm", params.PermRequest{
 		Read:  []string{"a"},
 		Write: []string{"b", "c"},
 	})
-	c.Assert(calledEntity, jc.DeepEquals, &audit.Entry{
+	c.Assert(calledEntities, jc.DeepEquals, []audit.Entry{{
 		User: "bob",
 		Op:   audit.OpSetPerm,
 		ACL: &audit.ACL{
-			Read:  []string{"a"},
+			Read: []string{"a"},
+		},
+		Entity: charm.MustParseReference("~bob/precise/wordpress-23"),
+	}, {
+		User: "bob",
+		Op:   audit.OpSetPerm,
+		ACL: &audit.ACL{
 			Write: []string{"b", "c"},
 		},
 		Entity: charm.MustParseReference("~bob/precise/wordpress-23"),
-	})
+	}})
 }
 
 func (s *APISuite) TestMetaPerm(c *gc.C) {

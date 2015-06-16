@@ -9,6 +9,8 @@ import (
 	"net/url"
 
 	"gopkg.in/errgo.v1"
+	//	"gopkg.in/juju/charmstore.v5-unstable/audit"
+	"gopkg.in/juju/charmstore.v5-unstable/audit"
 )
 
 // A FieldQueryFunc is used to retrieve a metadata document for the given URL,
@@ -17,14 +19,18 @@ type FieldQueryFunc func(id *ResolvedURL, selector map[string]int, req *http.Req
 
 // FieldUpdater records field changes made by a FieldUpdateFunc.
 type FieldUpdater struct {
-	fields map[string]interface{}
-	search bool
+	fields  map[string]interface{}
+	entries []interface{}
+	search  bool
 }
 
 // UpdateField requests that the provided field is updated with
 // the given value.
-func (u *FieldUpdater) UpdateField(fieldName string, val interface{}) {
+func (u *FieldUpdater) UpdateField(fieldName string, val interface{}, entry *audit.Entry) {
 	u.fields[fieldName] = val
+	if entry != nil {
+		u.entries = append(u.entries, *entry)
+	}
 }
 
 // UpdateSearch requests that search records are updated.
@@ -35,7 +41,7 @@ func (u *FieldUpdater) UpdateSearch() {
 // A FieldUpdateFunc is used to update a metadata document for the
 // given id. For each field in fields, it should set that field to
 // its corresponding value in the metadata document.
-type FieldUpdateFunc func(id *ResolvedURL, fields map[string]interface{}) error
+type FieldUpdateFunc func(id *ResolvedURL, fields map[string]interface{}, entries []interface{}) error
 
 // A FieldUpdateSearchFunc is used to update a search document for the
 // given id. For each field in fields, it should set that field to
@@ -103,7 +109,8 @@ func (h *fieldIncludeHandler) Key() interface{} {
 
 func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *ResolvedURL, paths []string, values []*json.RawMessage, req *http.Request) []error {
 	updater := &FieldUpdater{
-		fields: make(map[string]interface{}),
+		fields:  make(map[string]interface{}),
+		entries: make([]interface{}, 0),
 	}
 	var errs []error
 	errCount := 0
@@ -131,7 +138,7 @@ func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *ResolvedURL
 		// no need to call Update.
 		return errs
 	}
-	if err := h.p.Update(id, updater.fields); err != nil {
+	if err := h.p.Update(id, updater.fields, updater.entries); err != nil {
 		for i := range hs {
 			setError(i, err)
 		}

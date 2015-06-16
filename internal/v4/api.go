@@ -308,18 +308,40 @@ func (h *ReqHandler) puttableBaseEntityHandler(get baseEntityHandlerFunc, handle
 	})
 }
 
-func (h *ReqHandler) updateBaseEntity(id *router.ResolvedURL, fields map[string]interface{}) error {
+var testAddAuditCallback func(e audit.Entry)
+
+func (h *ReqHandler) processEntries(entries []interface{}) {
+	for _, v := range entries {
+		if e, err := v.(audit.Entry); err {
+			h.Store.AddAudit(e)
+
+			if testAddAuditCallback != nil {
+				testAddAuditCallback(e)
+			}
+		} else {
+			logger.Errorf("Cannot process audit log entry as wrong type: %T", v)
+		}
+	}
+}
+
+func (h *ReqHandler) updateBaseEntity(id *router.ResolvedURL, fields map[string]interface{}, entries []interface{}) error {
 	if err := h.Store.UpdateBaseEntity(id, bson.D{{"$set", fields}}); err != nil {
 		return errgo.Notef(err, "cannot update base entity %q", id)
 	}
+
+	h.processEntries(entries)
+
 	return nil
 }
 
-func (h *ReqHandler) updateEntity(id *router.ResolvedURL, fields map[string]interface{}) error {
+func (h *ReqHandler) updateEntity(id *router.ResolvedURL, fields map[string]interface{}, entries []interface{}) error {
 	err := h.Store.UpdateEntity(id, bson.D{{"$set", fields}})
 	if err != nil {
 		return errgo.Notef(err, "cannot update %q", &id.URL)
 	}
+
+	h.processEntries(entries)
+
 	err = h.Store.UpdateSearchFields(id, fields)
 	if err != nil {
 		return errgo.Notef(err, "cannot update %q", &id.URL)
@@ -742,7 +764,7 @@ func (h *ReqHandler) putMetaExtraInfo(id *router.ResolvedURL, path string, val *
 		}
 	}
 	for key, val := range fields {
-		updater.UpdateField("extrainfo."+key, *val)
+		updater.UpdateField("extrainfo."+key, *val, nil)
 	}
 	return nil
 }
@@ -754,7 +776,7 @@ func (h *ReqHandler) putMetaExtraInfoWithKey(id *router.ResolvedURL, path string
 	if err := checkExtraInfoKey(key); err != nil {
 		return err
 	}
-	updater.UpdateField("extrainfo."+key, *val)
+	updater.UpdateField("extrainfo."+key, *val, nil)
 	return nil
 }
 
@@ -789,23 +811,22 @@ func (h *ReqHandler) putMetaPerm(id *router.ResolvedURL, path string, val *json.
 		}
 	}
 
-	updater.UpdateField("acls.read", perms.Read)
-	updater.UpdateField("public", isPublic)
-	updater.UpdateField("acls.write", perms.Write)
-
 	// This is currently wrong as the updater will fire later and might fail.
 	// TODO: Associate the audit entry with the FieldUpdater
-	h.addAuditSetPerms(id, perms.Read, perms.Write)
+	auditRead := h.getAuditSetPerms(id, perms.Read, nil)
+	auditWrite := h.getAuditSetPerms(id, nil, perms.Write)
+
+	updater.UpdateField("acls.read", perms.Read, &auditRead)
+	updater.UpdateField("public", isPublic, nil)
+	updater.UpdateField("acls.write", perms.Write, &auditWrite)
 
 	updater.UpdateSearch()
 	return nil
 }
 
-var testAddAuditCallback func(e audit.Entry)
-
-// addAuditSetPerms adds an audit entry recording that the permissions of the given
+// getAuditSetPerms adds an audit entry recording that the permissions of the given
 // entity have been set to the given ACLs.
-func (h *ReqHandler) addAuditSetPerms(id *router.ResolvedURL, read, write []string) {
+func (h *ReqHandler) getAuditSetPerms(id *router.ResolvedURL, read, write []string) audit.Entry {
 	if h.auth.Username == "" && !h.auth.Admin {
 		panic("No auth set in ReqHandler")
 	}
@@ -821,11 +842,7 @@ func (h *ReqHandler) addAuditSetPerms(id *router.ResolvedURL, read, write []stri
 	if h.auth.Admin && e.User == "" {
 		e.User = "admin"
 	}
-	h.Store.AddAudit(e)
-
-	if testAddAuditCallback != nil {
-		testAddAuditCallback(e)
-	}
+	return e
 }
 
 // GET id/meta/promulgated
@@ -864,14 +881,14 @@ func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val
 	}
 	switch path {
 	case "/read":
-		updater.UpdateField("acls.read", perms)
-		updater.UpdateField("public", isPublic)
-		h.addAuditSetPerms(id, perms, nil)
+		e := h.getAuditSetPerms(id, perms, nil)
+		updater.UpdateField("acls.read", perms, &e)
+		updater.UpdateField("public", isPublic, nil)
 		updater.UpdateSearch()
 		return nil
 	case "/write":
-		updater.UpdateField("acls.write", perms)
-		h.addAuditSetPerms(id, nil, perms)
+		e := h.getAuditSetPerms(id, nil, perms)
+		updater.UpdateField("acls.write", perms, &e)
 		return nil
 	}
 	return errgo.WithCausef(nil, params.ErrNotFound, "unknown permission")
