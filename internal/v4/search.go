@@ -38,14 +38,7 @@ func (h *ReqHandler) serveSearch(_ http.Header, req *http.Request) (interface{},
 		}
 		sp.Groups = append(sp.Groups, groups...)
 	}
-	search := func() (interface{}, error) {
-		return h.doSearch(sp, req)
-	}
-	if sp.Admin || len(sp.Groups) > 0 {
-		// Don't use the cache if the request has elevated privileges.
-		return search()
-	}
-	return h.handler.searchCache.Get(req.URL.RawQuery, search)
+	return h.doSearch(sp, req)
 }
 
 // doSearch performs the search specified by SearchParams. If sp
