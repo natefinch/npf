@@ -15,6 +15,10 @@ const (
 	// OpSetPerm represents the setting of ACLs on an entity.
 	// Required fields: Entity, ACL
 	OpSetPerm Operation = "set-perm"
+
+	// OpSetPromulgated represents the promulgation on an entity.
+	// Required fields: Entity, Promulgated
+	OpSetPromulgated Operation = "set-promulgated"
 )
 
 // ACL represents an access control list.
@@ -25,9 +29,10 @@ type ACL struct {
 
 // Entry represents an audit log entry.
 type Entry struct {
-	Time   time.Time        `json:"time"`
-	User   string           `json:"user"`
-	Op     Operation        `json:"op"`
-	Entity *charm.Reference `json:"entity,omitempty"`
-	ACL    *ACL             `json:"acl,omitempty"`
+	Time        time.Time        `json:"time"`
+	User        string           `json:"user"`
+	Op          Operation        `json:"op"`
+	Entity      *charm.Reference `json:"entity,omitempty"`
+	ACL         *ACL             `json:"acl,omitempty"`
+	Promulgated bool             `json:"promulgation,omitempty"`
 }

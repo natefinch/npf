@@ -308,15 +308,9 @@ func (h *ReqHandler) puttableBaseEntityHandler(get baseEntityHandlerFunc, handle
 	})
 }
 
-var testAddAuditCallback func(e audit.Entry)
-
 func (h *ReqHandler) processEntries(entries []audit.Entry) {
 	for _, e := range entries {
-		h.Store.AddAudit(e)
-
-		if testAddAuditCallback != nil {
-			testAddAuditCallback(e)
-		}
+		h.addAudit(e)
 	}
 }
 
@@ -807,33 +801,24 @@ func (h *ReqHandler) putMetaPerm(id *router.ResolvedURL, path string, val *json.
 		}
 	}
 
-	updater.UpdateField("acls.read", perms.Read, h.auditSetPerms(id, perms.Read, nil))
-	updater.UpdateField("public", isPublic, nil)
-	updater.UpdateField("acls.write", perms.Write, h.auditSetPerms(id, nil, perms.Write))
-
-	updater.UpdateSearch()
-	return nil
-}
-
-// auditSetPerms returns an audit entry to record later that the permissions of the given
-// entity have been set to the given ACLs.
-func (h *ReqHandler) auditSetPerms(id *router.ResolvedURL, read, write []string) *audit.Entry {
-	if h.auth.Username == "" && !h.auth.Admin {
-		panic("No auth set in ReqHandler")
-	}
-	e := audit.Entry{
+	updater.UpdateField("acls.read", perms.Read, &audit.Entry{
 		Op:     audit.OpSetPerm,
 		Entity: &id.URL,
 		ACL: &audit.ACL{
-			Read:  read,
-			Write: write,
+			Read: perms.Read,
 		},
-		User: h.auth.Username,
-	}
-	if h.auth.Admin && e.User == "" {
-		e.User = "admin"
-	}
-	return &e
+	})
+	updater.UpdateField("public", isPublic, nil)
+	updater.UpdateField("acls.write", perms.Write, &audit.Entry{
+		Op:     audit.OpSetPerm,
+		Entity: &id.URL,
+		ACL: &audit.ACL{
+			Write: perms.Write,
+		},
+	})
+
+	updater.UpdateSearch()
+	return nil
 }
 
 // GET id/meta/promulgated
@@ -872,12 +857,24 @@ func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val
 	}
 	switch path {
 	case "/read":
-		updater.UpdateField("acls.read", perms, h.auditSetPerms(id, perms, nil))
+		updater.UpdateField("acls.read", perms, &audit.Entry{
+			Op:     audit.OpSetPerm,
+			Entity: &id.URL,
+			ACL: &audit.ACL{
+				Read: perms,
+			},
+		})
 		updater.UpdateField("public", isPublic, nil)
 		updater.UpdateSearch()
 		return nil
 	case "/write":
-		updater.UpdateField("acls.write", perms, h.auditSetPerms(id, nil, perms))
+		updater.UpdateField("acls.write", perms, &audit.Entry{
+			Op:     audit.OpSetPerm,
+			Entity: &id.URL,
+			ACL: &audit.ACL{
+				Write: perms,
+			},
+		})
 		return nil
 	}
 	return errgo.WithCausef(nil, params.ErrNotFound, "unknown permission")
@@ -978,7 +975,7 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 	return m, nil
 }
 
-// GET id/promulgate
+// PUT id/promulgate
 // See https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idpromulgate
 func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, _ bool, w http.ResponseWriter, req *http.Request) error {
 	if _, err := h.authorize(req, []string{promulgatorsGroup}, false, id); err != nil {
@@ -998,6 +995,13 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, _ bool, w http
 	if err := h.Store.SetPromulgated(id, promulgate.Promulgated); err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
+
+	h.addAudit(audit.Entry{
+		Op:          audit.OpSetPromulgated,
+		Entity:      &id.URL,
+		Promulgated: promulgate.Promulgated,
+	})
+
 	return nil
 }
 
@@ -1031,5 +1035,23 @@ func (h *ReqHandler) resolveId(f resolvedIdHandler) router.IdHandler {
 			return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
 		return f(rid, isFullySpecified(id), w, req)
+	}
+}
+
+var testAddAuditCallback func(e audit.Entry)
+
+// addAudit delegates an audit entry to the store to record an audit log after
+// it has set correctly the user doing the action.
+func (h *ReqHandler) addAudit(e audit.Entry) {
+	if h.auth.Username == "" && !h.auth.Admin {
+		panic("No auth set in ReqHandler")
+	}
+	e.User = h.auth.Username
+	if h.auth.Admin && e.User == "" {
+		e.User = "admin"
+	}
+	h.Store.AddAudit(e)
+	if testAddAuditCallback != nil {
+		testAddAuditCallback(e)
 	}
 }
