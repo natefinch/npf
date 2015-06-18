@@ -2197,6 +2197,8 @@ var promulgateTests = []struct {
 	expectBody         interface{}
 	expectEntities     []*mongodoc.Entity
 	expectBaseEntities []*mongodoc.BaseEntity
+	expectPromulgate   bool
+	expectUser         string
 }{{
 	about: "unpromulgate base entity",
 	entities: []*mongodoc.Entity{
@@ -2216,6 +2218,7 @@ var promulgateTests = []struct {
 	expectBaseEntities: []*mongodoc.BaseEntity{
 		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
 	},
+	expectUser: "admin",
 }, {
 	about: "promulgate base entity",
 	entities: []*mongodoc.Entity{
@@ -2235,6 +2238,8 @@ var promulgateTests = []struct {
 	expectBaseEntities: []*mongodoc.BaseEntity{
 		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
 	},
+	expectPromulgate: true,
+	expectUser:       "admin",
 }, {
 	about: "unpromulgate base entity not found",
 	entities: []*mongodoc.Entity{
@@ -2394,6 +2399,7 @@ var promulgateTests = []struct {
 	expectBaseEntities: []*mongodoc.BaseEntity{
 		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
 	},
+	expectUser: "promulgators",
 }, {
 	about: "promulgate base entity with macaroon",
 	entities: []*mongodoc.Entity{
@@ -2414,6 +2420,8 @@ var promulgateTests = []struct {
 	expectBaseEntities: []*mongodoc.BaseEntity{
 		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
 	},
+	expectPromulgate: true,
+	expectUser:       "promulgators",
 }, {
 	about: "promulgate base entity with group macaroon",
 	entities: []*mongodoc.Entity{
@@ -2437,6 +2445,8 @@ var promulgateTests = []struct {
 	expectBaseEntities: []*mongodoc.BaseEntity{
 		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
 	},
+	expectPromulgate: true,
+	expectUser:       "bob",
 }, {
 	about: "no authorisation",
 	entities: []*mongodoc.Entity{
@@ -2503,6 +2513,12 @@ func (s *APISuite) TestPromulgate(c *gc.C) {
 		if test.method == "" {
 			test.method = "PUT"
 		}
+
+		var calledEntities []audit.Entry
+		s.PatchValue(v4.TestAddAuditCallback, func(e audit.Entry) {
+			calledEntities = append(calledEntities, e)
+		})
+
 		client := httpbakery.NewHTTPClient()
 		s.discharge = func(_, _ string) ([]checkers.Caveat, error) {
 			return test.caveats, nil
@@ -2535,6 +2551,22 @@ func (s *APISuite) TestPromulgate(c *gc.C) {
 		for _, e := range test.expectBaseEntities {
 			storetesting.AssertBaseEntity(c, s.store.DB.BaseEntities(), e)
 		}
+
+		if test.expectStatus == http.StatusOK {
+			ref := charm.MustParseReference(test.id)
+			ref.Series = "trusty"
+			ref.Revision = 0
+
+			c.Assert(calledEntities, jc.DeepEquals, []audit.Entry{{
+				User:        test.expectUser,
+				Op:          audit.OpSetPromulgated,
+				Entity:      ref,
+				Promulgated: test.expectPromulgate,
+			}})
+		} else {
+			c.Assert(len(calledEntities), gc.Equals, 0)
+		}
+		calledEntities = nil
 	}
 }
 
