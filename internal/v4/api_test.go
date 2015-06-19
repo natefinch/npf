@@ -2561,7 +2561,7 @@ func (s *APISuite) TestPromulgate(c *gc.C) {
 				User:        test.expectUser,
 				Op:          audit.OpSetPromulgated,
 				Entity:      ref,
-				Promulgated: test.expectPromulgate,
+				Promulgated: &test.expectPromulgate,
 			}})
 		} else {
 			c.Assert(len(calledEntities), gc.Equals, 0)

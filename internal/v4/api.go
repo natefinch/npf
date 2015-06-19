@@ -999,7 +999,7 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, _ bool, w http
 	h.addAudit(audit.Entry{
 		Op:          audit.OpSetPromulgated,
 		Entity:      &id.URL,
-		Promulgated: promulgate.Promulgated,
+		Promulgated: &promulgate.Promulgated,
 	})
 
 	return nil

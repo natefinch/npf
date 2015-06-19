@@ -34,5 +34,5 @@ type Entry struct {
 	Op          Operation        `json:"op"`
 	Entity      *charm.Reference `json:"entity,omitempty"`
 	ACL         *ACL             `json:"acl,omitempty"`
-	Promulgated bool             `json:"promulgation,omitempty"`
+	Promulgated *bool            `json:"promulgated,omitempty"`
 }
