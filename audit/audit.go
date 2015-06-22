@@ -16,10 +16,10 @@ const (
 	// Required fields: Entity, ACL
 	OpSetPerm Operation = "set-perm"
 
-	// OpSetPromulgate, OpSetUnPromulgate represent the promulgation on an entity.
+	// OpPromulgate, OpUnpromulgate represent the promulgation on an entity.
 	// Required fields: Entity
-	OpSetPromulgate Operation = "set-promulgate"
-	OpSetUnPromulgate Operation = "set-unpromulgate"
+	OpPromulgate Operation = "promulgate"
+	OpUnpromulgate Operation = "unpromulgate"
 )
 
 // ACL represents an access control list.

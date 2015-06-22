@@ -1000,9 +1000,9 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, _ bool, w http
 		Entity:      &id.URL,
 	}
 	if promulgate.Promulgated {
-		e.Op = audit.OpSetPromulgate
+		e.Op = audit.OpPromulgate
 	} else {
-		e.Op = audit.OpSetUnPromulgate
+		e.Op = audit.OpUnpromulgate
 	}
 	h.addAudit(e)
 
