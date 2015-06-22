@@ -2557,12 +2557,21 @@ func (s *APISuite) TestPromulgate(c *gc.C) {
 			ref.Series = "trusty"
 			ref.Revision = 0
 
-			c.Assert(calledEntities, jc.DeepEquals, []audit.Entry{{
-				User:        test.expectUser,
-				Op:          audit.OpSetPromulgated,
-				Entity:      ref,
-				Promulgated: &test.expectPromulgate,
-			}})
+			var e []audit.Entry
+			if test.expectPromulgate {
+				e = []audit.Entry{{
+					User:        test.expectUser,
+					Op:          audit.OpSetPromulgate,
+					Entity:      ref,
+				}}
+			} else {
+				e = []audit.Entry{{
+					User:        test.expectUser,
+					Op:          audit.OpSetUnPromulgate,
+					Entity:      ref,
+				}}
+			}
+			c.Assert(calledEntities, jc.DeepEquals, e)
 		} else {
 			c.Assert(len(calledEntities), gc.Equals, 0)
 		}

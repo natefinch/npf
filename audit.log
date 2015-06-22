@@ -1,0 +1,2 @@
+{"time":"2015-06-19T06:09:46.540496636+02:00","user":"admin","op":"set-promulgated","entity":"cs:~cf-charmers/trusty/cf-mysql-broker-23","promulgated":true}
+{"time":"2015-06-19T06:09:51.819100321+02:00","user":"admin","op":"set-promulgated","entity":"cs:~cf-charmers/trusty/cf-mysql-broker-23","promulgated":false}

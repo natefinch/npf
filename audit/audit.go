@@ -16,9 +16,10 @@ const (
 	// Required fields: Entity, ACL
 	OpSetPerm Operation = "set-perm"
 
-	// OpSetPromulgated represents the promulgation on an entity.
-	// Required fields: Entity, Promulgated
-	OpSetPromulgated Operation = "set-promulgated"
+	// OpSetPromulgated, OpSetPromulgated represent the promulgation on an entity.
+	// Required fields: Entity
+	OpSetPromulgate Operation = "set-promulgate"
+	OpSetUnPromulgate Operation = "set-unpromulgate"
 )
 
 // ACL represents an access control list.
@@ -34,5 +35,4 @@ type Entry struct {
 	Op          Operation        `json:"op"`
 	Entity      *charm.Reference `json:"entity,omitempty"`
 	ACL         *ACL             `json:"acl,omitempty"`
-	Promulgated *bool            `json:"promulgated,omitempty"`
 }
