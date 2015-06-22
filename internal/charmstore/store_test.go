@@ -25,7 +25,9 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v0/csclient/params"
+	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/mgo.v2/bson"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/audit"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
@@ -33,7 +35,6 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 type StoreSuite struct {
@@ -1160,7 +1161,7 @@ func (s *StoreSuite) newStore(c *gc.C, withES bool) *Store {
 	if withES {
 		si = &SearchIndex{s.ES, s.TestIndex}
 	}
-	p, err := NewPool(s.Session.DB("juju_test"), si, nil, ServerParams{})
+	p, err := NewPool(s.Session.DB("juju_test"), si, &bakery.NewServiceParams{}, ServerParams{})
 	c.Assert(err, gc.IsNil)
 	store := p.Store()
 	p.Close()
@@ -2287,6 +2288,11 @@ func (s *StoreSuite) TestCopyCopiesSessions(c *gc.C) {
 	r, _, err := store1.BlobStore.Open(entity.BlobName)
 	c.Assert(err, gc.IsNil)
 	r.Close()
+
+	// Also check the macaroon storage as that also has its own session reference.
+	m, err := store1.Bakery.NewMacaroon("", nil, nil)
+	c.Assert(err, gc.IsNil)
+	c.Assert(m, gc.NotNil)
 }
 
 func (s *StoreSuite) TestAddAudit(c *gc.C) {

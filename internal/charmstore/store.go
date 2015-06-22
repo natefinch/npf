@@ -21,13 +21,13 @@ import (
 	"gopkg.in/macaroon-bakery.v1/bakery/mgostorage"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
+	"gopkg.in/natefinch/lumberjack.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/audit"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/cache"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var logger = loggo.GetLogger("charmstore.internal.charmstore")
@@ -230,22 +230,26 @@ func (p *Pool) requestStoreNB(always bool) (*Store, error) {
 		pool:      p,
 	}
 	if p.bakeryParams != nil {
-		macStore, err := mgostorage.New(db.Macaroons())
-		if err != nil {
-			return nil, errgo.Notef(err, "cannot create macaroon store")
-		}
-		bp := *p.bakeryParams
-		bp.Store = macStore
-		bsvc, err := bakery.NewService(bp)
-		if err != nil {
-			// This should never happen because the only reason bakery.NewService
-			// can fail is if it can't generate a key, and we have already made
-			// sure that the key is generated.
-			panic(errgo.Notef(err, "cannot make bakery service"))
-		}
-		store.Bakery = bsvc
+		store.Bakery = newBakery(db, *p.bakeryParams)
 	}
 	return store, nil
+}
+
+func newBakery(db StoreDatabase, bp bakery.NewServiceParams) *bakery.Service {
+	macStore, err := mgostorage.New(db.Macaroons())
+	if err != nil {
+		// Should never happen.
+		panic(errgo.Newf("unexpected error from mgostorage.New: %v", err))
+	}
+	bp.Store = macStore
+	bsvc, err := bakery.NewService(bp)
+	if err != nil {
+		// This should never happen because the only reason bakery.NewService
+		// can fail is if it can't generate a key, and we have already made
+		// sure that the key is generated.
+		panic(errgo.Notef(err, "cannot make bakery service"))
+	}
+	return bsvc
 }
 
 // Store holds a connection to the underlying charm and blob
@@ -268,6 +272,9 @@ func (s *Store) Copy() *Store {
 	s1 := *s
 	s1.DB = s.DB.clone()
 	s1.BlobStore = blobstore.New(s1.DB.Database, "entitystore")
+	if s.Bakery != nil {
+		s1.Bakery = newBakery(s1.DB, *s.pool.bakeryParams)
+	}
 
 	s.pool.mu.Lock()
 	s.pool.storeCount++
@@ -1291,6 +1298,8 @@ func (s StoreDatabase) Macaroons() *mgo.Collection {
 
 // allCollections holds for each collection used by the charm store a
 // function returns that collection.
+// The macaroons collection is omitted because it does
+// not exist until a macaroon is actually created.
 var allCollections = []func(StoreDatabase) *mgo.Collection{
 	StoreDatabase.StatCounters,
 	StoreDatabase.StatTokens,
@@ -1298,7 +1307,6 @@ var allCollections = []func(StoreDatabase) *mgo.Collection{
 	StoreDatabase.BaseEntities,
 	StoreDatabase.Logs,
 	StoreDatabase.Migrations,
-	StoreDatabase.Macaroons,
 }
 
 // Collections returns a slice of all the collections used
