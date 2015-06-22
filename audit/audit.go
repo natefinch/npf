@@ -16,7 +16,7 @@ const (
 	// Required fields: Entity, ACL
 	OpSetPerm Operation = "set-perm"
 
-	// OpSetPromulgated, OpSetPromulgated represent the promulgation on an entity.
+	// OpSetPromulgate, OpSetUnPromulgate represent the promulgation on an entity.
 	// Required fields: Entity
 	OpSetPromulgate Operation = "set-promulgate"
 	OpSetUnPromulgate Operation = "set-unpromulgate"
