@@ -996,11 +996,15 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, _ bool, w http
 		return errgo.Mask(err, errgo.Any)
 	}
 
-	h.addAudit(audit.Entry{
-		Op:          audit.OpSetPromulgated,
+	e := audit.Entry{
 		Entity:      &id.URL,
-		Promulgated: promulgate.Promulgated,
-	})
+	}
+	if promulgate.Promulgated {
+		e.Op = audit.OpPromulgate
+	} else {
+		e.Op = audit.OpUnpromulgate
+	}
+	h.addAudit(e)
 
 	return nil
 }
