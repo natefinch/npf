@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"mime"
 	"net/http"
 	"net/http/httptest"
 
@@ -211,6 +212,19 @@ func (i *idM) serveAgent(w http.ResponseWriter, r *http.Request) {
 		d := i.discharges[test]
 		d.c <- err
 		i.error(w, http.StatusInternalServerError, "cannot read agent login request: %s", err)
+		return
+	}
+	ct, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil {
+		d := i.discharges[test]
+		d.c <- err
+		i.error(w, http.StatusBadRequest, "cannot parse mediatype: %s", err)
+		return
+	}
+	if ct != "application/json" {
+		d := i.discharges[test]
+		d.c <- err
+		i.error(w, http.StatusBadRequest, "unexpected Content-Type: %s", ct)
 		return
 	}
 	var login agent.AgentLoginRequest

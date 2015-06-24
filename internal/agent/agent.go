@@ -70,6 +70,7 @@ func VisitWebPage(c *httpbakery.Client, username string) func(u *url.URL) error 
 		if err != nil {
 			return errgo.Notef(err, "cannot create login request")
 		}
+		req.Header.Set("Content-Type", "application/json")
 		resp, err = c.DoWithBody(req, bytes.NewReader(body))
 		if err != nil {
 			return errgo.Notef(err, "cannot post login request")
