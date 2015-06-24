@@ -662,9 +662,28 @@ func (s *ArchiveSuite) TestPostErrorReadsFully(c *gc.C) {
 		Method: "POST",
 		URL:    u,
 		Body:   ioutil.NopCloser(b),
+		Header: http.Header{},
 	}
-	err = v4.ServePostArchive(h, id, nil, r)
+	r.SetBasicAuth(testUsername, testPassword)
+	err = v4.ServeArchive(h, id, nil, r)
 	c.Assert(err, gc.ErrorMatches, "hash parameter not specified")
+	c.Assert(b.Len(), gc.Equals, 0)
+}
+
+func (s *ArchiveSuite) TestPostAuthErrorReadsFully(c *gc.C) {
+	h := s.handler(c)
+	defer h.Close()
+	id := charm.MustParseReference("~charmers/trusty/wordpress")
+	u, err := url.Parse("http://127.0.0.1/v4/" + id.Path() + "/archive")
+	c.Assert(err, gc.IsNil)
+	b := bytes.NewBuffer([]byte("test body"))
+	r := &http.Request{
+		Method: "POST",
+		URL:    u,
+		Body:   ioutil.NopCloser(b),
+	}
+	err = v4.ServeArchive(h, id, nil, r)
+	c.Assert(err, gc.ErrorMatches, "authentication failed: missing HTTP auth header")
 	c.Assert(b.Len(), gc.Equals, 0)
 }
 
@@ -693,10 +712,12 @@ func (s *ArchiveSuite) TestUploadOfCurrentCharmReadsFully(c *gc.C) {
 		Method: "POST",
 		URL:    u,
 		Body:   ioutil.NopCloser(b),
+		Header: http.Header{},
 	}
 	r.ParseForm()
+	r.SetBasicAuth(testUsername, testPassword)
 	rec := httptest.NewRecorder()
-	err = v4.ServePostArchive(h, id, rec, r)
+	err = v4.ServeArchive(h, id, rec, r)
 	c.Assert(err, gc.IsNil)
 	expectId := charm.MustParseReference("~charmers/precise/wordpress-0")
 	httptesting.AssertJSONResponse(
