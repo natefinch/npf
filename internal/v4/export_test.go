@@ -19,4 +19,5 @@ var (
 	BundleCharms              = (*ReqHandler).bundleCharms
 	GetNewPromulgatedRevision = (*ReqHandler).getNewPromulgatedRevision
 	GroupsForUser             = (*ReqHandler).groupsForUser
+	ServeArchive              = (*ReqHandler).serveArchive
 )

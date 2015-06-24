@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -352,6 +353,14 @@ func (s *ArchiveSuite) TestPostCharm(c *gc.C) {
 	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/precise/wordpress-1", -1), "mysql")
 }
 
+func (s *ArchiveSuite) TestPostCurrentVersion(c *gc.C) {
+	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/precise/wordpress-0", -1), "wordpress")
+
+	// Subsequent charm uploads should not increment the revision by
+	// 1.
+	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/precise/wordpress-0", -1), "wordpress")
+}
+
 func (s *ArchiveSuite) TestPutCharm(c *gc.C) {
 	s.assertUploadCharm(
 		c,
@@ -640,6 +649,86 @@ func (s *ArchiveSuite) TestPostFailureCounters(c *gc.C) {
 	// Check that the failed upload count for the entity has been updated.
 	key := []string{params.StatsArchiveFailedUpload, "utopic", "wordpress", "charmers"}
 	stats.CheckCounterSum(c, s.store, key, false, 3)
+}
+
+func (s *ArchiveSuite) TestPostErrorReadsFully(c *gc.C) {
+	h := s.handler(c)
+	defer h.Close()
+	id := charm.MustParseReference("~charmers/trusty/wordpress")
+	u, err := url.Parse("http://127.0.0.1/v4/" + id.Path() + "/archive")
+	c.Assert(err, gc.IsNil)
+	b := bytes.NewBuffer([]byte("test body"))
+	r := &http.Request{
+		Method: "POST",
+		URL:    u,
+		Body:   ioutil.NopCloser(b),
+		Header: http.Header{},
+	}
+	r.SetBasicAuth(testUsername, testPassword)
+	err = v4.ServeArchive(h, id, nil, r)
+	c.Assert(err, gc.ErrorMatches, "hash parameter not specified")
+	c.Assert(b.Len(), gc.Equals, 0)
+}
+
+func (s *ArchiveSuite) TestPostAuthErrorReadsFully(c *gc.C) {
+	h := s.handler(c)
+	defer h.Close()
+	id := charm.MustParseReference("~charmers/trusty/wordpress")
+	u, err := url.Parse("http://127.0.0.1/v4/" + id.Path() + "/archive")
+	c.Assert(err, gc.IsNil)
+	b := bytes.NewBuffer([]byte("test body"))
+	r := &http.Request{
+		Method: "POST",
+		URL:    u,
+		Body:   ioutil.NopCloser(b),
+	}
+	err = v4.ServeArchive(h, id, nil, r)
+	c.Assert(err, gc.ErrorMatches, "authentication failed: missing HTTP auth header")
+	c.Assert(b.Len(), gc.Equals, 0)
+}
+
+func (s *ArchiveSuite) TestUploadOfCurrentCharmReadsFully(c *gc.C) {
+	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/precise/wordpress-0", -1), "wordpress")
+
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
+	f, err := os.Open(ch.Path)
+	c.Assert(err, gc.IsNil)
+	defer f.Close()
+
+	// Calculate blob hashes.
+	hash := blobstore.NewHash()
+	_, err = io.Copy(hash, f)
+	c.Assert(err, gc.IsNil)
+	hashSum := fmt.Sprintf("%x", hash.Sum(nil))
+
+	// Simulate upload of current version
+	h := s.handler(c)
+	defer h.Close()
+	id := charm.MustParseReference("~charmers/precise/wordpress")
+	u, err := url.Parse("http://127.0.0.1/v4/" + id.Path() + "/archive?hash=" + hashSum)
+	c.Assert(err, gc.IsNil)
+	b := bytes.NewBuffer([]byte("test body"))
+	r := &http.Request{
+		Method: "POST",
+		URL:    u,
+		Body:   ioutil.NopCloser(b),
+		Header: http.Header{},
+	}
+	r.ParseForm()
+	r.SetBasicAuth(testUsername, testPassword)
+	rec := httptest.NewRecorder()
+	err = v4.ServeArchive(h, id, rec, r)
+	c.Assert(err, gc.IsNil)
+	expectId := charm.MustParseReference("~charmers/precise/wordpress-0")
+	httptesting.AssertJSONResponse(
+		c,
+		rec,
+		http.StatusOK,
+		params.ArchiveUploadResponse{
+			Id: expectId,
+		},
+	)
+	c.Assert(b.Len(), gc.Equals, 0)
 }
 
 func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSeeker, errorMessage string) {

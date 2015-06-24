@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"mime"
 	"net/http"
 	"path"
@@ -51,6 +52,15 @@ func (h *ReqHandler) serveArchive(id *charm.Reference, w http.ResponseWriter, re
 	case "GET":
 		return h.resolveId(h.authId(h.serveGetArchive))(id, w, req)
 	case "POST", "PUT":
+		// Make sure we consume the full request body, before responding.
+		//
+		// It seems a shame to require the whole, possibly large, archive
+		// is uploaded if we already know that the request is going to
+		// fail, but it is necessary to prevent some failures.
+		//
+		// TODO: investigate using 100-Continue statuses to prevent
+		// unnecessary uploads.
+		defer io.Copy(ioutil.Discard, req.Body)
 		if err := h.authorizeUpload(id, req); err != nil {
 			return errgo.Mask(err, errgo.Any)
 		}
