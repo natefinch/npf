@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"mime"
 	"net/http"
 	"path"
@@ -136,7 +137,21 @@ func (h *ReqHandler) updateStatsArchiveUpload(id *charm.Reference, err *error) {
 	h.Store.IncCounterAsync(charmstore.EntityStatsKey(id, kind))
 }
 
-func (h *ReqHandler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
+func (h *ReqHandler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+	err := h.servePostArchive0(id, w, req)
+	// Make sure we consume the full request body.
+	//
+	// It seems a shame to require the whole, possibly large, archive
+	// is uploaded if we already know that the request is going to
+	// fail, but it is necessary to comply with the HTTP standard.
+	//
+	// TODO: investigate using 100-Continue statuses to prevent
+	// unnecessary uploads.
+	io.Copy(ioutil.Discard, req.Body)
+	return err
+}
+
+func (h *ReqHandler) servePostArchive0(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
 	defer h.updateStatsArchiveUpload(id, &err)
 
 	if id.Series == "" {
