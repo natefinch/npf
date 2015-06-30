@@ -754,7 +754,6 @@ func (s *SearchSuite) TestLegacyStatsUpdatesSearch(c *gc.C) {
 	doc, err = s.store.ES.GetSearchDocument(charm.MustParseReference("~openstack-charmers/trusty/mysql-7"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(doc.TotalDownloads, gc.Equals, int64(57))
-
 }
 
 func (s *SearchSuite) assertPut(c *gc.C, url string, val interface{}) {
