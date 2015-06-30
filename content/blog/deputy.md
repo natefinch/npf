@@ -1,6 +1,6 @@
 +++
 date = "2015-06-30T12:44:29-04:00"
-title = "Deputy"
+title = "Take control of your command with Deputy"
 type = "post"
 tags = ["go", "golang", "executables", "package"]
 +++
