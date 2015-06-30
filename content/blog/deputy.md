@@ -9,6 +9,10 @@ tags = ["go", "golang", "executables", "package"]
 
 <sup><sub>image: creative commons, &copy; [MatsuRD](http://matsurd.deviantart.com/art/Paper53-Deputy-Stubbs-342123485)</sub></sup>
 
+As a part of my work on [Juju](https://github.com/juju/juju), I have published a
+new package at http://github.com/juju/deputy.  I think it'll be of general use
+to a lot of people.
+
 <blockquote class="twitter-tweet" lang="en"><p lang="en" dir="ltr">I want to name a package &quot;lieutenant&quot;, but it&#39;s too hard to spell.</p>&mdash; Nate Finch (@NateTheFinch) <a href="https://twitter.com/NateTheFinch/status/610481962311131136">June 15, 2015</a></blockquote>
 <script async src="//platform.twitter.com/widgets.js" charset="utf-8"></script>
 
