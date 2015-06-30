@@ -1117,7 +1117,8 @@ true
 #### PUT *id*/meta/extra-info
 
 This request updates the value of any metadata values. Any values that are not
-mentioned in the request are left untouched.
+mentioned in the request are left untouched. Any fields with null values are
+deleted.
 
 Example: `PUT precise/wordpress-32/meta/extra-info`
 
@@ -1131,6 +1132,7 @@ Request body:
 #### PUT *id*/meta/extra-info/*key*
 
 This request creates or updates the value for a specific key.
+If the value is null, the key is deleted.
 
 Example: `PUT precise/wordpress-32/meta/extra-info/vcs-digest`
 

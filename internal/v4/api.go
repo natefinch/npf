@@ -5,6 +5,7 @@ package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -315,28 +316,39 @@ func (h *ReqHandler) processEntries(entries []audit.Entry) {
 }
 
 func (h *ReqHandler) updateBaseEntity(id *router.ResolvedURL, fields map[string]interface{}, entries []audit.Entry) error {
-	if err := h.Store.UpdateBaseEntity(id, bson.D{{"$set", fields}}); err != nil {
+	if err := h.Store.UpdateBaseEntity(id, entityUpdateOp(fields)); err != nil {
 		return errgo.Notef(err, "cannot update base entity %q", id)
 	}
-
 	h.processEntries(entries)
-
 	return nil
 }
 
 func (h *ReqHandler) updateEntity(id *router.ResolvedURL, fields map[string]interface{}, entries []audit.Entry) error {
-	err := h.Store.UpdateEntity(id, bson.D{{"$set", fields}})
+	err := h.Store.UpdateEntity(id, entityUpdateOp(fields))
 	if err != nil {
 		return errgo.Notef(err, "cannot update %q", &id.URL)
 	}
-
-	h.processEntries(entries)
-
 	err = h.Store.UpdateSearchFields(id, fields)
 	if err != nil {
 		return errgo.Notef(err, "cannot update %q", &id.URL)
 	}
+	h.processEntries(entries)
 	return nil
+}
+
+// entityUpdateOp returns a mongo update operation that
+// sets the given fields. Any nil fields will be unset.
+func entityUpdateOp(fields map[string]interface{}) bson.D {
+	setFields := make(bson.D, 0, len(fields))
+	var unsetFields bson.D
+	for name, val := range fields {
+		if val != nil {
+			setFields = append(setFields, bson.DocElem{name, val})
+		} else {
+			unsetFields = append(unsetFields, bson.DocElem{name, val})
+		}
+	}
+	return bson.D{{"$set", setFields}, {"$unset", unsetFields}}
 }
 
 func (h *ReqHandler) updateSearch(id *router.ResolvedURL, fields map[string]interface{}) error {
@@ -754,10 +766,16 @@ func (h *ReqHandler) putMetaExtraInfo(id *router.ResolvedURL, path string, val *
 		}
 	}
 	for key, val := range fields {
-		updater.UpdateField("extrainfo."+key, *val, nil)
+		if val == nil {
+			updater.UpdateField("extrainfo."+key, nil, nil)
+		} else {
+			updater.UpdateField("extrainfo."+key, *val, nil)
+		}
 	}
 	return nil
 }
+
+var nullBytes = []byte("null")
 
 // PUT id/meta/extra-info/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetaextra-infokey
@@ -766,7 +784,13 @@ func (h *ReqHandler) putMetaExtraInfoWithKey(id *router.ResolvedURL, path string
 	if err := checkExtraInfoKey(key); err != nil {
 		return err
 	}
-	updater.UpdateField("extrainfo."+key, *val, nil)
+	// If the user puts null, we treat that as if they want to
+	// delete the field.
+	if val == nil || bytes.Equal(*val, nullBytes) {
+		updater.UpdateField("extrainfo."+key, nil, nil)
+	} else {
+		updater.UpdateField("extrainfo."+key, *val, nil)
+	}
 	return nil
 }
 
@@ -997,7 +1021,7 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, _ bool, w http
 	}
 
 	e := audit.Entry{
-		Entity:      &id.URL,
+		Entity: &id.URL,
 	}
 	if promulgate.Promulgated {
 		e.Op = audit.OpPromulgate

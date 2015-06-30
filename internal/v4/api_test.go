@@ -755,6 +755,31 @@ func (s *APISuite) TestExtraInfo(c *gc.C) {
 		"bar":  "barval",
 		"frob": []int{1, 4, 6},
 	})
+
+	// Delete a single value.
+	s.assertPut(c, id+"/meta/extra-info/foo", nil)
+	s.assertGet(c, id+"/meta/extra-info", map[string]interface{}{
+		"baz":  "bazval",
+		"bar":  "barval",
+		"frob": []int{1, 4, 6},
+	})
+
+	// Delete a value and add some values at the same time.
+	s.assertPut(c, id+"/meta/any", params.MetaAnyResponse{
+		Meta: map[string]interface{}{
+			"extra-info": map[string]interface{}{
+				"baz":    nil,
+				"bar":    nil,
+				"dazzle": "x",
+				"fizzle": "y",
+			},
+		},
+	})
+	s.assertGet(c, id+"/meta/extra-info", map[string]interface{}{
+		"frob":   []int{1, 4, 6},
+		"dazzle": "x",
+		"fizzle": "y",
+	})
 }
 
 var extraInfoBadPutRequestsTests = []struct {
@@ -2558,8 +2583,8 @@ func (s *APISuite) TestPromulgate(c *gc.C) {
 			ref.Revision = 0
 
 			e := audit.Entry{
-				User: test.expectUser,
-				Op: audit.OpUnpromulgate,
+				User:   test.expectUser,
+				Op:     audit.OpUnpromulgate,
 				Entity: ref,
 			}
 			if test.expectPromulgate {
