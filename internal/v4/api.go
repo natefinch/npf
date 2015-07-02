@@ -348,7 +348,14 @@ func entityUpdateOp(fields map[string]interface{}) bson.D {
 			unsetFields = append(unsetFields, bson.DocElem{name, val})
 		}
 	}
-	return bson.D{{"$set", setFields}, {"$unset", unsetFields}}
+	op := make(bson.D, 0, 2)
+	if len(setFields) > 0 {
+		op = append(op, bson.DocElem{"$set", setFields})
+	}
+	if len(unsetFields) > 0 {
+		op = append(op, bson.DocElem{"$unset", unsetFields})
+	}
+	return op
 }
 
 func (h *ReqHandler) updateSearch(id *router.ResolvedURL, fields map[string]interface{}) error {
