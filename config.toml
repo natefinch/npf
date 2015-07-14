@@ -1,4 +1,4 @@
-baseurl = "http://npf.io"
+baseurl = "https://npf.io"
 languageCode = "en-us"
 title = "npf.io"
 theme = "hyde"
