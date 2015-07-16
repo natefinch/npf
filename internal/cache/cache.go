@@ -73,6 +73,14 @@ func (c *Cache) Get(key string, fetch func() (interface{}, error)) (interface{},
 	return c.getAtTime(key, fetch, time.Now())
 }
 
+// Refresh returns the value for the given key, using fetch to fetch
+// the value and store the value in the cache refreshing any previous value.
+// If fetch returns an error, the returned error from Refresh will have
+// the same cause.
+func (c *Cache) Refresh(key string, fetch func() (interface{}, error)) (interface{}, error) {
+	return c.refreshAtTime(key, fetch, time.Now())
+}
+
 // getAtTime is the internal version of Get, useful for testing; now represents the current
 // time.
 func (c *Cache) getAtTime(key string, fetch func() (interface{}, error), now time.Time) (interface{}, error) {
@@ -87,6 +95,27 @@ func (c *Cache) getAtTime(key string, fetch func() (interface{}, error), now tim
 		// TODO consider caching cache misses.
 		return nil, errgo.Mask(err, errgo.Any)
 	}
+	c.addCacheEntry(key, val, now)
+	return val, nil
+}
+
+// refreshAtTime is the internal version of Refresh, useful for testing; now represents the current
+// time.
+func (c *Cache) refreshAtTime(key string, fetch func() (interface{}, error), now time.Time) (interface{}, error) {
+	// Fetch the data without the mutex held
+	// so that one slow fetch doesn't hold up
+	// all the other cache accesses.
+	val, err := fetch()
+	if err != nil {
+		// TODO consider caching cache misses.
+		return nil, errgo.Mask(err, errgo.Any)
+	}
+	c.addCacheEntry(key, val, now)
+	return val, nil
+}
+
+// addCacheEntry adds a cache entry to the cache.
+func (c *Cache) addCacheEntry(key string, val interface{}, now time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	// Add the new cache entry. Because it's quite likely that a
@@ -100,7 +129,6 @@ func (c *Cache) getAtTime(key string, fetch func() (interface{}, error), now tim
 		value:  val,
 		expire: now.Add(c.maxAge - time.Duration(rand.Int63n(int64(c.maxAge/2)))),
 	}
-	return val, nil
 }
 
 // cachedValue returns any cached value for the given key
