@@ -489,7 +489,7 @@ var LegacyDownloadCountsEnabled = true
 
 // ArchiveDownloadCounts calculates the aggregated download counts for
 // a charm or bundle.
-func (s *Store) ArchiveDownloadCounts(id *charm.Reference, forceRefresh bool) (thisRevision, allRevisions AggregatedCounts, err error) {
+func (s *Store) ArchiveDownloadCounts(id *charm.Reference, refresh bool) (thisRevision, allRevisions AggregatedCounts, err error) {
 	// Retrieve the aggregated stats.
 	fetchId := *id
 	fetch := func() (interface{}, error) {
@@ -497,22 +497,22 @@ func (s *Store) ArchiveDownloadCounts(id *charm.Reference, forceRefresh bool) (t
 	}
 
 	var v interface{}
-	if forceRefresh {
-		v, err = s.pool.statsCache.Refresh(fetchId.String(), fetch)
-	} else {
-		v, err = s.pool.statsCache.Get(fetchId.String(), fetch)
+	if refresh {
+		s.pool.statsCache.Evict(fetchId.String())
 	}
+	v, err = s.pool.statsCache.Get(fetchId.String(), fetch)
+
 	if err != nil {
 		return AggregatedCounts{}, AggregatedCounts{}, errgo.Mask(err)
 	}
 	thisRevision = v.(AggregatedCounts)
 
 	fetchId.Revision = -1
-	if forceRefresh {
-		v, err = s.pool.statsCache.Refresh(fetchId.String(), fetch)
-	} else {
-		v, err = s.pool.statsCache.Get(fetchId.String(), fetch)
+	if refresh {
+		s.pool.statsCache.Evict(fetchId.String())
 	}
+	v, err = s.pool.statsCache.Get(fetchId.String(), fetch)
+
 	if err != nil {
 		return AggregatedCounts{}, AggregatedCounts{}, errgo.Mask(err)
 	}

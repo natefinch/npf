@@ -35,7 +35,8 @@ func (*suite) TestSimpleRefresh(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(v, gc.Equals, 2)
 
-	v, err = p.Refresh("a", fetchValue(3))
+	p.Evict("a")
+	v, err = p.Get("a", fetchValue(3))
 	c.Assert(err, gc.IsNil)
 	c.Assert(v, gc.Equals, 3)
 
