@@ -1283,6 +1283,10 @@ Example: `GET trusty/wordpress-42/meta/promulgated`
 
 #### GET *id*/meta/stats
 
+<pre>
+GET <i>id</i>/meta/stats?[refresh=0|1]
+</pre>
+
 Many clients will need to use stats to determine the best result. Details for a
 charm/bundle might require the stats as important information to users.
 Currently we track deployment stats only. We intend to open this up to
@@ -1312,6 +1316,8 @@ type StatsCount struct {
         Month int64 // Count over the last month.
 }
 ```
+
+Refresh boolean will allow to fetch the latest stats.
 
 #### GET *id*/meta/tags
 

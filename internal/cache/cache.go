@@ -57,8 +57,7 @@ func (c *Cache) Len() int {
 	return len(c.old) + len(c.new)
 }
 
-// Evict removes an entry from the cache if found based on
-// the key provided otherwise does nothing.
+// Evict removes the entry with the given key from the cache if present.
 func (c *Cache) Evict(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
