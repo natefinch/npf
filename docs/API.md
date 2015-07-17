@@ -1317,7 +1317,7 @@ type StatsCount struct {
 }
 ```
 
-Refresh boolean will allow to fetch the latest stats.
+If the refresh boolean parameter is non-zero, the latest stats will be returned without caching.
 
 #### GET *id*/meta/tags
 
