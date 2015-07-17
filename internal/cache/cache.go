@@ -57,6 +57,13 @@ func (c *Cache) Len() int {
 	return len(c.old) + len(c.new)
 }
 
+// Evict removes the entry with the given key from the cache if present.
+func (c *Cache) Evict(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.new, key)
+}
+
 // EvictAll removes all entries from the cache.
 func (c *Cache) EvictAll() {
 	c.mu.Lock()

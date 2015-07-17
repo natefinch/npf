@@ -203,7 +203,7 @@ func (s *Store) searchDocFromEntity(e *mongodoc.Entity, be *mongodoc.BaseEntity)
 		doc.Entity.PromulgatedURL = nil
 		doc.Entity.PromulgatedRevision = -1
 	}
-	_, allRevisions, err := s.ArchiveDownloadCounts(EntityResolvedURL(e).PreferredURL())
+	_, allRevisions, err := s.ArchiveDownloadCounts(EntityResolvedURL(e).PreferredURL(), false)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}

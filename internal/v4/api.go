@@ -633,8 +633,13 @@ func (h *ReqHandler) metaTags(entity *mongodoc.Entity, id *router.ResolvedURL, p
 // GET id/meta/stats/
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetastats
 func (h *ReqHandler) metaStats(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+
 	// Retrieve the aggregated downloads count for the specific revision.
-	counts, countsAllRevisions, err := h.Store.ArchiveDownloadCounts(id.PreferredURL())
+	refresh, err := router.ParseBool(flags.Get("refresh"))
+	if err != nil {
+		return charmstore.SearchParams{}, badRequestf(err, "invalid refresh parameter")
+	}
+	counts, countsAllRevisions, err := h.Store.ArchiveDownloadCounts(id.PreferredURL(), refresh)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}

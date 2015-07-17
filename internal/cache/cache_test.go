@@ -25,6 +25,26 @@ func (*suite) TestSimpleGet(c *gc.C) {
 	c.Assert(v, gc.Equals, 2)
 }
 
+func (*suite) TestSimpleRefresh(c *gc.C) {
+	p := cache.New(time.Hour)
+	v, err := p.Get("a", fetchValue(2))
+	c.Assert(err, gc.IsNil)
+	c.Assert(v, gc.Equals, 2)
+
+	v, err = p.Get("a", fetchValue(4))
+	c.Assert(err, gc.IsNil)
+	c.Assert(v, gc.Equals, 2)
+
+	p.Evict("a")
+	v, err = p.Get("a", fetchValue(3))
+	c.Assert(err, gc.IsNil)
+	c.Assert(v, gc.Equals, 3)
+
+	v, err = p.Get("a", fetchValue(4))
+	c.Assert(err, gc.IsNil)
+	c.Assert(v, gc.Equals, 3)
+}
+
 func (*suite) TestFetchError(c *gc.C) {
 	p := cache.New(time.Hour)
 	expectErr := errgo.New("hello")
