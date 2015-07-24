@@ -3,7 +3,7 @@ date = "2015-07-14T07:00:19-04:00"
 draft = true
 title = "Go Pointers"
 type = "post"
-tags = ["go", "golang", pointers"]
+tags = ["go", "golang", "pointers"]
 +++
 
 One thing makes Go different from many other modern languages - it has pointers.
