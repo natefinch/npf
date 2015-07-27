@@ -8,7 +8,7 @@
 // There is no reason to use different vocabulary from that of elasticsearch.
 // Use the elasticsearch terminology and avoid mapping names of things.
 
-package elasticsearch // import "gopkg.in/juju/charmstore.v5-unstable/internal/elasticsearch"
+package elasticsearch // import "gopkg.in/juju/charmstore.v5-unstable/elasticsearch"
 
 import (
 	"bytes"

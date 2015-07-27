@@ -18,8 +18,8 @@ import (
 
 	"gopkg.in/juju/charmstore.v5-unstable"
 	"gopkg.in/juju/charmstore.v5-unstable/config"
+	"gopkg.in/juju/charmstore.v5-unstable/elasticsearch"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/debug"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/elasticsearch"
 )
 
 var (
