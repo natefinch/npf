@@ -30,8 +30,8 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/audit"
+	"gopkg.in/juju/charmstore.v5-unstable/elasticsearch"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/elasticsearch"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
