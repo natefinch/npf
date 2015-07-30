@@ -112,7 +112,7 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %q", rec.Body.Bytes()))
 	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
-	assertCacheControl(c, rec.Header(), false)
+	assertCacheControl(c, rec.Header(), true)
 
 	// Check that the output contains valid XML with an SVG tag,
 	// but don't check the details of the output so that this test doesn't
@@ -289,7 +289,7 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Body.String(), gc.Equals, expected)
 	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
-	assertCacheControl(c, rec.Header(), false)
+	assertCacheControl(c, rec.Header(), true)
 
 	// Reload the charm with an icon that already has viewBox.
 	wordpress = storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")

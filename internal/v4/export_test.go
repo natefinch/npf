@@ -4,17 +4,16 @@
 package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 var (
-	ParseSearchParams              = parseSearchParams
-	DefaultIcon                    = defaultIcon
-	ArchiveCacheVersionedMaxAge    = &archiveCacheVersionedMaxAge
-	ArchiveCacheNonVersionedMaxAge = &archiveCacheNonVersionedMaxAge
-	ParamsLogLevels                = paramsLogLevels
-	ParamsLogTypes                 = paramsLogTypes
-	ProcessIcon                    = processIcon
-	ErrProbablyNotXML              = errProbablyNotXML
-	UsernameAttr                   = usernameAttr
-	DelegatableMacaroonExpiry      = delegatableMacaroonExpiry
-	TestAddAuditCallback           = &testAddAuditCallback
+	ParseSearchParams         = parseSearchParams
+	DefaultIcon               = defaultIcon
+	ArchiveCachePublicMaxAge  = &archiveCachePublicMaxAge
+	ParamsLogLevels           = paramsLogLevels
+	ParamsLogTypes            = paramsLogTypes
+	ProcessIcon               = processIcon
+	ErrProbablyNotXML         = errProbablyNotXML
+	UsernameAttr              = usernameAttr
+	DelegatableMacaroonExpiry = delegatableMacaroonExpiry
+	TestAddAuditCallback      = &testAddAuditCallback
 
 	BundleCharms              = (*ReqHandler).bundleCharms
 	GetNewPromulgatedRevision = (*ReqHandler).getNewPromulgatedRevision
