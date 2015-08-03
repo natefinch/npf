@@ -2206,6 +2206,36 @@ func (s *APISuite) TestMacaroon(c *gc.C) {
 	})
 }
 
+func (s *APISuite) TestWhoAmIFailWithNoMacaroon(c *gc.C) {
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.noMacaroonSrv,
+		URL:          storeURL("whoami"),
+		Do:           bakeryDo(nil),
+		ExpectStatus: http.StatusUnauthorized,
+		ExpectBody: params.Error{
+			Code:    params.ErrUnauthorized,
+			Message: "authentication failed: missing HTTP auth header",
+		},
+	})
+}
+
+func (s *APISuite) TestWhoAmIReturnsNameAndGroups(c *gc.C) {
+	s.discharge = dischargeForUser("who")
+	s.idM.groups = map[string][]string{
+		"who": []string{"foo", "bar"},
+	}
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("whoami"),
+		Do:           bakeryDo(nil),
+		ExpectStatus: http.StatusOK,
+		ExpectBody: params.WhoAmIResponse{
+			User:   "who",
+			Groups: []string{"foo", "bar"},
+		},
+	})
+}
+
 var promulgateTests = []struct {
 	about              string
 	entities           []*mongodoc.Entity

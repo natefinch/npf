@@ -133,6 +133,7 @@ func newReqHandler() *ReqHandler {
 			"stats/counter/":       router.HandleJSON(h.serveStatsCounter),
 			"macaroon":             router.HandleJSON(h.serveMacaroon),
 			"delegatable-macaroon": router.HandleJSON(h.serveDelegatableMacaroon),
+			"whoami":               router.HandleJSON(h.serveWhoAmI),
 		},
 		Id: map[string]router.IdHandler{
 			"archive":     h.serveArchive,
@@ -1009,6 +1010,26 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 		return nil, errgo.Mask(err)
 	}
 	return m, nil
+}
+
+// GET /whoami
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#whoami
+func (h *ReqHandler) serveWhoAmI(_ http.Header, req *http.Request) (interface{}, error) {
+	auth, err := h.authorize(req, []string{params.Everyone}, true, nil)
+	if err != nil {
+		return nil, errgo.Mask(err, errgo.Any)
+	}
+	if auth.Admin {
+		return nil, errgo.WithCausef(nil, params.ErrForbidden, "admin credentials used")
+	}
+	groups, err := h.groupsForUser(auth.Username)
+	if err != nil {
+		return nil, errgo.Mask(err, errgo.Any)
+	}
+	return params.WhoAmIResponse{
+		User:   auth.Username,
+		Groups: groups,
+	}, nil
 }
 
 // PUT id/promulgate
