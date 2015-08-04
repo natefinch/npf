@@ -1806,6 +1806,28 @@ A delegatable macaroon will only be returned to an authorized user (not
 including admin). It will carry the same privileges as the macaroon used
 to authorize the request.
 
+#### GET /whoami
+
+This endpoint returns the user name of the client and the list of groups the user
+is a member of. This endpoint requires authorization.
+
+Example: `GET whoami`
+
+```json
+{
+    "User": "alice",
+    "Groups": ["charmers", "admin", "team-awesome"]
+}
+```
+
+The response is defined as:
+```go
+type WhoAmIResponse struct {
+    User string
+    Groups []string
+}
+```
+
 ### Logs
 
 #### GET /log
