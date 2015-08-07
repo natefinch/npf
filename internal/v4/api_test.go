@@ -1823,6 +1823,7 @@ func (s *APISuite) TestMetaStatsWithLegacyDownloadCounts(c *gc.C) {
 type publishSpec struct {
 	id   *router.ResolvedURL
 	time string
+	acl  []string
 }
 
 func (p publishSpec) published() params.Published {
@@ -1851,6 +1852,10 @@ var publishedCharms = []publishSpec{{
 }, {
 	id:   newResolvedURL("cs:~charmers/precise/wordpress-3", 3),
 	time: "5432-10-14 01:00",
+}, {
+	id:   newResolvedURL("cs:~charmers/precise/django-0", -1),
+	time: "5432-10-14 02:00",
+	acl:  []string{"charmers"},
 }}
 
 var changesPublishedTests = []struct {
@@ -1898,6 +1903,21 @@ func (s *APISuite) TestChangesPublished(c *gc.C) {
 			ExpectBody: expect,
 		})
 	}
+}
+
+func (s *APISuite) TestChangesPublishedAdmin(c *gc.C) {
+	s.publishCharmsAtKnownTimes(c, publishedCharms)
+	expect := make([]params.Published, len(publishedCharms))
+	for i := range expect {
+		expect[i] = publishedCharms[len(publishedCharms)-(i+1)].published()
+	}
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:    s.srv,
+		Username:   testUsername,
+		Password:   testPassword,
+		URL:        storeURL("changes/published"),
+		ExpectBody: expect,
+	})
 }
 
 var changesPublishedErrorsTests = []struct {
@@ -1962,6 +1982,10 @@ func (s *APISuite) publishCharmsAtKnownTimes(c *gc.C, charms []publishSpec) {
 		t := ch.published().PublishTime
 		err := s.store.UpdateEntity(id, bson.D{{"$set", bson.D{{"uploadtime", t}}}})
 		c.Assert(err, gc.IsNil)
+		if len(ch.acl) > 0 {
+			err := s.store.SetPerms(&id.URL, "read", ch.acl...)
+			c.Assert(err, gc.IsNil)
+		}
 	}
 }
 

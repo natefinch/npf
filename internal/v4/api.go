@@ -966,17 +966,27 @@ func (h *ReqHandler) serveChangesPublished(_ http.Header, r *http.Request) (inte
 		Find(findQuery).
 		Sort("-uploadtime").
 		Select(bson.D{{"_id", 1}, {"uploadtime", 1}})
-	if limit != -1 {
-		query = query.Limit(limit)
-	}
 
 	results := []params.Published{}
+	var count int
 	var entity mongodoc.Entity
-	for iter := query.Iter(); iter.Next(&entity); {
+	iter := query.Iter()
+	for iter.Next(&entity) {
+		// Ignore entities that aren't readable by the current user.
+		if err := h.AuthorizeEntity(charmstore.EntityResolvedURL(&entity), r); err != nil {
+			continue
+		}
 		results = append(results, params.Published{
 			Id:          entity.URL,
 			PublishTime: entity.UploadTime.UTC(),
 		})
+		count++
+		if limit > 0 && limit <= count {
+			break
+		}
+	}
+	if err := iter.Close(); err != nil {
+		return nil, errgo.Mask(err)
 	}
 	return results, nil
 }
