@@ -719,6 +719,8 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 			BlobSize: fakeBlobSize,
 		})
 		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+		c.Assert(err, gc.IsNil)
 	}
 
 	for i, test := range metaBundlesContainingTests {
@@ -764,6 +766,54 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 		err = s.store.DB.Entities().Remove(bson.D{{"_id", &rurl.URL}})
 		c.Assert(err, gc.IsNil)
 	}
+}
+
+func (s *RelationsSuite) TestMetaBundlesContainingBundleACL(c *gc.C) {
+	// Add the bundles used for testing to the database.
+	for id, b := range metaBundlesContainingBundles {
+		url := mustParseResolvedURL(id)
+		// The blob related info are not used in these tests.
+		// The charm-bundle relations are retrieved from the entities
+		// collection, without accessing the blob store.
+		err := s.store.AddBundle(b, charmstore.AddParams{
+			URL:      url,
+			BlobName: "blobName",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
+		})
+		c.Assert(err, gc.IsNil)
+		if url.URL.Name == "useless" {
+			// The useless bundle is not available for "everyone".
+			err = s.store.SetPerms(&url.URL, "read", url.URL.User)
+			c.Assert(err, gc.IsNil)
+			continue
+		}
+		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+		c.Assert(err, gc.IsNil)
+	}
+	rurl := mustParseResolvedURL("42 ~charmers/utopic/wordpress-42")
+	// Add the charm we need bundle info on to the database.
+	err := s.store.AddCharm(&relationTestingCharm{}, charmstore.AddParams{
+		URL:      rurl,
+		BlobName: "blobName",
+		BlobHash: fakeBlobHash,
+		BlobSize: fakeBlobSize,
+	})
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	c.Assert(err, gc.IsNil)
+
+	// Perform the request and ensure that the useless bundle isn't listed.
+	storeURL := storeURL("utopic/wordpress-42/meta/bundles-containing")
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL,
+		ExpectBody: sameMetaAnyResponses([]*params.MetaAnyResponse{{
+			Id: charm.MustParseReference("bundle/wordpress-complex-1"),
+		}, {
+			Id: charm.MustParseReference("bundle/wordpress-simple-0"),
+		}}),
+	})
 }
 
 // sameMetaAnyResponses returns a BodyAsserter that checks whether the meta/any response
