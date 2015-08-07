@@ -264,6 +264,10 @@ func (h *ReqHandler) metaBundlesContaining(entity *mongodoc.Entity, id *router.R
 	includes := flags["include"]
 	// TODO(rog) make this concurrent.
 	for _, e := range entities {
+		// Ignore entities that aren't readable by the current user.
+		if err := h.AuthorizeEntity(charmstore.EntityResolvedURL(e), req); err != nil {
+			continue
+		}
 		meta, err := h.getMetadataForEntity(e, includes, req)
 		if err != nil {
 			return nil, errgo.Notef(err, "cannot retrieve bundle metadata")
