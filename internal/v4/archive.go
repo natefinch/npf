@@ -97,7 +97,7 @@ func (h *ReqHandler) authorizeUpload(id *charm.Reference, req *http.Request) err
 	return h.authorizeWithPerms(req, nil, []string{id.User}, nil)
 }
 
-func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	r, size, hash, err := h.Store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
@@ -117,7 +117,7 @@ func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, fullySpecified bool
 	return nil
 }
 
-func (h *ReqHandler) serveDeleteArchive(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveDeleteArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	// Retrieve the entity blob name from the database.
 	blobName, _, err := h.Store.BlobNameAndHash(id)
 	if err != nil {
@@ -383,7 +383,7 @@ func verifyConstraints(s string) error {
 
 // GET id/archive/path
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idarchivepath
-func (h *ReqHandler) serveArchiveFile(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveArchiveFile(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	r, size, _, err := h.Store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
