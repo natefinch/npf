@@ -97,14 +97,14 @@ func (h *ReqHandler) authorizeUpload(id *charm.Reference, req *http.Request) err
 	return h.authorizeWithPerms(req, nil, []string{id.User}, nil)
 }
 
-func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	r, size, hash, err := h.Store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	defer r.Close()
 	header := w.Header()
-	setArchiveCacheControl(w.Header(), fullySpecified)
+	setArchiveCacheControl(w.Header(), h.isPublic(id.URL))
 	header.Set(params.ContentHashHeader, hash)
 	header.Set(params.EntityIdHeader, id.String())
 
@@ -117,7 +117,7 @@ func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, fullySpecified bool
 	return nil
 }
 
-func (h *ReqHandler) serveDeleteArchive(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveDeleteArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	// Retrieve the entity blob name from the database.
 	blobName, _, err := h.Store.BlobNameAndHash(id)
 	if err != nil {
@@ -383,7 +383,7 @@ func verifyConstraints(s string) error {
 
 // GET id/archive/path
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idarchivepath
-func (h *ReqHandler) serveArchiveFile(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveArchiveFile(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	r, size, _, err := h.Store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
@@ -416,12 +416,25 @@ func (h *ReqHandler) serveArchiveFile(id *router.ResolvedURL, fullySpecified boo
 			w.Header().Set("Content-Type", ctype)
 		}
 		w.Header().Set("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
-		setArchiveCacheControl(w.Header(), fullySpecified)
+		setArchiveCacheControl(w.Header(), h.isPublic(id.URL))
 		w.WriteHeader(http.StatusOK)
 		io.Copy(w, content)
 		return nil
 	}
 	return errgo.WithCausef(nil, params.ErrNotFound, "file %q not found in the archive", filePath)
+}
+
+func (h *ReqHandler) isPublic(id charm.Reference) bool {
+	baseEntity, err := h.Store.FindBaseEntity(&id, "acls")
+	if err == nil {
+		for _, p := range baseEntity.ACLs.Read {
+			if p == params.Everyone {
+				return true
+				break
+			}
+		}
+	}
+	return false
 }
 
 func (h *ReqHandler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
@@ -516,26 +529,22 @@ func verificationError(err error) error {
 }
 
 var (
-	// archiveCacheVersionedMaxAge specifies the cache expiry duration for items
-	// returned from the archive where the id is fully specified.
-	archiveCacheVersionedMaxAge = 365 * 24 * time.Hour
-
-	// archiveCacheNonVersionedMaxAge specifies the cache expiry duration for items
-	// returned from the archive where the id is not fully specified.
-	archiveCacheNonVersionedMaxAge = 5 * time.Minute
+	// archiveCachePublicMaxAge specifies the cache expiry duration for items
+	// returned from the archive where the id represents the id of a public entity.
+	archiveCachePublicMaxAge = 1 * time.Hour
 )
 
-// setArchiveCacheControl sets any cache control headers
+// setArchiveCacheControl sets cache control headers
 // in a response to an archive-derived endpoint.
-// The idFullySpecified header specifies whether
-// the entity id in the request was fully specified by the client.
-func setArchiveCacheControl(h http.Header, idFullySpecified bool) {
-	age := archiveCacheVersionedMaxAge
-	if !idFullySpecified {
-		age = archiveCacheNonVersionedMaxAge
+// The isPublic parameter specifies whether
+// the entity id can or not be cached .
+func setArchiveCacheControl(h http.Header, isPublic bool) {
+	if isPublic {
+		seconds := int(archiveCachePublicMaxAge / time.Second)
+		h.Set("Cache-Control", "public, max-age="+strconv.Itoa(seconds))
+	} else {
+		h.Set("Cache-Control", "no-cache, must-revalidate")
 	}
-	seconds := int(age / time.Second)
-	h.Set("Cache-Control", "public, max-age="+strconv.Itoa(seconds))
 }
 
 // getNewPromulgatedRevision returns the promulgated revision

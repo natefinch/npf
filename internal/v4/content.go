@@ -24,7 +24,7 @@ import (
 
 // GET id/diagram.svg
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-iddiagramsvg
-func (h *ReqHandler) serveDiagram(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveDiagram(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	if id.URL.Series != "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "diagrams not supported for charms")
 	}
@@ -51,7 +51,7 @@ func (h *ReqHandler) serveDiagram(id *router.ResolvedURL, fullySpecified bool, w
 	if urlErr != nil {
 		return urlErr
 	}
-	setArchiveCacheControl(w.Header(), fullySpecified)
+	setArchiveCacheControl(w.Header(), h.isPublic(id.URL))
 	w.Header().Set("Content-Type", "image/svg+xml")
 	canvas.Marshal(w)
 	return nil
@@ -70,7 +70,7 @@ var allowedReadMe = map[string]bool{
 
 // GET id/readme
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idreadme
-func (h *ReqHandler) serveReadMe(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveReadMe(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	entity, err := h.Store.FindEntity(id, "_id", "contents", "blobname")
 	if err != nil {
 		return errgo.NoteMask(err, "cannot get README", errgo.Is(params.ErrNotFound))
@@ -86,14 +86,14 @@ func (h *ReqHandler) serveReadMe(id *router.ResolvedURL, fullySpecified bool, w 
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	defer r.Close()
-	setArchiveCacheControl(w.Header(), fullySpecified)
+	setArchiveCacheControl(w.Header(), h.isPublic(id.URL))
 	io.Copy(w, r)
 	return nil
 }
 
 // GET id/icon.svg
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idiconsvg
-func (h *ReqHandler) serveIcon(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveIcon(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	if id.URL.Series == "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "icons not supported for bundles")
 	}
@@ -110,14 +110,14 @@ func (h *ReqHandler) serveIcon(id *router.ResolvedURL, fullySpecified bool, w ht
 		if errgo.Cause(err) != params.ErrNotFound {
 			return errgo.Mask(err)
 		}
-		setArchiveCacheControl(w.Header(), fullySpecified)
+		setArchiveCacheControl(w.Header(), h.isPublic(id.URL))
 		w.Header().Set("Content-Type", "image/svg+xml")
 		io.Copy(w, strings.NewReader(defaultIcon))
 		return nil
 	}
 	defer r.Close()
 	w.Header().Set("Content-Type", "image/svg+xml")
-	setArchiveCacheControl(w.Header(), fullySpecified)
+	setArchiveCacheControl(w.Header(), h.isPublic(id.URL))
 	if err := processIcon(w, r); err != nil {
 		if errgo.Cause(err) == errProbablyNotXML {
 			logger.Errorf("cannot process icon.svg from %s: %v", id, err)

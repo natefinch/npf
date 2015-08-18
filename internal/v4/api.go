@@ -449,13 +449,13 @@ func (h *ReqHandler) serveDebug(w http.ResponseWriter, req *http.Request) {
 //
 // PUT id/resources/[~user/]series/name.stream-revision/arch?sha256=hash
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idresourcesuserseriesnamestream-revisionarchsha256hash
-func (h *ReqHandler) serveResources(id *router.ResolvedURL, _ bool, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveResources(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	return errNotImplemented
 }
 
 // GET id/expand-id
 // https://docs.google.com/a/canonical.com/document/d/1TgRA7jW_mmXoKH3JiwBbtPvQu7WiM6XMrz1wSrhTMXw/edit#bookmark=id.4xdnvxphb2si
-func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, _ bool, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	baseURL := id.PreferredURL()
 	baseURL.Revision = -1
 	baseURL.Series = ""
@@ -1044,7 +1044,7 @@ func (h *ReqHandler) serveWhoAmI(_ http.Header, req *http.Request) (interface{},
 
 // PUT id/promulgate
 // See https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idpromulgate
-func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, _ bool, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	if _, err := h.authorize(req, []string{promulgatorsGroup}, false, id); err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
@@ -1076,25 +1076,21 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, _ bool, w http
 	return nil
 }
 
-type resolvedIdHandler func(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error
+type resolvedIdHandler func(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error
 
 // authId returns a resolvedIdHandler that checks that the client
 // is authorized to perform the HTTP request method before
 // invoking f.
 func (h *ReqHandler) authId(f resolvedIdHandler) resolvedIdHandler {
-	return func(id *router.ResolvedURL, fullySpecified bool, w http.ResponseWriter, req *http.Request) error {
+	return func(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 		if err := h.AuthorizeEntity(id, req); err != nil {
 			return errgo.Mask(err, errgo.Any)
 		}
-		if err := f(id, fullySpecified, w, req); err != nil {
+		if err := f(id, w, req); err != nil {
 			return errgo.Mask(err, errgo.Any)
 		}
 		return nil
 	}
-}
-
-func isFullySpecified(id *charm.Reference) bool {
-	return id.Series != "" && id.Revision != -1
 }
 
 // resolveId returns an id handler that resolves any non-fully-specified
@@ -1105,7 +1101,7 @@ func (h *ReqHandler) resolveId(f resolvedIdHandler) router.IdHandler {
 		if err != nil {
 			return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
-		return f(rid, isFullySpecified(id), w, req)
+		return f(rid, w, req)
 	}
 }
 

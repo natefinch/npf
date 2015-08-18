@@ -1523,8 +1523,7 @@ func hashOf(r io.Reader) (hashSum string, size int64) {
 func patchArchiveCacheAges(s interface {
 	PatchValue(interface{}, interface{})
 }) {
-	s.PatchValue(v4.ArchiveCacheVersionedMaxAge, 20*time.Second)
-	s.PatchValue(v4.ArchiveCacheNonVersionedMaxAge, 5*time.Second)
+	s.PatchValue(v4.ArchiveCachePublicMaxAge, 5*time.Second)
 }
 
 // assertCacheControl asserts that the cache control headers are
@@ -1532,12 +1531,13 @@ func patchArchiveCacheAges(s interface {
 // whether the id in the request was fully specified.
 // It assumes that patchArchiveCacheAges has been called
 // for the current test.
-func assertCacheControl(c *gc.C, h http.Header, idFullySpecified bool) {
-	seconds := 5
-	if idFullySpecified {
-		seconds = 20
+func assertCacheControl(c *gc.C, h http.Header, isPublic bool) {
+	if isPublic {
+		seconds := 5
+		c.Assert(h.Get("Cache-Control"), gc.Equals, fmt.Sprintf("public, max-age=%d", seconds))
+	} else {
+		c.Assert(h.Get("Cache-Control"), gc.Equals, "no-cache, must-revalidate")
 	}
-	c.Assert(h.Get("Cache-Control"), gc.Equals, fmt.Sprintf("public, max-age=%d", seconds))
 }
 
 type ArchiveSearchSuite struct {
