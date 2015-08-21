@@ -358,6 +358,38 @@ Example:
 We need to provide aggregated stats for downloads:
 * promulgated and ~user counterpart charms should have the same download stats.
 
+#### PUT stats/update
+
+This endpoint can be used to increase the stats related to an entity.
+This will increase the download stats by one for the entity provided and at the time stamp provided.
+It can for future purpose include the client issuing the requests.
+This is used when charmstore is in front of a cache server that will not call the real /archive endpoint and 
+as such will not increase the download counts.
+
+<pre>
+PUT stats/counter
+</pre>
+
+Request body:
+```go
+type StatsUpdateRequest struct {
+	Timestamp      time.Time
+	Type           string
+	CharmReference *charm.Reference
+}
+```
+Example: `PUT stats/update`
+
+
+Request body:
+```json
+{
+    "Timestamp":"2015-08-06T06:46:13Z",
+    "Type":"deploy",
+    "CharmReference":"cs:~charmers/utopic/wordpress-42"
+}
+```
+
 ### Meta
 
 #### GET meta

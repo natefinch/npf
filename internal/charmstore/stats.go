@@ -184,9 +184,7 @@ func (s *Store) IncCounter(key []string) error {
 }
 
 // IncCounterAtTime increases by one the counter associated with the composed
-// key, associating it with the given time, which should be time.Now.
-// This method is exposed for testing purposes only - production
-// code should always call IncCounter or IncCounterAsync.
+// key, associating it with the given time.
 func (s *Store) IncCounterAtTime(key []string, t time.Time) error {
 	skey, err := s.stats.key(s.DB, key, true)
 	if err != nil {
@@ -574,6 +572,7 @@ func (s *Store) aggregateStats(key []string, prefix bool) (AggregatedCounts, err
 		Prefix: prefix,
 	}
 	results, err := s.Counters(&req)
+
 	if err != nil {
 		return counts, errgo.Notef(err, "cannot retrieve stats")
 	}
@@ -613,8 +612,14 @@ func (s *Store) IncrementDownloadCountsAsync(id *router.ResolvedURL) {
 // IncrementDownloadCounts updates the download statistics for entity id in both
 // the statistics database and the search database.
 func (s *Store) IncrementDownloadCounts(id *router.ResolvedURL) error {
+	return s.IncrementDownloadCountsAtTime(id, time.Now())
+}
+
+// IncrementDownloadCountsAtTime updates the download statistics for entity id in both
+// the statistics database and the search database, associating it with the given time.
+func (s *Store) IncrementDownloadCountsAtTime(id *router.ResolvedURL, t time.Time) error {
 	key := EntityStatsKey(&id.URL, params.StatsArchiveDownload)
-	if err := s.IncCounter(key); err != nil {
+	if err := s.IncCounterAtTime(key, t); err != nil {
 		return errgo.Notef(err, "cannot increase stats counter for %v", key)
 	}
 	if id.PromulgatedRevision == -1 {
@@ -624,13 +629,13 @@ func (s *Store) IncrementDownloadCounts(id *router.ResolvedURL) error {
 		// it will not be in the critical path.
 		entity, err := s.FindEntity(id, "promulgated-revision")
 		if err != nil {
-			return errgo.Notef(err, "cannot find entity %v", &id.URL)
+			return err
 		}
 		id.PromulgatedRevision = entity.PromulgatedRevision
 	}
 	if id.PromulgatedRevision != -1 {
 		key := EntityStatsKey(id.PreferredURL(), params.StatsArchiveDownload)
-		if err := s.IncCounter(key); err != nil {
+		if err := s.IncCounterAtTime(key, t); err != nil {
 			return errgo.Notef(err, "cannot increase stats counter for %v", key)
 		}
 	}
