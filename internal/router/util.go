@@ -14,7 +14,7 @@ import (
 	"github.com/juju/loggo"
 	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charmrepo.v0/csclient/params"
+	"gopkg.in/juju/charmrepo.v1/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 )
 

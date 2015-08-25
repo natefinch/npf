@@ -15,7 +15,7 @@ import (
 	"github.com/juju/xml"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v0/csclient/params"
+	"gopkg.in/juju/charmrepo.v1/csclient/params"
 	"gopkg.in/juju/jujusvg.v1"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
