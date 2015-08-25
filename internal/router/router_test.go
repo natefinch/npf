@@ -22,7 +22,7 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v0/csclient/params"
+	"gopkg.in/juju/charmrepo.v1/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 
 	"gopkg.in/juju/charmstore.v5-unstable/audit"

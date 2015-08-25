@@ -10,7 +10,7 @@ import (
 
 	"github.com/juju/utils/parallel"
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charmrepo.v0/csclient/params"
+	"gopkg.in/juju/charmrepo.v1/csclient/params"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"

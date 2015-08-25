@@ -13,7 +13,7 @@ import (
 	"github.com/juju/utils/debugstatus"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v0/csclient/params"
+	"gopkg.in/juju/charmrepo.v1/csclient/params"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
