@@ -4,6 +4,7 @@
 package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -109,6 +110,40 @@ func (h *ReqHandler) serveStatsCounter(_ http.Header, r *http.Request) (interfac
 	}
 
 	return items, nil
+}
+
+// PUT stats/update
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#put-statsupdate
+func (h *ReqHandler) serveStatsUpdate(_ http.Header, r *http.Request) (interface{}, error) {
+	if _, err := h.authorize(r, nil, true, nil); err != nil {
+		return nil, err
+	}
+	if r.Method != "PUT" {
+		return nil, errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", r.Method)
+	}
+
+	var req params.StatsUpdateRequest
+	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
+		return nil, errgo.WithCausef(nil, params.ErrBadRequest, "unexpected Content-Type %q; expected %q", ct, "application/json")
+	}
+
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&req); err != nil {
+		return nil, errgo.Notef(err, "cannot unmarshal body")
+	}
+
+	rid, err := h.resolveURL(req.CharmReference)
+	if err != nil {
+		return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+
+	logger.Infof("Increase download stats for id: %s at time: %s", rid, req.Timestamp)
+
+	if err := h.Store.IncrementDownloadCountsAtTime(rid, req.Timestamp); err != nil {
+		return nil, err
+	}
+
+	return make(map[string]interface{}), nil
 }
 
 // StatsEnabled reports whether statistics should be gathered for
