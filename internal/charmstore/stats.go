@@ -629,7 +629,7 @@ func (s *Store) IncrementDownloadCountsAtTime(id *router.ResolvedURL, t time.Tim
 		// it will not be in the critical path.
 		entity, err := s.FindEntity(id, "promulgated-revision")
 		if err != nil {
-			return err
+			return errgo.Notef(err, "cannot find entity %v", &id.URL)
 		}
 		id.PromulgatedRevision = entity.PromulgatedRevision
 	}

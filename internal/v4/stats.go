@@ -122,7 +122,7 @@ func (h *ReqHandler) serveStatsUpdate(_ http.Header, r *http.Request) (interface
 		return nil, errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", r.Method)
 	}
 
-	var req params.StatsUpdateRequest
+	var req []params.StatsUpdateRequest
 	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
 		return nil, errgo.WithCausef(nil, params.ErrBadRequest, "unexpected Content-Type %q; expected %q", ct, "application/json")
 	}
@@ -132,16 +132,34 @@ func (h *ReqHandler) serveStatsUpdate(_ http.Header, r *http.Request) (interface
 		return nil, errgo.Notef(err, "cannot unmarshal body")
 	}
 
-	rid, err := h.resolveURL(req.CharmReference)
-	if err != nil {
-		return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	errors := make([]error, 0)
+	for i := range req {
+		rid, err := h.resolveURL(req[i].CharmReference)
+		if err != nil {
+			errors = append(errors, errgo.Notef(err, "cannot find entity for url: %s", req[i].CharmReference))
+			continue
+		}
+
+		logger.Infof("Increase download stats for id: %s at time: %s", rid, req[i].Timestamp)
+
+		if err := h.Store.IncrementDownloadCountsAtTime(rid, req[i].Timestamp); err != nil {
+			errors = append(errors, err)
+			continue
+		}
 	}
 
-	logger.Infof("Increase download stats for id: %s at time: %s", rid, req.Timestamp)
-
-	if err := h.Store.IncrementDownloadCountsAtTime(rid, req.Timestamp); err != nil {
-		return nil, err
+	if len(errors) != 0 {
+		messages := make([]string, len(errors))
+		for i, err := range errors {
+			messages[i] = err.Error()
+		}
+		encodedMessages, err := json.Marshal(messages)
+		if err != nil {
+			return nil, err
+		}
+		return nil, errgo.New(string(encodedMessages))
 	}
+
 
 	return make(map[string]interface{}), nil
 }
