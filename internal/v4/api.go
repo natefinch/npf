@@ -131,7 +131,7 @@ func newReqHandler() *ReqHandler {
 			"search/interesting":   http.HandlerFunc(h.serveSearchInteresting),
 			"stats/":               router.NotFoundHandler(),
 			"stats/counter/":       router.HandleJSON(h.serveStatsCounter),
-			"stats/update":         router.HandleJSON(h.serveStatsUpdate),
+			"stats/update":         router.HandleErrors(h.serveStatsUpdate),
 			"macaroon":             router.HandleJSON(h.serveMacaroon),
 			"delegatable-macaroon": router.HandleJSON(h.serveDelegatableMacaroon),
 			"whoami":               router.HandleJSON(h.serveWhoAmI),
