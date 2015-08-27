@@ -90,44 +90,109 @@ func (s *StatsSuite) TestServerStatsStatus(c *gc.C) {
 func (s *StatsSuite) TestServerStatsUpdate(c *gc.C) {
 	ref := charm.MustParseReference("~charmers/precise/wordpress-23")
 	tests := []struct {
-		path       string
-		status     int
-		body       params.StatsUpdateRequest
-		expectBody map[string]interface{}
-		previous   bool
+		path          string
+		status        int
+		body          params.StatsUpdateRequest
+		expectBody    map[string]interface{}
+		previousMonth bool
 	}{{
 		path:   "stats/update",
 		status: http.StatusOK,
-		body: params.StatsUpdateRequest {
-			Timestamp:      time.Now(),
-			CharmReference: charm.MustParseReference("~charmers/wordpress"),
-		},
-		expectBody: make(map[string]interface {}),
-	},{
-		path:   "stats/update",
-		status: http.StatusOK,
-		body: params.StatsUpdateRequest {
-			Timestamp:      time.Now(),
-			CharmReference: ref,
-		},
-		expectBody: make(map[string]interface {}),
-	},{
-		path:   "stats/update",
-		status: http.StatusNotFound,
-		body: params.StatsUpdateRequest {
-			Timestamp:      time.Now(),
-			CharmReference: charm.MustParseReference("~charmers/precise/unknown-23"),
-		},
-		expectBody: map[string]interface {}{"Code":"not found", "Message":"entity not found"},
-	},{
+		body: params.StatsUpdateRequest{
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now(),
+				CharmReference: charm.MustParseReference("~charmers/wordpress"),
+			}}},
+	}, {
 		path:   "stats/update",
 		status: http.StatusOK,
 		body: params.StatsUpdateRequest{
-			Timestamp:      time.Now().AddDate(0, -1, 0),
-			CharmReference: ref,
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now(),
+				CharmReference: ref,
+			}},
 		},
-		expectBody: make(map[string]interface{}),
-		previous:   true,
+	}, {
+		path:   "stats/update",
+		status: http.StatusOK,
+		body: params.StatsUpdateRequest{
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now().AddDate(0, -1, 0),
+				CharmReference: ref,
+			}},
+		},
+		previousMonth: true,
+	}}
+
+	ch := storetesting.Charms.CharmDir("wordpress")
+	rurl := newResolvedURL("~charmers/precise/wordpress-23", 23)
+	err := s.store.AddCharmWithArchive(rurl, ch)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	c.Assert(err, gc.IsNil)
+
+	var countsBefore, countsAfter charmstore.AggregatedCounts
+	for i, test := range tests {
+		c.Logf("test %d. %s", i, test.path)
+
+		_, countsBefore, err = s.store.ArchiveDownloadCounts(ref, true)
+		c.Assert(err, gc.IsNil)
+
+		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+			Handler:  s.srv,
+			URL:      storeURL(test.path),
+			Method:   "PUT",
+			Username: testUsername,
+			Password: testPassword,
+			JSONBody: test.body,
+		})
+
+		c.Assert(rec.Code, gc.Equals, test.status)
+
+		_, countsAfter, err = s.store.ArchiveDownloadCounts(ref, true)
+		c.Assert(err, gc.IsNil)
+		c.Assert(countsAfter.Total-countsBefore.Total, gc.Equals, int64(1))
+		if test.previousMonth {
+			c.Assert(countsAfter.LastDay-countsBefore.LastDay, gc.Equals, int64(0))
+		} else {
+			c.Assert(countsAfter.LastDay-countsBefore.LastDay, gc.Equals, int64(1))
+		}
+	}
+}
+
+func (s *StatsSuite) TestServerStatsUpdateErrors(c *gc.C) {
+	ref := charm.MustParseReference("~charmers/precise/wordpress-23")
+	tests := []struct {
+		path          string
+		status        int
+		body          params.StatsUpdateRequest
+		expectMessage string
+		expectCode    params.ErrorCode
+		partialUpdate bool
+	}{{
+		path:   "stats/update",
+		status: http.StatusInternalServerError,
+		body: params.StatsUpdateRequest{
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now(),
+				CharmReference: charm.MustParseReference("~charmers/precise/unknown-23"),
+			}},
+		},
+		expectMessage: "cannot find entity cs:~charmers/precise/unknown-23: entity not found",
+	}, {
+		path:   "stats/update",
+		status: http.StatusInternalServerError,
+		body: params.StatsUpdateRequest{
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now(),
+				CharmReference: charm.MustParseReference("~charmers/precise/unknown-23"),
+			}, {
+				Timestamp:      time.Now(),
+				CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
+			}},
+		},
+		expectMessage: "cannot find entity cs:~charmers/precise/unknown-23: entity not found",
+		partialUpdate: true,
 	}}
 
 	ch := storetesting.Charms.CharmDir("wordpress")
@@ -140,7 +205,7 @@ func (s *StatsSuite) TestServerStatsUpdate(c *gc.C) {
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.path)
 		var countsBefore, countsAfter charmstore.AggregatedCounts
-		if test.status == http.StatusOK {
+		if test.partialUpdate {
 			_, countsBefore, err = s.store.ArchiveDownloadCounts(ref, true)
 			c.Assert(err, gc.IsNil)
 		}
@@ -152,48 +217,51 @@ func (s *StatsSuite) TestServerStatsUpdate(c *gc.C) {
 			Password:     testPassword,
 			JSONBody:     test.body,
 			ExpectStatus: test.status,
-			ExpectBody:   test.expectBody,
+			ExpectBody: params.Error{
+				Message: test.expectMessage,
+				Code:    test.expectCode,
+			},
 		})
-		if test.status == http.StatusOK {
+		if test.partialUpdate {
 			_, countsAfter, err = s.store.ArchiveDownloadCounts(ref, true)
 			c.Assert(err, gc.IsNil)
 			c.Assert(countsAfter.Total-countsBefore.Total, gc.Equals, int64(1))
-			if test.previous {
-				c.Assert(countsAfter.LastDay-countsBefore.LastDay, gc.Equals, int64(0))
-			} else {
-				c.Assert(countsAfter.LastDay-countsBefore.LastDay, gc.Equals, int64(1))
-			}
+			c.Assert(countsAfter.LastDay-countsBefore.LastDay, gc.Equals, int64(1))
 		}
 	}
 }
 
 func (s *StatsSuite) TestServerStatsUpdateNonAdmin(c *gc.C) {
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:      s.srv,
-		URL:          storeURL("stats/update"),
-		Method:       "PUT",
-		JSONBody:     params.StatsUpdateRequest {
-			Timestamp:      time.Now(),
-			CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
+		Handler: s.srv,
+		URL:     storeURL("stats/update"),
+		Method:  "PUT",
+		JSONBody: params.StatsUpdateRequest{
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now(),
+				CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
+			}},
 		},
 		ExpectStatus: http.StatusUnauthorized,
-		ExpectBody:   &params.Error {
+		ExpectBody: &params.Error{
 			Message: "authentication failed: missing HTTP auth header",
 			Code:    params.ErrUnauthorized,
 		},
 	})
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:      s.srv,
-		URL:          storeURL("stats/update"),
-		Method:       "PUT",
-		Username:     "brad",
-		Password:     "pitt",
-		JSONBody:     params.StatsUpdateRequest {
-			Timestamp:      time.Now(),
-			CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
+		Handler:  s.srv,
+		URL:      storeURL("stats/update"),
+		Method:   "PUT",
+		Username: "brad",
+		Password: "pitt",
+		JSONBody: params.StatsUpdateRequest{
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now(),
+				CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
+			}},
 		},
 		ExpectStatus: http.StatusUnauthorized,
-		ExpectBody:   &params.Error {
+		ExpectBody: &params.Error{
 			Message: "invalid user name or password",
 			Code:    params.ErrUnauthorized,
 		},

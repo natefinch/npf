@@ -114,36 +114,49 @@ func (h *ReqHandler) serveStatsCounter(_ http.Header, r *http.Request) (interfac
 
 // PUT stats/update
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-statsupdate
-func (h *ReqHandler) serveStatsUpdate(_ http.Header, r *http.Request) (interface{}, error) {
+func (h *ReqHandler) serveStatsUpdate(w http.ResponseWriter, r *http.Request) error {
 	if _, err := h.authorize(r, nil, true, nil); err != nil {
-		return nil, err
+		return err
 	}
 	if r.Method != "PUT" {
-		return nil, errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", r.Method)
+		return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", r.Method)
 	}
 
 	var req params.StatsUpdateRequest
 	if ct := r.Header.Get("Content-Type"); ct != "application/json" {
-		return nil, errgo.WithCausef(nil, params.ErrBadRequest, "unexpected Content-Type %q; expected %q", ct, "application/json")
+		return errgo.WithCausef(nil, params.ErrBadRequest, "unexpected Content-Type %q; expected %q", ct, "application/json")
 	}
 
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&req); err != nil {
-		return nil, errgo.Notef(err, "cannot unmarshal body")
+		return errgo.Notef(err, "cannot unmarshal body")
 	}
 
-	rid, err := h.resolveURL(req.CharmReference)
-	if err != nil {
-		return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	errors := make([]error, 0)
+	for _, entry := range req.Entries {
+		rid, err := h.resolveURL(entry.CharmReference)
+		if err != nil {
+			errors = append(errors, errgo.Notef(err, "cannot find entity for url %s", entry.CharmReference))
+			continue
+		}
+
+		logger.Infof("Increase download stats for id: %s at time: %s", rid, entry.Timestamp)
+
+		if err := h.Store.IncrementDownloadCountsAtTime(rid, entry.Timestamp); err != nil {
+			errors = append(errors, err)
+			continue
+		}
 	}
 
-	logger.Infof("Increase download stats for id: %s at time: %s", rid, req.Timestamp)
-
-	if err := h.Store.IncrementDownloadCountsAtTime(rid, req.Timestamp); err != nil {
-		return nil, err
+	if len(errors) != 0 {
+		logger.Infof("Errors detected during /stats/update processing: %v", errors)
+		if len(errors) > 1 {
+			return errgo.Newf("%s (and %d more errors)", errors[0], len(errors)-1)
+		}
+		return errors[0]
 	}
 
-	return make(map[string]interface{}), nil
+	return nil
 }
 
 // StatsEnabled reports whether statistics should be gathered for
