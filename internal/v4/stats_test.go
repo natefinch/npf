@@ -92,54 +92,63 @@ func (s *StatsSuite) TestServerStatsUpdate(c *gc.C) {
 	tests := []struct {
 		path          string
 		status        int
-		body          []params.StatsUpdateRequest
+		body          params.StatsUpdateRequest
 		expectBody    map[string]interface{}
 		previousMonth bool
 		partialUpdate bool
 	}{{
 		path:   "stats/update",
 		status: http.StatusOK,
-		body: []params.StatsUpdateRequest {{
+		body: params.StatsUpdateRequest {
+			Entries: []params.StatsUpdateEntry{{
 			Timestamp:      time.Now(),
 			CharmReference: charm.MustParseReference("~charmers/wordpress"),
-		}},
+		}}},
 		expectBody: make(map[string]interface {}),
 	},{
 		path:   "stats/update",
 		status: http.StatusOK,
-		body: []params.StatsUpdateRequest {{
-			Timestamp:      time.Now(),
-			CharmReference: ref,
-		}},
+		body: params.StatsUpdateRequest {
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now(),
+				CharmReference: ref,
+			}},
+		},
 		expectBody: make(map[string]interface {}),
 	},{
 		path:   "stats/update",
 		status: http.StatusOK,
-		body: []params.StatsUpdateRequest{{
-			Timestamp:      time.Now().AddDate(0, -1, 0),
-			CharmReference: ref,
-		}},
+		body: params.StatsUpdateRequest {
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now().AddDate(0, -1, 0),
+				CharmReference: ref,
+			}},
+		},
 		expectBody: make(map[string]interface{}),
 		previousMonth: true,
 	},{
 		path:   "stats/update",
 		status: http.StatusInternalServerError,
-		body: []params.StatsUpdateRequest {{
-			Timestamp:      time.Now(),
-			CharmReference: charm.MustParseReference("~charmers/precise/unknown-23"),
-		}},
-		expectBody: map[string]interface {}{"Code":"", "Message":"[\"cannot find entity cs:~charmers/precise/unknown-23: entity not found\"]"},
+		body: params.StatsUpdateRequest {
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now(),
+				CharmReference: charm.MustParseReference("~charmers/precise/unknown-23"),
+			}},
+		},
+		expectBody: map[string]interface {}{"Code":"", "Message":"cannot find entity cs:~charmers/precise/unknown-23: entity not found"},
 	},{
 		path:   "stats/update",
 		status: http.StatusInternalServerError,
-		body: []params.StatsUpdateRequest {{
-			Timestamp:      time.Now(),
-			CharmReference: charm.MustParseReference("~charmers/precise/unknown-23"),
-		},{
-			Timestamp:      time.Now(),
-			CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
-		}},
-		expectBody: map[string]interface {}{"Code":"", "Message":"[\"cannot find entity cs:~charmers/precise/unknown-23: entity not found\"]"},
+		body: params.StatsUpdateRequest{
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now(),
+				CharmReference: charm.MustParseReference("~charmers/precise/unknown-23"),
+			}, {
+				Timestamp:      time.Now(),
+				CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
+			}},
+		},
+		expectBody: map[string]interface {}{"Code":"", "Message":"cannot find entity cs:~charmers/precise/unknown-23: entity not found"},
 		partialUpdate: true,
 	}}
 
@@ -185,9 +194,11 @@ func (s *StatsSuite) TestServerStatsUpdateNonAdmin(c *gc.C) {
 		Handler:      s.srv,
 		URL:          storeURL("stats/update"),
 		Method:       "PUT",
-		JSONBody:     params.StatsUpdateRequest {
-			Timestamp:      time.Now(),
-			CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
+		JSONBody: params.StatsUpdateRequest {
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now(),
+				CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
+			}},
 		},
 		ExpectStatus: http.StatusUnauthorized,
 		ExpectBody:   &params.Error {
@@ -201,9 +212,11 @@ func (s *StatsSuite) TestServerStatsUpdateNonAdmin(c *gc.C) {
 		Method:       "PUT",
 		Username:     "brad",
 		Password:     "pitt",
-		JSONBody:     params.StatsUpdateRequest {
-			Timestamp:      time.Now(),
-			CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
+		JSONBody: params.StatsUpdateRequest {
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now(),
+				CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
+			}},
 		},
 		ExpectStatus: http.StatusUnauthorized,
 		ExpectBody:   &params.Error {
