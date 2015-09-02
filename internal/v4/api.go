@@ -21,6 +21,7 @@ import (
 	"gopkg.in/juju/charmrepo.v1/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
+	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -129,6 +130,7 @@ func newReqHandler() *ReqHandler {
 			"log":                  router.HandleErrors(h.serveLog),
 			"search":               router.HandleJSON(h.serveSearch),
 			"search/interesting":   http.HandlerFunc(h.serveSearchInteresting),
+			"set-auth-cookie":      router.HandleErrors(h.serveSetAuthCookie),
 			"stats/":               router.NotFoundHandler(),
 			"stats/counter/":       router.HandleJSON(h.serveStatsCounter),
 			"stats/update":         router.HandleErrors(h.serveStatsUpdate),
@@ -1074,6 +1076,25 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 	}
 	h.addAudit(e)
 
+	return nil
+}
+
+// serveSetAuthCookie sets the provided macaroon slice as a cookie on the
+// client.
+func (h *ReqHandler) serveSetAuthCookie(w http.ResponseWriter, req *http.Request) error {
+	if req.Method != "PUT" {
+		return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)
+	}
+	var p params.SetAuthCookie
+	decoder := json.NewDecoder(req.Body)
+	if err := decoder.Decode(&p); err != nil {
+		return errgo.Notef(err, "cannot unmarshal macaroons")
+	}
+	cookie, err := httpbakery.NewCookie(p.Macaroons)
+	if err != nil {
+		return errgo.Notef(err, "cannot create macaroons cookie")
+	}
+	http.SetCookie(w, cookie)
 	return nil
 }
 
