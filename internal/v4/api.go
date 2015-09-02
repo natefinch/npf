@@ -1079,6 +1079,8 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 	return nil
 }
 
+// serveSetAuthCookie sets the provided macaroon slice as a cookie on the
+// client.
 func (h *ReqHandler) serveSetAuthCookie(w http.ResponseWriter, req *http.Request) error {
 	if req.Method != "PUT" {
 		return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)

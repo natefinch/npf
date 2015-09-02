@@ -2718,3 +2718,39 @@ var dischargeRequiredBody httptesting.BodyAsserter = func(c *gc.C, body json.Raw
 	}
 	c.Fatalf("no third party caveat found in response macaroon; caveats %#v", response.Info.Macaroon.Caveats())
 }
+
+func (s *APISuite) TestSetAuthCookie(c *gc.C) {
+	m, err := macaroon.New([]byte("key"), "id", "location")
+	c.Assert(err, jc.ErrorIsNil)
+	ms := macaroon.Slice{m}
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("set-auth-cookie"),
+		Method:  "PUT",
+		JSONBody: params.SetAuthCookie{
+			Macaroons: ms,
+		},
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	resp := http.Response{Header: rec.Header()}
+	cookies := resp.Cookies()
+	c.Assert(len(cookies), gc.Equals, 1)
+	expected, err := httpbakery.NewCookie(ms)
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(cookies[0].Value, gc.Equals, expected.Value)
+}
+
+func (s *APISuite) TestSetAuthCookieError(c *gc.C) {
+	m, err := macaroon.New([]byte("key"), "id", "location")
+	c.Assert(err, jc.ErrorIsNil)
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("set-auth-cookie"),
+		Method:       "PUT",
+		JSONBody:     macaroon.Slice{m},
+		ExpectStatus: http.StatusInternalServerError,
+		ExpectBody: params.Error{
+			Message: "cannot unmarshal macaroons: json: cannot unmarshal array into Go value of type params.SetAuthCookie",
+		},
+	})
+}
