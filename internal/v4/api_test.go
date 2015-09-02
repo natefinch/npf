@@ -2740,7 +2740,7 @@ func (s *APISuite) TestSetAuthCookie(c *gc.C) {
 	c.Assert(cookies[0].Value, gc.Equals, expected.Value)
 }
 
-func (s *APISuite) TestSetAuthCookieError(c *gc.C) {
+func (s *APISuite) TestSetAuthCookieBodyError(c *gc.C) {
 	m, err := macaroon.New([]byte("key"), "id", "location")
 	c.Assert(err, jc.ErrorIsNil)
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
@@ -2751,6 +2751,22 @@ func (s *APISuite) TestSetAuthCookieError(c *gc.C) {
 		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
 			Message: "cannot unmarshal macaroons: json: cannot unmarshal array into Go value of type params.SetAuthCookie",
+		},
+	})
+}
+
+func (s *APISuite) TestSetAuthCookieMethodError(c *gc.C) {
+	m, err := macaroon.New([]byte("key"), "id", "location")
+	c.Assert(err, jc.ErrorIsNil)
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("set-auth-cookie"),
+		Method:       "POST",
+		JSONBody:     macaroon.Slice{m},
+		ExpectStatus: http.StatusMethodNotAllowed,
+		ExpectBody: params.Error{
+			Code:    params.ErrMethodNotAllowed,
+			Message: "POST not allowed",
 		},
 	})
 }
