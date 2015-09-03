@@ -259,7 +259,8 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS
 	header := w.Header()
 	header.Set("Access-Control-Allow-Origin", "*")
-	header.Set("Access-Control-Allow-Headers", "X-Requested-With")
+	header.Set("Access-Control-Allow-Headers", "Macaroons, X-Requested-With")
+	header.Set("Access-Control-Allow-Credentials", "true")
 
 	if req.Method == "OPTIONS" {
 		// We cheat here and say that all methods are allowed,
@@ -268,6 +269,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		// putting OPTIONS handling in every endpoint,
 		// and it shouldn't actually matter in practice.
 		header.Set("Allow", "DELETE,GET,HEAD,PUT,POST")
+		header.Set("Access-Control-Allow-Origin", req.Header.Get("Origin"))
 		return
 	}
 	if err := req.ParseForm(); err != nil {
