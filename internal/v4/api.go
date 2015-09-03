@@ -1082,6 +1082,9 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 // serveSetAuthCookie sets the provided macaroon slice as a cookie on the
 // client.
 func (h *ReqHandler) serveSetAuthCookie(w http.ResponseWriter, req *http.Request) error {
+	// Allow cross-domain requests for the origin of this specific request so
+	// that cookies can be set even if the request is xhr.
+	w.Header().Set("Access-Control-Allow-Origin", req.Header.Get("Origin"))
 	if req.Method != "PUT" {
 		return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)
 	}
