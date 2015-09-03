@@ -997,6 +997,7 @@ func (s *RouterSuite) TestCORSHeaders(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Header().Get("Access-Control-Allow-Origin"), gc.Equals, "*")
 	c.Assert(rec.Header().Get("Access-Control-Allow-Headers"), gc.Equals, "Macaroons, X-Requested-With")
+	c.Assert(rec.Header().Get("Access-Control-Allow-Methods"), gc.Equals, "DELETE,GET,HEAD,PUT,POST,OPTIONS")
 }
 
 func (s *RouterSuite) TestHTTPRequestPassedThroughToMeta(c *gc.C) {
@@ -1068,6 +1069,7 @@ func (s *RouterSuite) TestOptionsHTTPMethod(c *gc.C) {
 	header := rec.Header()
 	c.Assert(header.Get("Access-Control-Allow-Origin"), gc.Equals, "https://1.2.42.47")
 	c.Assert(header.Get("Access-Control-Allow-Headers"), gc.Equals, "Macaroons, X-Requested-With")
+	c.Assert(header.Get("Access-Control-Allow-Methods"), gc.Equals, "DELETE,GET,HEAD,PUT,POST,OPTIONS")
 	c.Assert(header.Get("Allow"), gc.Equals, "DELETE,GET,HEAD,PUT,POST")
 }
 

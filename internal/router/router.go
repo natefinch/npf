@@ -261,6 +261,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	header.Set("Access-Control-Allow-Origin", "*")
 	header.Set("Access-Control-Allow-Headers", "Macaroons, X-Requested-With")
 	header.Set("Access-Control-Allow-Credentials", "true")
+	header.Set("Access-Control-Allow-Methods", "DELETE,GET,HEAD,PUT,POST,OPTIONS")
 
 	if req.Method == "OPTIONS" {
 		// We cheat here and say that all methods are allowed,
