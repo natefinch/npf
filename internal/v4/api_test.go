@@ -2727,11 +2727,18 @@ func (s *APISuite) TestSetAuthCookie(c *gc.C) {
 		Handler: s.srv,
 		URL:     storeURL("set-auth-cookie"),
 		Method:  "PUT",
+		Header:  http.Header{"Origin": []string{"https://1.2.3.4"}},
 		JSONBody: params.SetAuthCookie{
 			Macaroons: ms,
 		},
 	})
+	// The request is successful.
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+
+	// The response includes the CORS header for the specific request.
+	c.Assert(rec.Header().Get("Access-Control-Allow-Origin"), gc.Equals, "https://1.2.3.4")
+
+	// The response includes the macaroons cookie.
 	resp := http.Response{Header: rec.Header()}
 	cookies := resp.Cookies()
 	c.Assert(len(cookies), gc.Equals, 1)
