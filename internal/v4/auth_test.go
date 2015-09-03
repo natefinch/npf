@@ -141,7 +141,7 @@ func (s *commonSuite) testMacaroonAuth(c *gc.C, p httptesting.JSONCallParams) {
 	p.Do = bakeryDo(client) // clear cookies
 	p.Password = ""
 	p.Username = ""
-	p.ExpectError = `cannot get discharge from "http://[^"]*": third party refused discharge: cannot discharge: go away`
+	p.ExpectError = `cannot get discharge from "https://[^"]*": third party refused discharge: cannot discharge: go away`
 	httptesting.AssertJSONCall(c, p)
 }
 
