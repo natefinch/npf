@@ -72,7 +72,7 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 	// to the whole handler.
 	// TODO use a relative URL here: router.RelativeURLPath(req.RequestURI, "/")
 	cookiePath := "/"
-	return authorization{}, httpbakery.NewDischargeRequiredError(m, cookiePath, verr)
+	return authorization{}, httpbakery.NewDischargeRequiredErrorForRequest(m, cookiePath, verr, req)
 }
 
 // checkRequest checks for any authorization tokens in the request and returns any

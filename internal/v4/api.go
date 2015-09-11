@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/juju/httprequest"
 	"github.com/juju/loggo"
-	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v1/csclient/params"
@@ -496,7 +496,7 @@ func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter
 	}
 
 	// Write the response in JSON format.
-	return jsonhttp.WriteJSON(w, http.StatusOK, response)
+	return httprequest.WriteJSON(w, http.StatusOK, response)
 }
 
 func badRequestf(underlying error, f string, a ...interface{}) error {

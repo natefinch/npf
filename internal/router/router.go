@@ -15,7 +15,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/juju/utils/jsonhttp"
+	"github.com/juju/httprequest"
 	"github.com/juju/utils/parallel"
 	"gopkg.in/errgo.v1"
 	charm "gopkg.in/juju/charm.v6-unstable"
@@ -259,8 +259,9 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// See https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS
 	header := w.Header()
 	header.Set("Access-Control-Allow-Origin", "*")
-	header.Set("Access-Control-Allow-Headers", "Macaroons, X-Requested-With")
+	header.Set("Access-Control-Allow-Headers", "Bakery-Protocol-Version, Macaroons, X-Requested-With")
 	header.Set("Access-Control-Allow-Credentials", "true")
+	header.Set("Access-Control-Cache-Max-Age", "600")
 	header.Set("Access-Control-Allow-Methods", "DELETE,GET,HEAD,PUT,POST,OPTIONS")
 
 	if req.Method == "OPTIONS" {
@@ -352,7 +353,7 @@ func (r *Router) serveMeta(id *ResolvedURL, w http.ResponseWriter, req *http.Req
 			// Note: preserve error causes from meta handlers.
 			return errgo.Mask(err, errgo.Any)
 		}
-		jsonhttp.WriteJSON(w, http.StatusOK, resp)
+		httprequest.WriteJSON(w, http.StatusOK, resp)
 		return nil
 	case "PUT":
 		// Put requests don't return any data unless there's
@@ -518,14 +519,14 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) error {
 		// A bare meta returns all endpoints.
 		// See https://github.com/juju/charmstore/blob/v4/docs/API.md#bulk-requests-and-missing-metadata
 		if req.URL.Path == "/" || req.URL.Path == "" {
-			jsonhttp.WriteJSON(w, http.StatusOK, r.metaNames())
+			httprequest.WriteJSON(w, http.StatusOK, r.metaNames())
 			return nil
 		}
 		resp, err := r.serveBulkMetaGet(req)
 		if err != nil {
 			return errgo.Mask(err, errgo.Any)
 		}
-		jsonhttp.WriteJSON(w, http.StatusOK, resp)
+		httprequest.WriteJSON(w, http.StatusOK, resp)
 		return nil
 	case "PUT":
 		return r.serveBulkMetaPut(req)

@@ -15,10 +15,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/juju/httprequest"
 	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
-	"github.com/juju/utils/jsonhttp"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
@@ -996,7 +996,8 @@ func (s *RouterSuite) TestCORSHeaders(c *gc.C) {
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Header().Get("Access-Control-Allow-Origin"), gc.Equals, "*")
-	c.Assert(rec.Header().Get("Access-Control-Allow-Headers"), gc.Equals, "Macaroons, X-Requested-With")
+	c.Assert(rec.Header().Get("Access-Control-Cache-Max-Age"), gc.Equals, "600")
+	c.Assert(rec.Header().Get("Access-Control-Allow-Headers"), gc.Equals, "Bakery-Protocol-Version, Macaroons, X-Requested-With")
 	c.Assert(rec.Header().Get("Access-Control-Allow-Methods"), gc.Equals, "DELETE,GET,HEAD,PUT,POST,OPTIONS")
 }
 
@@ -1068,7 +1069,8 @@ func (s *RouterSuite) TestOptionsHTTPMethod(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	header := rec.Header()
 	c.Assert(header.Get("Access-Control-Allow-Origin"), gc.Equals, "https://1.2.42.47")
-	c.Assert(header.Get("Access-Control-Allow-Headers"), gc.Equals, "Macaroons, X-Requested-With")
+	c.Assert(header.Get("Access-Control-Cache-Max-Age"), gc.Equals, "600")
+	c.Assert(header.Get("Access-Control-Allow-Headers"), gc.Equals, "Bakery-Protocol-Version, Macaroons, X-Requested-With")
 	c.Assert(header.Get("Access-Control-Allow-Methods"), gc.Equals, "DELETE,GET,HEAD,PUT,POST,OPTIONS")
 	c.Assert(header.Get("Allow"), gc.Equals, "DELETE,GET,HEAD,PUT,POST")
 }
@@ -1891,7 +1893,7 @@ func (s *RouterSuite) TestWriteJSON(c *gc.C) {
 	type Number struct {
 		N int
 	}
-	err := jsonhttp.WriteJSON(rec, http.StatusTeapot, Number{1234})
+	err := httprequest.WriteJSON(rec, http.StatusTeapot, Number{1234})
 	c.Assert(err, gc.IsNil)
 	c.Assert(rec.Code, gc.Equals, http.StatusTeapot)
 	c.Assert(rec.Body.String(), gc.Equals, `{"N":1234}`)
@@ -2094,7 +2096,7 @@ type idHandlerTestResp struct {
 }
 
 func testIdHandler(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
-	jsonhttp.WriteJSON(w, http.StatusOK, idHandlerTestResp{
+	httprequest.WriteJSON(w, http.StatusOK, idHandlerTestResp{
 		CharmURL: charmId.String(),
 		Path:     req.URL.Path,
 		Method:   req.Method,

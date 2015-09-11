@@ -689,7 +689,7 @@ func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
 			Method:  "GET",
 		})
 		if test.expectError != "" {
-			c.Assert(rec.Code, gc.Equals, http.StatusProxyAuthRequired)
+			c.Assert(rec.Code, gc.Equals, http.StatusUnauthorized)
 			var respErr httpbakery.Error
 			err := json.Unmarshal(rec.Body.Bytes(), &respErr)
 			c.Assert(err, gc.IsNil)
@@ -705,7 +705,17 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 	s.discharge = dischargeForUser("bob")
 
 	// First check that we get a macaraq error when using a vanilla http do
-	// request.
+	// request with both bakery protocol.
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL("delegatable-macaroon"),
+		Header:  http.Header{"Bakery-Protocol-Version": {"1"}},
+		ExpectBody: httptesting.BodyAsserter(func(c *gc.C, m json.RawMessage) {
+			// Allow any body - the next check will check that it's a valid macaroon.
+		}),
+		ExpectStatus: http.StatusUnauthorized,
+	})
+
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: s.srv,
 		URL:     storeURL("delegatable-macaroon"),
