@@ -11,8 +11,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/juju/httprequest"
 	"github.com/juju/loggo"
-	"github.com/juju/utils/jsonhttp"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charmrepo.v1/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
@@ -20,13 +20,47 @@ import (
 
 var logger = loggo.GetLogger("charmstore.internal.router")
 
-var (
-	HandleErrors = jsonhttp.HandleErrors(errorToResp)
-	HandleJSON   = jsonhttp.HandleJSON(errorToResp)
-	WriteError   = jsonhttp.WriteError(errorToResp)
-)
+// WriteError can be used to write an error response.
+var WriteError = errorToResp.WriteError
 
-func errorToResp(err error) (int, interface{}) {
+// JSONHandler represents a handler that returns a JSON value.
+// The provided header can be used to set response headers.
+type JSONHandler func(http.Header, *http.Request) (interface{}, error)
+
+// ErrorHandler represents a handler that can return an error.
+type ErrorHandler func(http.ResponseWriter, *http.Request) error
+
+// HandleJSON converts from a JSONHandler function to an http.Handler.
+func HandleJSON(h JSONHandler) http.Handler {
+	// We can't use errorToResp.HandleJSON directly because
+	// we still use old-style handlers in charmstore, so we
+	// insert shim functions to do the conversion.
+	handleJSON := errorToResp.HandleJSON(
+		func(p httprequest.Params) (interface{}, error) {
+			return h(p.Response.Header(), p.Request)
+		},
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		handleJSON(w, req, nil)
+	})
+}
+
+// HandleJSON converts from a ErrorHandler function to an http.Handler.
+func HandleErrors(h ErrorHandler) http.Handler {
+	// We can't use errorToResp.HandleErrors directly because
+	// we still use old-style handlers in charmstore, so we
+	// insert shim functions to do the conversion.
+	handleErrors := errorToResp.HandleErrors(
+		func(p httprequest.Params) error {
+			return h(p.Response, p.Request)
+		},
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		handleErrors(w, req, nil)
+	})
+}
+
+var errorToResp httprequest.ErrorMapper = func(err error) (int, interface{}) {
 	status, body := errorToResp1(err)
 	logger.Infof("error response %d; %s", status, errgo.Details(err))
 	return status, body

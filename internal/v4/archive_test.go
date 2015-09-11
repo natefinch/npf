@@ -1349,7 +1349,8 @@ func (s *ArchiveSuite) TestArchiveFileGetHasCORSHeaders(c *gc.C) {
 	c.Assert(len(headers["Access-Control-Allow-Origin"]), gc.Equals, 1)
 	c.Assert(len(headers["Access-Control-Allow-Headers"]), gc.Equals, 1)
 	c.Assert(headers["Access-Control-Allow-Origin"][0], gc.Equals, "*")
-	c.Assert(headers["Access-Control-Allow-Headers"][0], gc.Equals, "Macaroons, X-Requested-With")
+	c.Assert(headers["Access-Control-Cache-Max-Age"][0], gc.Equals, "600")
+	c.Assert(headers["Access-Control-Allow-Headers"][0], gc.Equals, "Bakery-Protocol-Version, Macaroons, X-Requested-With")
 }
 
 var getNewPromulgatedRevisionTests = []struct {

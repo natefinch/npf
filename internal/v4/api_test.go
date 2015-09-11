@@ -898,6 +898,20 @@ func (s *APISuite) TestExtraInfoPutUnauthorized(c *gc.C) {
 		ExpectStatus: http.StatusProxyAuthRequired,
 		ExpectBody:   dischargeRequiredBody,
 	})
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL("precise/wordpress-23/meta/extra-info"),
+		Method:  "PUT",
+		Header: http.Header{
+			"Content-Type":            {"application/json"},
+			"Bakery-Protocol-Version": {"1"},
+		},
+		Body: strings.NewReader(mustMarshalJSON(map[string]string{
+			"bar": "value",
+		})),
+		ExpectStatus: http.StatusUnauthorized,
+		ExpectBody:   dischargeRequiredBody,
+	})
 }
 
 func isNull(v interface{}) bool {

@@ -130,7 +130,7 @@ func (i *idM) serveProtected(w http.ResponseWriter, r *http.Request) {
 		i.error(w, http.StatusInternalServerError, "cannot create macaroon: %s", err)
 		return
 	}
-	httpbakery.WriteDischargeRequiredError(w, m, "/", verr)
+	httpbakery.WriteDischargeRequiredErrorForRequest(w, m, "/", verr, r)
 }
 
 // serveLogin provides the /login endpoint. When /login is called it should
@@ -245,7 +245,7 @@ func (i *idM) serveAgent(w http.ResponseWriter, r *http.Request) {
 		i.error(w, http.StatusInternalServerError, "cannot create macaroon: %s", err)
 		return
 	}
-	httpbakery.WriteDischargeRequiredError(w, m, "/", verr)
+	httpbakery.WriteDischargeRequiredErrorForRequest(w, m, "/", verr, r)
 }
 
 func (i *idM) checker(r *http.Request, cavId, cav string) ([]checkers.Caveat, error) {
