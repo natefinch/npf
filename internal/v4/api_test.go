@@ -910,7 +910,10 @@ func (s *APISuite) TestExtraInfoPutUnauthorized(c *gc.C) {
 			"bar": "value",
 		})),
 		ExpectStatus: http.StatusUnauthorized,
-		ExpectBody:   dischargeRequiredBody,
+		ExpectHeader: http.Header{
+			"WWW-Authenticate": {"Macaroon"},
+		},
+		ExpectBody: dischargeRequiredBody,
 	})
 }
 

@@ -9,7 +9,7 @@ github.com/juju/httprequest	git	4e85fb5c118912f35c2eb35cd8fce9cae2ad4215	2015-09
 github.com/juju/loggo	git	8477fc936adf0e382d680310047ca27e128a309a	2015-05-27T03:58:39Z
 github.com/juju/names	git	a6a253b0a94cc79e99a68d284b970ffce2a11ecd	2015-07-09T13:59:32Z
 github.com/juju/schema	git	afe1151cb49d1d7ed3c75592dfc6f38703f2e988	2015-08-07T07:58:08Z
-github.com/juju/testing	git	f521911d9a79aeb62c051fe18e689796369c5564	2015-05-29T04:40:43Z
+github.com/juju/testing	git	9ac9bc11f947698f94911eddb444445afa038cfa	2015-09-16T09:14:49Z
 github.com/juju/txn	git	99ec629d0066a4d73c54d8e021a7fc1dc07df614	2015-06-09T16:58:27Z
 github.com/juju/utils	git	6f48322bb574b8578e8ecccf689220eac7edad9d	2015-08-10T03:07:18Z
 github.com/juju/xml	git	eb759a627588d35166bc505fceb51b88500e291e	2015-04-13T13:11:21Z
