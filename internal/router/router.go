@@ -263,6 +263,7 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	header.Set("Access-Control-Allow-Credentials", "true")
 	header.Set("Access-Control-Cache-Max-Age", "600")
 	header.Set("Access-Control-Allow-Methods", "DELETE,GET,HEAD,PUT,POST,OPTIONS")
+	header.Set("Access-Control-Expose-Headers", "WWW-Authenticate")
 
 	if req.Method == "OPTIONS" {
 		// We cheat here and say that all methods are allowed,

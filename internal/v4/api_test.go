@@ -2757,6 +2757,7 @@ func (s *APISuite) TestSetAuthCookie(c *gc.C) {
 	cookies := resp.Cookies()
 	c.Assert(len(cookies), gc.Equals, 1)
 	expected, err := httpbakery.NewCookie(ms)
+	expected.Path = "/"
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(cookies[0].Value, gc.Equals, expected.Value)
 }
