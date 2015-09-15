@@ -999,6 +999,7 @@ func (s *RouterSuite) TestCORSHeaders(c *gc.C) {
 	c.Assert(rec.Header().Get("Access-Control-Cache-Max-Age"), gc.Equals, "600")
 	c.Assert(rec.Header().Get("Access-Control-Allow-Headers"), gc.Equals, "Bakery-Protocol-Version, Macaroons, X-Requested-With")
 	c.Assert(rec.Header().Get("Access-Control-Allow-Methods"), gc.Equals, "DELETE,GET,HEAD,PUT,POST,OPTIONS")
+	c.Assert(rec.Header().Get("Access-Control-Expose-Headers"), gc.Equals, "WWW-Authenticate")
 }
 
 func (s *RouterSuite) TestHTTPRequestPassedThroughToMeta(c *gc.C) {
