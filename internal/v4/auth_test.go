@@ -153,6 +153,11 @@ type cookieJar struct {
 func (j *cookieJar) SetCookies(url *url.URL, cookies []*http.Cookie) {
 	url1 := *url
 	url1.Host = "somehost"
+	for _, cookie := range cookies {
+		if cookie.Path != "" {
+			url1.Path = cookie.Path
+		}
+	}
 	j.cookieURLs = append(j.cookieURLs, url1.String())
 	j.CookieJar.SetCookies(url, cookies)
 }
