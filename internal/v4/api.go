@@ -1098,6 +1098,7 @@ func (h *ReqHandler) serveSetAuthCookie(w http.ResponseWriter, req *http.Request
 		return errgo.Notef(err, "cannot create macaroons cookie")
 	}
 	cookie.Path = "/"
+	cookie.Name = "macaroon-ui"
 	http.SetCookie(w, cookie)
 	return nil
 }
