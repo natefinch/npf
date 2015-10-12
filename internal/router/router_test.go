@@ -122,6 +122,19 @@ var routerGetTests = []struct {
 		CharmURL: "cs:win81/visualstudio-2012",
 	},
 }, {
+	about: "wily id handler",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:       "/wily/wordpress-34/foo",
+	expectStatus: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		Method:   "GET",
+		CharmURL: "cs:wily/wordpress-34",
+	},
+}, {
 	about: "id handler with no series in id",
 	handlers: Handlers{
 		Id: map[string]IdHandler{
@@ -199,6 +212,19 @@ var routerGetTests = []struct {
 	expectBody: idHandlerTestResp{
 		Method:   "GET",
 		CharmURL: "cs:~joe/precise/wordpress-34",
+	},
+}, {
+	about: "wily handler with user",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:       "/~joe/wily/wordpress-34/foo",
+	expectStatus: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		Method:   "GET",
+		CharmURL: "cs:~joe/wily/wordpress-34",
 	},
 }, {
 	about: "id handler with user and extra path",
