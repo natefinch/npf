@@ -40,6 +40,7 @@ var knownSeries = map[string]bool{
 	"trusty":      true,
 	"utopic":      true,
 	"vivid":       true,
+	"wily":        true,
 	"win2012hvr2": true,
 	"win2012hv":   true,
 	"win2012r2":   true,
@@ -47,6 +48,7 @@ var knownSeries = map[string]bool{
 	"win7":        true,
 	"win8":        true,
 	"win81":       true,
+	"win10":       true,
 	"centos7":     true,
 }
 
