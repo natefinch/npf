@@ -142,7 +142,7 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 		key := []string{params.StatsArchiveDownload, "utopic", "mysql", id.URL.User, "42"}
 		stats.CheckCounterSum(c, s.store, key, false, 1)
 		// Check that the promulgated download count for the entity has also been updated
-		key = []string{params.StatsArchiveDownload, "utopic", "mysql", "", "42"}
+		key = []string{params.StatsArchiveDownloadPromulgated, "utopic", "mysql", "", "42"}
 		stats.CheckCounterSum(c, s.store, key, false, 1)
 	}
 }

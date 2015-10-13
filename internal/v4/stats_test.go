@@ -160,6 +160,50 @@ func (s *StatsSuite) TestServerStatsUpdate(c *gc.C) {
 	}
 }
 
+func (s *StatsSuite) TestServerStatsArchiveDownloadOnPromulgatedEntity(c *gc.C) {
+	ref := charm.MustParseReference("~charmers/precise/wordpress-23")
+	path := "/stats/counter/archive-download:*"
+
+	ch := storetesting.Charms.CharmDir("wordpress")
+	rurl := newResolvedURL("~charmers/precise/wordpress-23", 23)
+	err := s.store.AddCharmWithArchive(rurl, ch)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	c.Assert(err, gc.IsNil)
+	s.store.SetPromulgated(rurl, true)
+
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL(path),
+		Method:  "GET",
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	c.Assert(rec.Body.String(), gc.Equals, `[{"Count":0}]`)
+
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler:  s.srv,
+		URL:      storeURL("stats/update"),
+		Method:   "PUT",
+		Username: testUsername,
+		Password: testPassword,
+		JSONBody: params.StatsUpdateRequest{
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now(),
+				CharmReference: ref,
+			}}},
+	})
+
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL(path),
+		Method:  "GET",
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	c.Assert(rec.Body.String(), gc.Equals, `[{"Count":1}]`)
+}
+
 func (s *StatsSuite) TestServerStatsUpdateErrors(c *gc.C) {
 	ref := charm.MustParseReference("~charmers/precise/wordpress-23")
 	tests := []struct {
