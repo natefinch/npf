@@ -1744,7 +1744,7 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 					c.Assert(err, gc.IsNil)
 				}
 				if url.PromulgatedRevision > -1 {
-					key := []string{params.StatsArchiveDownload, url.URL.Series, url.URL.Name, "", strconv.Itoa(url.PromulgatedRevision)}
+					key := []string{params.StatsArchiveDownloadPromulgated, url.URL.Series, url.URL.Name, "", strconv.Itoa(url.PromulgatedRevision)}
 					for i := 0; i < downloads; i++ {
 						err := s.store.IncCounterAtTime(key, date)
 						c.Assert(err, gc.IsNil)

@@ -686,7 +686,11 @@ func (s *StatsSuite) TestArchiveDownloadCounts(c *gc.C) {
 }
 
 func setDownloadCounts(c *gc.C, s *charmstore.Store, id *charm.Reference, t time.Time, n int) {
-	key := charmstore.EntityStatsKey(id, params.StatsArchiveDownload)
+	kind := params.StatsArchiveDownload
+	if id.User == "" {
+		kind = params.StatsArchiveDownloadPromulgated
+	}
+	key := charmstore.EntityStatsKey(id, kind)
 	for i := 0; i < n; i++ {
 		err := s.IncCounterAtTime(key, t)
 		c.Assert(err, gc.IsNil)

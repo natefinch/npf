@@ -520,7 +520,11 @@ func (s *Store) ArchiveDownloadCounts(id *charm.Reference, refresh bool) (thisRe
 
 func (s *Store) statsCacheFetch(id *charm.Reference) (interface{}, error) {
 	prefix := id.Revision == -1
-	counts, err := s.aggregateStats(EntityStatsKey(id, params.StatsArchiveDownload), prefix)
+	kind := params.StatsArchiveDownload
+	if id.User == "" {
+		kind = params.StatsArchiveDownloadPromulgated
+	}
+	counts, err := s.aggregateStats(EntityStatsKey(id, kind), prefix)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot get aggregated count for %q", id)
 	}
@@ -634,7 +638,7 @@ func (s *Store) IncrementDownloadCountsAtTime(id *router.ResolvedURL, t time.Tim
 		id.PromulgatedRevision = entity.PromulgatedRevision
 	}
 	if id.PromulgatedRevision != -1 {
-		key := EntityStatsKey(id.PreferredURL(), params.StatsArchiveDownload)
+		key := EntityStatsKey(id.PreferredURL(), params.StatsArchiveDownloadPromulgated)
 		if err := s.IncCounterAtTime(key, t); err != nil {
 			return errgo.Notef(err, "cannot increase stats counter for %v", key)
 		}
