@@ -38,6 +38,8 @@ var seriesBoost = map[string]float64{
 	"trusty":      1.125,
 	"precise":     1.1125,
 	"utopic":      1.1,
+	"vivid":       1.101,
+	"wily":        1.102,
 	"win2012hvr2": 1.1,
 	"win2012hv":   1.1,
 	"win2012r2":   1.1,

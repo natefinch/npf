@@ -1720,6 +1720,9 @@ var findBestEntityTests = []struct {
 }, {
 	url:       "wordpress-simple",
 	expectURL: "~donald/bundle/wordpress-simple-1",
+}, {
+	url:       "~pluto/juju-gui",
+	expectURL: "~pluto/wily/juju-gui-1",
 }}
 
 func (s *StoreSuite) TestFindBestEntity(c *gc.C) {
@@ -1831,6 +1834,28 @@ func (s *StoreSuite) TestFindBestEntity(c *gc.C) {
 		Revision:            1,
 		PromulgatedURL:      charm.MustParseReference("bundle/wordpress-simple-0"),
 		PromulgatedRevision: 0,
+	})
+	c.Assert(err, gc.IsNil)
+	err = store.DB.Entities().Insert(&mongodoc.Entity{
+		URL:                 charm.MustParseReference("~pluto/utopic/juju-gui-2"),
+		BaseURL:             charm.MustParseReference("~pluto/juju-gui"),
+		User:                "pluto",
+		Series:              "utopic",
+		Name:                "juju-gui",
+		Revision:            2,
+		PromulgatedURL:      nil,
+		PromulgatedRevision: -1,
+	})
+	c.Assert(err, gc.IsNil)
+	err = store.DB.Entities().Insert(&mongodoc.Entity{
+		URL:                 charm.MustParseReference("~pluto/wily/juju-gui-1"),
+		BaseURL:             charm.MustParseReference("~pluto/juju-gui"),
+		User:                "pluto",
+		Series:              "wily",
+		Name:                "juju-gui",
+		Revision:            1,
+		PromulgatedURL:      nil,
+		PromulgatedRevision: -1,
 	})
 	c.Assert(err, gc.IsNil)
 	for i, test := range findBestEntityTests {
