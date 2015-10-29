@@ -29,6 +29,8 @@ type Config struct {
 	ESAddr            string            `yaml:"elasticsearch-addr"` // elasticsearch is optional
 	IdentityPublicKey *bakery.PublicKey `yaml:"identity-public-key"`
 	IdentityLocation  string            `yaml:"identity-location"`
+	TermsPublicKey    *bakery.PublicKey `yaml:"terms-public-key"`
+	TermsLocation     string            `yaml:"terms-location"`
 	// The identity API is optional
 	IdentityAPIURL    string          `yaml:"identity-api-url"`
 	AgentUsername     string          `yaml:"agent-username"`

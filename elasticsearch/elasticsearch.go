@@ -334,7 +334,7 @@ func (db *Database) Search(index, type_ string, q QueryDSL) (SearchResult, error
 }
 
 // do performs a request on the elasticsearch server. If body is not nil it will be
-// marsheled as a json object and sent with the request. If v is non nil the response
+// marshaled as a json object and sent with the request. If v is non nil the response
 // body will be unmarshalled into the value it points to.
 func (db *Database) do(method, url string, body, v interface{}) error {
 	log.Debugf(">>> %s %s", method, url)

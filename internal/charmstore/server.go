@@ -43,6 +43,10 @@ type ServerParams struct {
 	// If it is empty, IdentityURL+"/v1/discharger" will be used.
 	IdentityLocation string
 
+	// TermsLocation holds the location of the third party
+	// terms service to use when creating third party caveats.
+	TermsLocation string
+
 	// PublicKeyLocator holds a public key store.
 	// It may be nil.
 	PublicKeyLocator bakery.PublicKeyLocator
@@ -92,12 +96,14 @@ func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions 
 		return nil, errgo.Newf("charm store server must serve at least one version of the API")
 	}
 	config.IdentityLocation = strings.Trim(config.IdentityLocation, "/")
+	config.TermsLocation = strings.Trim(config.TermsLocation, "/")
 	config.IdentityAPIURL = strings.Trim(config.IdentityAPIURL, "/")
 	if config.IdentityLocation == "" && config.IdentityAPIURL != "" {
 		config.IdentityLocation = config.IdentityAPIURL + "/v1/discharger"
 	}
 	logger.Infof("identity discharge location: %s", config.IdentityLocation)
 	logger.Infof("identity API location: %s", config.IdentityAPIURL)
+	logger.Infof("terms discharge location: %s", config.TermsLocation)
 	bparams := bakery.NewServiceParams{
 		// TODO The location is attached to any macaroons that we
 		// mint. Currently we don't know the location of the current
