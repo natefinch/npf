@@ -693,6 +693,8 @@ var seriesScore = map[string]int{
 	"raring":  2,
 	"saucy":   3,
 	"utopic":  4,
+	"vivid":   5,
+	"wily":    6,
 }
 
 // EntitiesQuery creates a mgo.Query object that can be used to find
