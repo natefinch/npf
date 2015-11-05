@@ -237,10 +237,12 @@ const (
 	LegacyStatisticsType
 )
 
+type MigrationName string
+
 // Migration holds information about the database migration.
 type Migration struct {
 	// Executed holds the migration names for migrations already executed.
-	Executed []string
+	Executed []MigrationName
 }
 
 // IntBool is a bool that will be represented internally in the database as 1 for
