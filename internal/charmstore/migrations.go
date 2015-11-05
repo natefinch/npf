@@ -11,7 +11,9 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 )
 
-// TODO add migration names for all the migrations.
+const (
+	migrationAddSupportedSeries mongodoc.MigrationName = "add supported series"
+)
 
 // migrations holds all the migration functions that are executed in the order
 // they are defined when the charm store server is started. Each migration is
@@ -20,7 +22,24 @@ import (
 // migration name and function to this list, and update the
 // TestMigrateMigrationList test in migration_test.go adding the new name(s).
 // Note that migration names must be unique across the list.
-var migrations = []migration{}
+//
+// A migration entry may have a nil migration function if the migration
+// is obsolete. Obsolete migrations should never be removed entirely,
+// otherwise the charmstore will see the old migrations in the table
+// and refuse to start up because it thinks that it's running an old
+// version of the charm store on a newer version of the database.
+var migrations = []migration{{
+	name: "entity ids denormalization",
+}, {
+	name: "base entities creation",
+}, {
+	name: "read acl creation",
+}, {
+	name: "write acl creation",
+}, {
+	name:    migrationAddSupportedSeries,
+	migrate: addSupportedSeries,
+}}
 
 // migration holds a migration function with its corresponding name.
 type migration struct {
@@ -45,7 +64,7 @@ func migrate(db StoreDatabase) error {
 	db.Migrations().Create(&mgo.CollectionInfo{})
 	// Execute required migrations.
 	for _, m := range migrations {
-		if executed[m.name] {
+		if executed[m.name] || m.migrate == nil {
 			logger.Debugf("skipping already executed migration: %s", m.name)
 			continue
 		}
@@ -86,6 +105,37 @@ func getExecuted(db StoreDatabase) (map[mongodoc.MigrationName]bool, error) {
 		executed[name] = true
 	}
 	return executed, nil
+}
+
+// addSupportedSeries adds the supported-series field
+// to entities that don't have it. Note that it does not
+// need to work for multi-series charms because support
+// for those has not been implemented before this migration.
+func addSupportedSeries(db StoreDatabase) error {
+	entities := db.Entities()
+	var entity mongodoc.Entity
+	iter := entities.Find(bson.D{{
+		// Use the supportedseries field to collect not migrated entities.
+		"supportedseries", bson.D{{"$exists", false}},
+	}, {
+		"series", bson.D{{"$ne", "bundle"}},
+	}}).Select(bson.D{{"_id", 1}}).Iter()
+	defer iter.Close()
+
+	for iter.Next(&entity) {
+		logger.Infof("updating %s", entity.URL)
+		if err := entities.UpdateId(entity.URL, bson.D{{
+			"$set", bson.D{
+				{"supportedseries", []string{entity.URL.Series}},
+			},
+		}}); err != nil {
+			return errgo.Notef(err, "cannot denormalize entity id %s", entity.URL)
+		}
+	}
+	if err := iter.Close(); err != nil {
+		return errgo.Notef(err, "cannot iterate entities")
+	}
+	return nil
 }
 
 func setExecuted(db StoreDatabase, name mongodoc.MigrationName) error {

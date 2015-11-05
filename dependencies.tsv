@@ -18,8 +18,8 @@ golang.org/x/crypto	git	1e856cbfdf9bc25eefca75f83f25d55e35ae72e0	2015-06-08T19:5
 golang.org/x/net	git	38f3db3860bb1812858610029b0d8188517d8b74	2015-06-22T06:16:26Z
 gopkg.in/check.v1	git	8d49746f13e4c654088c52685541fcf4cbc8fa59	2015-06-10T23:30:30Z
 gopkg.in/errgo.v1	git	15098963088579c1cd9eb1a7da285831e548390b	2015-07-07T18:34:45Z
-gopkg.in/juju/charm.v6-unstable	git	f2045cd59d58471fbfd0b799e2e13eae232280a4	2015-06-18T15:58:44Z
-gopkg.in/juju/charmrepo.v1	git	0773238dc8fd0dbaf42e08b2a06f8f1671c28291	2015-10-13T14:36:03Z
+gopkg.in/juju/charm.v6-unstable	git	f93c81467758d7237af01239ffb3fdad89c3f179	2015-11-04T09:35:00Z
+gopkg.in/juju/charmrepo.v1	git	12348f5cefcac2fdc8c81a2a9ec80c5f6ce57d77	2015-11-05T17:57:21Z
 gopkg.in/juju/jujusvg.v1	git	3eedb1c722ece2b66d62508368ca3e8b7f916569	2015-05-20T11:48:32Z
 gopkg.in/macaroon-bakery.v1	git	02515960824f7efa4c3553055877bb2572da7a88	2015-09-22T14:57:22Z
 gopkg.in/macaroon.v1	git	ab3940c6c16510a850e1c2dd628b919f0f3f1464	2015-01-21T11:42:31Z

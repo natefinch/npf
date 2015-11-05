@@ -38,7 +38,13 @@ type Entity struct {
 	Revision int
 
 	// Series holds the entity series (for instance "trusty" or "bundle").
+	// For multi-series charms, this will be empty.
 	Series string
+
+	// SupportedSeries holds the series supported by a charm.
+	// For non-multi-series charms, this is a single element slice
+	// containing the value in Series.
+	SupportedSeries []string
 
 	// BlobHash holds the hash checksum of the blob, in hexadecimal format,
 	// as created by blobstore.NewHash.
