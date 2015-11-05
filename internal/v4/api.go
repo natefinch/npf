@@ -169,20 +169,21 @@ func newReqHandler() *ReqHandler {
 				h.putMetaExtraInfoWithKey,
 				"extrainfo",
 			),
-			"hash":          h.entityHandler(h.metaHash, "blobhash"),
-			"hash256":       h.entityHandler(h.metaHash256, "blobhash256"),
-			"id":            h.entityHandler(h.metaId, "_id"),
-			"id-name":       h.entityHandler(h.metaIdName, "_id"),
-			"id-user":       h.entityHandler(h.metaIdUser, "_id"),
-			"id-revision":   h.entityHandler(h.metaIdRevision, "_id"),
-			"id-series":     h.entityHandler(h.metaIdSeries, "_id"),
-			"manifest":      h.entityHandler(h.metaManifest, "blobname"),
-			"perm":          h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "acls"),
-			"perm/":         h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "acls"),
-			"promulgated":   h.baseEntityHandler(h.metaPromulgated, "promulgated"),
-			"revision-info": router.SingleIncludeHandler(h.metaRevisionInfo),
-			"stats":         h.entityHandler(h.metaStats),
-			"tags":          h.entityHandler(h.metaTags, "charmmeta", "bundledata"),
+			"hash":             h.entityHandler(h.metaHash, "blobhash"),
+			"hash256":          h.entityHandler(h.metaHash256, "blobhash256"),
+			"id":               h.entityHandler(h.metaId, "_id"),
+			"id-name":          h.entityHandler(h.metaIdName, "_id"),
+			"id-user":          h.entityHandler(h.metaIdUser, "_id"),
+			"id-revision":      h.entityHandler(h.metaIdRevision, "_id"),
+			"id-series":        h.entityHandler(h.metaIdSeries, "_id"),
+			"manifest":         h.entityHandler(h.metaManifest, "blobname"),
+			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "acls"),
+			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "acls"),
+			"promulgated":      h.baseEntityHandler(h.metaPromulgated, "promulgated"),
+			"revision-info":    router.SingleIncludeHandler(h.metaRevisionInfo),
+			"stats":            h.entityHandler(h.metaStats),
+			"supported-series": h.entityHandler(h.metaSupportedSeries, "supportedseries"),
+			"tags":             h.entityHandler(h.metaTags, "charmmeta", "bundledata"),
 
 			// endpoints not yet implemented:
 			// "color": router.SingleIncludeHandler(h.metaColor),
@@ -740,6 +741,17 @@ func (h *ReqHandler) metaIdName(entity *mongodoc.Entity, id *router.ResolvedURL,
 func (h *ReqHandler) metaIdRevision(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.IdRevisionResponse{
 		Revision: id.PreferredURL().Revision,
+	}, nil
+}
+
+// GET id/meta/supported-series
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetasupported-series
+func (h *ReqHandler) metaSupportedSeries(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	if entity.URL.Series == "bundle" {
+		return nil, nil
+	}
+	return &params.SupportedSeriesResponse{
+		SupportedSeries: entity.SupportedSeries,
 	}, nil
 }
 
