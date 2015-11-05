@@ -35,7 +35,9 @@ func (s *migrationsSuite) SetUpTest(c *gc.C) {
 var (
 	// migrationFields holds the fields added to mongodoc.Entity,
 	// keyed by the migration step that added them.
-	migrationEntityFields = map[mongodoc.MigrationName][]string{}
+	migrationEntityFields = map[mongodoc.MigrationName][]string{
+		migrationAddSupportedSeries: {"supportedseries"},
+	}
 
 	// initialFields holds all the mongodoc.Entity fields
 	// at the dawn of migration time.
@@ -248,16 +250,19 @@ func (s *migrationsSuite) TestMigrateParallelMigration(c *gc.C) {
 	// are deployed together.
 
 	// Prepare a database for the migration.
-	e1 := denormalizeEntity(&mongodoc.Entity{
+	e1 := &mongodoc.Entity{
 		URL:            charm.MustParseReference("~charmers/trusty/django-42"),
 		PromulgatedURL: charm.MustParseReference("trusty/django-3"),
 		Size:           12,
-	})
-	e2 := denormalizeEntity(&mongodoc.Entity{
+	}
+	denormalizeEntity(e1)
+	s.insertEntity(c, e1, initialEntityFields)
+
+	e2 := &mongodoc.Entity{
 		URL:  charm.MustParseReference("~who/utopic/rails-47"),
 		Size: 13,
-	})
-	s.insertEntity(c, e1, initialEntityFields)
+	}
+	denormalizeEntity(e2)
 	s.insertEntity(c, e2, initialEntityFields)
 
 	// Run the migrations in parallel.
@@ -283,6 +288,36 @@ func (s *migrationsSuite) TestMigrateParallelMigration(c *gc.C) {
 	s.checkCount(c, s.db.Entities(), 2)
 	s.checkEntity(c, e1)
 	s.checkEntity(c, e2)
+}
+
+func (s *migrationsSuite) TestAddSupportedSeries(c *gc.C) {
+	s.patchMigrations(c, getMigrations(migrationAddSupportedSeries))
+
+	entities := []*mongodoc.Entity{{
+		URL:            charm.MustParseReference("~charmers/trusty/django-42"),
+		PromulgatedURL: charm.MustParseReference("trusty/django-3"),
+		Size:           12,
+	}, {
+		URL:  charm.MustParseReference("~who/utopic/rails-47"),
+		Size: 13,
+	}, {
+		URL:  charm.MustParseReference("~who/bundle/something-47"),
+		Size: 13,
+	}}
+	for _, e := range entities {
+		denormalizeEntity(e)
+		s.insertEntity(c, e, entityFields[migrationAddSupportedSeries])
+	}
+
+	// Start the server.
+	err := s.newServer(c)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure entities have been updated correctly.
+	s.checkCount(c, s.db.Entities(), len(entities))
+	for _, e := range entities {
+		s.checkEntity(c, e)
+	}
 }
 
 func (s *migrationsSuite) checkExecuted(c *gc.C, expected ...mongodoc.MigrationName) {
@@ -333,54 +368,25 @@ func (s *migrationsSuite) checkBaseEntitiesCount(c *gc.C, expectCount int) {
 	c.Assert(count, gc.Equals, expectCount)
 }
 
-// denormalizeEntity returns a copy of e0 with all denormalized fields
-// filled out if they are zero.
-func denormalizeEntity(e0 *mongodoc.Entity) *mongodoc.Entity {
-	e := *e0
-	if e.BaseURL == nil {
-		e.BaseURL = baseURL(e.URL)
-	}
-	if e.Name == "" {
-		e.Name = e.URL.Name
-	}
-	if e.User == "" {
-		e.User = e.URL.User
-	}
-	if e.Revision == 0 {
-		e.Revision = e.URL.Revision
-	}
-	if e.Series == "" {
-		e.Series = e.URL.Series
-	}
-	if e.PromulgatedRevision == 0 {
-		if e.PromulgatedURL == nil {
-			e.PromulgatedRevision = -1
-		} else {
-			e.PromulgatedRevision = e.PromulgatedURL.Revision
-		}
-	}
-	return &e
-}
-
-// insertEntity inserts the given entity. If any include fields are specified,
-// only those given entity fields will be inserted.
+// insertEntity inserts the given entity. Only the fields specified in includeFields
+// will be inserted.
 func (s *migrationsSuite) insertEntity(c *gc.C, e *mongodoc.Entity, includeFields []string) {
+	c.Assert(includeFields, gc.Not(gc.HasLen), 0)
+
 	data, err := bson.Marshal(e)
 	c.Assert(err, gc.IsNil)
 	var rawEntity map[string]interface{}
 	err = bson.Unmarshal(data, &rawEntity)
 	c.Assert(err, gc.IsNil)
 
-	if len(includeFields) > 0 {
-	loop:
-		for k := range rawEntity {
-			for _, inc := range includeFields {
-				if inc == k {
-					continue loop
-				}
+loop:
+	for k := range rawEntity {
+		for _, inc := range includeFields {
+			if inc == k {
+				continue loop
 			}
-			delete(rawEntity, k)
 		}
+		delete(rawEntity, k)
 	}
 	err = s.db.Entities().Insert(rawEntity)
 	c.Assert(err, gc.IsNil)
