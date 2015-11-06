@@ -1261,8 +1261,8 @@ var resolveURLTests = []struct {
 	url:    "~charmers/wordpress",
 	expect: newResolvedURL("cs:~charmers/trusty/wordpress-25", -1),
 }, {
-	url:    "~charmers/wordpress-24",
-	expect: newResolvedURL("cs:~charmers/trusty/wordpress-24", -1),
+	url:      "~charmers/wordpress-24",
+	notFound: true,
 }, {
 	url:    "~bob/wordpress",
 	expect: newResolvedURL("cs:~bob/trusty/wordpress-1", -1),
@@ -1273,8 +1273,8 @@ var resolveURLTests = []struct {
 	url:    "bigdata",
 	expect: newResolvedURL("cs:~charmers/utopic/bigdata-10", 10),
 }, {
-	url:    "wordpress-24",
-	expect: newResolvedURL("cs:~charmers/trusty/wordpress-24", 24),
+	url:      "wordpress-24",
+	notFound: true,
 }, {
 	url:    "bundlelovin",
 	expect: newResolvedURL("cs:~charmers/bundle/bundlelovin-10", 10),
@@ -1345,8 +1345,14 @@ var serveExpandIdTests = []struct {
 		{Id: "cs:precise/haproxy-1"},
 	},
 }, {
-	about: "single result",
+	about: "revision with series matches bundles (and multi-series charms) only",
 	url:   "mongo-0",
+	expect: []params.ExpandedId{
+		{Id: "cs:bundle/mongo-0"},
+	},
+}, {
+	about: "single result",
+	url:   "bundle/mongo-0",
 	expect: []params.ExpandedId{
 		{Id: "cs:bundle/mongo-0"},
 	},

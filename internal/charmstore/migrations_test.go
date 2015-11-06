@@ -255,14 +255,14 @@ func (s *migrationsSuite) TestMigrateParallelMigration(c *gc.C) {
 		PromulgatedURL: charm.MustParseReference("trusty/django-3"),
 		Size:           12,
 	}
-	denormalizeEntity(e1)
+	DenormalizeEntity(e1)
 	s.insertEntity(c, e1, initialEntityFields)
 
 	e2 := &mongodoc.Entity{
 		URL:  charm.MustParseReference("~who/utopic/rails-47"),
 		Size: 13,
 	}
-	denormalizeEntity(e2)
+	DenormalizeEntity(e2)
 	s.insertEntity(c, e2, initialEntityFields)
 
 	// Run the migrations in parallel.
@@ -305,7 +305,7 @@ func (s *migrationsSuite) TestAddSupportedSeries(c *gc.C) {
 		Size: 13,
 	}}
 	for _, e := range entities {
-		denormalizeEntity(e)
+		DenormalizeEntity(e)
 		s.insertEntity(c, e, entityFields[migrationAddSupportedSeries])
 	}
 
