@@ -896,7 +896,7 @@ var routerGetTests = []struct {
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
-		Message: `not found: charm URL has invalid charm name: "robots.txt"`,
+		Message: `not found: URL has invalid charm or bundle name: "robots.txt"`,
 	},
 }, {
 	about:        "bulk meta handler, invalid id",
@@ -905,7 +905,7 @@ var routerGetTests = []struct {
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
-		Message: `bad request: charm URL has invalid charm name: "robots.txt"`,
+		Message: `bad request: URL has invalid charm or bundle name: "robots.txt"`,
 	},
 }}
 
@@ -1812,10 +1812,10 @@ var splitIdTests = []struct {
 	expectURL: "cs:~user/wordpress",
 }, {
 	path:        "",
-	expectError: `charm URL has invalid charm name: ""`,
+	expectError: `URL has invalid charm or bundle name: ""`,
 }, {
 	path:        "~foo-bar-/wordpress",
-	expectError: `charm URL has invalid user name: "~foo-bar-/wordpress"`,
+	expectError: `charm or bundle URL has invalid user name: "~foo-bar-/wordpress"`,
 }}
 
 func (s *RouterSuite) TestSplitId(c *gc.C) {

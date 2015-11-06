@@ -424,7 +424,7 @@ var serveCharmEventErrorsTests = []struct {
 }{{
 	about: "invalid charm URL",
 	url:   "no-such:charm",
-	err:   `invalid charm URL: charm URL has invalid schema: "no-such:charm"`,
+	err:   `invalid charm URL: charm or bundle URL has invalid schema: "no-such:charm"`,
 }, {
 	about: "revision specified",
 	url:   "cs:utopic/django-42",
