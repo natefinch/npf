@@ -565,7 +565,9 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 // from their associated canonical fields.
 //
 // It is the responsibility of the caller to set e.SupportedSeries
-// if the entity URL does not contain a series.
+// if the entity URL does not contain a series. If the entity
+// URL *does* contain a series, e.SupportedSeries will
+// be overwritten.
 func denormalizeEntity(e *mongodoc.Entity) {
 	e.BaseURL = baseURL(e.URL)
 	e.Name = e.URL.Name

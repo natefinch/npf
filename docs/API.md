@@ -425,6 +425,7 @@ Example: `GET /meta`
     "promulgated",
     "revision-info",
     "stats",
+    "supported-series",
     "tags"
 ]
 ```
@@ -1062,6 +1063,26 @@ Response body:
 ```json
 {
     "Sum": "9ab5036cc18ba61a9d25fad389e46b3d407fc02c3eba917fe5f18fdf51ee6924"
+}
+```
+
+#### GET *id*/meta/supported-series
+
+This path returns the set of series supported by the given
+charm. This endpoint is appropriate for charms only.
+
+```go
+type SupportedSeriesResponse struct {
+    SupportedSeries []string
+}
+```
+
+Example: `GET precise/wordpress/meta/supported-series`
+
+Response body:
+```json
+{
+    "SupportedSeries": ["precise"]
 }
 ```
 

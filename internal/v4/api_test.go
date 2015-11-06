@@ -437,6 +437,22 @@ var metaEndpoints = []metaEndpoint{{
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data, gc.Equals, params.PromulgatedResponse{Promulgated: false})
 	},
+}, {
+	name: "supported-series",
+	get: entityGetter(func(entity *mongodoc.Entity) interface{} {
+		if entity.URL.Series == "bundle" {
+			return nil
+		}
+		return params.SupportedSeriesResponse{
+			SupportedSeries: entity.SupportedSeries,
+		}
+	}),
+	checkURL: newResolvedURL("~charmers/utopic/category-2", 2),
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, jc.DeepEquals, params.SupportedSeriesResponse{
+			SupportedSeries: []string{"utopic"},
+		})
+	},
 }}
 
 // TestEndpointGet tries to ensure that the endpoint
