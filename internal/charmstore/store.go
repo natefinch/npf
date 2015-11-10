@@ -542,7 +542,7 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
 		Contents:                p.Contents,
 	}
-	DenormalizeEntity(entity)
+	denormalizeEntity(entity)
 
 	// Check that we're not going to create a charm that duplicates
 	// the name of a bundle. This is racy, but it's the best we can do.
@@ -561,7 +561,7 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	return nil
 }
 
-// DenormalizeEntity sets all denormalized fields in e
+// denormalizeEntity sets all denormalized fields in e
 // from their associated canonical fields.
 //
 // It is the responsibility of the caller to set e.SupportedSeries
@@ -571,7 +571,7 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 //
 // This is exported for the purposes of tests that
 // need to create directly into the database.
-func DenormalizeEntity(e *mongodoc.Entity) {
+func denormalizeEntity(e *mongodoc.Entity) {
 	e.BaseURL = baseURL(e.URL)
 	e.Name = e.URL.Name
 	e.User = e.URL.User
@@ -1018,7 +1018,7 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 		Contents:           p.Contents,
 		PromulgatedURL:     p.URL.PromulgatedURL(),
 	}
-	DenormalizeEntity(entity)
+	denormalizeEntity(entity)
 
 	// Check that we're not going to create a bundle that duplicates
 	// the name of a charm. This is racy, but it's the best we can do.
