@@ -2455,11 +2455,11 @@ func (s *StoreSuite) TestAddAuditWithNoLumberjack(c *gc.C) {
 	})
 }
 
-func (s *StoreSuite) TestDenormalizeEntity(c *gc.C) {
+func (s *StoreSuite) TestdenormalizeEntity(c *gc.C) {
 	e := &mongodoc.Entity{
 		URL: charm.MustParseReference("~someone/utopic/acharm-45"),
 	}
-	DenormalizeEntity(e)
+	denormalizeEntity(e)
 	c.Assert(e, jc.DeepEquals, &mongodoc.Entity{
 		URL:                 charm.MustParseReference("~someone/utopic/acharm-45"),
 		BaseURL:             charm.MustParseReference("~someone/acharm"),
@@ -2477,7 +2477,7 @@ func (s *StoreSuite) TestDenormalizePromulgatedEntity(c *gc.C) {
 		URL:            charm.MustParseReference("~someone/utopic/acharm-45"),
 		PromulgatedURL: charm.MustParseReference("utopic/acharm-5"),
 	}
-	DenormalizeEntity(e)
+	denormalizeEntity(e)
 	c.Assert(e, jc.DeepEquals, &mongodoc.Entity{
 		URL:                 charm.MustParseReference("~someone/utopic/acharm-45"),
 		BaseURL:             charm.MustParseReference("~someone/acharm"),
@@ -2495,7 +2495,7 @@ func (s *StoreSuite) TestDenormalizeBundleEntity(c *gc.C) {
 	e := &mongodoc.Entity{
 		URL: charm.MustParseReference("~someone/bundle/acharm-45"),
 	}
-	DenormalizeEntity(e)
+	denormalizeEntity(e)
 	c.Assert(e, jc.DeepEquals, &mongodoc.Entity{
 		URL:                 charm.MustParseReference("~someone/bundle/acharm-45"),
 		BaseURL:             charm.MustParseReference("~someone/acharm"),
@@ -2517,7 +2517,7 @@ func entity(url, purl string) *mongodoc.Entity {
 		URL:            id,
 		PromulgatedURL: pid,
 	}
-	DenormalizeEntity(e)
+	denormalizeEntity(e)
 	return e
 }
 
@@ -2535,6 +2535,6 @@ func baseEntity(url string, promulgated bool) *mongodoc.BaseEntity {
 // a copy of e with its denormalized fields filled out.
 func denormalizedEntity(e *mongodoc.Entity) *mongodoc.Entity {
 	e1 := *e
-	DenormalizeEntity(&e1)
+	denormalizeEntity(&e1)
 	return &e1
 }
