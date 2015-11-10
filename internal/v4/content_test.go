@@ -36,7 +36,7 @@ var serveDiagramErrorsTests = []struct {
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
-		Message: `entity "cs:~charmers/bundle/foo-23" not found`,
+		Message: `no matching charm or bundle for "cs:~charmers/bundle/foo-23"`,
 	},
 }, {
 	about:        "diagram for a charm",
@@ -211,44 +211,6 @@ func (s *APISuite) TestServeReadMe(c *gc.C) {
 			assertCacheControl(c, rec.Header(), true)
 		}
 	}
-}
-
-func (s *APISuite) TestServeReadMeEntityNotFound(c *gc.C) {
-	// Add another charm so that the base entity exists so we
-	// actually get through to the code we're wanting to test.
-	// (if the base entity does not exist, the authorization code
-	// will fail).
-	url := newResolvedURL("~charmers/precise/nothingatall-1", -1)
-	s.addPublicCharm(c, "wordpress", url)
-
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:      s.srv,
-		URL:          storeURL("~charmers/precise/nothingatall-32/readme"),
-		ExpectStatus: http.StatusNotFound,
-		ExpectBody: params.Error{
-			Code:    params.ErrNotFound,
-			Message: `cannot get README: entity not found`,
-		},
-	})
-}
-
-func (s *APISuite) TestServeIconEntityNotFound(c *gc.C) {
-	// Add another charm so that the base entity exists so we
-	// actually get through to the code we're wanting to test.
-	// (if the base entity does not exist, the authorization code
-	// will fail).
-	id := newResolvedURL("~charmers/precise/nothingatall-1", -1)
-	s.addPublicCharm(c, "wordpress", id)
-
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:      s.srv,
-		URL:          storeURL("~charmers/precise/nothingatall-32/icon.svg"),
-		ExpectStatus: http.StatusNotFound,
-		ExpectBody: params.Error{
-			Code:    params.ErrNotFound,
-			Message: `cannot get icon: entity not found`,
-		},
-	})
 }
 
 func charmWithExtraFile(c *gc.C, name, file, content string) *charm.CharmDir {

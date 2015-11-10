@@ -228,13 +228,6 @@ func (h *ReqHandler) Close() {
 // ResolveURL resolves the series and revision of the given URL if either is
 // unspecified by filling them out with information retrieved from the store.
 func ResolveURL(store *charmstore.Store, url *charm.Reference) (*router.ResolvedURL, error) {
-	if url.Series != "" && url.Revision != -1 && url.User != "" {
-		// URL is fully specified; no need for a database lookup.
-		return &router.ResolvedURL{
-			URL:                 *url,
-			PromulgatedRevision: -1,
-		}, nil
-	}
 	entity, err := store.FindBestEntity(url, "_id", "promulgated-revision")
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return nil, errgo.Mask(err)

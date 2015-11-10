@@ -913,7 +913,7 @@ var archiveFileErrorsTests = []struct {
 	about:         "entity not found",
 	path:          "~charmers/trusty/no-such-42/archive/icon.svg",
 	expectStatus:  http.StatusNotFound,
-	expectMessage: `entity "cs:~charmers/trusty/no-such-42" not found`,
+	expectMessage: `no matching charm or bundle for "cs:~charmers/trusty/no-such-42"`,
 	expectCode:    params.ErrNotFound,
 }, {
 	about:         "directory listing",
@@ -1178,7 +1178,7 @@ func (s *ArchiveSuite) TestDeleteNotFound(c *gc.C) {
 		Password:     testPassword,
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
-			Message: `entity "cs:~charmers/utopic/no-such-0" not found`,
+			Message: `no matching charm or bundle for "cs:~charmers/utopic/no-such-0"`,
 			Code:    params.ErrNotFound,
 		},
 	})
