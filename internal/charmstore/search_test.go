@@ -490,8 +490,8 @@ func (s *StoreSearchSuite) TestSearches(c *gc.C) {
 		c.Logf("results: %v", res.Results)
 		sort.Sort(resolvedURLsByString(res.Results))
 		sort.Sort(resolvedURLsByString(test.results))
-		c.Assert(res.Results, jc.DeepEquals, test.results)
-		c.Assert(res.Total, gc.Equals, len(test.results)+test.totalDiff)
+		c.Check(res.Results, jc.DeepEquals, test.results)
+		c.Check(res.Total, gc.Equals, len(test.results)+test.totalDiff)
 	}
 }
 

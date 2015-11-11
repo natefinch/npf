@@ -58,7 +58,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, url *r
 	c.Assert(err, gc.IsNil)
 	afterAdding := time.Now()
 
-	var doc mongodoc.Entity
+	var doc *mongodoc.Entity
 	err = store.DB.Entities().FindId(&url.URL).One(&doc)
 	c.Assert(err, gc.IsNil)
 
@@ -90,13 +90,8 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, url *r
 	c.Assert(blobName, gc.Matches, "[0-9a-z]+")
 	doc.BlobName = ""
 
-	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
+	c.Assert(doc, jc.DeepEquals, denormalizedEntity(&mongodoc.Entity{
 		URL:                     &url.URL,
-		BaseURL:                 baseURL(&url.URL),
-		User:                    url.URL.User,
-		Name:                    url.URL.Name,
-		Revision:                url.URL.Revision,
-		Series:                  url.URL.Series,
 		BlobHash:                hash,
 		BlobHash256:             hash256,
 		Size:                    size,
@@ -106,8 +101,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, url *r
 		CharmProvidedInterfaces: []string{"http", "logging", "monitoring"},
 		CharmRequiredInterfaces: []string{"mysql", "varnish"},
 		PromulgatedURL:          url.PromulgatedURL(),
-		PromulgatedRevision:     url.PromulgatedRevision,
-	})
+	}))
 
 	// The charm archive has been properly added to the blob store.
 	r, obtainedSize, err := store.BlobStore.Open(blobName)
@@ -147,7 +141,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool, 
 	c.Assert(err, gc.IsNil)
 	afterAdding := time.Now()
 
-	var doc mongodoc.Entity
+	var doc *mongodoc.Entity
 	err = store.DB.Entities().FindId(&url.URL).One(&doc)
 	c.Assert(err, gc.IsNil)
 	sort.Sort(orderedURLs(doc.BundleCharms))
@@ -179,13 +173,8 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool, 
 
 	// The entity doc has been correctly added to the mongo collection.
 	size, hash, hash256 := getSizeAndHashes(bundle)
-	c.Assert(doc, jc.DeepEquals, mongodoc.Entity{
+	c.Assert(doc, jc.DeepEquals, denormalizedEntity(&mongodoc.Entity{
 		URL:          &url.URL,
-		BaseURL:      baseURL(&url.URL),
-		User:         url.URL.User,
-		Name:         url.URL.Name,
-		Revision:     url.URL.Revision,
-		Series:       url.URL.Series,
 		BlobHash:     hash,
 		BlobHash256:  hash256,
 		Size:         size,
@@ -195,11 +184,10 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool, 
 			charm.MustParseReference("mysql"),
 			charm.MustParseReference("wordpress"),
 		},
-		BundleMachineCount:  newInt(2),
-		BundleUnitCount:     newInt(2),
-		PromulgatedURL:      url.PromulgatedURL(),
-		PromulgatedRevision: url.PromulgatedRevision,
-	})
+		BundleMachineCount: newInt(2),
+		BundleUnitCount:    newInt(2),
+		PromulgatedURL:     url.PromulgatedURL(),
+	}))
 
 	// The bundle archive has been properly added to the blob store.
 	r, obtainedSize, err := store.BlobStore.Open(blobName)
@@ -276,7 +264,7 @@ var urlFindingTests = []struct {
 }, {
 	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "23 cs:~charmers/trusty/wordpress-23", "24 cs:~charmers/trusty/wordpress-24"},
 	expand:  "wordpress-23",
-	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "23 cs:~charmers/trusty/wordpress-23"},
+	expect:  []string{},
 }, {
 	inStore: []string{"cs:~user/precise/wordpress-23", "cs:~user/trusty/wordpress-23"},
 	expand:  "~user/precise/wordpress",
@@ -1692,7 +1680,7 @@ var findBestEntityTests = []struct {
 	expectURL: "~mickey/trusty/wordpress-13",
 }, {
 	url:       "~mickey/wordpress-12",
-	expectURL: "~mickey/trusty/wordpress-12",
+	expectErr: "entity not found",
 }, {
 	url:       "~mickey/precise/wordpress",
 	expectURL: "~mickey/precise/wordpress-24",
@@ -1720,124 +1708,239 @@ var findBestEntityTests = []struct {
 }, {
 	url:       "wordpress-simple",
 	expectURL: "~donald/bundle/wordpress-simple-1",
+}, {
+	url:       "~pluto/juju-gui",
+	expectURL: "~pluto/wily/juju-gui-1",
 }}
 
 func (s *StoreSuite) TestFindBestEntity(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
-	err := store.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                 charm.MustParseReference("~charmers/trusty/wordpress-9"),
-		BaseURL:             charm.MustParseReference("~charmers/wordpress"),
-		User:                "charmers",
-		Series:              "trusty",
-		Name:                "wordpress",
-		Revision:            9,
-		PromulgatedURL:      charm.MustParseReference("trusty/wordpress-9"),
-		PromulgatedRevision: 9,
-	})
-	c.Assert(err, gc.IsNil)
-	err = store.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                 charm.MustParseReference("~charmers/trusty/wordpress-10"),
-		BaseURL:             charm.MustParseReference("~charmers/wordpress"),
-		User:                "charmers",
-		Series:              "trusty",
-		Name:                "wordpress",
-		Revision:            10,
-		PromulgatedURL:      charm.MustParseReference("trusty/wordpress-10"),
-		PromulgatedRevision: 10,
-	})
-	c.Assert(err, gc.IsNil)
-	err = store.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                 charm.MustParseReference("~charmers/trusty/wordpress-11"),
-		BaseURL:             charm.MustParseReference("~charmers/wordpress"),
-		User:                "charmers",
-		Series:              "trusty",
-		Name:                "wordpress",
-		Revision:            11,
-		PromulgatedURL:      charm.MustParseReference("trusty/wordpress-11"),
-		PromulgatedRevision: 11,
-	})
-	c.Assert(err, gc.IsNil)
-	err = store.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                 charm.MustParseReference("~charmers/trusty/wordpress-12"),
-		BaseURL:             charm.MustParseReference("~charmers/wordpress"),
-		User:                "charmers",
-		Series:              "trusty",
-		Name:                "wordpress",
-		Revision:            12,
-		PromulgatedURL:      charm.MustParseReference("trusty/wordpress-12"),
-		PromulgatedRevision: 12,
-	})
-	c.Assert(err, gc.IsNil)
-	err = store.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                 charm.MustParseReference("~mickey/precise/wordpress-12"),
-		BaseURL:             charm.MustParseReference("~mickey/wordpress"),
-		User:                "mickey",
-		Series:              "precise",
-		Name:                "wordpress",
-		Revision:            12,
-		PromulgatedRevision: -1,
-	})
-	c.Assert(err, gc.IsNil)
-	err = store.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                 charm.MustParseReference("~mickey/trusty/wordpress-12"),
-		BaseURL:             charm.MustParseReference("~mickey/wordpress"),
-		User:                "mickey",
-		Series:              "trusty",
-		Name:                "wordpress",
-		Revision:            12,
-		PromulgatedRevision: -1,
-	})
-	c.Assert(err, gc.IsNil)
-	err = store.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                 charm.MustParseReference("~mickey/trusty/wordpress-13"),
-		BaseURL:             charm.MustParseReference("~mickey/wordpress"),
-		User:                "mickey",
-		Series:              "trusty",
-		Name:                "wordpress",
-		Revision:            13,
-		PromulgatedURL:      charm.MustParseReference("trusty/wordpress-13"),
-		PromulgatedRevision: 13,
-	})
-	c.Assert(err, gc.IsNil)
-	err = store.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                 charm.MustParseReference("~mickey/precise/wordpress-24"),
-		BaseURL:             charm.MustParseReference("~mickey/wordpress"),
-		User:                "mickey",
-		Series:              "precise",
-		Name:                "wordpress",
-		Revision:            24,
-		PromulgatedURL:      charm.MustParseReference("precise/wordpress-24"),
-		PromulgatedRevision: 24,
-	})
-	c.Assert(err, gc.IsNil)
-	err = store.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                 charm.MustParseReference("~donald/bundle/wordpress-simple-0"),
-		BaseURL:             charm.MustParseReference("~donald/wordpress-simple"),
-		User:                "donald",
-		Series:              "bundle",
-		Name:                "wordpress-simple",
-		Revision:            0,
-		PromulgatedURL:      nil,
-		PromulgatedRevision: -1,
-	})
-	c.Assert(err, gc.IsNil)
-	err = store.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                 charm.MustParseReference("~donald/bundle/wordpress-simple-1"),
-		BaseURL:             charm.MustParseReference("~donald/wordpress-simple"),
-		User:                "donald",
-		Series:              "bundle",
-		Name:                "wordpress-simple",
-		Revision:            1,
-		PromulgatedURL:      charm.MustParseReference("bundle/wordpress-simple-0"),
-		PromulgatedRevision: 0,
-	})
-	c.Assert(err, gc.IsNil)
+	entities := []*mongodoc.Entity{{
+		URL:            charm.MustParseReference("~charmers/trusty/wordpress-9"),
+		PromulgatedURL: charm.MustParseReference("trusty/wordpress-9"),
+	}, {
+		URL:            charm.MustParseReference("~charmers/trusty/wordpress-10"),
+		PromulgatedURL: charm.MustParseReference("trusty/wordpress-10"),
+	}, {
+		URL:            charm.MustParseReference("~charmers/trusty/wordpress-11"),
+		PromulgatedURL: charm.MustParseReference("trusty/wordpress-11"),
+	}, {
+		URL:            charm.MustParseReference("~charmers/trusty/wordpress-12"),
+		PromulgatedURL: charm.MustParseReference("trusty/wordpress-12"),
+	}, {
+		URL: charm.MustParseReference("~mickey/precise/wordpress-12"),
+	}, {
+		URL: charm.MustParseReference("~mickey/trusty/wordpress-12"),
+	}, {
+		URL:            charm.MustParseReference("~mickey/trusty/wordpress-13"),
+		PromulgatedURL: charm.MustParseReference("trusty/wordpress-13"),
+	}, {
+		URL:            charm.MustParseReference("~mickey/precise/wordpress-24"),
+		PromulgatedURL: charm.MustParseReference("precise/wordpress-24"),
+	}, {
+		URL: charm.MustParseReference("~donald/bundle/wordpress-simple-0"),
+	}, {
+		URL:            charm.MustParseReference("~donald/bundle/wordpress-simple-1"),
+		PromulgatedURL: charm.MustParseReference("bundle/wordpress-simple-0"),
+	}, {
+		URL: charm.MustParseReference("~pluto/utopic/juju-gui-2"),
+	}, {
+		URL: charm.MustParseReference("~pluto/wily/juju-gui-1"),
+	}}
+	for _, e := range entities {
+		err := store.DB.Entities().Insert(denormalizedEntity(e))
+		c.Assert(err, gc.IsNil)
+	}
+
 	for i, test := range findBestEntityTests {
 		c.Logf("test %d: %s", i, test.url)
 		entity, err := store.FindBestEntity(charm.MustParseReference(test.url))
 		if test.expectErr != "" {
 			c.Assert(err, gc.ErrorMatches, test.expectErr)
+		} else {
+			c.Assert(err, gc.IsNil)
+			c.Assert(entity.URL.String(), gc.Equals, charm.MustParseReference(test.expectURL).String())
+		}
+	}
+}
+
+var findBestEntityWithMultiSeriesCharmsTests = []struct {
+	about     string
+	entities  []*mongodoc.Entity
+	url       string
+	expectURL string
+}{{
+	about: "URL with series and revision can select multi-series charm",
+	entities: []*mongodoc.Entity{{
+		URL:             charm.MustParseReference("~charmers/wordpress-10"),
+		SupportedSeries: []string{"precise", "trusty"},
+	}},
+	url:       "~charmers/trusty/wordpress-10",
+	expectURL: "~charmers/wordpress-10",
+}, {
+	about: "URL with series and revision gives not found if series not supported",
+	entities: []*mongodoc.Entity{{
+		URL:             charm.MustParseReference("~charmers/wordpress-10"),
+		SupportedSeries: []string{"trusty"},
+	}, {
+		URL:             charm.MustParseReference("~bob/wordpress-12"),
+		SupportedSeries: []string{"quantal"},
+	}},
+	url: "~charmers/utopic/wordpress-10",
+}, {
+	about: "URL with series and no revision prefers latest revision that supports that series",
+	entities: []*mongodoc.Entity{{
+		URL:             charm.MustParseReference("~charmers/wordpress-10"),
+		SupportedSeries: []string{"precise", "trusty"},
+	}, {
+		URL:             charm.MustParseReference("~charmers/wordpress-11"),
+		SupportedSeries: []string{"quantal"},
+	}, {
+		URL:             charm.MustParseReference("~charmers/wordpress-12"),
+		SupportedSeries: []string{"precise"},
+	}, {
+		URL:             charm.MustParseReference("~charmers/wordpress-13"),
+		SupportedSeries: []string{"trusty"},
+	}, {
+		URL:             charm.MustParseReference("~bob/wordpress-14"),
+		SupportedSeries: []string{"precise"},
+	}},
+	url:       "~charmers/precise/wordpress",
+	expectURL: "~charmers/wordpress-12",
+}, {
+	about: "URL with no series and revision resolves to the given exact entity",
+	entities: []*mongodoc.Entity{{
+		URL:             charm.MustParseReference("~charmers/wordpress-10"),
+		SupportedSeries: []string{"precise", "trusty"},
+	}},
+	url:       "~charmers/wordpress-10",
+	expectURL: "~charmers/wordpress-10",
+}, {
+	about: "URL with no series and revision will not find non-multi-series charm",
+	entities: []*mongodoc.Entity{{
+		URL: charm.MustParseReference("~charmers/precise/wordpress-10"),
+	}},
+	url: "~charmers/wordpress-10",
+}, {
+	about: "URL with no series and revision can find bundle",
+	entities: []*mongodoc.Entity{{
+		URL: charm.MustParseReference("~charmers/bundle/trundle-10"),
+	}},
+	url:       "~charmers/trundle-10",
+	expectURL: "~charmers/bundle/trundle-10",
+}, {
+	about: "URL with no series and no revision finds latest multi-series charm",
+	entities: []*mongodoc.Entity{{
+		URL:             charm.MustParseReference("~charmers/wordpress-11"),
+		SupportedSeries: []string{"precise", "trusty"},
+	}, {
+		URL:             charm.MustParseReference("~charmers/wordpress-10"),
+		SupportedSeries: []string{"precise"},
+	}, {
+		URL:             charm.MustParseReference("~charmers/wordpress-12"),
+		SupportedSeries: []string{"precise"},
+	}},
+	url:       "~charmers/wordpress",
+	expectURL: "~charmers/wordpress-12",
+}, {
+	about: "promulgated URL with series, name and revision can select multi-series charm",
+	entities: []*mongodoc.Entity{{
+		URL:             charm.MustParseReference("~charmers/wordpress-10"),
+		PromulgatedURL:  charm.MustParseReference("wordpress-2"),
+		SupportedSeries: []string{"precise", "trusty"},
+	}},
+	url:       "precise/wordpress-2",
+	expectURL: "~charmers/wordpress-10",
+}, {
+	about: "promulgated URL with series and no revision prefers latest promulgated revision that supports that series",
+	entities: []*mongodoc.Entity{{
+		URL:             charm.MustParseReference("~charmers/wordpress-10"),
+		PromulgatedURL:  charm.MustParseReference("wordpress-1"),
+		SupportedSeries: []string{"precise", "trusty"},
+	}, {
+		URL:             charm.MustParseReference("~charmers/wordpress-11"),
+		PromulgatedURL:  charm.MustParseReference("wordpress-2"),
+		SupportedSeries: []string{"quantal"},
+	}, {
+		URL:             charm.MustParseReference("~newcharmers/wordpress-1"),
+		PromulgatedURL:  charm.MustParseReference("wordpress-3"),
+		SupportedSeries: []string{"precise"},
+	}, {
+		URL:             charm.MustParseReference("~newcharmers/wordpress-13"),
+		PromulgatedURL:  charm.MustParseReference("wordpress-4"),
+		SupportedSeries: []string{"trusty"},
+	}, {
+		URL:             charm.MustParseReference("~bob/wordpress-14"),
+		SupportedSeries: []string{"precise"},
+	}},
+	url:       "precise/wordpress",
+	expectURL: "~newcharmers/wordpress-1",
+}, {
+	about: "promulgated URL with no series and revision resolves to the given exact entity",
+	entities: []*mongodoc.Entity{{
+		URL:             charm.MustParseReference("~charmers/wordpress-10"),
+		PromulgatedURL:  charm.MustParseReference("wordpress-3"),
+		SupportedSeries: []string{"precise", "trusty"},
+	}},
+	url:       "wordpress-3",
+	expectURL: "~charmers/wordpress-10",
+}, {
+	about: "promulgated URL with no series and revision will not find non-multi-series charm",
+	entities: []*mongodoc.Entity{{
+		URL:            charm.MustParseReference("~charmers/precise/wordpress-10"),
+		PromulgatedURL: charm.MustParseReference("precise/wordpress-3"),
+	}},
+	url: "wordpress-3",
+}, {
+	about: "promulgated URL with no series and revision can find bundle",
+	entities: []*mongodoc.Entity{{
+		URL:            charm.MustParseReference("~charmers/bundle/trundle-10"),
+		PromulgatedURL: charm.MustParseReference("bundle/trundle-10"),
+	}},
+	url:       "trundle-10",
+	expectURL: "~charmers/bundle/trundle-10",
+}, {
+	about: "promulgated URL with no series and no revision finds latest multi-series charm",
+	entities: []*mongodoc.Entity{{
+		URL:             charm.MustParseReference("~charmers/wordpress-10"),
+		PromulgatedURL:  charm.MustParseReference("wordpress-1"),
+		SupportedSeries: []string{"precise", "trusty"},
+	}, {
+		URL:             charm.MustParseReference("~charmers/wordpress-11"),
+		PromulgatedURL:  charm.MustParseReference("wordpress-2"),
+		SupportedSeries: []string{"quantal"},
+	}, {
+		URL:             charm.MustParseReference("~newcharmers/wordpress-1"),
+		PromulgatedURL:  charm.MustParseReference("wordpress-3"),
+		SupportedSeries: []string{"precise"},
+	}, {
+		URL:             charm.MustParseReference("~newcharmers/wordpress-13"),
+		PromulgatedURL:  charm.MustParseReference("wordpress-4"),
+		SupportedSeries: []string{"trusty"},
+	}, {
+		URL:             charm.MustParseReference("~bob/wordpress-14"),
+		SupportedSeries: []string{"precise"},
+	}},
+	url:       "wordpress",
+	expectURL: "~newcharmers/wordpress-13",
+}}
+
+func (s *StoreSuite) TestFindBestEntityWithMultiSeriesCharms(c *gc.C) {
+	store := s.newStore(c, false)
+	defer store.Close()
+
+	for i, test := range findBestEntityWithMultiSeriesCharmsTests {
+		c.Logf("test %d: %s", i, test.about)
+		_, err := store.DB.Entities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+		for _, e := range test.entities {
+			err := store.DB.Entities().Insert(denormalizedEntity(e))
+			c.Assert(err, gc.IsNil)
+		}
+		entity, err := store.FindBestEntity(charm.MustParseReference(test.url))
+		if test.expectURL == "" {
+			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 		} else {
 			c.Assert(err, gc.IsNil)
 			c.Assert(entity.URL.String(), gc.Equals, charm.MustParseReference(test.expectURL).String())
@@ -1863,16 +1966,10 @@ func (s *StoreSuite) TestUpdateEntity(c *gc.C) {
 		url := newResolvedURL(test.url, 10)
 		_, err := store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
-		err = store.DB.Entities().Insert(&mongodoc.Entity{
-			URL:                 charm.MustParseReference("~charmers/trusty/wordpress-10"),
-			BaseURL:             charm.MustParseReference("~charmers/wordpress"),
-			User:                "charmers",
-			Series:              "trusty",
-			Name:                "wordpress",
-			Revision:            9,
-			PromulgatedURL:      charm.MustParseReference("trusty/wordpress-4"),
-			PromulgatedRevision: 4,
-		})
+		err = store.DB.Entities().Insert(denormalizedEntity(&mongodoc.Entity{
+			URL:            charm.MustParseReference("~charmers/trusty/wordpress-10"),
+			PromulgatedURL: charm.MustParseReference("trusty/wordpress-4"),
+		}))
 		c.Assert(err, gc.IsNil)
 		err = store.UpdateEntity(url, bson.D{{"$set", bson.D{{"extrainfo.test", []byte("PASS")}}}})
 		if test.expectErr != "" {
@@ -2358,24 +2455,70 @@ func (s *StoreSuite) TestAddAuditWithNoLumberjack(c *gc.C) {
 	})
 }
 
+func (s *StoreSuite) TestdenormalizeEntity(c *gc.C) {
+	e := &mongodoc.Entity{
+		URL: charm.MustParseReference("~someone/utopic/acharm-45"),
+	}
+	denormalizeEntity(e)
+	c.Assert(e, jc.DeepEquals, &mongodoc.Entity{
+		URL:                 charm.MustParseReference("~someone/utopic/acharm-45"),
+		BaseURL:             charm.MustParseReference("~someone/acharm"),
+		User:                "someone",
+		Name:                "acharm",
+		Revision:            45,
+		Series:              "utopic",
+		PromulgatedRevision: -1,
+		SupportedSeries:     []string{"utopic"},
+	})
+}
+
+func (s *StoreSuite) TestDenormalizePromulgatedEntity(c *gc.C) {
+	e := &mongodoc.Entity{
+		URL:            charm.MustParseReference("~someone/utopic/acharm-45"),
+		PromulgatedURL: charm.MustParseReference("utopic/acharm-5"),
+	}
+	denormalizeEntity(e)
+	c.Assert(e, jc.DeepEquals, &mongodoc.Entity{
+		URL:                 charm.MustParseReference("~someone/utopic/acharm-45"),
+		BaseURL:             charm.MustParseReference("~someone/acharm"),
+		User:                "someone",
+		Name:                "acharm",
+		Revision:            45,
+		Series:              "utopic",
+		PromulgatedURL:      charm.MustParseReference("utopic/acharm-5"),
+		PromulgatedRevision: 5,
+		SupportedSeries:     []string{"utopic"},
+	})
+}
+
+func (s *StoreSuite) TestDenormalizeBundleEntity(c *gc.C) {
+	e := &mongodoc.Entity{
+		URL: charm.MustParseReference("~someone/bundle/acharm-45"),
+	}
+	denormalizeEntity(e)
+	c.Assert(e, jc.DeepEquals, &mongodoc.Entity{
+		URL:                 charm.MustParseReference("~someone/bundle/acharm-45"),
+		BaseURL:             charm.MustParseReference("~someone/acharm"),
+		User:                "someone",
+		Name:                "acharm",
+		Revision:            45,
+		Series:              "bundle",
+		PromulgatedRevision: -1,
+	})
+}
+
 func entity(url, purl string) *mongodoc.Entity {
 	id := charm.MustParseReference(url)
 	var pid *charm.Reference
-	pRev := -1
 	if purl != "" {
 		pid = charm.MustParseReference(purl)
-		pRev = pid.Revision
 	}
-	return &mongodoc.Entity{
-		URL:                 id,
-		User:                id.User,
-		Name:                id.Name,
-		Series:              id.Series,
-		Revision:            id.Revision,
-		BaseURL:             baseURL(id),
-		PromulgatedURL:      pid,
-		PromulgatedRevision: pRev,
+	e := &mongodoc.Entity{
+		URL:            id,
+		PromulgatedURL: pid,
 	}
+	denormalizeEntity(e)
+	return e
 }
 
 func baseEntity(url string, promulgated bool) *mongodoc.BaseEntity {
@@ -2386,4 +2529,12 @@ func baseEntity(url string, promulgated bool) *mongodoc.BaseEntity {
 		User:        id.User,
 		Promulgated: mongodoc.IntBool(promulgated),
 	}
+}
+
+// denormalizedEntity is a convenience function that returns
+// a copy of e with its denormalized fields filled out.
+func denormalizedEntity(e *mongodoc.Entity) *mongodoc.Entity {
+	e1 := *e
+	denormalizeEntity(&e1)
+	return &e1
 }
