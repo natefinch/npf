@@ -711,10 +711,11 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 }
 
 func (s *APISuite) TestMetaPermPutUnauthorized(c *gc.C) {
-	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/utopic/wordpress-23", 23))
+	id := "precise/wordpress-23"
+	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/"+id, 23))
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: s.noMacaroonSrv,
-		URL:     storeURL("~charmers/precise/wordpress-23/meta/perm/read"),
+		URL:     storeURL("~charmers/" + id + "/meta/perm/read"),
 		Method:  "PUT",
 		Header: http.Header{
 			"Content-Type": {"application/json"},
@@ -1255,8 +1256,8 @@ var resolveURLTests = []struct {
 	url:    "~charmers/precise/wordpress",
 	expect: newResolvedURL("cs:~charmers/precise/wordpress-24", -1),
 }, {
-	url:    "~charmers/precise/wordpress-99",
-	expect: newResolvedURL("cs:~charmers/precise/wordpress-99", -1),
+	url:      "~charmers/precise/wordpress-99",
+	notFound: true,
 }, {
 	url:    "~charmers/wordpress",
 	expect: newResolvedURL("cs:~charmers/trusty/wordpress-25", -1),
@@ -1331,13 +1332,6 @@ var serveExpandIdTests = []struct {
 		{Id: "cs:~charmers/trusty/wordpress-47"},
 	},
 }, {
-	about: "fully qualified URL that does not exist",
-	url:   "~charmers/trusty/wordpress-99",
-	expect: []params.ExpandedId{
-		{Id: "cs:~charmers/utopic/wordpress-42"},
-		{Id: "cs:~charmers/trusty/wordpress-47"},
-	},
-}, {
 	about: "partial URL",
 	url:   "haproxy",
 	expect: []params.ExpandedId{
@@ -1359,7 +1353,7 @@ var serveExpandIdTests = []struct {
 }, {
 	about: "fully qualified URL with no entities found",
 	url:   "~charmers/precise/no-such-42",
-	err:   `entity "cs:~charmers/precise/no-such-42" not found`,
+	err:   `no matching charm or bundle for "cs:~charmers/precise/no-such-42"`,
 }, {
 	about: "partial URL with no entities found",
 	url:   "no-such",
@@ -2397,52 +2391,6 @@ var promulgateTests = []struct {
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
 		Message: `no matching charm or bundle for "cs:~charmers/mysql"`,
-	},
-	expectEntities: []*mongodoc.Entity{
-		storetesting.NewEntity("~charmers/trusty/wordpress-0").Build(),
-	},
-	expectBaseEntities: []*mongodoc.BaseEntity{
-		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
-	},
-}, {
-	about: "promulgate base entity not found, fully qualified URL",
-	entities: []*mongodoc.Entity{
-		storetesting.NewEntity("~charmers/trusty/wordpress-0").Build(),
-	},
-	baseEntities: []*mongodoc.BaseEntity{
-		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
-	},
-	id:           "~charmers/precise/mysql-9",
-	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
-	username:     testUsername,
-	password:     testPassword,
-	expectStatus: http.StatusNotFound,
-	expectBody: params.Error{
-		Code:    params.ErrNotFound,
-		Message: `base entity "cs:~charmers/mysql" not found`,
-	},
-	expectEntities: []*mongodoc.Entity{
-		storetesting.NewEntity("~charmers/trusty/wordpress-0").Build(),
-	},
-	expectBaseEntities: []*mongodoc.BaseEntity{
-		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
-	},
-}, {
-	about: "unpromulgate base entity not found, fully qualified URL",
-	entities: []*mongodoc.Entity{
-		storetesting.NewEntity("~charmers/trusty/wordpress-0").Build(),
-	},
-	baseEntities: []*mongodoc.BaseEntity{
-		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
-	},
-	id:           "~charmers/precise/mysql-9",
-	body:         storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
-	username:     testUsername,
-	password:     testPassword,
-	expectStatus: http.StatusNotFound,
-	expectBody: params.Error{
-		Code:    params.ErrNotFound,
-		Message: `base entity "cs:~charmers/mysql" not found`,
 	},
 	expectEntities: []*mongodoc.Entity{
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").Build(),
