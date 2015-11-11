@@ -1098,7 +1098,7 @@ var archiveFileErrorsTests = []struct {
 	about:         "entity not found",
 	path:          "~charmers/trusty/no-such-42/archive/icon.svg",
 	expectStatus:  http.StatusNotFound,
-	expectMessage: `entity "cs:~charmers/trusty/no-such-42" not found`,
+	expectMessage: `no matching charm or bundle for "cs:~charmers/trusty/no-such-42"`,
 	expectCode:    params.ErrNotFound,
 }, {
 	about:         "directory listing",
@@ -1238,9 +1238,8 @@ func (s *ArchiveSuite) TestBundleCharms(c *gc.C) {
 		},
 	}, {
 		about: "partial ids",
-		ids:   []string{"~charmers/utopic/wordpress", "~charmers/mysql-0", "~charmers/riak"},
+		ids:   []string{"~charmers/utopic/wordpress", "~charmers/riak"},
 		charms: map[string]charm.Charm{
-			"~charmers/mysql-0":          mysql,
 			"~charmers/riak":             riak,
 			"~charmers/utopic/wordpress": wordpress,
 		},
@@ -1364,7 +1363,7 @@ func (s *ArchiveSuite) TestDeleteNotFound(c *gc.C) {
 		Password:     testPassword,
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
-			Message: `entity "cs:~charmers/utopic/no-such-0" not found`,
+			Message: `no matching charm or bundle for "cs:~charmers/utopic/no-such-0"`,
 			Code:    params.ErrNotFound,
 		},
 	})
@@ -1569,115 +1568,26 @@ var getNewPromulgatedRevisionTests = []struct {
 }}
 
 func (s *ArchiveSuite) TestGetNewPromulgatedRevision(c *gc.C) {
-	err := s.store.DB.BaseEntities().Insert(&mongodoc.BaseEntity{
-		URL:    charm.MustParseReference("cs:~dduck/mysql"),
-		User:   "dduck",
-		Name:   "mysql",
-		Public: true,
-		ACLs: mongodoc.ACL{
-			Read: []string{"everyone", "dduck"},
-		},
-		Promulgated: false,
-	})
-	c.Assert(err, gc.IsNil)
-	err = s.store.DB.BaseEntities().Insert(&mongodoc.BaseEntity{
-		URL:    charm.MustParseReference("cs:~goofy/mysql"),
-		User:   "goofy",
-		Name:   "mysql",
-		Public: true,
-		ACLs: mongodoc.ACL{
-			Read: []string{"everyone", "goofy"},
-		},
-		Promulgated: true,
-	})
-	c.Assert(err, gc.IsNil)
-	err = s.store.DB.BaseEntities().Insert(&mongodoc.BaseEntity{
-		URL:    charm.MustParseReference("cs:~pluto/mariadb"),
-		User:   "pluto",
-		Name:   "mariadb",
-		Public: true,
-		ACLs: mongodoc.ACL{
-			Read: []string{"everyone", "pluto"},
-		},
-		Promulgated: true,
-	})
-	c.Assert(err, gc.IsNil)
-	err = s.store.DB.BaseEntities().Insert(&mongodoc.BaseEntity{
-		URL:    charm.MustParseReference("cs:~tom/sed"),
-		User:   "tom",
-		Name:   "sed",
-		Public: true,
-		ACLs: mongodoc.ACL{
-			Read: []string{"everyone", "tom"},
-		},
-		Promulgated: true,
-	})
-	c.Assert(err, gc.IsNil)
-	err = s.store.DB.BaseEntities().Insert(&mongodoc.BaseEntity{
-		URL:    charm.MustParseReference("cs:~jerry/sed"),
-		User:   "jerry",
-		Name:   "sed",
-		Public: true,
-		ACLs: mongodoc.ACL{
-			Read: []string{"everyone", "jerry"},
-		},
-		Promulgated: false,
-	})
-	c.Assert(err, gc.IsNil)
-	err = s.store.DB.BaseEntities().Insert(&mongodoc.BaseEntity{
-		URL:    charm.MustParseReference("cs:~tom/awk"),
-		User:   "tom",
-		Name:   "awk",
-		Public: true,
-		ACLs: mongodoc.ACL{
-			Read: []string{"everyone", "tom"},
-		},
-		Promulgated: true,
-	})
-	c.Assert(err, gc.IsNil)
-	err = s.store.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                 charm.MustParseReference("cs:~pluto/trusty/mariadb-5"),
-		User:                "pluto",
-		Name:                "mariadb",
-		Series:              "trusty",
-		Revision:            5,
-		PromulgatedURL:      charm.MustParseReference("cs:trusty/mariadb-3"),
-		PromulgatedRevision: 3,
-	})
-	c.Assert(err, gc.IsNil)
-	err = s.store.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                 charm.MustParseReference("cs:~tom/trusty/sed-0"),
-		User:                "tom",
-		Name:                "sed",
-		Series:              "trusty",
-		Revision:            0,
-		PromulgatedURL:      charm.MustParseReference("cs:trusty/sed-0"),
-		PromulgatedRevision: 0,
-	})
-	c.Assert(err, gc.IsNil)
-	err = s.store.DB.Entities().Insert(&mongodoc.Entity{
-		URL:                 charm.MustParseReference("cs:~jerry/trusty/sed-3"),
-		User:                "jerry",
-		Name:                "sed",
-		Series:              "trusty",
-		Revision:            3,
-		PromulgatedURL:      charm.MustParseReference("cs:trusty/sed-4"),
-		PromulgatedRevision: 4,
-	})
-	c.Assert(err, gc.IsNil)
-	id := charm.MustParseReference("cs:~tom/trusty/awk")
-	pid := charm.MustParseReference("cs:trusty/awk")
-	for i := 0; i < 5; i++ {
-		id.Revision = i
-		pid.Revision = i
-		err = s.store.DB.Entities().Insert(&mongodoc.Entity{
-			URL:                 id,
-			User:                "tom",
-			Name:                "awk",
-			Series:              "trusty",
-			Revision:            i,
-			PromulgatedURL:      pid,
-			PromulgatedRevision: i,
+	charms := []string{
+		"cs:~dduck/trusty/mysql-14",
+		"14 cs:~goofy/precise/mysql-14",
+		"3 cs:~pluto/trusty/mariadb-5",
+		"0 cs:~tom/trusty/sed-0",
+		"cs:~jerry/trusty/sed-2",
+		"4 cs:~jerry/trusty/sed-3",
+		"0 cs:~tom/trusty/awk-0",
+		"1 cs:~tom/trusty/awk-1",
+		"2 cs:~tom/trusty/awk-2",
+		"3 cs:~tom/trusty/awk-3",
+		"4 cs:~tom/trusty/awk-4",
+	}
+	for _, ch := range charms {
+		url := mustParseResolvedURL(ch)
+		err := s.store.AddCharm(&relationTestingCharm{}, charmstore.AddParams{
+			URL:      url,
+			BlobName: "blobName",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
 		})
 		c.Assert(err, gc.IsNil)
 	}
