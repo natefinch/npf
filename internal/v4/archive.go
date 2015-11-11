@@ -98,6 +98,10 @@ func (h *ReqHandler) authorizeUpload(id *charm.Reference, req *http.Request) err
 }
 
 func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
+	err := h.checkTerms(id, req)
+	if err != nil {
+		return err
+	}
 	r, size, hash, err := h.Store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))

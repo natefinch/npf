@@ -5,6 +5,7 @@ package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 import (
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -73,6 +74,46 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 	// TODO use a relative URL here: router.RelativeURLPath(req.RequestURI, "/")
 	cookiePath := "/"
 	return authorization{}, httpbakery.NewDischargeRequiredErrorForRequest(m, cookiePath, verr, req)
+}
+
+func (h *ReqHandler) checkTerms(id *router.ResolvedURL, req *http.Request) error {
+	user, passwd, err := parseCredentials(req)
+	if err == nil {
+		if user != h.handler.config.AuthUsername || passwd != h.handler.config.AuthPassword {
+			return errgo.WithCausef(nil, params.ErrUnauthorized, "invalid user name or password")
+		}
+		return nil
+	}
+	entity, err := h.Store.FindEntity(id)
+	if err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	if len(entity.CharmMeta.Terms) > 0 {
+		if h.handler.config.TermsLocation == "" {
+			return errgo.New("charmstore not serving charms requiring agreement to terms and conditions")
+		}
+
+		_, verr := httpbakery.CheckRequest(h.Store.Bakery, req, nil, checkers.OperationChecker("get-archive"))
+		if verr == nil {
+			return nil
+		}
+		if _, ok := errgo.Cause(verr).(*bakery.VerificationError); !ok {
+			return errgo.Mask(verr)
+		}
+		bk := h.Store.Bakery
+		if bk == nil || h.handler.config.TermsLocation == "" {
+			return errgo.WithCausef(verr, params.ErrUnauthorized, "authentication failed")
+		}
+		m, err := h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
+			checkers.Caveat{h.handler.config.TermsLocation, fmt.Sprintf("has-agreed %s", strings.Join(entity.CharmMeta.Terms, ","))},
+			checkers.AllowCaveat("get-archive"),
+		})
+		if err != nil {
+			return errgo.Mask(err)
+		}
+		return httpbakery.NewDischargeRequiredError(m, "/", verr)
+	}
+	return nil
 }
 
 // checkRequest checks for any authorization tokens in the request and returns any
