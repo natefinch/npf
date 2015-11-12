@@ -1187,6 +1187,21 @@ func (s *StoreSuite) TestAddCharmWithMultipleSeries(c *gc.C) {
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
 
+func (s *StoreSuite) TestAddCharmWithSeriesWhenThereIsAnExistingMultiSeriesVersion(c *gc.C) {
+	store := s.newStore(c, false)
+	defer store.Close()
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
+	err := store.AddCharm(ch, AddParams{
+		URL: newResolvedURL("~charmers/multi-series-1", -1),
+	})
+	c.Assert(err, gc.IsNil)
+	ch = storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
+	err = store.AddCharm(ch, AddParams{
+		URL: newResolvedURL("~charmers/trusty/multi-series-2", -1),
+	})
+	c.Assert(err, gc.ErrorMatches, `charm name duplicates multi-series charm name cs:~charmers/multi-series-1`)
+}
+
 var addInvalidCharmURLTests = []string{
 	"cs:precise/wordpress-2",          // no user
 	"cs:~charmers/precise/wordpress",  // no revision
