@@ -144,8 +144,9 @@ type Router struct {
 }
 
 // ResolvedURL represents a URL that has been resolved by resolveURL.
-// URL.User and URL.Series should always be non-empty and
-// URL.Revision should never be -1.
+// URL.User should always be non-empty and URL.Revision should never be
+// -1. URL.Series will only be non-empty if the URL refers to a
+// multi-series charm.
 //
 // If PromulgatedRevision is not -1, it holds the revision of the
 // promulgated version of the charm.
@@ -160,10 +161,10 @@ type ResolvedURL struct {
 // value.
 //
 // This function panics if urlStr cannot be parsed as a charm.Reference
-// or if it is not fully specified, including user, series and revision.
+// or if it is not fully specified, including user and revision.
 func MustNewResolvedURL(urlStr string, promulgatedRev int) *ResolvedURL {
 	url := charm.MustParseReference(urlStr)
-	if url.User == "" || url.Series == "" || url.Revision == -1 {
+	if url.User == "" || url.Revision == -1 {
 		panic(fmt.Errorf("incomplete url %v", urlStr))
 	}
 	return &ResolvedURL{
