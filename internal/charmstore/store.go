@@ -549,7 +549,9 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	denormalizeEntity(entity)
 
 	// Check that we're not going to create a charm that duplicates
-	// the name of a bundle. This is racy, but it's the best we can do.
+	// the name of a bundle. This is racy, but it's the best we can
+	// do. Also check that there isn't an existing multi-series charm
+	// that would be replaced by this one.
 	entities, err := s.FindEntities(entity.BaseURL)
 	if err != nil {
 		return errgo.Notef(err, "cannot check for existing entities")
@@ -557,6 +559,9 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	for _, entity := range entities {
 		if entity.URL.Series == "bundle" {
 			return errgo.Newf("charm name duplicates bundle name %v", entity.URL)
+		}
+		if p.URL.URL.Series != "" && entity.URL.Series == "" {
+			return errgo.Newf("charm name duplicates multi-series charm name %v", entity.URL)
 		}
 	}
 	if err := s.insertEntity(entity); err != nil {
