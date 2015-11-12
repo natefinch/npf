@@ -1167,7 +1167,7 @@ func (s *StoreSuite) TestAddCharmWithBundleSeries(c *gc.C) {
 	c.Assert(err, gc.ErrorMatches, `charm added with invalid id cs:~charmers/bundle/wordpress-2`)
 }
 
-func (s *StoreSuite) TestAddCharmWithMultipleSeries(c *gc.C) {
+func (s *StoreSuite) TestAddCharmWithMultiSeries(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
@@ -1200,6 +1200,13 @@ func (s *StoreSuite) TestAddCharmWithSeriesWhenThereIsAnExistingMultiSeriesVersi
 		URL: newResolvedURL("~charmers/trusty/multi-series-2", -1),
 	})
 	c.Assert(err, gc.ErrorMatches, `charm name duplicates multi-series charm name cs:~charmers/multi-series-1`)
+}
+
+func (s *StoreSuite) TestAddCharmWithMultiSeriesToES(c *gc.C) {
+	store := s.newStore(c, true)
+	defer store.Close()
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
+	s.checkAddCharm(c, ch, true, newResolvedURL("~charmers/juju-gui-1", 1))
 }
 
 var addInvalidCharmURLTests = []string{

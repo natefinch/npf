@@ -66,6 +66,7 @@ type SearchDoc struct {
 	*mongodoc.Entity
 	TotalDownloads int64
 	ReadACLs       []string
+	Series         []string
 }
 
 // UpdateSearchAsync will update the search record for the entity
@@ -210,6 +211,11 @@ func (s *Store) searchDocFromEntity(e *mongodoc.Entity, be *mongodoc.BaseEntity)
 		return nil, errgo.Mask(err)
 	}
 	doc.TotalDownloads = allRevisions.Total
+	if doc.Entity.Series == "bundle" {
+		doc.Series = []string{"bundle"}
+	} else {
+		doc.Series = doc.Entity.SupportedSeries
+	}
 	return &doc, nil
 }
 
@@ -229,6 +235,21 @@ func (si *SearchIndex) update(doc *SearchDoc) error {
 		doc)
 	if err != nil && err != elasticsearch.ErrConflict {
 		return errgo.Mask(err)
+	}
+	if doc.Entity.URL.Series != "" {
+		return nil
+	}
+	// This document represents a multi-series charm. It might be
+	// replacing existing documents for previous single-series
+	// charms. Remove any documents that this replaces.
+	for _, series := range doc.Entity.SupportedSeries {
+		u := *doc.Entity.URL
+		u.Series = series
+		err := si.DeleteDocument(si.Index, typeName, si.getID(&u))
+		if err != nil && errgo.Cause(err) != elasticsearch.ErrNotFound {
+			u.Revision = -1
+			logger.Errorf("cannot remove old search document for %q: %s", u, err)
+		}
 	}
 	return nil
 }
