@@ -155,7 +155,8 @@ type BaseEntity struct {
 	// The permissions apply to all revisions.
 	ACLs ACL
 
-	// DevelopmentACLs is similar to ACLs but applies to development revisions.
+	// DevelopmentACLs is similar to ACLs but applies to all development
+	// revisions.
 	DevelopmentACLs ACL
 
 	// Promulgated specifies whether the charm or bundle should be
