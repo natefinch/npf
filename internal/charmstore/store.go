@@ -523,8 +523,11 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	// always be canonical, but check just in case anyway, as this is
 	// final gateway before a potentially invalid url might be stored
 	// in the database.
-	if p.URL.URL.Series == "bundle" || p.URL.URL.User == "" || p.URL.URL.Revision == -1 || p.URL.URL.Series == "" {
+	if p.URL.URL.Series == "bundle" || p.URL.URL.User == "" || p.URL.URL.Revision == -1 {
 		return errgo.Newf("charm added with invalid id %v", &p.URL.URL)
+	}
+	if p.URL.URL.Series == "" && len(c.Meta().Series) == 0 {
+		return errgo.Newf("charm added without series %v", &p.URL.URL)
 	}
 	logger.Infof("add charm url %s; prev %d", &p.URL.URL, p.URL.PromulgatedRevision)
 	entity := &mongodoc.Entity{
@@ -541,6 +544,7 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 		CharmProvidedInterfaces: interfacesForRelations(c.Meta().Provides),
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
 		Contents:                p.Contents,
+		SupportedSeries:         c.Meta().Series,
 	}
 	denormalizeEntity(entity)
 

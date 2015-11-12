@@ -101,6 +101,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, url *r
 		CharmProvidedInterfaces: []string{"http", "logging", "monitoring"},
 		CharmRequiredInterfaces: []string{"mysql", "varnish"},
 		PromulgatedURL:          url.PromulgatedURL(),
+		SupportedSeries:         ch.Meta().Series,
 	}))
 
 	// The charm archive has been properly added to the blob store.
@@ -1166,10 +1167,32 @@ func (s *StoreSuite) TestAddCharmWithBundleSeries(c *gc.C) {
 	c.Assert(err, gc.ErrorMatches, `charm added with invalid id cs:~charmers/bundle/wordpress-2`)
 }
 
+func (s *StoreSuite) TestAddCharmWithMultipleSeries(c *gc.C) {
+	store := s.newStore(c, false)
+	defer store.Close()
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "juju-gui")
+	s.checkAddCharm(c, ch, false, newResolvedURL("~charmers/juju-gui-1", 1))
+	// Make sure it can be accessed with a number of names
+	e, err := store.FindEntity(newResolvedURL("~charmers/juju-gui-1", 1))
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/juju-gui-1")
+	e, err = store.FindEntity(newResolvedURL("~charmers/lucid/juju-gui-1", 1))
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/juju-gui-1")
+	e, err = store.FindEntity(newResolvedURL("~charmers/trusty/juju-gui-1", 1))
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/juju-gui-1")
+	e, err = store.FindEntity(newResolvedURL("~charmers/wily/juju-gui-1", 1))
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/juju-gui-1")
+	_, err = store.FindEntity(newResolvedURL("~charmers/precise/juju-gui-1", 1))
+	c.Assert(err, gc.ErrorMatches, "entity not found")
+	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
+}
+
 var addInvalidCharmURLTests = []string{
 	"cs:precise/wordpress-2",          // no user
 	"cs:~charmers/precise/wordpress",  // no revision
-	"cs:~charmers/wordpress-3",        // no series
 	"cs:~charmers/bundle/wordpress-2", // invalid series
 }
 
@@ -1187,6 +1210,16 @@ func (s *StoreSuite) TestAddInvalidCharmURL(c *gc.C) {
 		})
 		c.Assert(err, gc.ErrorMatches, `charm added with invalid id .*`)
 	}
+}
+
+func (s *StoreSuite) TestAddNoSeries(c *gc.C) {
+	store := s.newStore(c, false)
+	defer store.Close()
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
+	err := store.AddCharm(ch, AddParams{
+		URL: newResolvedURL("cs:~charmers/wordpress-1", -1),
+	})
+	c.Assert(err, gc.ErrorMatches, `charm added without series cs:~charmers/wordpress-1`)
 }
 
 var addInvalidBundleURLTests = []string{
