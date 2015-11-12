@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	migrationAddSupportedSeries mongodoc.MigrationName = "add supported series"
+	migrationAddSupportedSeries        mongodoc.MigrationName = "add supported series"
+	migrationHandleDevelopmentEntities mongodoc.MigrationName = "handle development entities"
 )
 
 // migrations holds all the migration functions that are executed in the order
@@ -39,6 +40,9 @@ var migrations = []migration{{
 }, {
 	name:    migrationAddSupportedSeries,
 	migrate: addSupportedSeries,
+}, {
+	name:    migrationHandleDevelopmentEntities,
+	migrate: handleDevelopmentEntities,
 }}
 
 // migration holds a migration function with its corresponding name.
@@ -134,6 +138,36 @@ func addSupportedSeries(db StoreDatabase) error {
 	}
 	if err := iter.Close(); err != nil {
 		return errgo.Notef(err, "cannot iterate entities")
+	}
+	return nil
+}
+
+// handleDevelopmentEntities adds the Development field to all entities and
+// sets up ACLs for development revisions.
+func handleDevelopmentEntities(db StoreDatabase) error {
+	logger.Infof("adding development field to all entities")
+	if _, err := db.Entities().UpdateAll(nil, bson.D{{
+		"$set", bson.D{{"development", false}},
+	}}); err != nil {
+		return errgo.Notef(err, "cannot add development field to all entities")
+	}
+
+	logger.Infof("adding development ACLs to all base entities")
+	baseEntities := db.BaseEntities()
+	var baseEntity mongodoc.BaseEntity
+	iter := baseEntities.Find(bson.D{{
+		"developmentacls", bson.D{{"$exists", false}},
+	}}).Select(bson.D{{"_id", 1}, {"acls", 1}}).Iter()
+	defer iter.Close()
+	for iter.Next(&baseEntity) {
+		if err := baseEntities.UpdateId(baseEntity.URL, bson.D{{
+			"$set", bson.D{{"developmentacls", baseEntity.ACLs}},
+		}}); err != nil {
+			return errgo.Notef(err, "cannot add development ACLs to base entity id %s", baseEntity.URL)
+		}
+	}
+	if err := iter.Close(); err != nil {
+		return errgo.Notef(err, "cannot iterate base entities")
 	}
 	return nil
 }

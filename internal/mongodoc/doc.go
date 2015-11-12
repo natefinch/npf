@@ -114,6 +114,11 @@ type Entity struct {
 	// PromulgatedRevision holds the revision number from the promulgated URL.
 	// If the entity is not promulgated this should be set to -1.
 	PromulgatedRevision int `bson:"promulgated-revision"`
+
+	// Development holds whether the entity is in development or published.
+	// A development entity can only be referred to using URLs including the
+	// "development" channel.
+	Development bool
 }
 
 // PreferredURL returns the preferred way to refer to this entity. If
@@ -146,10 +151,12 @@ type BaseEntity struct {
 	// be ignored when reading a charm.
 	Public bool
 
-	// ACLs holds permission information relevant to
-	// the base entity. The permissions apply to all
-	// revisions.
+	// ACLs holds permission information relevant to the base entity.
+	// The permissions apply to all revisions.
 	ACLs ACL
+
+	// DevelopmentACLs is similar to ACLs but applies to development revisions.
+	DevelopmentACLs ACL
 
 	// Promulgated specifies whether the charm or bundle should be
 	// promulgated.

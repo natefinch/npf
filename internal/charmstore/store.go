@@ -439,6 +439,7 @@ func (s *Store) AddCharmWithArchive(url *router.ResolvedURL, ch charm.Charm) err
 		BlobHash:    blobHash,
 		BlobHash256: blobHash256,
 		BlobSize:    blobSize,
+		Development: url.Development,
 	})
 }
 
@@ -463,6 +464,7 @@ func (s *Store) AddBundleWithArchive(url *router.ResolvedURL, b charm.Bundle) er
 		BlobHash:    blobHash,
 		BlobHash256: blobHash256,
 		BlobSize:    size,
+		Development: url.Development,
 	})
 }
 
@@ -514,6 +516,9 @@ type AddParams struct {
 	// Contents holds references to files inside the
 	// entity's archive blob.
 	Contents map[mongodoc.FileId]mongodoc.ZipFile
+
+	// Development holds whether the entity revision is in development.
+	Development bool
 }
 
 // AddCharm adds a charm entities collection with the given
@@ -545,6 +550,7 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
 		Contents:                p.Contents,
 		SupportedSeries:         c.Meta().Series,
+		Development:             p.Development,
 	}
 	denormalizeEntity(entity)
 
@@ -602,16 +608,18 @@ var everyonePerm = []string{params.Everyone}
 func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 	// Add the base entity to the database.
 	perms := []string{entity.User}
+	acls := mongodoc.ACL{
+		Read:  perms,
+		Write: perms,
+	}
 	baseEntity := &mongodoc.BaseEntity{
-		URL:    entity.BaseURL,
-		User:   entity.User,
-		Name:   entity.Name,
-		Public: false,
-		ACLs: mongodoc.ACL{
-			Read:  perms,
-			Write: perms,
-		},
-		Promulgated: entity.PromulgatedURL != nil,
+		URL:             entity.BaseURL,
+		User:            entity.User,
+		Name:            entity.Name,
+		Public:          false,
+		ACLs:            acls,
+		DevelopmentACLs: acls,
+		Promulgated:     entity.PromulgatedURL != nil,
 	}
 	err = s.DB.BaseEntities().Insert(baseEntity)
 	if err != nil && !mgo.IsDup(err) {
@@ -1021,6 +1029,7 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 		BundleCharms:       urls,
 		Contents:           p.Contents,
 		PromulgatedURL:     p.URL.PromulgatedURL(),
+		Development:        p.Development,
 	}
 	denormalizeEntity(entity)
 
