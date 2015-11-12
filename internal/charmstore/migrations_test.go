@@ -41,14 +41,14 @@ var (
 	// migrationEntityFields holds the fields added to mongodoc.Entity,
 	// keyed by the migration step that added them.
 	migrationEntityFields = map[mongodoc.MigrationName][]string{
-		migrationAddSupportedSeries:        {"supportedseries"},
-		migrationHandleDevelopmentEntities: {"development"},
+		migrationAddSupportedSeries: {"supportedseries"},
+		migrationAddDevelopment:     {"development"},
 	}
 
 	// migrationBaseEntityFields holds the fields added to mongodoc.BaseEntity,
 	// keyed by the migration step that added them.
 	migrationBaseEntityFields = map[mongodoc.MigrationName][]string{
-		migrationHandleDevelopmentEntities: {"developmentacls"},
+		migrationAddDevelopmentACLs: {"developmentacls"},
 	}
 
 	// initialFields holds all the mongodoc.Entity fields
@@ -365,8 +365,8 @@ func (s *migrationsSuite) TestMigrateAddSupportedSeries(c *gc.C) {
 	}
 }
 
-func (s *migrationsSuite) TestMigrateHandleDevelopmentEntities(c *gc.C) {
-	s.patchMigrations(c, getMigrations(migrationHandleDevelopmentEntities))
+func (s *migrationsSuite) TestMigrateAddDevelopment(c *gc.C) {
+	s.patchMigrations(c, getMigrations(migrationAddDevelopment))
 
 	// Populate the database with some entities.
 	entities := []*mongodoc.Entity{{
@@ -382,7 +382,7 @@ func (s *migrationsSuite) TestMigrateHandleDevelopmentEntities(c *gc.C) {
 	}}
 	for _, e := range entities {
 		denormalizeEntity(e)
-		s.insertEntity(c, e, migrationHandleDevelopmentEntities)
+		s.insertEntity(c, e, migrationAddDevelopment)
 	}
 
 	// Start the server.
@@ -401,8 +401,8 @@ func (s *migrationsSuite) TestMigrateHandleDevelopmentEntities(c *gc.C) {
 	}
 }
 
-func (s *migrationsSuite) TestMigrateHandleDevelopmentEntitiesBaseEntities(c *gc.C) {
-	s.patchMigrations(c, getMigrations(migrationHandleDevelopmentEntities))
+func (s *migrationsSuite) TestMigrateAddDevelopmentACLs(c *gc.C) {
+	s.patchMigrations(c, getMigrations(migrationAddDevelopmentACLs))
 
 	// Populate the database with some entities.
 	entities := []*mongodoc.BaseEntity{{
@@ -428,7 +428,7 @@ func (s *migrationsSuite) TestMigrateHandleDevelopmentEntitiesBaseEntities(c *gc
 		},
 	}}
 	for _, e := range entities {
-		s.insertBaseEntity(c, e, migrationHandleDevelopmentEntities)
+		s.insertBaseEntity(c, e, migrationAddDevelopmentACLs)
 	}
 
 	// Start the server.
@@ -439,7 +439,7 @@ func (s *migrationsSuite) TestMigrateHandleDevelopmentEntitiesBaseEntities(c *gc
 	s.checkCount(c, s.db.BaseEntities(), len(entities))
 	for _, e := range entities {
 		e.DevelopmentACLs = e.ACLs
-		s.checkBaseEntity(c, e, migrationHandleDevelopmentEntities)
+		s.checkBaseEntity(c, e, migrationAddDevelopmentACLs)
 	}
 }
 

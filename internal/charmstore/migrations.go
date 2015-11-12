@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	migrationAddSupportedSeries        mongodoc.MigrationName = "add supported series"
-	migrationHandleDevelopmentEntities mongodoc.MigrationName = "handle development entities"
+	migrationAddSupportedSeries mongodoc.MigrationName = "add supported series"
+	migrationAddDevelopment     mongodoc.MigrationName = "add development"
+	migrationAddDevelopmentACLs mongodoc.MigrationName = "add development acls"
 )
 
 // migrations holds all the migration functions that are executed in the order
@@ -41,8 +42,11 @@ var migrations = []migration{{
 	name:    migrationAddSupportedSeries,
 	migrate: addSupportedSeries,
 }, {
-	name:    migrationHandleDevelopmentEntities,
-	migrate: handleDevelopmentEntities,
+	name:    migrationAddDevelopment,
+	migrate: addDevelopment,
+}, {
+	name:    migrationAddDevelopmentACLs,
+	migrate: addDevelopmentACLs,
 }}
 
 // migration holds a migration function with its corresponding name.
@@ -142,16 +146,22 @@ func addSupportedSeries(db StoreDatabase) error {
 	return nil
 }
 
-// handleDevelopmentEntities adds the Development field to all entities and
-// sets up ACLs for development revisions.
-func handleDevelopmentEntities(db StoreDatabase) error {
+// addDevelopment adds the Development field to all entities on which that
+// field is not present.
+func addDevelopment(db StoreDatabase) error {
 	logger.Infof("adding development field to all entities")
-	if _, err := db.Entities().UpdateAll(nil, bson.D{{
+	if _, err := db.Entities().UpdateAll(bson.D{{
+		"development", bson.D{{"$exists", false}},
+	}}, bson.D{{
 		"$set", bson.D{{"development", false}},
 	}}); err != nil {
 		return errgo.Notef(err, "cannot add development field to all entities")
 	}
+	return nil
+}
 
+// addDevelopmentACLs sets up ACLs on base entities for development revisions.
+func addDevelopmentACLs(db StoreDatabase) error {
 	logger.Infof("adding development ACLs to all base entities")
 	baseEntities := db.BaseEntities()
 	var baseEntity mongodoc.BaseEntity
