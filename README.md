@@ -1,6 +1,6 @@
 # juju/charmstore
 
-Store and publish Juju charms.
+Store and publish Juju charms and bundles.
 
 ## Installation
 

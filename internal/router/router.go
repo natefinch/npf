@@ -144,15 +144,17 @@ type Router struct {
 }
 
 // ResolvedURL represents a URL that has been resolved by resolveURL.
-// URL.User should always be non-empty and URL.Revision should never be
-// -1. URL.Series will only be non-empty if the URL refers to a
-// multi-series charm.
-//
-// If PromulgatedRevision is not -1, it holds the revision of the
-// promulgated version of the charm.
 type ResolvedURL struct {
-	URL                 charm.Reference
+	// URL holds the fully qualified URL. URL.User should always be non-empty
+	// and URL.Revision should never be -1. URL.Series will only be non-empty
+	// if the URL refers to a multi-series charm.
+	URL charm.Reference
+	// PromulgatedRevision holds the revision of the promulgated version of the
+	// charm or -1 if the corresponding entity is not promulgated.
 	PromulgatedRevision int
+	// Development holds whether the original entity URL included the
+	// "development" channel.
+	Development bool
 }
 
 // MustNewResolvedURL returns a new ResolvedURL by parsing

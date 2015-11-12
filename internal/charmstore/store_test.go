@@ -102,6 +102,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, url *r
 		CharmRequiredInterfaces: []string{"mysql", "varnish"},
 		PromulgatedURL:          url.PromulgatedURL(),
 		SupportedSeries:         ch.Meta().Series,
+		Development:             url.Development,
 	}))
 
 	// The charm archive has been properly added to the blob store.
@@ -188,6 +189,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool, 
 		BundleMachineCount: newInt(2),
 		BundleUnitCount:    newInt(2),
 		PromulgatedURL:     url.PromulgatedURL(),
+		Development:        url.Development,
 	}))
 
 	// The bundle archive has been properly added to the blob store.
@@ -219,12 +221,13 @@ func assertBaseEntity(c *gc.C, store *Store, url *charm.Reference, promulgated b
 		Write: []string{url.User},
 	}
 	c.Assert(baseEntity, jc.DeepEquals, &mongodoc.BaseEntity{
-		URL:         url,
-		User:        url.User,
-		Name:        url.Name,
-		Public:      false,
-		ACLs:        expectACLs,
-		Promulgated: mongodoc.IntBool(promulgated),
+		URL:             url,
+		User:            url.User,
+		Name:            url.Name,
+		Public:          false,
+		ACLs:            expectACLs,
+		DevelopmentACLs: expectACLs,
+		Promulgated:     mongodoc.IntBool(promulgated),
 	})
 }
 
@@ -513,6 +516,10 @@ var findBaseEntityTests = []struct {
 		Public:      false,
 		Promulgated: true,
 		ACLs: mongodoc.ACL{
+			Read:  []string{"charmers"},
+			Write: []string{"charmers"},
+		},
+		DevelopmentACLs: mongodoc.ACL{
 			Read:  []string{"charmers"},
 			Write: []string{"charmers"},
 		},
@@ -1119,6 +1126,15 @@ func (s *StoreSuite) TestAddUserOwnedCharmArchive(c *gc.C) {
 	s.checkAddCharm(c, charmArchive, false, newResolvedURL("~charmers/precise/wordpress-1", -1))
 }
 
+func (s *StoreSuite) TestAddDevelopmentCharmArchive(c *gc.C) {
+	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
+	url := newResolvedURL("~charmers/precise/wordpress-1", 1)
+	// TODO frankban: this will be automatically handled by ResolvedURL when
+	// the concept of channel is introduced in charm.URL.
+	url.Development = true
+	s.checkAddCharm(c, charmArchive, false, url)
+}
+
 func (s *StoreSuite) TestAddBundleDir(c *gc.C) {
 	bundleDir := storetesting.Charms.BundleDir("wordpress-simple")
 	s.checkAddBundle(c, bundleDir, false, newResolvedURL("~charmers/bundle/wordpress-simple-2", 3))
@@ -1143,6 +1159,18 @@ func (s *StoreSuite) TestAddUserOwnedBundleArchive(c *gc.C) {
 	)
 	c.Assert(err, gc.IsNil)
 	s.checkAddBundle(c, bundleArchive, false, newResolvedURL("~charmers/bundle/wordpress-simple-1", -1))
+}
+
+func (s *StoreSuite) TestAddDevelopmentBundleArchive(c *gc.C) {
+	bundleArchive, err := charm.ReadBundleArchive(
+		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
+	)
+	c.Assert(err, gc.IsNil)
+	url := newResolvedURL("~charmers/bundle/wordpress-simple-2", 3)
+	// TODO frankban: this will be automatically handled by ResolvedURL when
+	// the concept of channel is introduced in charm.URL.
+	url.Development = true
+	s.checkAddBundle(c, bundleArchive, false, url)
 }
 
 func (s *StoreSuite) newStore(c *gc.C, withES bool) *Store {
