@@ -1170,22 +1170,19 @@ func (s *StoreSuite) TestAddCharmWithBundleSeries(c *gc.C) {
 func (s *StoreSuite) TestAddCharmWithMultipleSeries(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
-	ch := storetesting.Charms.CharmArchive(c.MkDir(), "juju-gui")
-	s.checkAddCharm(c, ch, false, newResolvedURL("~charmers/juju-gui-1", 1))
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
+	s.checkAddCharm(c, ch, false, newResolvedURL("~charmers/multi-series-1", 1))
 	// Make sure it can be accessed with a number of names
-	e, err := store.FindEntity(newResolvedURL("~charmers/juju-gui-1", 1))
+	e, err := store.FindEntity(newResolvedURL("~charmers/multi-series-1", 1))
 	c.Assert(err, gc.IsNil)
-	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/juju-gui-1")
-	e, err = store.FindEntity(newResolvedURL("~charmers/lucid/juju-gui-1", 1))
+	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
+	e, err = store.FindEntity(newResolvedURL("~charmers/trusty/multi-series-1", 1))
 	c.Assert(err, gc.IsNil)
-	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/juju-gui-1")
-	e, err = store.FindEntity(newResolvedURL("~charmers/trusty/juju-gui-1", 1))
+	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
+	e, err = store.FindEntity(newResolvedURL("~charmers/wily/multi-series-1", 1))
 	c.Assert(err, gc.IsNil)
-	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/juju-gui-1")
-	e, err = store.FindEntity(newResolvedURL("~charmers/wily/juju-gui-1", 1))
-	c.Assert(err, gc.IsNil)
-	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/juju-gui-1")
-	_, err = store.FindEntity(newResolvedURL("~charmers/precise/juju-gui-1", 1))
+	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
+	_, err = store.FindEntity(newResolvedURL("~charmers/precise/multi-series-1", 1))
 	c.Assert(err, gc.ErrorMatches, "entity not found")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
@@ -1742,8 +1739,8 @@ var findBestEntityTests = []struct {
 	url:       "wordpress-simple",
 	expectURL: "~donald/bundle/wordpress-simple-1",
 }, {
-	url:       "~pluto/juju-gui",
-	expectURL: "~pluto/wily/juju-gui-1",
+	url:       "~pluto/multi-series",
+	expectURL: "~pluto/wily/multi-series-1",
 }}
 
 func (s *StoreSuite) TestFindBestEntity(c *gc.C) {
@@ -1777,9 +1774,9 @@ func (s *StoreSuite) TestFindBestEntity(c *gc.C) {
 		URL:            charm.MustParseReference("~donald/bundle/wordpress-simple-1"),
 		PromulgatedURL: charm.MustParseReference("bundle/wordpress-simple-0"),
 	}, {
-		URL: charm.MustParseReference("~pluto/utopic/juju-gui-2"),
+		URL: charm.MustParseReference("~pluto/utopic/multi-series-2"),
 	}, {
-		URL: charm.MustParseReference("~pluto/wily/juju-gui-1"),
+		URL: charm.MustParseReference("~pluto/wily/multi-series-1"),
 	}}
 	for _, e := range entities {
 		err := store.DB.Entities().Insert(denormalizedEntity(e))
