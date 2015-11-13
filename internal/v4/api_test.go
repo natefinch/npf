@@ -316,6 +316,28 @@ var metaEndpoints = []metaEndpoint{{
 		c.Assert(data, gc.Equals, "value cs:~charmers/precise/wordpress-23")
 	},
 }, {
+	name: "common-extra-info",
+	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
+		return map[string]string{
+			"key": "value " + url.URL.String(),
+		}, nil
+	},
+	checkURL: newResolvedURL("~charmers/precise/wordpress-23", 23),
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.DeepEquals, map[string]string{
+			"key": "value cs:~charmers/precise/wordpress-23",
+		})
+	},
+}, {
+	name: "common-extra-info/key",
+	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
+		return "value " + url.URL.String(), nil
+	},
+	checkURL: newResolvedURL("~charmers/precise/wordpress-23", 23),
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.Equals, "value cs:~charmers/precise/wordpress-23")
+	},
+}, {
 	name: "perm",
 	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
 		e, err := store.FindBaseEntity(&url.URL)
@@ -518,7 +540,9 @@ func (s *APISuite) addTestEntities(c *gc.C) []*router.ResolvedURL {
 		}
 		// Associate some extra-info data with the entity.
 		key := e.URL.Path() + "/meta/extra-info/key"
+		commonkey := e.URL.Path() + "/meta/common-extra-info/key"
 		s.assertPut(c, key, "value "+e.URL.String())
+		s.assertPut(c, commonkey, "value "+e.URL.String())
 	}
 	return testEntities
 }
@@ -547,6 +571,7 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 				continue
 			}
 			tested = true
+			c.Logf("	path %q: %#v", url, path)
 			s.assertGet(c, path, expectData)
 		}
 		if !tested {
@@ -794,26 +819,30 @@ func (s *APISuite) TestMetaPermPutUnauthorized(c *gc.C) {
 func (s *APISuite) TestExtraInfo(c *gc.C) {
 	id := "precise/wordpress-23"
 	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/"+id, 23))
+	s.checkInfo(c, "extra-info", id)
+	s.checkInfo(c, "common-extra-info", id)
+}
 
+func (s *APISuite) checkInfo(c *gc.C, path string, id string) {
 	// Add one value and check that it's there.
-	s.assertPut(c, id+"/meta/extra-info/foo", "fooval")
-	s.assertGet(c, id+"/meta/extra-info/foo", "fooval")
-	s.assertGet(c, id+"/meta/extra-info", map[string]string{
+	s.assertPut(c, id+"/meta/"+path+"/foo", "fooval")
+	s.assertGet(c, id+"/meta/"+path+"/foo", "fooval")
+	s.assertGet(c, id+"/meta/"+path, map[string]string{
 		"foo": "fooval",
 	})
 
 	// Add another value and check that both values are there.
-	s.assertPut(c, id+"/meta/extra-info/bar", "barval")
-	s.assertGet(c, id+"/meta/extra-info/bar", "barval")
-	s.assertGet(c, id+"/meta/extra-info", map[string]string{
+	s.assertPut(c, id+"/meta/"+path+"/bar", "barval")
+	s.assertGet(c, id+"/meta/"+path+"/bar", "barval")
+	s.assertGet(c, id+"/meta/"+path, map[string]string{
 		"foo": "fooval",
 		"bar": "barval",
 	})
 
 	// Overwrite a value and check that it's changed.
-	s.assertPut(c, id+"/meta/extra-info/foo", "fooval2")
-	s.assertGet(c, id+"/meta/extra-info/foo", "fooval2")
-	s.assertGet(c, id+"/meta/extra-info", map[string]string{
+	s.assertPut(c, id+"/meta/"+path+"/foo", "fooval2")
+	s.assertGet(c, id+"/meta/"+path+"/foo", "fooval2")
+	s.assertGet(c, id+"/meta/"+path+"", map[string]string{
 		"foo": "fooval2",
 		"bar": "barval",
 	})
@@ -821,14 +850,14 @@ func (s *APISuite) TestExtraInfo(c *gc.C) {
 	// Write several values at once.
 	s.assertPut(c, id+"/meta/any", params.MetaAnyResponse{
 		Meta: map[string]interface{}{
-			"extra-info": map[string]string{
+			path: map[string]string{
 				"foo": "fooval3",
 				"baz": "bazval",
 			},
-			"extra-info/frob": []int{1, 4, 6},
+			path+"/frob": []int{1, 4, 6},
 		},
 	})
-	s.assertGet(c, id+"/meta/extra-info", map[string]interface{}{
+	s.assertGet(c, id+"/meta/"+path, map[string]interface{}{
 		"foo":  "fooval3",
 		"baz":  "bazval",
 		"bar":  "barval",
@@ -836,8 +865,8 @@ func (s *APISuite) TestExtraInfo(c *gc.C) {
 	})
 
 	// Delete a single value.
-	s.assertPut(c, id+"/meta/extra-info/foo", nil)
-	s.assertGet(c, id+"/meta/extra-info", map[string]interface{}{
+	s.assertPut(c, id+"/meta/"+path+"/foo", nil)
+	s.assertGet(c, id+"/meta/"+path, map[string]interface{}{
 		"baz":  "bazval",
 		"bar":  "barval",
 		"frob": []int{1, 4, 6},
@@ -846,7 +875,7 @@ func (s *APISuite) TestExtraInfo(c *gc.C) {
 	// Delete a value and add some values at the same time.
 	s.assertPut(c, id+"/meta/any", params.MetaAnyResponse{
 		Meta: map[string]interface{}{
-			"extra-info": map[string]interface{}{
+			path: map[string]interface{}{
 				"baz":    nil,
 				"bar":    nil,
 				"dazzle": "x",
@@ -854,7 +883,7 @@ func (s *APISuite) TestExtraInfo(c *gc.C) {
 			},
 		},
 	})
-	s.assertGet(c, id+"/meta/extra-info", map[string]interface{}{
+	s.assertGet(c, id+"/meta/"+path, map[string]interface{}{
 		"frob":   []int{1, 4, 6},
 		"dazzle": "x",
 		"fizzle": "y",
@@ -863,14 +892,14 @@ func (s *APISuite) TestExtraInfo(c *gc.C) {
 
 var extraInfoBadPutRequestsTests = []struct {
 	about        string
-	path         string
+	key         string
 	body         interface{}
 	contentType  string
 	expectStatus int
 	expectBody   params.Error
 }{{
 	about:        "key with extra element",
-	path:         "precise/wordpress-23/meta/extra-info/foo/bar",
+	key:          "foo/bar",
 	body:         "hello",
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
@@ -879,7 +908,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	},
 }, {
 	about:        "key with a dot",
-	path:         "precise/wordpress-23/meta/extra-info/foo.bar",
+	key:         "foo.bar",
 	body:         "hello",
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
@@ -888,7 +917,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	},
 }, {
 	about:        "key with a dollar",
-	path:         "precise/wordpress-23/meta/extra-info/foo$bar",
+	key:         "foo$bar",
 	body:         "hello",
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
@@ -897,7 +926,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	},
 }, {
 	about: "multi key with extra element",
-	path:  "precise/wordpress-23/meta/extra-info",
+	key:  "",
 	body: map[string]string{
 		"foo/bar": "value",
 	},
@@ -908,7 +937,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	},
 }, {
 	about: "multi key with dot",
-	path:  "precise/wordpress-23/meta/extra-info",
+	key:  "",
 	body: map[string]string{
 		".bar": "value",
 	},
@@ -919,7 +948,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	},
 }, {
 	about: "multi key with dollar",
-	path:  "precise/wordpress-23/meta/extra-info",
+	key:  "",
 	body: map[string]string{
 		"$bar": "value",
 	},
@@ -930,7 +959,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	},
 }, {
 	about:        "multi key with bad map",
-	path:         "precise/wordpress-23/meta/extra-info",
+	key:         "",
 	body:         "bad",
 	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
@@ -940,6 +969,7 @@ var extraInfoBadPutRequestsTests = []struct {
 
 func (s *APISuite) TestExtraInfoBadPutRequests(c *gc.C) {
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-23", 23))
+	path := "precise/wordpress-23/meta/"
 	for i, test := range extraInfoBadPutRequestsTests {
 		c.Logf("test %d: %s", i, test.about)
 		contentType := test.contentType
@@ -948,7 +978,20 @@ func (s *APISuite) TestExtraInfoBadPutRequests(c *gc.C) {
 		}
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: s.srv,
-			URL:     storeURL(test.path),
+			URL:     storeURL(path + "extra-info/" + test.key),
+			Method:  "PUT",
+			Header: http.Header{
+				"Content-Type": {contentType},
+			},
+			Username:     testUsername,
+			Password:     testPassword,
+			Body:         strings.NewReader(mustMarshalJSON(test.body)),
+			ExpectStatus: test.expectStatus,
+			ExpectBody:   test.expectBody,
+		})
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler: s.srv,
+			URL:     storeURL(path + "common-extra-info/" + test.key),
 			Method:  "PUT",
 			Header: http.Header{
 				"Content-Type": {contentType},
@@ -994,6 +1037,59 @@ func (s *APISuite) TestExtraInfoPutUnauthorized(c *gc.C) {
 		},
 		ExpectBody: dischargeRequiredBody,
 	})
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL("precise/wordpress-23/meta/common-extra-info"),
+		Method:  "PUT",
+		Header: http.Header{
+			"Content-Type": {"application/json"},
+		},
+		Body: strings.NewReader(mustMarshalJSON(map[string]string{
+			"bar": "value",
+		})),
+		ExpectStatus: http.StatusProxyAuthRequired,
+		ExpectBody:   dischargeRequiredBody,
+	})
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL("precise/wordpress-23/meta/common-extra-info"),
+		Method:  "PUT",
+		Header: http.Header{
+			"Content-Type":            {"application/json"},
+			"Bakery-Protocol-Version": {"1"},
+		},
+		Body: strings.NewReader(mustMarshalJSON(map[string]string{
+			"bar": "value",
+		})),
+		ExpectStatus: http.StatusUnauthorized,
+		ExpectHeader: http.Header{
+			"WWW-Authenticate": {"Macaroon"},
+		},
+		ExpectBody: dischargeRequiredBody,
+	})
+}
+
+func (s *APISuite) TestCommonExtraInfo(c *gc.C) {
+	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-23", 23))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-24", 24))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/trusty/wordpress-1", 1))
+
+	s.assertPut(c, "wordpress/meta/common-extra-info/key", "something")
+
+	s.assertGet(c, "wordpress/meta/common-extra-info", map[string]string {
+		"key": "something",
+	})
+	for i, u := range []string{"precise/wordpress-23", "precise/wordpress-24", "trusty/wordpress-1"} {
+		c.Logf("id %d: %q", i, u)
+		s.assertGet(c, u + "/meta/common-extra-info", map[string]string {
+			"key": "something",
+		})
+		e, err := s.store.FindBaseEntity(charm.MustParseURL(u))
+		c.Assert(err, gc.IsNil)
+		c.Assert(e.CommonExtraInfo, gc.DeepEquals, map[string][]byte {
+			"key": []byte("\"something\""),
+		})
+	}
 }
 
 func isNull(v interface{}) bool {

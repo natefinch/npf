@@ -169,6 +169,16 @@ func newReqHandler() *ReqHandler {
 				h.putMetaExtraInfoWithKey,
 				"extrainfo",
 			),
+			"common-extra-info": h.puttableBaseEntityHandler(
+				h.metaCommonExtraInfo,
+				h.putMetaCommonExtraInfo,
+				"commonextrainfo",
+			),
+			"common-extra-info/": h.puttableBaseEntityHandler(
+				h.metaCommonExtraInfoWithKey,
+				h.putMetaCommonExtraInfoWithKey,
+				"commonextrainfo",
+			),
 			"hash":             h.entityHandler(h.metaHash, "blobhash"),
 			"hash256":          h.entityHandler(h.metaHash256, "blobhash256"),
 			"id":               h.entityHandler(h.metaId, "_id"),
@@ -810,6 +820,71 @@ func (h *ReqHandler) putMetaExtraInfoWithKey(id *router.ResolvedURL, path string
 		updater.UpdateField("extrainfo."+key, nil, nil)
 	} else {
 		updater.UpdateField("extrainfo."+key, *val, nil)
+	}
+	return nil
+}
+
+// GET id/meta/common-extra-info
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacommon-extra-info
+func (h *ReqHandler) metaCommonExtraInfo(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	// The common-extra-info is stored in mongo as simple byte
+	// slices, so convert the values to json.RawMessages
+	// so that the client will see the original JSON.
+	m := make(map[string]*json.RawMessage)
+	for key, val := range entity.CommonExtraInfo {
+		jmsg := json.RawMessage(val)
+		m[key] = &jmsg
+	}
+	return m, nil
+}
+
+// GET id/meta/common-extra-info/key
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacommon-extra-infokey
+func (h *ReqHandler) metaCommonExtraInfoWithKey(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	path = strings.TrimPrefix(path, "/")
+	var data json.RawMessage = entity.CommonExtraInfo[path]
+	if len(data) == 0 {
+		return nil, nil
+	}
+	return &data, nil
+}
+
+// PUT id/meta/common-extra-info
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetacommon-extra-info
+func (h *ReqHandler) putMetaCommonExtraInfo(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+	var fields map[string]*json.RawMessage
+	if err := json.Unmarshal(*val, &fields); err != nil {
+		return errgo.Notef(err, "cannot unmarshal extra info body")
+	}
+	// Check all the fields are OK before adding any fields to be updated.
+	for key := range fields {
+		if err := checkExtraInfoKey(key); err != nil {
+			return err
+		}
+	}
+	for key, val := range fields {
+		if val == nil {
+			updater.UpdateField("commonextrainfo."+key, nil, nil)
+		} else {
+			updater.UpdateField("commonextrainfo."+key, *val, nil)
+		}
+	}
+	return nil
+}
+
+// PUT id/meta/common-extra-info/key
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetacommon-extra-infokey
+func (h *ReqHandler) putMetaCommonExtraInfoWithKey(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+	key := strings.TrimPrefix(path, "/")
+	if err := checkExtraInfoKey(key); err != nil {
+		return err
+	}
+	// If the user puts null, we treat that as if they want to
+	// delete the field.
+	if val == nil || bytes.Equal(*val, nullBytes) {
+		updater.UpdateField("commonextrainfo."+key, nil, nil)
+	} else {
+		updater.UpdateField("commonextrainfo."+key, *val, nil)
 	}
 	return nil
 }

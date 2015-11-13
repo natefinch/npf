@@ -1551,6 +1551,73 @@ Example: `GET ~bob/trusty/wordpress-42/meta/id-series`
 }
 ```
 
+#### GET *id*/meta/common-extra-info
+
+The meta/common-extra-info path reports any common metadata recorded for 
+the base entity. 
+This contains only information stored by clients - the API server itself
+does not populate any fields. The resulting object holds an entry for each
+piece of metadata recorded with a PUT to `meta/common-extra-info`.
+
+```go
+type CommonExtraInfo struct {
+        Values map[string] interface{}
+}
+```
+
+Example: `GET wordpress/meta/common-extra-info`
+         `GET precise/wordpress-32/meta/common-extra-info`
+
+```json
+{
+    "featured": true,
+    "vcs-digest": "4b6b3c7d795eb66ca5f82bc52c01eb57ab595ab2"
+}
+```
+
+#### GET *id*/meta/common-extra-info/*key*
+
+This path returns the contents of the given `common-extra-info` key. The result is
+exactly the JSON value stored as a result of the PUT request to `common-extra-info` or
+`common-extra-info/key`.
+
+Example: `GET wordpress/meta/common-extra-info/featured`
+         `GET precise/wordpress-32/meta/common-extra-info/featured`
+
+```json
+true
+```
+
+#### PUT *id*/meta/common-extra-info
+
+This request updates the value of any metadata values. Any values that are not
+mentioned in the request are left untouched. Any fields with null values are
+deleted.
+
+Example: `PUT precise/wordpress-32/meta/common-extra-info`
+
+Request body:
+```json
+{
+    "vcs-digest": "7d6a853c7bb102d90027b6add67b15834d815e08",
+}
+```
+
+#### PUT *id*/meta/common-extra-info/*key*
+
+This request creates or updates the value for a specific key.
+If the value is null, the key is deleted.
+
+Example: `PUT precise/wordpress-32/meta/common-extra-info/vcs-digest`
+
+Request body:
+
+```json
+"7d6a853c7bb102d90027b6add67b15834d815e08",
+```
+
+The above example is equivalent to the `meta/common-extra-info` example above.
+
 ### Resources
 
 **Not yet implemented**
