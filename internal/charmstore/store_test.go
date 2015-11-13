@@ -254,13 +254,29 @@ var urlFindingTests = []struct {
 	expand:  "wordpress",
 	expect:  []string{"23 cs:~charmers/precise/wordpress-23"},
 }, {
-	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24"},
+	inStore: []string{"23 cs:~charmers/development/precise/wordpress-23"},
+	expand:  "wordpress",
+	expect:  []string{},
+}, {
+	inStore: []string{"23 cs:~charmers/development/precise/wordpress-23"},
+	expand:  "development/wordpress",
+	expect:  []string{"23 cs:~charmers/development/precise/wordpress-23"},
+}, {
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
 	expand:  "wordpress",
 	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24"},
 }, {
-	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
+	expand:  "development/wordpress",
+	expect:  []string{"25 cs:~charmers/development/precise/wordpress-25", "23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24"},
+}, {
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
 	expand:  "precise/wordpress",
 	expect:  []string{"23 cs:~charmers/precise/wordpress-23"},
+}, {
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25", "26 cs:~charmers/development/wily/wordpress-26"},
+	expand:  "development/precise/wordpress",
+	expect:  []string{"25 cs:~charmers/development/precise/wordpress-25", "23 cs:~charmers/precise/wordpress-23"},
 }, {
 	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "434 cs:~charmers/foo/bar-434"},
 	expand:  "wordpress",
@@ -288,6 +304,10 @@ var urlFindingTests = []struct {
 }, {
 	inStore: []string{},
 	expand:  "precise/wordpress-23",
+	expect:  []string{},
+}, {
+	inStore: []string{},
+	expand:  "development/precise/wordpress-23",
 	expect:  []string{},
 }}
 
@@ -1084,9 +1104,11 @@ func MustParseResolvedURL(urlStr string) *router.ResolvedURL {
 		}
 	case 1:
 	}
+	url := charm.MustParseURL(s[len(s)-1])
 	return &router.ResolvedURL{
-		URL:                 *charm.MustParseURL(s[len(s)-1]),
+		URL:                 *url.WithChannel(""),
 		PromulgatedRevision: promRev,
+		Development:         url.Channel == charm.DevelopmentChannel,
 	}
 }
 
@@ -1120,10 +1142,7 @@ func (s *StoreSuite) TestAddUserOwnedCharmArchive(c *gc.C) {
 
 func (s *StoreSuite) TestAddDevelopmentCharmArchive(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	url := newResolvedURL("~charmers/precise/wordpress-1", 1)
-	// TODO frankban: this will be automatically handled by ResolvedURL when
-	// the concept of channel is introduced in charm.URL.
-	url.Development = true
+	url := newResolvedURL("~charmers/development/precise/wordpress-1", 1)
 	s.checkAddCharm(c, charmArchive, false, url)
 }
 
@@ -1158,10 +1177,7 @@ func (s *StoreSuite) TestAddDevelopmentBundleArchive(c *gc.C) {
 		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
-	url := newResolvedURL("~charmers/bundle/wordpress-simple-2", 3)
-	// TODO frankban: this will be automatically handled by ResolvedURL when
-	// the concept of channel is introduced in charm.URL.
-	url.Development = true
+	url := newResolvedURL("~charmers/development/bundle/wordpress-simple-2", 3)
 	s.checkAddBundle(c, bundleArchive, false, url)
 }
 
@@ -2420,20 +2436,59 @@ func (s *StoreSuite) TestSetPromulgatedUpdateSearch(c *gc.C) {
 	c.Assert(doc.PromulgatedRevision, gc.Equals, -1)
 }
 
-func (s *StoreSuite) TestEntityResolvedURL(c *gc.C) {
-	c.Assert(EntityResolvedURL(&mongodoc.Entity{
+var entityResolvedURLTests = []struct {
+	about  string
+	entity *mongodoc.Entity
+	rurl   *router.ResolvedURL
+}{{
+	about: "user owned, published",
+	entity: &mongodoc.Entity{
 		URL: charm.MustParseURL("~charmers/precise/wordpress-23"),
-	}), gc.DeepEquals, &router.ResolvedURL{
+	},
+	rurl: &router.ResolvedURL{
 		URL:                 *charm.MustParseURL("~charmers/precise/wordpress-23"),
 		PromulgatedRevision: -1,
-	})
-	c.Assert(EntityResolvedURL(&mongodoc.Entity{
+	},
+}, {
+	about: "promulgated, published",
+	entity: &mongodoc.Entity{
 		URL:            charm.MustParseURL("~charmers/precise/wordpress-23"),
 		PromulgatedURL: charm.MustParseURL("precise/wordpress-4"),
-	}), gc.DeepEquals, &router.ResolvedURL{
+	},
+	rurl: &router.ResolvedURL{
 		URL:                 *charm.MustParseURL("~charmers/precise/wordpress-23"),
 		PromulgatedRevision: 4,
-	})
+	},
+}, {
+	about: "user owned, under development",
+	entity: &mongodoc.Entity{
+		URL:         charm.MustParseURL("~charmers/trusty/wordpress-42"),
+		Development: true,
+	},
+	rurl: &router.ResolvedURL{
+		URL:                 *charm.MustParseURL("~charmers/trusty/wordpress-42"),
+		PromulgatedRevision: -1,
+		Development:         true,
+	},
+}, {
+	about: "promulgated, under development",
+	entity: &mongodoc.Entity{
+		URL:            charm.MustParseURL("~charmers/wily/wordpress-42"),
+		PromulgatedURL: charm.MustParseURL("wily/wordpress-0"),
+		Development:    true,
+	},
+	rurl: &router.ResolvedURL{
+		URL:                 *charm.MustParseURL("~charmers/wily/wordpress-42"),
+		PromulgatedRevision: 0,
+		Development:         true,
+	},
+}}
+
+func (s *StoreSuite) TestEntityResolvedURL(c *gc.C) {
+	for i, test := range entityResolvedURLTests {
+		c.Logf("test %d: %s", i, test.about)
+		c.Assert(EntityResolvedURL(test.entity), gc.DeepEquals, test.rurl)
+	}
 }
 
 func (s *StoreSuite) TestCopyCopiesSessions(c *gc.C) {

@@ -170,8 +170,9 @@ func MustNewResolvedURL(urlStr string, promulgatedRev int) *ResolvedURL {
 		panic(fmt.Errorf("incomplete url %v", urlStr))
 	}
 	return &ResolvedURL{
-		URL:                 *url,
+		URL:                 *url.WithChannel(""),
 		PromulgatedRevision: promulgatedRev,
+		Development:         url.Channel == charm.DevelopmentChannel,
 	}
 }
 
@@ -181,6 +182,9 @@ func MustNewResolvedURL(urlStr string, promulgatedRev int) *ResolvedURL {
 // may be modified freely.
 func (id *ResolvedURL) PreferredURL() *charm.URL {
 	u := id.URL
+	if id.Development {
+		u.Channel = charm.DevelopmentChannel
+	}
 	if id.PromulgatedRevision == -1 {
 		return &u
 	}
@@ -819,14 +823,19 @@ func splitPath(path string, i int) (elem string, nextIndex int) {
 // URL and the rest of the path.
 func splitId(path string) (url *charm.URL, rest string, err error) {
 	path = strings.TrimPrefix(path, "/")
-
 	part, i := splitPath(path, 0)
 
-	// skip ~<username>
+	// Skip ~<username>.
 	if strings.HasPrefix(part, "~") {
 		part, i = splitPath(path, i)
 	}
-	// skip series
+
+	// Skip channel.
+	if charm.Channel(part) == charm.DevelopmentChannel {
+		part, i = splitPath(path, i)
+	}
+
+	// Skip series.
 	if knownSeries[part] {
 		part, i = splitPath(path, i)
 	}
@@ -834,7 +843,6 @@ func splitId(path string) (url *charm.URL, rest string, err error) {
 	// part should now contain the charm name,
 	// and path[0:i] should contain the entire
 	// charm id.
-
 	urlStr := strings.TrimSuffix(path[0:i], "/")
 	url, err = charm.ParseURL(urlStr)
 	if err != nil {

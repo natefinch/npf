@@ -674,7 +674,9 @@ func (s *Store) FindEntity(url *router.ResolvedURL, fields ...string) (*mongodoc
 // FindEntities finds all entities in the store matching the given URL.
 // If any fields are specified, only those fields will be
 // populated in the returned entities. If the given URL has no user then
-// only promulgated entities will be queried.
+// only promulgated entities will be queried. If the given URL channel does
+// not represent an entity under development then only published entities
+// will be queried.
 func (s *Store) FindEntities(url *charm.URL, fields ...string) ([]*mongodoc.Entity, error) {
 	query := selectFields(s.EntitiesQuery(url), fields)
 	var docs []*mongodoc.Entity
@@ -746,11 +748,16 @@ var seriesBundleOrEmpty = bson.D{{"$or", []bson.D{{{"series", "bundle"}}, {{"ser
 
 // EntitiesQuery creates a mgo.Query object that can be used to find
 // entities matching the given URL. If the given URL has no user then
-// the produced query will only match promulgated entities.
+// the produced query will only match promulgated entities. If the given URL
+// channel is not "development" then the produced query will only match
+// published entities.
 func (s *Store) EntitiesQuery(url *charm.URL) *mgo.Query {
 	entities := s.DB.Entities()
-	query := make(bson.D, 1, 4)
+	query := make(bson.D, 1, 5)
 	query[0] = bson.DocElem{"name", url.Name}
+	if url.Channel != charm.DevelopmentChannel {
+		query = append(query, bson.DocElem{"development", false})
+	}
 	if url.User == "" {
 		if url.Revision > -1 {
 			query = append(query, bson.DocElem{"promulgated-revision", url.Revision})
@@ -1408,12 +1415,13 @@ func (s *Store) SynchroniseElasticsearch() error {
 // It requires the PromulgatedURL field to have been
 // filled out in the entity.
 func EntityResolvedURL(e *mongodoc.Entity) *router.ResolvedURL {
-	promulgatedRev := -1
-	if e.PromulgatedURL != nil {
-		promulgatedRev = e.PromulgatedURL.Revision
-	}
-	return &router.ResolvedURL{
+	rurl := &router.ResolvedURL{
 		URL:                 *e.URL,
-		PromulgatedRevision: promulgatedRev,
+		PromulgatedRevision: -1,
+		Development:         e.Development,
 	}
+	if e.PromulgatedURL != nil {
+		rurl.PromulgatedRevision = e.PromulgatedURL.Revision
+	}
+	return rurl
 }

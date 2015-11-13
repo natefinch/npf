@@ -235,16 +235,15 @@ func ResolveURL(store *charmstore.Store, url *charm.URL) (*router.ResolvedURL, e
 	if errgo.Cause(err) == params.ErrNotFound {
 		return nil, noMatchingURLError(url)
 	}
-	if url.User == "" {
-		return &router.ResolvedURL{
-			URL:                 *entity.URL,
-			PromulgatedRevision: entity.PromulgatedRevision,
-		}, nil
-	}
-	return &router.ResolvedURL{
+	rurl := &router.ResolvedURL{
 		URL:                 *entity.URL,
 		PromulgatedRevision: -1,
-	}, nil
+		Development:         url.Channel == charm.DevelopmentChannel,
+	}
+	if url.User == "" {
+		rurl.PromulgatedRevision = entity.PromulgatedRevision
+	}
+	return rurl, nil
 }
 
 func noMatchingURLError(url *charm.URL) error {

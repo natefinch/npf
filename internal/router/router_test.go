@@ -109,6 +109,32 @@ var routerGetTests = []struct {
 		CharmURL: "cs:precise/wordpress-34",
 	},
 }, {
+	about: "development id handler",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:       "/development/trusty/wordpress-34/foo",
+	expectStatus: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		Method:   "GET",
+		CharmURL: "cs:development/trusty/wordpress-34",
+	},
+}, {
+	about: "id handler with invalid channel",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:       "/bad-wolf/trusty/wordpress-34/foo",
+	expectStatus: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: "not found",
+	},
+}, {
 	about: "windows id handler",
 	handlers: Handlers{
 		Id: map[string]IdHandler{
@@ -120,6 +146,19 @@ var routerGetTests = []struct {
 	expectBody: idHandlerTestResp{
 		Method:   "GET",
 		CharmURL: "cs:win81/visualstudio-2012",
+	},
+}, {
+	about: "windows development id handler",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:       "/development/win81/visualstudio-2012/foo",
+	expectStatus: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		Method:   "GET",
+		CharmURL: "cs:development/win81/visualstudio-2012",
 	},
 }, {
 	about: "wily id handler",
@@ -159,6 +198,19 @@ var routerGetTests = []struct {
 	expectBody: idHandlerTestResp{
 		Method:   "GET",
 		CharmURL: "cs:precise/wordpress",
+	},
+}, {
+	about: "id handler with channel and name only",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo": testIdHandler,
+		},
+	},
+	urlStr:       "/development/wordpress/foo",
+	expectStatus: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		Method:   "GET",
+		CharmURL: "cs:development/wordpress",
 	},
 }, {
 	about: "id handler with extra path",
@@ -239,6 +291,33 @@ var routerGetTests = []struct {
 		Method:   "GET",
 		CharmURL: "cs:~joe/precise/wordpress-34",
 		Path:     "/blah/arble",
+	},
+}, {
+	about: "development id handler with user and extra path",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo/": testIdHandler,
+		},
+	},
+	urlStr:       "/~joe/development/precise/wordpress-34/foo/blah/arble",
+	expectStatus: http.StatusOK,
+	expectBody: idHandlerTestResp{
+		Method:   "GET",
+		CharmURL: "cs:~joe/development/precise/wordpress-34",
+		Path:     "/blah/arble",
+	},
+}, {
+	about: "id handler with user, invalid channel and extra path",
+	handlers: Handlers{
+		Id: map[string]IdHandler{
+			"foo/": testIdHandler,
+		},
+	},
+	urlStr:       "/~joe/bad-wolf/precise/wordpress-34/foo/blah/arble",
+	expectStatus: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: "not found",
 	},
 }, {
 	about: "id handler that returns an error",
@@ -376,6 +455,18 @@ var routerGetTests = []struct {
 	expectStatus: http.StatusOK,
 	expectBody: &metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
+	},
+}, {
+	about: "meta handler with development channel",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	urlStr:       "/development/precise/wordpress/meta/foo",
+	expectStatus: http.StatusOK,
+	expectBody: &metaHandlerTestResp{
+		CharmURL: "cs:development/precise/wordpress-0",
 	},
 }, {
 	about: "meta handler with additional elements",
@@ -643,8 +734,35 @@ var routerGetTests = []struct {
 		},
 	},
 }, {
+	about:  "bulk meta handler, single development id",
+	urlStr: "/meta/foo?id=~user/development/wily/wordpress-42",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	expectStatus: http.StatusOK,
+	expectBody: map[string]metaHandlerTestResp{
+		"~user/development/wily/wordpress-42": {
+			CharmURL: "cs:~user/development/wily/wordpress-42",
+		},
+	},
+}, {
+	about:  "bulk meta handler, single id with invalid channel",
+	urlStr: "/meta/foo?id=~user/bad-wolf/wily/wordpress-42",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo": testMetaHandler(0),
+		},
+	},
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: `bad request: charm or bundle URL has invalid form: "~user/bad-wolf/wily/wordpress-42"`,
+	},
+}, {
 	about:  "bulk meta handler, several ids",
-	urlStr: "/meta/foo?id=precise/wordpress-42&id=utopic/foo-32",
+	urlStr: "/meta/foo?id=precise/wordpress-42&id=utopic/foo-32&id=development/django",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
 			"foo": testMetaHandler(0),
@@ -658,10 +776,13 @@ var routerGetTests = []struct {
 		"utopic/foo-32": {
 			CharmURL: "cs:utopic/foo-32",
 		},
+		"development/django": {
+			CharmURL: "cs:development/precise/django-0",
+		},
 	},
 }, {
 	about:  "bulk meta/any handler, several ids",
-	urlStr: "/meta/any?id=precise/wordpress-42&id=utopic/foo-32&include=foo&include=bar/something",
+	urlStr: "/meta/any?id=precise/wordpress-42&id=utopic/foo-32&id=development/django-47&include=foo&include=bar/something",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
 			"foo":  testMetaHandler(0),
@@ -694,6 +815,32 @@ var routerGetTests = []struct {
 				},
 			},
 		},
+		"development/django-47": {
+			Id: charm.MustParseURL("cs:development/precise/django-47"),
+			Meta: map[string]interface{}{
+				"foo": metaHandlerTestResp{
+					CharmURL: "cs:development/precise/django-47",
+				},
+				"bar/something": metaHandlerTestResp{
+					CharmURL: "cs:development/precise/django-47",
+					Path:     "/something",
+				},
+			},
+		},
+	},
+}, {
+	about:  "bulk meta/any handler, several ids, invalid channel",
+	urlStr: "/meta/any?id=precise/wordpress-42&id=staging/trusty/django&include=foo&include=bar/something",
+	handlers: Handlers{
+		Meta: map[string]BulkIncludeHandler{
+			"foo":  testMetaHandler(0),
+			"bar/": testMetaHandler(1),
+		},
+	},
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: `bad request: charm or bundle URL has invalid form: "staging/trusty/django"`,
 	},
 }, {
 	about:  "bulk meta/any handler, discharge required",
@@ -1271,8 +1418,19 @@ var routerPutTests = []struct {
 				"baz/ppp":  "baz/ppp-mysql-val",
 			},
 		},
+		"development/trusty/django-47": {
+			Meta: map[string]interface{}{
+				"foo": "foo-django-val",
+			},
+		},
 	},
 	expectRecordedCalls: []interface{}{
+		metaHandlerTestPutParams{
+			NumHandlers: 1,
+			Id:          "cs:development/trusty/django-47",
+			Paths:       []string{""},
+			Values:      []interface{}{"foo-django-val"},
+		},
 		metaHandlerTestPutParams{
 			NumHandlers: 3,
 			Id:          "cs:precise/mysql-134",
@@ -1811,6 +1969,12 @@ var splitIdTests = []struct {
 	path:      "~user/wordpress",
 	expectURL: "cs:~user/wordpress",
 }, {
+	path:      "development/wordpress",
+	expectURL: "cs:development/wordpress",
+}, {
+	path:      "~user/development/wordpress",
+	expectURL: "cs:~user/development/wordpress",
+}, {
 	path:        "",
 	expectError: `URL has invalid charm or bundle name: ""`,
 }, {
@@ -1828,6 +1992,7 @@ func (s *RouterSuite) TestSplitId(c *gc.C) {
 			c.Assert(rest, gc.Equals, "")
 			continue
 		}
+		c.Assert(err, gc.Equals, nil)
 		c.Assert(url.String(), gc.Equals, test.expectURL)
 		c.Assert(rest, gc.Equals, "")
 
@@ -2110,6 +2275,18 @@ func (s *RouterSuite) TestResolvedURLPreferredURL(c *gc.C) {
 	c.Assert(u, gc.DeepEquals, charm.MustParseURL("~charmers/precise/wordpress-23"))
 	u.Series = "foo"
 	c.Assert(r.URL.Series, gc.Equals, "precise")
+
+	r = MustNewResolvedURL("~charmers/development/trusty/wordpress-42", 0)
+	c.Assert(r.URL.Channel, gc.Equals, charm.Channel(""))
+	c.Assert(r.Development, jc.IsTrue)
+	u = r.PreferredURL()
+	c.Assert(u, gc.DeepEquals, charm.MustParseURL("development/trusty/wordpress-0"))
+
+	r = MustNewResolvedURL("~charmers/development/trusty/wordpress-42", -1)
+	c.Assert(r.URL.Channel, gc.Equals, charm.Channel(""))
+	c.Assert(r.Development, jc.IsTrue)
+	u = r.PreferredURL()
+	c.Assert(u, gc.DeepEquals, charm.MustParseURL("~charmers/development/trusty/wordpress-42"))
 }
 
 func errorIdHandler(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
