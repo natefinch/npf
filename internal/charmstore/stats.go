@@ -14,7 +14,7 @@ import (
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -457,7 +457,7 @@ func (s sortableCounters) Less(i, j int) bool {
 //   - kind:trusty:django:who:* -> all revisions of a user owned charm;
 //   - kind:trusty:django:who:42 -> a specific user owned charm;
 // The above also applies to bundles (where the series is "bundle").
-func EntityStatsKey(url *charm.Reference, kind string) []string {
+func EntityStatsKey(url *charm.URL, kind string) []string {
 	key := []string{kind, url.Series, url.Name, url.User}
 	if url.Revision != -1 {
 		key = append(key, strconv.Itoa(url.Revision))
@@ -487,7 +487,7 @@ var LegacyDownloadCountsEnabled = true
 
 // ArchiveDownloadCounts calculates the aggregated download counts for
 // a charm or bundle.
-func (s *Store) ArchiveDownloadCounts(id *charm.Reference, refresh bool) (thisRevision, allRevisions AggregatedCounts, err error) {
+func (s *Store) ArchiveDownloadCounts(id *charm.URL, refresh bool) (thisRevision, allRevisions AggregatedCounts, err error) {
 	// Retrieve the aggregated stats.
 	fetchId := *id
 	fetch := func() (interface{}, error) {
@@ -518,7 +518,7 @@ func (s *Store) ArchiveDownloadCounts(id *charm.Reference, refresh bool) (thisRe
 	return
 }
 
-func (s *Store) statsCacheFetch(id *charm.Reference) (interface{}, error) {
+func (s *Store) statsCacheFetch(id *charm.URL) (interface{}, error) {
 	prefix := id.Revision == -1
 	kind := params.StatsArchiveDownload
 	if id.User == "" {
@@ -546,7 +546,7 @@ func (s *Store) statsCacheFetch(id *charm.Reference) (interface{}, error) {
 // legacyDownloadCounts retrieves the aggregated stats from the entity
 // extra-info. This is used when LegacyDownloadCountsEnabled is true.
 // TODO (frankban): remove this method when removing the legacy counts logic.
-func (s *Store) legacyDownloadCounts(id *charm.Reference) (AggregatedCounts, error) {
+func (s *Store) legacyDownloadCounts(id *charm.URL) (AggregatedCounts, error) {
 	counts := AggregatedCounts{}
 	entities, err := s.FindEntities(id, "extrainfo")
 	if err != nil {

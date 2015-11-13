@@ -24,7 +24,7 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
@@ -241,14 +241,14 @@ var metaEndpoints = []metaEndpoint{{
 			ref = id.PreferredURL()
 		}
 		return params.RevisionInfoResponse{
-			[]*charm.Reference{ref},
+			[]*charm.URL{ref},
 		}, nil
 	},
 	checkURL: newResolvedURL("~charmers/precise/wordpress-99", 99),
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data, gc.DeepEquals, params.RevisionInfoResponse{
-			[]*charm.Reference{
-				charm.MustParseReference("cs:precise/wordpress-99"),
+			[]*charm.URL{
+				charm.MustParseURL("cs:precise/wordpress-99"),
 			}})
 	},
 }, {
@@ -415,7 +415,7 @@ var metaEndpoints = []metaEndpoint{{
 	checkURL: newResolvedURL("~charmers/utopic/category-2", 2),
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data, jc.DeepEquals, params.IdResponse{
-			Id:       charm.MustParseReference("cs:utopic/category-2"),
+			Id:       charm.MustParseURL("cs:utopic/category-2"),
 			User:     "",
 			Series:   "utopic",
 			Name:     "category",
@@ -571,7 +571,7 @@ func (s *APISuite) TestMetaPermAudit(c *gc.C) {
 		ACL: &audit.ACL{
 			Read: []string{"charlie"},
 		},
-		Entity: charm.MustParseReference("~bob/precise/wordpress-23"),
+		Entity: charm.MustParseURL("~bob/precise/wordpress-23"),
 	}})
 	calledEntities = []audit.Entry{}
 
@@ -582,7 +582,7 @@ func (s *APISuite) TestMetaPermAudit(c *gc.C) {
 		ACL: &audit.ACL{
 			Write: []string{"bob", "foo"},
 		},
-		Entity: charm.MustParseReference("~bob/precise/wordpress-23"),
+		Entity: charm.MustParseURL("~bob/precise/wordpress-23"),
 	}})
 	calledEntities = []audit.Entry{}
 
@@ -596,14 +596,14 @@ func (s *APISuite) TestMetaPermAudit(c *gc.C) {
 		ACL: &audit.ACL{
 			Read: []string{"a"},
 		},
-		Entity: charm.MustParseReference("~bob/precise/wordpress-23"),
+		Entity: charm.MustParseURL("~bob/precise/wordpress-23"),
 	}, {
 		User: "bob",
 		Op:   audit.OpSetPerm,
 		ACL: &audit.ACL{
 			Write: []string{"b", "c"},
 		},
-		Entity: charm.MustParseReference("~bob/precise/wordpress-23"),
+		Entity: charm.MustParseURL("~bob/precise/wordpress-23"),
 	}})
 }
 
@@ -619,7 +619,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		Read:  []string{params.Everyone, "charmers"},
 		Write: []string{"charmers"},
 	})
-	e, err := s.store.FindBaseEntity(charm.MustParseReference("precise/wordpress-23"))
+	e, err := s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{params.Everyone, "charmers"})
 
@@ -641,7 +641,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 			},
 		})
 	}
-	e, err = s.store.FindBaseEntity(charm.MustParseReference("precise/wordpress-23"))
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsFalse)
 	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{
@@ -656,7 +656,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		Write: []string{"admin"},
 	})
 	s.assertGet(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
-	e, err = s.store.FindBaseEntity(charm.MustParseReference("precise/wordpress-23"))
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsTrue)
 	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{
@@ -677,7 +677,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 			Message: `unauthorized: access denied for user "bob"`,
 		},
 	})
-	e, err = s.store.FindBaseEntity(charm.MustParseReference("precise/wordpress-23"))
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsFalse)
 	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{})
@@ -688,7 +688,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		Read:  []string{"bob"},
 		Write: []string{"admin"},
 	})
-	e, err = s.store.FindBaseEntity(charm.MustParseReference("precise/wordpress-23"))
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsFalse)
 	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{
@@ -701,7 +701,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		Read []string
 	}{Read: []string{"joe"}}
 	s.assertPut(c, "wordpress/meta/perm", readRequest)
-	e, err = s.store.FindBaseEntity(charm.MustParseReference("precise/wordpress-23"))
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsFalse)
 	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{
@@ -1306,7 +1306,7 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 
 	for i, test := range resolveURLTests {
 		c.Logf("test %d: %s", i, test.url)
-		url := charm.MustParseReference(test.url)
+		url := charm.MustParseURL(test.url)
 		rurl, err := v4.ResolveURL(s.store, url)
 		if test.notFound {
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
@@ -1404,54 +1404,54 @@ var serveMetaRevisionInfoTests = []struct {
 	about: "fully qualified url",
 	url:   "trusty/wordpress-42",
 	expect: params.RevisionInfoResponse{
-		[]*charm.Reference{
-			charm.MustParseReference("cs:trusty/wordpress-43"),
-			charm.MustParseReference("cs:trusty/wordpress-42"),
-			charm.MustParseReference("cs:trusty/wordpress-41"),
-			charm.MustParseReference("cs:trusty/wordpress-9"),
+		[]*charm.URL{
+			charm.MustParseURL("cs:trusty/wordpress-43"),
+			charm.MustParseURL("cs:trusty/wordpress-42"),
+			charm.MustParseURL("cs:trusty/wordpress-41"),
+			charm.MustParseURL("cs:trusty/wordpress-9"),
 		}},
 }, {
 	about: "partial url uses a default series",
 	url:   "wordpress",
 	expect: params.RevisionInfoResponse{
-		[]*charm.Reference{
-			charm.MustParseReference("cs:trusty/wordpress-43"),
-			charm.MustParseReference("cs:trusty/wordpress-42"),
-			charm.MustParseReference("cs:trusty/wordpress-41"),
-			charm.MustParseReference("cs:trusty/wordpress-9"),
+		[]*charm.URL{
+			charm.MustParseURL("cs:trusty/wordpress-43"),
+			charm.MustParseURL("cs:trusty/wordpress-42"),
+			charm.MustParseURL("cs:trusty/wordpress-41"),
+			charm.MustParseURL("cs:trusty/wordpress-9"),
 		}},
 }, {
 	about: "non-promulgated URL gives non-promulgated revisions (~charmers)",
 	url:   "~charmers/trusty/cinder",
 	expect: params.RevisionInfoResponse{
-		[]*charm.Reference{
-			charm.MustParseReference("cs:~charmers/trusty/cinder-6"),
-			charm.MustParseReference("cs:~charmers/trusty/cinder-5"),
-			charm.MustParseReference("cs:~charmers/trusty/cinder-4"),
-			charm.MustParseReference("cs:~charmers/trusty/cinder-3"),
-			charm.MustParseReference("cs:~charmers/trusty/cinder-2"),
-			charm.MustParseReference("cs:~charmers/trusty/cinder-1"),
-			charm.MustParseReference("cs:~charmers/trusty/cinder-0"),
+		[]*charm.URL{
+			charm.MustParseURL("cs:~charmers/trusty/cinder-6"),
+			charm.MustParseURL("cs:~charmers/trusty/cinder-5"),
+			charm.MustParseURL("cs:~charmers/trusty/cinder-4"),
+			charm.MustParseURL("cs:~charmers/trusty/cinder-3"),
+			charm.MustParseURL("cs:~charmers/trusty/cinder-2"),
+			charm.MustParseURL("cs:~charmers/trusty/cinder-1"),
+			charm.MustParseURL("cs:~charmers/trusty/cinder-0"),
 		}},
 }, {
 	about: "non-promulgated URL gives non-promulgated revisions (~openstack-charmers)",
 	url:   "~openstack-charmers/trusty/cinder",
 	expect: params.RevisionInfoResponse{
-		[]*charm.Reference{
-			charm.MustParseReference("cs:~openstack-charmers/trusty/cinder-1"),
-			charm.MustParseReference("cs:~openstack-charmers/trusty/cinder-0"),
+		[]*charm.URL{
+			charm.MustParseURL("cs:~openstack-charmers/trusty/cinder-1"),
+			charm.MustParseURL("cs:~openstack-charmers/trusty/cinder-0"),
 		}},
 }, {
 	about: "promulgated URL gives promulgated revisions",
 	url:   "trusty/cinder",
 	expect: params.RevisionInfoResponse{
-		[]*charm.Reference{
-			charm.MustParseReference("cs:trusty/cinder-5"),
-			charm.MustParseReference("cs:trusty/cinder-4"),
-			charm.MustParseReference("cs:trusty/cinder-3"),
-			charm.MustParseReference("cs:trusty/cinder-2"),
-			charm.MustParseReference("cs:trusty/cinder-1"),
-			charm.MustParseReference("cs:trusty/cinder-0"),
+		[]*charm.URL{
+			charm.MustParseURL("cs:trusty/cinder-5"),
+			charm.MustParseURL("cs:trusty/cinder-4"),
+			charm.MustParseURL("cs:trusty/cinder-3"),
+			charm.MustParseURL("cs:trusty/cinder-2"),
+			charm.MustParseURL("cs:trusty/cinder-1"),
+			charm.MustParseURL("cs:trusty/cinder-0"),
 		}},
 }, {
 	about: "no entities found",
@@ -1736,7 +1736,7 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 
 		for id, downloadsPerDay := range test.downloads {
 			url := &router.ResolvedURL{
-				URL:                 *charm.MustParseReference(id),
+				URL:                 *charm.MustParseURL(id),
 				PromulgatedRevision: -1,
 			}
 			if url.URL.User == "" {
@@ -2619,7 +2619,7 @@ func (s *APISuite) TestPromulgate(c *gc.C) {
 		}
 
 		if test.expectStatus == http.StatusOK {
-			ref := charm.MustParseReference(test.id)
+			ref := charm.MustParseURL(test.id)
 			ref.Series = "trusty"
 			ref.Revision = 0
 

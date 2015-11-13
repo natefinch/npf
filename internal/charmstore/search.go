@@ -13,7 +13,7 @@ import (
 	"github.com/juju/utils"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -116,7 +116,7 @@ func (s *Store) UpdateSearch(r *router.ResolvedURL) error {
 // UpdateSearchBaseURL updates the search record for all entities with
 // the specified base URL. It must be called whenever the entry for the
 // given URL in the BaseEntitites collection has changed.
-func (s *Store) UpdateSearchBaseURL(baseURL *charm.Reference) error {
+func (s *Store) UpdateSearchBaseURL(baseURL *charm.URL) error {
 	if s.ES == nil || s.ES.Database == nil {
 		return nil
 	}
@@ -143,7 +143,7 @@ func (s *Store) UpdateSearchBaseURL(baseURL *charm.Reference) error {
 	}).Iter()
 	defer iter.Close()
 	var result struct {
-		URL *charm.Reference
+		URL *charm.URL
 	}
 	for iter.Next(&result) {
 		if deprecatedSeries[result.URL.Series] {
@@ -257,7 +257,7 @@ func (si *SearchIndex) update(doc *SearchDoc) error {
 // getID returns an ID for the elasticsearch document based on the contents of the
 // mongoDB document. This is to allow elasticsearch documents to be replaced with
 // updated versions when charm data is changed.
-func (si *SearchIndex) getID(r *charm.Reference) string {
+func (si *SearchIndex) getID(r *charm.URL) string {
 	ref := *r
 	ref.Revision = -1
 	b := sha1.Sum([]byte(ref.String()))
@@ -286,7 +286,7 @@ func (si *SearchIndex) search(sp SearchParams) (SearchResult, error) {
 	}
 	for _, h := range esr.Hits.Hits {
 		urlStr := h.Fields.GetString("URL")
-		url, err := charm.ParseReference(urlStr)
+		url, err := charm.ParseURL(urlStr)
 		if err != nil {
 			return SearchResult{}, errgo.Notef(err, "invalid URL in result %q", urlStr)
 		}
@@ -295,7 +295,7 @@ func (si *SearchIndex) search(sp SearchParams) (SearchResult, error) {
 		}
 
 		if purlStr := h.Fields.GetString("PromulgatedURL"); purlStr != "" {
-			purl, err := charm.ParseReference(purlStr)
+			purl, err := charm.ParseURL(purlStr)
 			if err != nil {
 				return SearchResult{}, errgo.Notef(err, "invalid promulgated URL in result %q", purlStr)
 			}
@@ -310,7 +310,7 @@ func (si *SearchIndex) search(sp SearchParams) (SearchResult, error) {
 
 // GetSearchDocument retrieves the current search record for the charm
 // reference id.
-func (si *SearchIndex) GetSearchDocument(id *charm.Reference) (*SearchDoc, error) {
+func (si *SearchIndex) GetSearchDocument(id *charm.URL) (*SearchDoc, error) {
 	if si == nil || si.Database == nil {
 		return &SearchDoc{}, nil
 	}

@@ -74,8 +74,8 @@ import (
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mempool"
@@ -160,7 +160,7 @@ func (h *reqHandler) serveCharm(w http.ResponseWriter, req *http.Request) error 
 	if req.Method != "GET" && req.Method != "HEAD" {
 		return params.ErrMethodNotAllowed
 	}
-	curl, err := charm.ParseReference(strings.TrimPrefix(req.URL.Path, "/"))
+	curl, err := charm.ParseURL(strings.TrimPrefix(req.URL.Path, "/"))
 	if err != nil {
 		return errgo.WithCausef(err, params.ErrNotFound, "")
 	}
@@ -168,7 +168,7 @@ func (h *reqHandler) serveCharm(w http.ResponseWriter, req *http.Request) error 
 }
 
 // charmStatsKey returns a stats key for the given charm reference and kind.
-func charmStatsKey(url *charm.Reference, kind string) []string {
+func charmStatsKey(url *charm.URL, kind string) []string {
 	if url.User == "" {
 		return []string{kind, url.Series, url.Name}
 	}
@@ -182,7 +182,7 @@ func (h *reqHandler) serveCharmInfo(_ http.Header, req *http.Request) (interface
 	for _, url := range req.Form["charms"] {
 		c := &charmrepo.InfoResponse{}
 		response[url] = c
-		curl, err := charm.ParseReference(url)
+		curl, err := charm.ParseURL(url)
 		if err != nil {
 			err = errNotFound
 		}
@@ -255,7 +255,7 @@ func (h *reqHandler) serveCharmEvent(_ http.Header, req *http.Request) (interfac
 		response[url] = c
 
 		// Validate the charm URL.
-		id, err := charm.ParseReference(url)
+		id, err := charm.ParseURL(url)
 		if err != nil {
 			c.Errors = []string{"invalid charm URL: " + err.Error()}
 			continue

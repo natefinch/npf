@@ -11,7 +11,7 @@ import (
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
@@ -55,7 +55,7 @@ func (h *ReqHandler) getLogs(w http.ResponseWriter, req *http.Request) error {
 	// Build the Mongo query.
 	query := make(bson.D, 0, 3)
 	if id != "" {
-		url, err := charm.ParseReference(id)
+		url, err := charm.ParseURL(id)
 		if err != nil {
 			return badRequestf(err, "invalid id value")
 		}

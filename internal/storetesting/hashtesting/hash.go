@@ -19,7 +19,7 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
 
-func CheckSHA256Laziness(c *gc.C, store *charmstore.Store, id *charm.Reference, check func()) {
+func CheckSHA256Laziness(c *gc.C, store *charmstore.Store, id *charm.URL, check func()) {
 	updated := make(chan struct{}, 1)
 
 	// Patch charmstore.UpdateEntitySHA256 so that we can know whether it has
