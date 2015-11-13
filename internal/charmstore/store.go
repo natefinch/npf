@@ -520,15 +520,21 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	// always be canonical, but check just in case anyway, as this is
 	// final gateway before a potentially invalid url might be stored
 	// in the database.
-	if p.URL.URL.Series == "bundle" || p.URL.URL.User == "" || p.URL.URL.Revision == -1 {
-		return errgo.Newf("charm added with invalid id %v", &p.URL.URL)
+	id := p.URL.URL
+	if id.Series == "bundle" || id.User == "" || id.Revision == -1 {
+		return errgo.Newf("charm added with invalid id %v", &id)
 	}
-	if p.URL.URL.Series == "" && len(c.Meta().Series) == 0 {
-		return errgo.Newf("charm added without series %v", &p.URL.URL)
+	if id.Series == "" {
+		if len(c.Meta().Series) == 0 {
+			return errgo.WithCausef(nil, params.ErrBadRequest, "charm %v added without any supported series", &p.URL.URL)
+		}
+	} else if len(c.Meta().Series) != 0 && !contains(id.Series, c.Meta().Series) {
+		return errgo.WithCausef(nil, params.ErrForbidden, "%s not listed in charm metadata", p.URL.URL.Series)
 	}
-	logger.Infof("add charm url %s; prev %d", &p.URL.URL, p.URL.PromulgatedRevision)
+
+	logger.Infof("add charm url %s; prev %d", &id, p.URL.PromulgatedRevision)
 	entity := &mongodoc.Entity{
-		URL:                     &p.URL.URL,
+		URL:                     &id,
 		PromulgatedURL:          p.URL.PromulgatedURL(),
 		BlobHash:                p.BlobHash,
 		BlobHash256:             p.BlobHash256,
@@ -555,16 +561,26 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	}
 	for _, entity := range entities {
 		if entity.URL.Series == "bundle" {
-			return errgo.Newf("charm name duplicates bundle name %v", entity.URL)
+			return errgo.WithCausef(err, params.ErrDuplicateUpload, "charm name duplicates bundle name %v", entity.URL)
 		}
-		if p.URL.URL.Series != "" && entity.URL.Series == "" {
-			return errgo.Newf("charm name duplicates multi-series charm name %v", entity.URL)
+		if id.Series != "" && entity.URL.Series == "" {
+			return errgo.WithCausef(err, params.ErrDuplicateUpload, "charm name duplicates multi-series charm name %v", entity.URL)
 		}
 	}
 	if err := s.insertEntity(entity); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 	}
 	return nil
+}
+
+// contains checks if s is in the slice ss.
+func contains(s string, ss []string) bool {
+	for _, t := range ss {
+		if s == t {
+			return true
+		}
+	}
+	return false
 }
 
 // denormalizeEntity sets all denormalized fields in e
@@ -1034,7 +1050,7 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 	}
 	for _, entity := range entities {
 		if entity.URL.Series != "bundle" {
-			return errgo.Newf("bundle name duplicates charm name %s", entity.URL)
+			return errgo.WithCausef(err, params.ErrDuplicateUpload, "bundle name duplicates charm name %s", entity.URL)
 		}
 	}
 	if err := s.insertEntity(entity); err != nil {
