@@ -11,8 +11,10 @@ import (
 
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charmrepo.v1/csclient/params"
 
+	"gopkg.in/juju/charmstore.v5-unstable/elasticsearch"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
@@ -92,6 +94,7 @@ func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 			Entity:         entity,
 			TotalDownloads: int64(charmDownloadCounts[name]),
 			ReadACLs:       readACLs,
+			Series:         entity.SupportedSeries,
 		}
 		c.Assert(string(actual), jc.JSONEquals, doc)
 	}
@@ -130,7 +133,78 @@ func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(old.URL), &actual)
 	c.Assert(err, gc.IsNil)
-	doc := SearchDoc{Entity: expected, ReadACLs: []string{"charmers", params.Everyone}}
+	doc := SearchDoc{
+		Entity:   expected,
+		ReadACLs: []string{"charmers", params.Everyone},
+		Series:   expected.SupportedSeries,
+	}
+	c.Assert(string(actual), jc.JSONEquals, doc)
+}
+
+func (s *StoreSearchSuite) TestExportMultiSeriesCharmsReplaceEarlierOnes(c *gc.C) {
+	charmArchive := storetesting.Charms.CharmDir("wordpress")
+	url := newResolvedURL("cs:~charmers/trusty/juju-gui-24", -1)
+	err := s.store.AddCharmWithArchive(url, charmArchive)
+	c.Assert(err, gc.IsNil)
+	charmArchive = storetesting.Charms.CharmDir("multi-series")
+	url = newResolvedURL("cs:~charmers/juju-gui-25", -1)
+	err = s.store.AddCharmWithArchive(url, charmArchive)
+	c.Assert(err, gc.IsNil)
+	var expected, old *mongodoc.Entity
+	var actual json.RawMessage
+	err = s.store.DB.Entities().FindId("cs:~charmers/trusty/juju-gui-24").One(&old)
+	c.Assert(err, gc.IsNil)
+	err = s.store.DB.Entities().FindId("cs:~charmers/juju-gui-25").One(&expected)
+	c.Assert(err, gc.IsNil)
+	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(old.URL), &actual)
+	c.Assert(errgo.Cause(err), gc.Equals, elasticsearch.ErrNotFound)
+	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(expected.URL), &actual)
+	c.Assert(err, gc.IsNil)
+	doc := SearchDoc{
+		Entity:   expected,
+		ReadACLs: []string{"charmers"},
+		Series:   expected.SupportedSeries,
+	}
+	c.Assert(string(actual), jc.JSONEquals, doc)
+}
+
+func (s *StoreSearchSuite) TestExportMultiSeriesCharmsDontReplaceEarlierOnesIfNotSupported(c *gc.C) {
+	charmArchive := storetesting.Charms.CharmDir("wordpress")
+	url := newResolvedURL("cs:~charmers/trusty/juju-gui-24", -1)
+	err := s.store.AddCharmWithArchive(url, charmArchive)
+	c.Assert(err, gc.IsNil)
+	url = newResolvedURL("cs:~charmers/precise/juju-gui-24", -1)
+	err = s.store.AddCharmWithArchive(url, charmArchive)
+	c.Assert(err, gc.IsNil)
+	charmArchive = storetesting.Charms.CharmDir("multi-series")
+	url = newResolvedURL("cs:~charmers/juju-gui-25", -1)
+	err = s.store.AddCharmWithArchive(url, charmArchive)
+	c.Assert(err, gc.IsNil)
+	var expected, trusty, precise *mongodoc.Entity
+	var actual json.RawMessage
+	err = s.store.DB.Entities().FindId("cs:~charmers/precise/juju-gui-24").One(&precise)
+	c.Assert(err, gc.IsNil)
+	err = s.store.DB.Entities().FindId("cs:~charmers/trusty/juju-gui-24").One(&trusty)
+	c.Assert(err, gc.IsNil)
+	err = s.store.DB.Entities().FindId("cs:~charmers/juju-gui-25").One(&expected)
+	c.Assert(err, gc.IsNil)
+	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(precise.URL), &actual)
+	c.Assert(err, gc.IsNil)
+	doc := SearchDoc{
+		Entity:   precise,
+		ReadACLs: []string{"charmers"},
+		Series:   precise.SupportedSeries,
+	}
+	c.Assert(string(actual), jc.JSONEquals, doc)
+	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(trusty.URL), &actual)
+	c.Assert(errgo.Cause(err), gc.Equals, elasticsearch.ErrNotFound)
+	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(expected.URL), &actual)
+	c.Assert(err, gc.IsNil)
+	doc = SearchDoc{
+		Entity:   expected,
+		ReadACLs: []string{"charmers"},
+		Series:   expected.SupportedSeries,
+	}
 	c.Assert(string(actual), jc.JSONEquals, doc)
 }
 
@@ -166,10 +240,9 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C) {
 		if url.URL.Name == "riak" {
 			continue
 		}
-		bURL := baseURL(&url.URL)
-		baseEntity, err := s.store.FindBaseEntity(bURL)
-		baseEntity.ACLs.Read = append(baseEntity.ACLs.Read, params.Everyone)
-		err = s.store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
+		err = s.store.SetPerms(&url.URL, "read", url.URL.User, params.Everyone)
+		c.Assert(err, gc.IsNil)
+		err = s.store.UpdateSearchBaseURL(baseURL(&url.URL))
 		c.Assert(err, gc.IsNil)
 	}
 	for name, url := range exportTestBundles {
@@ -181,10 +254,9 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C) {
 			err := s.store.IncrementDownloadCounts(url)
 			c.Assert(err, gc.IsNil)
 		}
-		bURL := baseURL(&url.URL)
-		baseEntity, err := s.store.FindBaseEntity(bURL)
-		baseEntity.ACLs.Read = append(baseEntity.ACLs.Read, params.Everyone)
-		err = s.store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
+		err = s.store.SetPerms(&url.URL, "read", url.URL.User, params.Everyone)
+		c.Assert(err, gc.IsNil)
+		err = s.store.UpdateSearchBaseURL(baseURL(&url.URL))
 		c.Assert(err, gc.IsNil)
 	}
 	s.store.pool.statsCache.EvictAll()
@@ -538,12 +610,9 @@ func (s *StoreSearchSuite) TestPromulgatedRank(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("varnish")
 	url := newResolvedURL("cs:~charmers/trusty/varnish-1", 1)
 	s.store.AddCharmWithArchive(url, charmArchive)
-	bURL := baseURL(&url.URL)
-	baseEntity, err := s.store.FindBaseEntity(bURL)
-	baseEntity.ACLs.Read = append(baseEntity.ACLs.Read, params.Everyone)
-	err = s.store.DB.BaseEntities().UpdateId(baseEntity.URL, baseEntity)
+	err := s.store.SetPerms(&url.URL, "read", url.URL.User, params.Everyone)
 	c.Assert(err, gc.IsNil)
-	err = s.store.UpdateSearchBaseURL(baseEntity.URL)
+	err = s.store.UpdateSearchBaseURL(baseURL(&url.URL))
 	c.Assert(err, gc.IsNil)
 	s.store.ES.Database.RefreshIndex(s.TestIndex)
 	sp := SearchParams{
@@ -803,4 +872,66 @@ func (s *StoreSearchSuite) TestUpdateConflict(c *gc.C) {
 	updated, err = s.store.ES.updateVersion(version{1, index}, 3)
 	c.Assert(err, gc.Equals, nil)
 	c.Assert(updated, gc.Equals, false)
+}
+
+func (s *StoreSearchSuite) TestMultiSeriesCharmFiltersSeriesCorrectly(c *gc.C) {
+	charmArchive := storetesting.Charms.CharmDir("multi-series")
+	url := newResolvedURL("cs:~charmers/juju-gui-25", -1)
+	err := s.store.AddCharmWithArchive(url, charmArchive)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&url.URL, "read", url.URL.User, params.Everyone)
+	c.Assert(err, gc.IsNil)
+	err = s.store.UpdateSearch(url)
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	filterTests := []struct {
+		series   string
+		notFound bool
+	}{{
+		series: "trusty",
+	}, {
+		series: "vivid",
+	}, {
+		series:   "sauch",
+		notFound: true,
+	}}
+	for i, test := range filterTests {
+		c.Logf("%d. %s", i, test.series)
+		res, err := s.store.Search(SearchParams{
+			Filters: map[string][]string{
+				"name":   []string{"juju-gui"},
+				"series": []string{test.series},
+			},
+		})
+		c.Assert(err, gc.IsNil)
+		if test.notFound {
+			c.Assert(res.Results, gc.HasLen, 0)
+			continue
+		}
+		c.Assert(res.Results, gc.HasLen, 1)
+		c.Assert(res.Results[0].URL.String(), gc.Equals, url.String())
+	}
+}
+
+func (s *StoreSearchSuite) TestMultiSeriesCharmSortsSeriesCorrectly(c *gc.C) {
+	charmArchive := storetesting.Charms.CharmDir("multi-series")
+	url := newResolvedURL("cs:~charmers/juju-gui-25", -1)
+	err := s.store.AddCharmWithArchive(url, charmArchive)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&url.URL, "read", url.URL.User, params.Everyone)
+	c.Assert(err, gc.IsNil)
+	err = s.store.UpdateSearch(url)
+	c.Assert(err, gc.IsNil)
+	s.store.ES.Database.RefreshIndex(s.TestIndex)
+	var sp SearchParams
+	sp.ParseSortFields("-series")
+	res, err := s.store.Search(sp)
+	c.Assert(err, gc.IsNil)
+	c.Assert(res.Results, jc.DeepEquals, []*router.ResolvedURL{
+		newResolvedURL("cs:~charmers/juju-gui-25", -1),
+		newResolvedURL("cs:~openstack-charmers/trusty/mysql-7", 7),
+		newResolvedURL("cs:~foo/trusty/varnish-1", -1),
+		newResolvedURL("cs:~charmers/precise/wordpress-23", 23),
+		newResolvedURL("cs:~charmers/bundle/wordpress-simple-4", 4),
+	})
 }
