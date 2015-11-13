@@ -36,7 +36,7 @@ func CheckCounterSum(c *gc.C, store *charmstore.Store, key []string, prefix bool
 
 // CheckSearchTotalDownloads checks that the search index is properly updated.
 // It retries a few times as they are generally updated in background.
-func CheckSearchTotalDownloads(c *gc.C, store *charmstore.Store, id *charm.Reference, expected int64) {
+func CheckSearchTotalDownloads(c *gc.C, store *charmstore.Store, id *charm.URL, expected int64) {
 	var doc *charmstore.SearchDoc
 	for retry := 0; retry < 10; retry++ {
 		var err error

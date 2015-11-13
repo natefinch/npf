@@ -30,7 +30,7 @@ prefers the latest LTS series).
 All endpoints that do not produce binary data produce a single JSON object as
 their result. These will be described in terms of the Go types that produce and
 consume the format, along with an example. A charm id is represented as a
-`charm.Reference type`.
+`charm.URL type`.
 
 
 ### Errors
@@ -363,7 +363,7 @@ We need to provide aggregated stats for downloads:
 This endpoint can be used to increase the stats related to an entity.
 This will increase the download stats by one for the entity provided and at the time stamp provided.
 It can for future purpose include the client issuing the requests.
-This is used when charmstore is in front of a cache server that will not call the real /archive endpoint and 
+This is used when charmstore is in front of a cache server that will not call the real /archive endpoint and
 as such will not increase the download counts.
 
 <pre>
@@ -375,7 +375,7 @@ Request body:
 type StatsUpdateRequest struct {
 	Timestamp      time.Time
 	Type           string
-	CharmReference *charm.Reference
+	CharmReference *charm.URL
 }
 ```
 Example: `PUT stats/update`
@@ -1398,8 +1398,8 @@ ordered list from newest to oldest revision. Note that the current revision
 will be included in the list as it is also an available revision.
 
 ```go
-type RevisionInfo struct {
-        Revisions []*charm.Reference
+type RevisionInfoResponse struct {
+        Revisions []*charm.URL
 }
 ```
 
@@ -1423,8 +1423,8 @@ its various components, including the id itself. The information is exactly
 that contained within the entity id.
 
 ```go
-type Id struct {
-        Id *charm.Reference
+type IdResponse struct {
+        Id *charm.URL
         User string
         Series string `json:",omitempty"`
         Name string
@@ -1907,7 +1907,7 @@ type LogResponse struct {
         Type LogType
 
         // URLs holds a slice of entity URLs associated with the log message.
-        URLs []`*`charm.Reference `json:",omitempty"`
+        URLs []`*`charm.URL `json:",omitempty"`
 
         // Time holds the time of the log.
         Time time.Time
@@ -1941,7 +1941,7 @@ type Log struct {
         Type LogType
 
         // URLs holds a slice of entity URLs associated with the log message.
-        URLs []*charm.Reference `json:",omitempty"`
+        URLs []*charm.URL `json:",omitempty"`
 }
 ```
 

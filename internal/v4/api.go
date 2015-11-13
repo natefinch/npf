@@ -18,7 +18,7 @@ import (
 	"github.com/juju/loggo"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
@@ -227,7 +227,7 @@ func (h *ReqHandler) Close() {
 
 // ResolveURL resolves the series and revision of the given URL if either is
 // unspecified by filling them out with information retrieved from the store.
-func ResolveURL(store *charmstore.Store, url *charm.Reference) (*router.ResolvedURL, error) {
+func ResolveURL(store *charmstore.Store, url *charm.URL) (*router.ResolvedURL, error) {
 	entity, err := store.FindBestEntity(url, "_id", "promulgated-revision")
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return nil, errgo.Mask(err)
@@ -247,11 +247,11 @@ func ResolveURL(store *charmstore.Store, url *charm.Reference) (*router.Resolved
 	}, nil
 }
 
-func noMatchingURLError(url *charm.Reference) error {
+func noMatchingURLError(url *charm.URL) error {
 	return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
 }
 
-func (h *ReqHandler) resolveURL(url *charm.Reference) (*router.ResolvedURL, error) {
+func (h *ReqHandler) resolveURL(url *charm.URL) (*router.ResolvedURL, error) {
 	return ResolveURL(h.Store, url)
 }
 
@@ -934,7 +934,7 @@ func (h *ReqHandler) metaArchiveUploadTime(entity *mongodoc.Entity, id *router.R
 }
 
 type PublishedResponse struct {
-	Id        *charm.Reference
+	Id        *charm.URL
 	Published time.Time
 }
 
@@ -1128,7 +1128,7 @@ func (h *ReqHandler) authId(f resolvedIdHandler) resolvedIdHandler {
 // resolveId returns an id handler that resolves any non-fully-specified
 // entity ids using h.resolveURL before calling f with the resolved id.
 func (h *ReqHandler) resolveId(f resolvedIdHandler) router.IdHandler {
-	return func(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+	return func(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
 		rid, err := h.resolveURL(id)
 		if err != nil {
 			return errgo.Mask(err, errgo.Is(params.ErrNotFound))

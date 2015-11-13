@@ -20,7 +20,7 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/macaroon.v1"
@@ -317,7 +317,7 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 			storetesting.Charms.CharmDir("wordpress"),
 		)
 		c.Assert(err, gc.IsNil)
-		baseURL := charm.MustParseReference("~charmers/wordpress")
+		baseURL := charm.MustParseURL("~charmers/wordpress")
 
 		// Change the ACLs for the testing charm.
 		err = s.store.SetPerms(baseURL, "read", test.readPerm...)
@@ -449,7 +449,7 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 			newResolvedURL("~charmers/utopic/wordpress-42", -1),
 			storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
-		baseURL := charm.MustParseReference("~charmers/wordpress")
+		baseURL := charm.MustParseURL("~charmers/wordpress")
 
 		// Change the ACLs for the testing charm.
 		err = s.store.SetPerms(baseURL, "write", test.writePerm...)
@@ -682,7 +682,7 @@ func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
 	// Change the ACLs for the testing charm.
-	err = s.store.SetPerms(charm.MustParseReference("cs:~charmers/wordpress"), "read", "bob")
+	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	for i, test := range isEntityCaveatTests {
@@ -772,7 +772,7 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
 	// Change the ACLs for the testing charm.
-	err = s.store.SetPerms(charm.MustParseReference("cs:~charmers/wordpress"), "read", "bob")
+	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	// First check that we require authorization to access the charm.

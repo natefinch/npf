@@ -15,7 +15,7 @@ import (
 	"github.com/juju/xml"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/juju/jujusvg.v1"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
@@ -35,7 +35,7 @@ func (h *ReqHandler) serveDiagram(id *router.ResolvedURL, w http.ResponseWriter,
 
 	var urlErr error
 	// TODO consider what happens when a charm's SVG does not exist.
-	canvas, err := jujusvg.NewFromBundle(entity.BundleData, func(id *charm.Reference) string {
+	canvas, err := jujusvg.NewFromBundle(entity.BundleData, func(id *charm.URL) string {
 		// TODO change jujusvg so that the iconURL function can
 		// return an error.
 		absPath := "/" + id.Path() + "/icon.svg"

@@ -21,12 +21,12 @@ import (
 type Entity struct {
 	// URL holds the fully specified URL of the charm or bundle.
 	// e.g. cs:precise/wordpress-34, cs:~user/trusty/foo-2
-	URL *charm.Reference `bson:"_id"`
+	URL *charm.URL `bson:"_id"`
 
 	// BaseURL holds the reference URL of the charm or bundle
 	// (this omits the series and revision from URL)
 	// e.g. cs:wordpress, cs:~user/foo
-	BaseURL *charm.Reference
+	BaseURL *charm.URL
 
 	// User holds the user part of the entity URL (for instance, "joe").
 	User string
@@ -88,7 +88,7 @@ type Entity struct {
 	// BundleCharms includes all the charm URLs referenced
 	// by the bundle, including base URLs where they are
 	// not already included.
-	BundleCharms []*charm.Reference
+	BundleCharms []*charm.URL
 
 	// BundleMachineCount counts the machines used or created
 	// by the bundle. It is nil for charms.
@@ -109,7 +109,7 @@ type Entity struct {
 
 	// PromulgatedURL holds the promulgated URL of the entity. If the entity
 	// is not promulgated this should be set to nil.
-	PromulgatedURL *charm.Reference `json:",omitempty" bson:"promulgated-url,omitempty"`
+	PromulgatedURL *charm.URL `json:",omitempty" bson:"promulgated-url,omitempty"`
 
 	// PromulgatedRevision holds the revision number from the promulgated URL.
 	// If the entity is not promulgated this should be set to -1.
@@ -124,7 +124,7 @@ type Entity struct {
 // PreferredURL returns the preferred way to refer to this entity. If
 // the entity has a promulgated URL and usePromulgated is true then the
 // promulgated URL will be used, otherwise the standard URL is used.
-func (e *Entity) PreferredURL(usePromulgated bool) *charm.Reference {
+func (e *Entity) PreferredURL(usePromulgated bool) *charm.URL {
 	if usePromulgated && e.PromulgatedURL != nil {
 		return e.PromulgatedURL
 	}
@@ -138,7 +138,7 @@ type BaseEntity struct {
 	// regardless of its revision, series or promulgation status
 	// (this omits the revision and series from URL).
 	// e.g., cs:~user/collection/foo
-	URL *charm.Reference `bson:"_id"`
+	URL *charm.URL `bson:"_id"`
 
 	// User holds the user part of the entity URL (for instance, "joe").
 	User string
@@ -216,7 +216,7 @@ type Log struct {
 	Type LogType
 
 	// URLs holds a slice of entity URLs associated with the log message.
-	URLs []*charm.Reference
+	URLs []*charm.URL
 
 	// Time holds the time of the log.
 	Time time.Time

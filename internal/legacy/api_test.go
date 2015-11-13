@@ -19,8 +19,8 @@ import (
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -317,8 +317,7 @@ func (s *APISuite) TestCharmPackageGet(c *gc.C) {
 	s.PatchValue(&charmrepo.CacheDir, c.MkDir())
 	s.PatchValue(&charmrepo.LegacyStore.BaseURL, srv.URL)
 
-	url, _ := wordpressURL.URL.URL("")
-	ch, err := charmrepo.LegacyStore.Get(url)
+	ch, err := charmrepo.LegacyStore.Get(&wordpressURL.URL)
 	c.Assert(err, gc.IsNil)
 	chArchive := ch.(*charm.CharmArchive)
 
@@ -332,7 +331,7 @@ func (s *APISuite) TestCharmPackageCharmInfo(c *gc.C) {
 	wordpressSHA256 := fileSHA256(c, wordpress.Path)
 	mysqlURL, mySQL := s.addPublicCharm(c, "wordpress", "cs:precise/mysql-2")
 	mysqlSHA256 := fileSHA256(c, mySQL.Path)
-	notFoundURL := charm.MustParseReference("cs:precise/not-found-3")
+	notFoundURL := charm.MustParseURL("cs:precise/not-found-3")
 
 	srv := httptest.NewServer(s.srv)
 	defer srv.Close()
@@ -401,7 +400,7 @@ func (s *APISuite) TestServerStatus(c *gc.C) {
 
 func (s *APISuite) addPublicCharm(c *gc.C, charmName, curl string) (*router.ResolvedURL, *charm.CharmArchive) {
 	rurl := &router.ResolvedURL{
-		URL:                 *charm.MustParseReference(curl),
+		URL:                 *charm.MustParseURL(curl),
 		PromulgatedRevision: -1,
 	}
 	if rurl.URL.User == "" {
