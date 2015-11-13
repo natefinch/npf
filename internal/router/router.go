@@ -19,7 +19,7 @@ import (
 	"github.com/juju/utils/parallel"
 	"gopkg.in/errgo.v1"
 	charm "gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 )
 
@@ -98,7 +98,7 @@ type BulkIncludeHandler interface {
 // IdHandler handles a charm store request rooted at the given id.
 // The request path (req.URL.Path) holds the URL path after
 // the id has been stripped off.
-type IdHandler func(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error
+type IdHandler func(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error
 
 // Handlers specifies how HTTP requests will be routed
 // by the router. All errors returned by the handlers will
@@ -138,7 +138,7 @@ type Handlers struct {
 type Router struct {
 	handlers   *Handlers
 	handler    http.Handler
-	resolveURL func(id *charm.Reference) (*ResolvedURL, error)
+	resolveURL func(id *charm.URL) (*ResolvedURL, error)
 	authorize  func(id *ResolvedURL, req *http.Request) error
 	exists     func(id *ResolvedURL, req *http.Request) (bool, error)
 }
@@ -148,7 +148,7 @@ type ResolvedURL struct {
 	// URL holds the fully qualified URL. URL.User should always be non-empty
 	// and URL.Revision should never be -1. URL.Series will only be non-empty
 	// if the URL refers to a multi-series charm.
-	URL charm.Reference
+	URL charm.URL
 	// PromulgatedRevision holds the revision of the promulgated version of the
 	// charm or -1 if the corresponding entity is not promulgated.
 	PromulgatedRevision int
@@ -162,10 +162,10 @@ type ResolvedURL struct {
 // specifies the value of PromulgatedRevision in the returned
 // value.
 //
-// This function panics if urlStr cannot be parsed as a charm.Reference
+// This function panics if urlStr cannot be parsed as a charm.URL
 // or if it is not fully specified, including user and revision.
 func MustNewResolvedURL(urlStr string, promulgatedRev int) *ResolvedURL {
-	url := charm.MustParseReference(urlStr)
+	url := charm.MustParseURL(urlStr)
 	if url.User == "" || url.Revision == -1 {
 		panic(fmt.Errorf("incomplete url %v", urlStr))
 	}
@@ -177,9 +177,9 @@ func MustNewResolvedURL(urlStr string, promulgatedRev int) *ResolvedURL {
 
 // PreferredURL returns the promulgated URL for
 // the given id if there is one, otherwise it
-// returns the non-promulgated URL. The returned *charm.Reference
+// returns the non-promulgated URL. The returned *charm.URL
 // may be modified freely.
-func (id *ResolvedURL) PreferredURL() *charm.Reference {
+func (id *ResolvedURL) PreferredURL() *charm.URL {
 	u := id.URL
 	if id.PromulgatedRevision == -1 {
 		return &u
@@ -191,7 +191,7 @@ func (id *ResolvedURL) PreferredURL() *charm.Reference {
 
 // PromulgatedURL returns the promulgated URL for id if there
 // is one, or nil otherwise.
-func (id *ResolvedURL) PromulgatedURL() *charm.Reference {
+func (id *ResolvedURL) PromulgatedURL() *charm.URL {
 	if id.PromulgatedRevision == -1 {
 		return nil
 	}
@@ -230,7 +230,7 @@ func (u *ResolvedURL) String() string {
 // but has no appropriate handler to call.
 func New(
 	handlers *Handlers,
-	resolveURL func(id *charm.Reference) (*ResolvedURL, error),
+	resolveURL func(id *charm.URL) (*ResolvedURL, error),
 	authorize func(id *ResolvedURL, req *http.Request) error,
 	exists func(id *ResolvedURL, req *http.Request) (bool, error),
 ) *Router {
@@ -560,7 +560,7 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 	delete(req.Form, "ignore-auth")
 	result := make(map[string]interface{})
 	for _, id := range ids {
-		url, err := charm.ParseReference(id)
+		url, err := charm.ParseURL(id)
 		if err != nil {
 			return nil, errgo.WithCausef(err, params.ErrBadRequest, "")
 		}
@@ -640,7 +640,7 @@ func (r *Router) serveBulkMetaPut(req *http.Request) error {
 // serveBulkMetaPutOne serves a PUT to a single id as part of a bulk PUT
 // request. It's in a separate function to make the error handling easier.
 func (r *Router) serveBulkMetaPutOne(req *http.Request, id string, val *json.RawMessage) error {
-	url, err := charm.ParseReference(id)
+	url, err := charm.ParseURL(id)
 	if err != nil {
 		return errgo.Mask(err)
 	}
@@ -817,7 +817,7 @@ func splitPath(path string, i int) (elem string, nextIndex int) {
 
 // splitId splits the given URL path into a charm or bundle
 // URL and the rest of the path.
-func splitId(path string) (url *charm.Reference, rest string, err error) {
+func splitId(path string) (url *charm.URL, rest string, err error) {
 	path = strings.TrimPrefix(path, "/")
 
 	part, i := splitPath(path, 0)
@@ -836,7 +836,7 @@ func splitId(path string) (url *charm.Reference, rest string, err error) {
 	// charm id.
 
 	urlStr := strings.TrimSuffix(path[0:i], "/")
-	url, err = charm.ParseReference(urlStr)
+	url, err = charm.ParseURL(urlStr)
 	if err != nil {
 		return nil, "", errgo.Mask(err)
 	}

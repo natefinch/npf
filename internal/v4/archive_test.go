@@ -25,8 +25,8 @@ import (
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
-	charmtesting "gopkg.in/juju/charmrepo.v1/testing"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
+	charmtesting "gopkg.in/juju/charmrepo.v2-unstable/testing"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
@@ -381,7 +381,7 @@ func (s *ArchiveSuite) TestPutCharm(c *gc.C) {
 	s.assertUploadCharmError(
 		c,
 		"PUT",
-		charm.MustParseReference("~charmers/precise/wordpress-3"),
+		charm.MustParseURL("~charmers/precise/wordpress-3"),
 		nil,
 		"mysql",
 		http.StatusInternalServerError,
@@ -395,8 +395,8 @@ func (s *ArchiveSuite) TestPutCharm(c *gc.C) {
 	s.assertUploadCharmError(
 		c,
 		"PUT",
-		charm.MustParseReference("~charmers/precise/wordpress-4"),
-		charm.MustParseReference("precise/wordpress-3"),
+		charm.MustParseURL("~charmers/precise/wordpress-4"),
+		charm.MustParseURL("precise/wordpress-3"),
 		"wordpress",
 		http.StatusInternalServerError,
 		params.Error{
@@ -409,8 +409,8 @@ func (s *ArchiveSuite) TestPutCharm(c *gc.C) {
 	s.assertUploadCharmError(
 		c,
 		"PUT",
-		charm.MustParseReference("~charmers/precise/wordpress-4"),
-		charm.MustParseReference("~charmers/precise/wordpress-4"),
+		charm.MustParseURL("~charmers/precise/wordpress-4"),
+		charm.MustParseURL("~charmers/precise/wordpress-4"),
 		"mysql",
 		http.StatusBadRequest,
 		params.Error{
@@ -423,8 +423,8 @@ func (s *ArchiveSuite) TestPutCharm(c *gc.C) {
 	s.assertUploadCharmError(
 		c,
 		"PUT",
-		charm.MustParseReference("~charmers/precise/wordpress-4"),
-		charm.MustParseReference("precise/mysql-4"),
+		charm.MustParseURL("~charmers/precise/wordpress-4"),
+		charm.MustParseURL("precise/mysql-4"),
 		"mysql",
 		http.StatusBadRequest,
 		params.Error{
@@ -654,7 +654,7 @@ func (s *ArchiveSuite) TestPostFailureCounters(c *gc.C) {
 func (s *ArchiveSuite) TestPostErrorReadsFully(c *gc.C) {
 	h := s.handler(c)
 	defer h.Close()
-	id := charm.MustParseReference("~charmers/trusty/wordpress")
+	id := charm.MustParseURL("~charmers/trusty/wordpress")
 	u, err := url.Parse("http://127.0.0.1/v4/" + id.Path() + "/archive")
 	c.Assert(err, gc.IsNil)
 	b := bytes.NewBuffer([]byte("test body"))
@@ -673,7 +673,7 @@ func (s *ArchiveSuite) TestPostErrorReadsFully(c *gc.C) {
 func (s *ArchiveSuite) TestPostAuthErrorReadsFully(c *gc.C) {
 	h := s.handler(c)
 	defer h.Close()
-	id := charm.MustParseReference("~charmers/trusty/wordpress")
+	id := charm.MustParseURL("~charmers/trusty/wordpress")
 	u, err := url.Parse("http://127.0.0.1/v4/" + id.Path() + "/archive")
 	c.Assert(err, gc.IsNil)
 	b := bytes.NewBuffer([]byte("test body"))
@@ -704,7 +704,7 @@ func (s *ArchiveSuite) TestUploadOfCurrentCharmReadsFully(c *gc.C) {
 	// Simulate upload of current version
 	h := s.handler(c)
 	defer h.Close()
-	id := charm.MustParseReference("~charmers/precise/wordpress")
+	id := charm.MustParseURL("~charmers/precise/wordpress")
 	u, err := url.Parse("http://127.0.0.1/v4/" + id.Path() + "/archive?hash=" + hashSum)
 	c.Assert(err, gc.IsNil)
 	b := bytes.NewBuffer([]byte("test body"))
@@ -719,7 +719,7 @@ func (s *ArchiveSuite) TestUploadOfCurrentCharmReadsFully(c *gc.C) {
 	rec := httptest.NewRecorder()
 	err = v4.ServeArchive(h, id, rec, r)
 	c.Assert(err, gc.IsNil)
-	expectId := charm.MustParseReference("~charmers/precise/wordpress-0")
+	expectId := charm.MustParseURL("~charmers/precise/wordpress-0")
 	httptesting.AssertJSONResponse(
 		c,
 		rec,
@@ -855,7 +855,7 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *router.Resolved
 // given name through the API, checking that the attempt fails with the
 // specified error. The URL must hold the expected revision that the
 // charm will be given when uploaded.
-func (s *ArchiveSuite) assertUploadCharmError(c *gc.C, method string, url, purl *charm.Reference, charmName string, expectStatus int, expectBody interface{}) {
+func (s *ArchiveSuite) assertUploadCharmError(c *gc.C, method string, url, purl *charm.URL, charmName string, expectStatus int, expectBody interface{}) {
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), charmName)
 	s.assertUploadError(c, method, url, purl, ch.Path, expectStatus, expectBody)
 }
@@ -865,7 +865,7 @@ func (s *ArchiveSuite) assertUploadCharmError(c *gc.C, method string, url, purl 
 // The reason this method does not take a *router.ResolvedURL
 // is so that we can test what happens when an inconsistent promulgated URL
 // is passed in.
-func (s *ArchiveSuite) assertUploadError(c *gc.C, method string, url, purl *charm.Reference, fileName string, expectStatus int, expectBody interface{}) {
+func (s *ArchiveSuite) assertUploadError(c *gc.C, method string, url, purl *charm.URL, fileName string, expectStatus int, expectBody interface{}) {
 	f, err := os.Open(fileName)
 	c.Assert(err, gc.IsNil)
 	defer f.Close()
@@ -1157,9 +1157,9 @@ func (s *ArchiveSuite) TestDeleteSpecificCharm(c *gc.C) {
 	})
 
 	// The other two charms are still present in the database.
-	urls := []*charm.Reference{
-		charm.MustParseReference("~charmers/trusty/mysql-42"),
-		charm.MustParseReference("~charmers/utopic/mysql-47"),
+	urls := []*charm.URL{
+		charm.MustParseURL("~charmers/trusty/mysql-42"),
+		charm.MustParseURL("~charmers/utopic/mysql-47"),
 	}
 	count, err := s.store.DB.Entities().Find(bson.D{{
 		"_id", bson.D{{"$in", urls}},
@@ -1308,7 +1308,7 @@ func checkAuthErrors(c *gc.C, handler http.Handler, method, url string) {
 // entityInfo holds all the information we want to find
 // out about a charm or bundle uploaded to the store.
 type entityInfo struct {
-	Id   *charm.Reference
+	Id   *charm.URL
 	Meta entityMetaInfo
 }
 
@@ -1354,31 +1354,31 @@ func (s *ArchiveSuite) TestArchiveFileGetHasCORSHeaders(c *gc.C) {
 
 var getNewPromulgatedRevisionTests = []struct {
 	about     string
-	id        *charm.Reference
+	id        *charm.URL
 	expectRev int
 }{{
 	about:     "no base entity",
-	id:        charm.MustParseReference("cs:~mmouse/trusty/mysql-14"),
+	id:        charm.MustParseURL("cs:~mmouse/trusty/mysql-14"),
 	expectRev: -1,
 }, {
 	about:     "not promulgated",
-	id:        charm.MustParseReference("cs:~dduck/trusty/mysql-14"),
+	id:        charm.MustParseURL("cs:~dduck/trusty/mysql-14"),
 	expectRev: -1,
 }, {
 	about:     "not yet promulgated",
-	id:        charm.MustParseReference("cs:~goofy/trusty/mysql-14"),
+	id:        charm.MustParseURL("cs:~goofy/trusty/mysql-14"),
 	expectRev: 0,
 }, {
 	about:     "existing promulgated",
-	id:        charm.MustParseReference("cs:~pluto/trusty/mariadb-14"),
+	id:        charm.MustParseURL("cs:~pluto/trusty/mariadb-14"),
 	expectRev: 4,
 }, {
 	about:     "previous promulgated by different user",
-	id:        charm.MustParseReference("cs:~tom/trusty/sed-1"),
+	id:        charm.MustParseURL("cs:~tom/trusty/sed-1"),
 	expectRev: 5,
 }, {
 	about:     "many previous promulgated revisions",
-	id:        charm.MustParseReference("cs:~tom/trusty/awk-5"),
+	id:        charm.MustParseURL("cs:~tom/trusty/awk-5"),
 	expectRev: 5,
 }}
 

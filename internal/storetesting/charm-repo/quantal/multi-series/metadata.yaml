@@ -1,0 +1,28 @@
+name: multi-series
+summary: multi-series test charm
+description: Test charm that supports a number of series
+series:
+ - trusty
+ - utopic
+ - vivid
+ - wily
+provides:
+  url:
+    interface: http
+    limit:
+    optional: false
+  logging-dir:
+    interface: logging
+    scope: container
+  monitoring-port:
+    interface: monitoring
+    scope: container
+requires:
+  db:
+    interface: mysql
+    limit: 1
+    optional: false
+  cache:
+    interface: varnish
+    limit: 2
+    optional: true

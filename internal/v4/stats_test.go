@@ -12,7 +12,7 @@ import (
 
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
@@ -88,7 +88,7 @@ func (s *StatsSuite) TestServerStatsStatus(c *gc.C) {
 }
 
 func (s *StatsSuite) TestServerStatsUpdate(c *gc.C) {
-	ref := charm.MustParseReference("~charmers/precise/wordpress-23")
+	ref := charm.MustParseURL("~charmers/precise/wordpress-23")
 	tests := []struct {
 		path          string
 		status        int
@@ -101,7 +101,7 @@ func (s *StatsSuite) TestServerStatsUpdate(c *gc.C) {
 		body: params.StatsUpdateRequest{
 			Entries: []params.StatsUpdateEntry{{
 				Timestamp:      time.Now(),
-				CharmReference: charm.MustParseReference("~charmers/wordpress"),
+				CharmReference: charm.MustParseURL("~charmers/wordpress"),
 			}}},
 	}, {
 		path:   "stats/update",
@@ -161,7 +161,7 @@ func (s *StatsSuite) TestServerStatsUpdate(c *gc.C) {
 }
 
 func (s *StatsSuite) TestServerStatsArchiveDownloadOnPromulgatedEntity(c *gc.C) {
-	ref := charm.MustParseReference("~charmers/precise/wordpress-23")
+	ref := charm.MustParseURL("~charmers/precise/wordpress-23")
 	path := "/stats/counter/archive-download:*"
 
 	ch := storetesting.Charms.CharmDir("wordpress")
@@ -205,7 +205,7 @@ func (s *StatsSuite) TestServerStatsArchiveDownloadOnPromulgatedEntity(c *gc.C) 
 }
 
 func (s *StatsSuite) TestServerStatsUpdateErrors(c *gc.C) {
-	ref := charm.MustParseReference("~charmers/precise/wordpress-23")
+	ref := charm.MustParseURL("~charmers/precise/wordpress-23")
 	tests := []struct {
 		path          string
 		status        int
@@ -219,7 +219,7 @@ func (s *StatsSuite) TestServerStatsUpdateErrors(c *gc.C) {
 		body: params.StatsUpdateRequest{
 			Entries: []params.StatsUpdateEntry{{
 				Timestamp:      time.Now(),
-				CharmReference: charm.MustParseReference("~charmers/precise/unknown-23"),
+				CharmReference: charm.MustParseURL("~charmers/precise/unknown-23"),
 			}},
 		},
 		expectMessage: `cannot find entity for url cs:~charmers/precise/unknown-23: no matching charm or bundle for "cs:~charmers/precise/unknown-23"`,
@@ -229,10 +229,10 @@ func (s *StatsSuite) TestServerStatsUpdateErrors(c *gc.C) {
 		body: params.StatsUpdateRequest{
 			Entries: []params.StatsUpdateEntry{{
 				Timestamp:      time.Now(),
-				CharmReference: charm.MustParseReference("~charmers/precise/unknown-23"),
+				CharmReference: charm.MustParseURL("~charmers/precise/unknown-23"),
 			}, {
 				Timestamp:      time.Now(),
-				CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
+				CharmReference: charm.MustParseURL("~charmers/precise/wordpress-23"),
 			}},
 		},
 		expectMessage: `cannot find entity for url cs:~charmers/precise/unknown-23: no matching charm or bundle for "cs:~charmers/precise/unknown-23"`,
@@ -283,7 +283,7 @@ func (s *StatsSuite) TestServerStatsUpdateNonAdmin(c *gc.C) {
 		JSONBody: params.StatsUpdateRequest{
 			Entries: []params.StatsUpdateEntry{{
 				Timestamp:      time.Now(),
-				CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
+				CharmReference: charm.MustParseURL("~charmers/precise/wordpress-23"),
 			}},
 		},
 		ExpectStatus: http.StatusUnauthorized,
@@ -301,7 +301,7 @@ func (s *StatsSuite) TestServerStatsUpdateNonAdmin(c *gc.C) {
 		JSONBody: params.StatsUpdateRequest{
 			Entries: []params.StatsUpdateEntry{{
 				Timestamp:      time.Now(),
-				CharmReference: charm.MustParseReference("~charmers/precise/wordpress-23"),
+				CharmReference: charm.MustParseURL("~charmers/precise/wordpress-23"),
 			}},
 		},
 		ExpectStatus: http.StatusUnauthorized,
