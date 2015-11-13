@@ -1201,6 +1201,16 @@ func (s *StoreSuite) TestAddCharmWithMultiSeriesToES(c *gc.C) {
 	s.checkAddCharm(c, ch, true, newResolvedURL("~charmers/juju-gui-1", 1))
 }
 
+func (s *StoreSuite) TestAddCharmWithSeriesMetadataFailsIfURLSpecifiesADifferentSeries(c *gc.C) {
+	store := s.newStore(c, false)
+	defer store.Close()
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
+	err := store.AddCharm(ch, AddParams{
+		URL: newResolvedURL("~charmers/precise/multi-series-2", -1),
+	})
+	c.Assert(err, gc.ErrorMatches, `precise not listed in charm metadata`)
+}
+
 var addInvalidCharmURLTests = []string{
 	"cs:precise/wordpress-2",          // no user
 	"cs:~charmers/precise/wordpress",  // no revision
@@ -1230,7 +1240,7 @@ func (s *StoreSuite) TestAddNoSeries(c *gc.C) {
 	err := store.AddCharm(ch, AddParams{
 		URL: newResolvedURL("cs:~charmers/wordpress-1", -1),
 	})
-	c.Assert(err, gc.ErrorMatches, `charm added without series cs:~charmers/wordpress-1`)
+	c.Assert(err, gc.ErrorMatches, `charm cs:~charmers/wordpress-1 added without any supported series`)
 }
 
 var addInvalidBundleURLTests = []string{
