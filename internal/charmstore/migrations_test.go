@@ -260,15 +260,15 @@ func (s *migrationsSuite) TestMigrateParallelMigration(c *gc.C) {
 
 	// Prepare a database for the migration.
 	e1 := &mongodoc.Entity{
-		URL:            charm.MustParseReference("~charmers/trusty/django-42"),
-		PromulgatedURL: charm.MustParseReference("trusty/django-3"),
+		URL:            charm.MustParseURL("~charmers/trusty/django-42"),
+		PromulgatedURL: charm.MustParseURL("trusty/django-3"),
 		Size:           12,
 	}
 	denormalizeEntity(e1)
 	s.insertEntity(c, e1, beforeAllMigrations)
 
 	e2 := &mongodoc.Entity{
-		URL:  charm.MustParseReference("~who/utopic/rails-47"),
+		URL:  charm.MustParseURL("~who/utopic/rails-47"),
 		Size: 13,
 	}
 	denormalizeEntity(e2)
@@ -303,14 +303,14 @@ func (s *migrationsSuite) TestAddSupportedSeries(c *gc.C) {
 	s.patchMigrations(c, getMigrations(migrationAddSupportedSeries))
 
 	entities := []*mongodoc.Entity{{
-		URL:            charm.MustParseReference("~charmers/trusty/django-42"),
-		PromulgatedURL: charm.MustParseReference("trusty/django-3"),
+		URL:            charm.MustParseURL("~charmers/trusty/django-42"),
+		PromulgatedURL: charm.MustParseURL("trusty/django-3"),
 		Size:           12,
 	}, {
-		URL:  charm.MustParseReference("~who/utopic/rails-47"),
+		URL:  charm.MustParseURL("~who/utopic/rails-47"),
 		Size: 13,
 	}, {
-		URL:  charm.MustParseReference("~who/bundle/something-47"),
+		URL:  charm.MustParseURL("~who/bundle/something-47"),
 		Size: 13,
 	}}
 	for _, e := range entities {

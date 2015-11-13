@@ -16,7 +16,7 @@ import (
 	"github.com/juju/utils/parallel"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/mgostorage"
 	"gopkg.in/mgo.v2"
@@ -670,7 +670,7 @@ func (s *Store) FindEntity(url *router.ResolvedURL, fields ...string) (*mongodoc
 // If any fields are specified, only those fields will be
 // populated in the returned entities. If the given URL has no user then
 // only promulgated entities will be queried.
-func (s *Store) FindEntities(url *charm.Reference, fields ...string) ([]*mongodoc.Entity, error) {
+func (s *Store) FindEntities(url *charm.URL, fields ...string) ([]*mongodoc.Entity, error) {
 	query := selectFields(s.EntitiesQuery(url), fields)
 	var docs []*mongodoc.Entity
 	err := query.All(&docs)
@@ -684,7 +684,7 @@ func (s *Store) FindEntities(url *charm.Reference, fields ...string) ([]*mongodo
 // the given URL. If any fields are specified, only those fields will be
 // populated in the returned entities. If the given URL has no user then
 // only promulgated entities will be queried.
-func (s *Store) FindBestEntity(url *charm.Reference, fields ...string) (*mongodoc.Entity, error) {
+func (s *Store) FindBestEntity(url *charm.URL, fields ...string) (*mongodoc.Entity, error) {
 	if len(fields) > 0 {
 		// Make sure we have all the fields we need to make a decision.
 		fields = append(fields, "_id", "promulgated-url", "promulgated-revision", "series", "revision")
@@ -742,7 +742,7 @@ var seriesBundleOrEmpty = bson.D{{"$or", []bson.D{{{"series", "bundle"}}, {{"ser
 // EntitiesQuery creates a mgo.Query object that can be used to find
 // entities matching the given URL. If the given URL has no user then
 // the produced query will only match promulgated entities.
-func (s *Store) EntitiesQuery(url *charm.Reference) *mgo.Query {
+func (s *Store) EntitiesQuery(url *charm.URL) *mgo.Query {
 	entities := s.DB.Entities()
 	query := make(bson.D, 1, 4)
 	query[0] = bson.DocElem{"name", url.Name}
@@ -777,7 +777,7 @@ func (s *Store) EntitiesQuery(url *charm.Reference) *mgo.Query {
 // which can either represent a fully qualified entity or a base id.
 // If any fields are specified, only those fields will be populated in the
 // returned base entity.
-func (s *Store) FindBaseEntity(url *charm.Reference, fields ...string) (*mongodoc.BaseEntity, error) {
+func (s *Store) FindBaseEntity(url *charm.URL, fields ...string) (*mongodoc.BaseEntity, error) {
 	var query *mgo.Query
 	if url.User == "" {
 		query = s.DB.BaseEntities().Find(bson.D{{"name", url.Name}, {"promulgated", 1}})
@@ -988,7 +988,7 @@ func interfacesForRelations(rels map[string]charm.Relation) []string {
 	return result
 }
 
-func baseURL(url *charm.Reference) *charm.Reference {
+func baseURL(url *charm.URL) *charm.URL {
 	newURL := *url
 	newURL.Revision = -1
 	newURL.Series = ""
@@ -1165,7 +1165,7 @@ func (s *Store) findZipFile(blob io.ReadSeeker, size int64, isFile func(f *zip.F
 // SetPerms sets the permissions for the base entity with
 // the given id for "which" operations ("read" or "write")
 // to the given ACL. This is mostly provided for testing.
-func (s *Store) SetPerms(id *charm.Reference, which string, acl ...string) error {
+func (s *Store) SetPerms(id *charm.URL, which string, acl ...string) error {
 	return s.DB.BaseEntities().UpdateId(baseURL(id), bson.D{{"$set",
 		bson.D{{"acls." + which, acl}},
 	}})
@@ -1220,12 +1220,12 @@ func bundleMachineCount(b *charm.BundleData) int {
 
 // bundleCharms returns all the charm URLs used by a bundle,
 // without duplicates.
-func bundleCharms(data *charm.BundleData) ([]*charm.Reference, error) {
+func bundleCharms(data *charm.BundleData) ([]*charm.URL, error) {
 	// Use a map to de-duplicate the URL list: a bundle can include services
 	// deployed by the same charm.
-	urlMap := make(map[string]*charm.Reference)
+	urlMap := make(map[string]*charm.URL)
 	for _, service := range data.Services {
-		url, err := charm.ParseReference(service.Charm)
+		url, err := charm.ParseURL(service.Charm)
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}
@@ -1234,7 +1234,7 @@ func bundleCharms(data *charm.BundleData) ([]*charm.Reference, error) {
 		base := baseURL(url)
 		urlMap[base.String()] = base
 	}
-	urls := make([]*charm.Reference, 0, len(urlMap))
+	urls := make([]*charm.URL, 0, len(urlMap))
 	for _, url := range urlMap {
 		urls = append(urls, url)
 	}
@@ -1242,7 +1242,7 @@ func bundleCharms(data *charm.BundleData) ([]*charm.Reference, error) {
 }
 
 // AddLog adds a log message to the database.
-func (s *Store) AddLog(data *json.RawMessage, logLevel mongodoc.LogLevel, logType mongodoc.LogType, urls []*charm.Reference) error {
+func (s *Store) AddLog(data *json.RawMessage, logLevel mongodoc.LogLevel, logType mongodoc.LogType, urls []*charm.URL) error {
 	// Encode the JSON data.
 	b, err := json.Marshal(data)
 	if err != nil {
@@ -1251,7 +1251,7 @@ func (s *Store) AddLog(data *json.RawMessage, logLevel mongodoc.LogLevel, logTyp
 
 	// Add the base URLs to the list of references associated with the log.
 	// Also remove duplicate URLs while maintaining the references' order.
-	var allUrls []*charm.Reference
+	var allUrls []*charm.URL
 	urlMap := make(map[string]bool)
 	for _, url := range urls {
 		urlStr := url.String()

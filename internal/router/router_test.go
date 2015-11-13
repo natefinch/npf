@@ -22,7 +22,7 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 
 	"gopkg.in/juju/charmstore.v5-unstable/audit"
@@ -43,7 +43,7 @@ var routerGetTests = []struct {
 	expectStatus     int
 	expectBody       interface{}
 	expectQueryCount int32
-	resolveURL       func(*charm.Reference) (*ResolvedURL, error)
+	resolveURL       func(*charm.URL) (*ResolvedURL, error)
 	authorize        func(*ResolvedURL, *http.Request) error
 	exists           func(*ResolvedURL, *http.Request) (bool, error)
 }{{
@@ -256,7 +256,7 @@ var routerGetTests = []struct {
 	about: "id handler that returns a not-found error",
 	handlers: Handlers{
 		Id: map[string]IdHandler{
-			"foo": func(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+			"foo": func(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
 				return params.ErrNotFound
 			},
 		},
@@ -271,7 +271,7 @@ var routerGetTests = []struct {
 	about: "id handler that returns some other kind of coded error",
 	handlers: Handlers{
 		Id: map[string]IdHandler{
-			"foo": func(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+			"foo": func(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
 				return errgo.WithCausef(nil, params.ErrorCode("foo"), "a message")
 			},
 		},
@@ -499,7 +499,7 @@ var routerGetTests = []struct {
 	exists:       alwaysExists,
 	expectStatus: http.StatusOK,
 	expectBody: params.MetaAnyResponse{
-		Id: charm.MustParseReference("cs:precise/wordpress-42"),
+		Id: charm.MustParseURL("cs:precise/wordpress-42"),
 	},
 }, {
 	about:  "meta/any, no includes, id does not exist",
@@ -525,7 +525,7 @@ var routerGetTests = []struct {
 	expectQueryCount: 1,
 	expectStatus:     http.StatusOK,
 	expectBody: params.MetaAnyResponse{
-		Id: charm.MustParseReference("cs:precise/wordpress-42"),
+		Id: charm.MustParseURL("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
 			"field1-1": fieldSelectHandleGetInfo{
 				HandlerId: "handler1",
@@ -566,7 +566,7 @@ var routerGetTests = []struct {
 	expectQueryCount: 1,
 	expectStatus:     http.StatusOK,
 	expectBody: params.MetaAnyResponse{
-		Id: charm.MustParseReference("cs:precise/wordpress-42"),
+		Id: charm.MustParseURL("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
 			"item1/foo": fieldSelectHandleGetInfo{
 				HandlerId: "handler1",
@@ -608,7 +608,7 @@ var routerGetTests = []struct {
 	},
 	expectStatus: http.StatusOK,
 	expectBody: params.MetaAnyResponse{
-		Id: charm.MustParseReference("cs:precise/wordpress-42"),
+		Id: charm.MustParseURL("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
 			"ok": metaHandlerTestResp{
 				CharmURL: "cs:precise/wordpress-42",
@@ -671,7 +671,7 @@ var routerGetTests = []struct {
 	expectStatus: http.StatusOK,
 	expectBody: map[string]params.MetaAnyResponse{
 		"precise/wordpress-42": {
-			Id: charm.MustParseReference("cs:precise/wordpress-42"),
+			Id: charm.MustParseURL("cs:precise/wordpress-42"),
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
 					CharmURL: "cs:precise/wordpress-42",
@@ -683,7 +683,7 @@ var routerGetTests = []struct {
 			},
 		},
 		"utopic/foo-32": {
-			Id: charm.MustParseReference("cs:utopic/foo-32"),
+			Id: charm.MustParseURL("cs:utopic/foo-32"),
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
 					CharmURL: "cs:utopic/foo-32",
@@ -731,7 +731,7 @@ var routerGetTests = []struct {
 	expectStatus: http.StatusOK,
 	expectBody: map[string]params.MetaAnyResponse{
 		"utopic/foo-32": {
-			Id: charm.MustParseReference("cs:utopic/foo-32"),
+			Id: charm.MustParseURL("cs:utopic/foo-32"),
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
 					CharmURL: "cs:utopic/foo-32",
@@ -823,7 +823,7 @@ var routerGetTests = []struct {
 }, {
 	about:  "bulk meta handler with unresolvable id",
 	urlStr: "/meta/foo?id=unresolved&id=~foo/precise/wordpress-23",
-	resolveURL: func(url *charm.Reference) (*ResolvedURL, error) {
+	resolveURL: func(url *charm.URL) (*ResolvedURL, error) {
 		if url.Name == "unresolved" {
 			return nil, params.ErrNotFound
 		}
@@ -843,7 +843,7 @@ var routerGetTests = []struct {
 }, {
 	about:  "bulk meta handler with id resolution error",
 	urlStr: "/meta/foo?id=resolveerror&id=precise/wordpress-23",
-	resolveURL: func(url *charm.Reference) (*ResolvedURL, error) {
+	resolveURL: func(url *charm.URL) (*ResolvedURL, error) {
 		if url.Name == "resolveerror" {
 			return nil, errgo.Newf("an error")
 		}
@@ -912,8 +912,8 @@ var routerGetTests = []struct {
 // resolveTo returns a URL resolver that resolves
 // unspecified series and revision to the given series
 // and revision.
-func resolveTo(series string, revision int) func(*charm.Reference) (*ResolvedURL, error) {
-	return func(url *charm.Reference) (*ResolvedURL, error) {
+func resolveTo(series string, revision int) func(*charm.URL) (*ResolvedURL, error) {
+	return func(url *charm.URL) (*ResolvedURL, error) {
 		var rurl ResolvedURL
 		rurl.URL = *url
 		if url.Series == "" {
@@ -930,13 +930,13 @@ func resolveTo(series string, revision int) func(*charm.Reference) (*ResolvedURL
 	}
 }
 
-func resolveURLError(err error) func(*charm.Reference) (*ResolvedURL, error) {
-	return func(*charm.Reference) (*ResolvedURL, error) {
+func resolveURLError(err error) func(*charm.URL) (*ResolvedURL, error) {
+	return func(*charm.URL) (*ResolvedURL, error) {
 		return nil, err
 	}
 }
 
-func alwaysResolveURL(u *charm.Reference) (*ResolvedURL, error) {
+func alwaysResolveURL(u *charm.URL) (*ResolvedURL, error) {
 	u1 := *u
 	if u1.Series == "" {
 		u1.Series = "precise"
@@ -1110,7 +1110,7 @@ var routerPutTests = []struct {
 	expectCode          int
 	expectBody          interface{}
 	expectRecordedCalls []interface{}
-	resolveURL          func(*charm.Reference) (*ResolvedURL, error)
+	resolveURL          func(*charm.URL) (*ResolvedURL, error)
 }{{
 	about: "global handler",
 	handlers: Handlers{
@@ -1521,7 +1521,7 @@ var routerPutTests = []struct {
 			}),
 		},
 	},
-	resolveURL: func(id *charm.Reference) (*ResolvedURL, error) {
+	resolveURL: func(id *charm.URL) (*ResolvedURL, error) {
 		if id.Name == "bad" {
 			return nil, params.ErrBadRequest
 		}
@@ -2100,19 +2100,19 @@ func (s *RouterSuite) TestResolvedURLPreferredURL(c *gc.C) {
 	r := MustNewResolvedURL("~charmers/precise/wordpress-23", 4)
 	// Ensure it's not aliased.
 	u := r.PreferredURL()
-	c.Assert(u, gc.DeepEquals, charm.MustParseReference("precise/wordpress-4"))
+	c.Assert(u, gc.DeepEquals, charm.MustParseURL("precise/wordpress-4"))
 	u.Series = "foo"
 	c.Assert(r.URL.Series, gc.Equals, "precise")
 
 	r = MustNewResolvedURL("~charmers/precise/wordpress-23", -1)
 	// Ensure it's not aliased.
 	u = r.PreferredURL()
-	c.Assert(u, gc.DeepEquals, charm.MustParseReference("~charmers/precise/wordpress-23"))
+	c.Assert(u, gc.DeepEquals, charm.MustParseURL("~charmers/precise/wordpress-23"))
 	u.Series = "foo"
 	c.Assert(r.URL.Series, gc.Equals, "precise")
 }
 
-func errorIdHandler(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func errorIdHandler(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
 	return errgo.Newf("errorIdHandler error")
 }
 
@@ -2122,7 +2122,7 @@ type idHandlerTestResp struct {
 	Path     string
 }
 
-func testIdHandler(charmId *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func testIdHandler(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {
 	httprequest.WriteJSON(w, http.StatusOK, idHandlerTestResp{
 		CharmURL: charmId.String(),
 		Path:     req.URL.Path,

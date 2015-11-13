@@ -13,7 +13,7 @@ import (
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
@@ -47,10 +47,10 @@ var logResponses = map[string]*params.LogResponse{
 		Data:  rawMessage("info data 2"),
 		Level: params.InfoLevel,
 		Type:  params.IngestionType,
-		URLs: []*charm.Reference{
-			charm.MustParseReference("precise/django"),
-			charm.MustParseReference("django"),
-			charm.MustParseReference("rails"),
+		URLs: []*charm.URL{
+			charm.MustParseURL("precise/django"),
+			charm.MustParseURL("django"),
+			charm.MustParseURL("rails"),
 		},
 	},
 	"warning1": {
@@ -63,30 +63,30 @@ var logResponses = map[string]*params.LogResponse{
 		Data:  rawMessage("error data 2"),
 		Level: params.ErrorLevel,
 		Type:  params.IngestionType,
-		URLs: []*charm.Reference{
-			charm.MustParseReference("hadoop"),
+		URLs: []*charm.URL{
+			charm.MustParseURL("hadoop"),
 		},
 	},
 	"info3": {
 		Data:  rawMessage("info data 3"),
 		Level: params.InfoLevel,
 		Type:  params.IngestionType,
-		URLs: []*charm.Reference{
-			charm.MustParseReference("trusty/django"),
-			charm.MustParseReference("django"),
-			charm.MustParseReference("utopic/hadoop"),
-			charm.MustParseReference("hadoop"),
+		URLs: []*charm.URL{
+			charm.MustParseURL("trusty/django"),
+			charm.MustParseURL("django"),
+			charm.MustParseURL("utopic/hadoop"),
+			charm.MustParseURL("hadoop"),
 		},
 	},
 	"error3": {
 		Data:  rawMessage("error data 3"),
 		Level: params.ErrorLevel,
 		Type:  params.IngestionType,
-		URLs: []*charm.Reference{
-			charm.MustParseReference("utopic/hadoop"),
-			charm.MustParseReference("hadoop"),
-			charm.MustParseReference("precise/django"),
-			charm.MustParseReference("django"),
+		URLs: []*charm.URL{
+			charm.MustParseURL("utopic/hadoop"),
+			charm.MustParseURL("hadoop"),
+			charm.MustParseURL("precise/django"),
+			charm.MustParseURL("django"),
 		},
 	},
 	"stats": {
@@ -354,9 +354,9 @@ func (s *logSuite) TestGetLogsErrorInvalidLog(c *gc.C) {
 
 func (s *logSuite) TestPostLogs(c *gc.C) {
 	// Prepare the request body.
-	body := makeByteLogs(rawMessage("info data"), params.InfoLevel, params.IngestionType, []*charm.Reference{
-		charm.MustParseReference("trusty/django"),
-		charm.MustParseReference("utopic/rails"),
+	body := makeByteLogs(rawMessage("info data"), params.InfoLevel, params.IngestionType, []*charm.URL{
+		charm.MustParseURL("trusty/django"),
+		charm.MustParseURL("utopic/rails"),
 	})
 
 	// Send the request.
@@ -380,11 +380,11 @@ func (s *logSuite) TestPostLogs(c *gc.C) {
 	c.Assert(string(doc.Data), gc.Equals, `"info data"`)
 	c.Assert(doc.Level, gc.Equals, mongodoc.InfoLevel)
 	c.Assert(doc.Type, gc.Equals, mongodoc.IngestionType)
-	c.Assert(doc.URLs, jc.DeepEquals, []*charm.Reference{
-		charm.MustParseReference("trusty/django"),
-		charm.MustParseReference("django"),
-		charm.MustParseReference("utopic/rails"),
-		charm.MustParseReference("rails"),
+	c.Assert(doc.URLs, jc.DeepEquals, []*charm.URL{
+		charm.MustParseURL("trusty/django"),
+		charm.MustParseURL("django"),
+		charm.MustParseURL("utopic/rails"),
+		charm.MustParseURL("rails"),
 	})
 }
 
@@ -513,7 +513,7 @@ func (s *logSuite) TestPostLogsUnauthorizedError(c *gc.C) {
 	})
 }
 
-func makeByteLogs(data json.RawMessage, logLevel params.LogLevel, logType params.LogType, urls []*charm.Reference) []byte {
+func makeByteLogs(data json.RawMessage, logLevel params.LogLevel, logType params.LogType, urls []*charm.URL) []byte {
 	logs := []params.Log{{
 		Data:  &data,
 		Level: logLevel,

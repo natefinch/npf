@@ -13,7 +13,7 @@ import (
 	"github.com/juju/utils/debugstatus"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
@@ -217,7 +217,7 @@ func (s *APISuite) TestStatusLegacyStatisticsMultipleLogs(c *gc.C) {
 func (s *APISuite) TestStatusBaseEntitiesError(c *gc.C) {
 	// Add a base entity without any corresponding entities.
 	entity := &mongodoc.BaseEntity{
-		URL:  charm.MustParseReference("django"),
+		URL:  charm.MustParseURL("django"),
 		Name: "django",
 	}
 	err := s.store.DB.BaseEntities().Insert(entity)

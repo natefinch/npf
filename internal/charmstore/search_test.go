@@ -12,7 +12,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 
 	"gopkg.in/juju/charmstore.v5-unstable/elasticsearch"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
