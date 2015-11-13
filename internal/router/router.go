@@ -160,7 +160,7 @@ type ResolvedURL struct {
 // specifies the value of PromulgatedRevision in the returned
 // value.
 //
-// This function panics if urlStr cannot be parsed as a charm.Reference
+// This function panics if urlStr cannot be parsed as a charm.URL
 // or if it is not fully specified, including user and revision.
 func MustNewResolvedURL(urlStr string, promulgatedRev int) *ResolvedURL {
 	url := charm.MustParseURL(urlStr)
@@ -175,7 +175,7 @@ func MustNewResolvedURL(urlStr string, promulgatedRev int) *ResolvedURL {
 
 // PreferredURL returns the promulgated URL for
 // the given id if there is one, otherwise it
-// returns the non-promulgated URL. The returned *charm.Reference
+// returns the non-promulgated URL. The returned *charm.URL
 // may be modified freely.
 func (id *ResolvedURL) PreferredURL() *charm.URL {
 	u := id.URL

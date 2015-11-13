@@ -449,9 +449,6 @@ func (s *Store) AddCharmWithArchive(url *router.ResolvedURL, ch charm.Charm) err
 //
 // If purl is not nil then the bundle will also be
 // available at the promulgated url specified.
-//
-// TODO This could take a *router.ResolvedURL as an argument
-// instead of two *charm.References.
 func (s *Store) AddBundleWithArchive(url *router.ResolvedURL, b charm.Bundle) error {
 	blobName, blobHash, blobHash256, size, err := s.uploadCharmOrBundle(b)
 	if err != nil {

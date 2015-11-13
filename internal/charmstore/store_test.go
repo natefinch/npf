@@ -1091,14 +1091,6 @@ func MustParseResolvedURLs(urlStrs []string) []*router.ResolvedURL {
 	return urls
 }
 
-func mustParseReferences(urlStrs []string) []*charm.URL {
-	urls := make([]*charm.URL, len(urlStrs))
-	for i, u := range urlStrs {
-		urls[i] = charm.MustParseURL(u)
-	}
-	return urls
-}
-
 func (s *StoreSuite) TestAddPromulgatedCharmDir(c *gc.C) {
 	charmDir := storetesting.Charms.CharmDir("wordpress")
 	s.checkAddCharm(c, charmDir, false, newResolvedURL("~charmers/precise/wordpress-1", 1))
