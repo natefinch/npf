@@ -1004,6 +1004,7 @@ func baseURL(url *charm.URL) *charm.URL {
 	newURL := *url
 	newURL.Revision = -1
 	newURL.Series = ""
+	newURL.Channel = ""
 	return &newURL
 }
 
@@ -1179,8 +1180,12 @@ func (s *Store) findZipFile(blob io.ReadSeeker, size int64, isFile func(f *zip.F
 // the given id for "which" operations ("read" or "write")
 // to the given ACL. This is mostly provided for testing.
 func (s *Store) SetPerms(id *charm.URL, which string, acl ...string) error {
+	field := "acls"
+	if id.Channel == charm.DevelopmentChannel {
+		field = "developmentacls"
+	}
 	return s.DB.BaseEntities().UpdateId(baseURL(id), bson.D{{"$set",
-		bson.D{{"acls." + which, acl}},
+		bson.D{{field + "." + which, acl}},
 	}})
 }
 

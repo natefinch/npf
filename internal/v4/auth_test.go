@@ -312,41 +312,56 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		}
 
 		// Add a charm to the store, used for testing.
-		err := s.store.AddCharmWithArchive(
-			newResolvedURL("~charmers/utopic/wordpress-42", -1),
-			storetesting.Charms.CharmDir("wordpress"),
-		)
-		c.Assert(err, gc.IsNil)
-		baseURL := charm.MustParseURL("~charmers/wordpress")
-
-		// Change the ACLs for the testing charm.
-		err = s.store.SetPerms(baseURL, "read", test.readPerm...)
+		rurl := newResolvedURL("~charmers/utopic/wordpress-42", -1)
+		err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
 
-		// Prepare the expected status.
-		expectStatus := test.expectStatus
-		if expectStatus == 0 {
-			expectStatus = http.StatusOK
-		}
+		// Change the ACLs for the testing charm
+		// (both published and development versions).
+		err = s.store.SetPerms(&rurl.URL, "read", test.readPerm...)
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", test.readPerm...)
+		c.Assert(err, gc.IsNil)
 
 		// Define an helper function used to send requests and check responses.
-		makeRequest := func(path string) {
+		makeRequest := func(path string, expectStatus int, expectBody interface{}) {
 			rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 				Handler: s.srv,
 				Do:      bakeryDo(nil),
 				URL:     storeURL(path),
 			})
+			if expectStatus == 0 {
+				expectStatus = http.StatusOK
+			}
 			c.Assert(rec.Code, gc.Equals, expectStatus, gc.Commentf("body: %s", rec.Body))
-			if test.expectBody != nil {
-				c.Assert(rec.Body.String(), jc.JSONEquals, test.expectBody)
+			if expectBody != nil {
+				c.Assert(rec.Body.String(), jc.JSONEquals, expectBody)
 			}
 		}
 
-		// Perform a meta request.
-		makeRequest("~charmers/wordpress/meta/archive-size")
+		// Perform meta and id requests.
+		makeRequest("~charmers/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
+		makeRequest("~charmers/wordpress/expand-id", test.expectStatus, test.expectBody)
 
-		// Perform an id request.
-		makeRequest("~charmers/wordpress/expand-id")
+		// Perform meta and id requests to the development channel.
+		makeRequest("~charmers/development/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
+		makeRequest("~charmers/development/wordpress/expand-id", test.expectStatus, test.expectBody)
+
+		// Remove permissions for the published charm.
+		err = s.store.SetPerms(&rurl.URL, "read")
+		c.Assert(err, gc.IsNil)
+
+		// Check that now accessing the published charm is not allowed,
+		// but accessing the development charm still works as expected.
+		makeRequest("~charmers/wordpress/meta/archive-size", http.StatusUnauthorized, nil)
+		makeRequest("~charmers/development/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
+
+		// Remove permissions for the development charm as well.
+		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read")
+		c.Assert(err, gc.IsNil)
+
+		// Check that now accessing the development charm is also denied.
+		makeRequest("~charmers/development/wordpress/meta/archive-size", http.StatusUnauthorized, nil)
 
 		// Remove all entities from the store.
 		_, err = s.store.DB.Entities().RemoveAll(nil)
@@ -445,38 +460,55 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 		}
 
 		// Add a charm to the store, used for testing.
-		err := s.store.AddCharmWithArchive(
-			newResolvedURL("~charmers/utopic/wordpress-42", -1),
-			storetesting.Charms.CharmDir("wordpress"))
+		rurl := newResolvedURL("~charmers/utopic/wordpress-42", -1)
+		err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
-		baseURL := charm.MustParseURL("~charmers/wordpress")
 
 		// Change the ACLs for the testing charm.
-		err = s.store.SetPerms(baseURL, "write", test.writePerm...)
+		// (both published and development versions).
+		err = s.store.SetPerms(&rurl.URL, "write", test.writePerm...)
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "write", test.writePerm...)
 		c.Assert(err, gc.IsNil)
 
-		// Prepare the expected status.
-		expectStatus := test.expectStatus
-		if expectStatus == 0 {
-			expectStatus = http.StatusOK
+		makeRequest := func(path string, expectStatus int, expectBody interface{}) {
+			client := httpbakery.NewHTTPClient()
+			rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+				Handler: s.srv,
+				Do:      bakeryDo(client),
+				URL:     storeURL(path),
+				Method:  "PUT",
+				Header:  http.Header{"Content-Type": {"application/json"}},
+				Body:    strings.NewReader("42"),
+			})
+			if expectStatus == 0 {
+				expectStatus = http.StatusOK
+			}
+			c.Assert(rec.Code, gc.Equals, expectStatus, gc.Commentf("body: %s", rec.Body))
+			if expectBody != nil {
+				c.Assert(rec.Body.String(), jc.JSONEquals, expectBody)
+			}
 		}
 
-		client := httpbakery.NewHTTPClient()
-		// Perform a meta PUT request.
-		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-			Handler: s.srv,
-			Do:      bakeryDo(client),
-			URL:     storeURL("~charmers/wordpress/meta/extra-info/key"),
-			Method:  "PUT",
-			Header: http.Header{
-				"Content-Type": {"application/json"},
-			},
-			Body: strings.NewReader("42"),
-		})
-		c.Assert(rec.Code, gc.Equals, expectStatus, gc.Commentf("body: %s", rec.Body))
-		if test.expectBody != nil {
-			c.Assert(rec.Body.String(), jc.JSONEquals, test.expectBody)
-		}
+		// Perform a meta PUT request to the published and development URLs.
+		makeRequest("~charmers/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
+		makeRequest("~charmers/development/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
+
+		// Remove permissions to write on the published entity.
+		err = s.store.SetPerms(&rurl.URL, "write")
+		c.Assert(err, gc.IsNil)
+
+		// Check that now writing to the published charm is not allowed,
+		// but accessing the development charm still works as expected.
+		makeRequest("~charmers/wordpress/meta/extra-info/key", http.StatusUnauthorized, nil)
+		makeRequest("~charmers/development/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
+
+		// Remove write permissions for the development charm as well.
+		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "write")
+		c.Assert(err, gc.IsNil)
+
+		// Check that now modifying the development charm is also denied.
+		makeRequest("~charmers/development/wordpress/meta/extra-info/key", http.StatusUnauthorized, nil)
 
 		// Remove all entities from the store.
 		_, err = s.store.DB.Entities().RemoveAll(nil)
