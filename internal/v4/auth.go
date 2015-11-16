@@ -121,14 +121,22 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityId *router.ResolvedUR
 // AuthorizeEntity checks that the given HTTP request
 // can access the entity with the given id.
 func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) error {
-	baseEntity, err := h.Store.FindBaseEntity(&id.URL, "acls")
+	field := "acls"
+	if id.Development {
+		field = "developmentacls"
+	}
+	baseEntity, err := h.Store.FindBaseEntity(&id.URL, field)
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
 			return errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
 		}
 		return errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}
-	return h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write, id)
+	acls := baseEntity.ACLs
+	if id.Development {
+		acls = baseEntity.DevelopmentACLs
+	}
+	return h.authorizeWithPerms(req, acls.Read, acls.Write, id)
 }
 
 func (h *ReqHandler) authorizeWithPerms(req *http.Request, read, write []string, entityId *router.ResolvedURL) error {
