@@ -175,12 +175,6 @@ var archivePostErrorsTests = []struct {
 	expectMessage   string
 	expectCode      params.ErrorCode
 }{{
-	about:         "no series",
-	path:          "~charmers/wordpress/archive",
-	expectStatus:  http.StatusBadRequest,
-	expectMessage: "series not specified",
-	expectCode:    params.ErrBadRequest,
-}, {
 	about:         "revision specified",
 	path:          "~charmers/precise/wordpress-23/archive",
 	expectStatus:  http.StatusBadRequest,
@@ -359,6 +353,67 @@ func (s *ArchiveSuite) TestPostCurrentVersion(c *gc.C) {
 	// Subsequent charm uploads should not increment the revision by
 	// 1.
 	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/precise/wordpress-0", -1), "wordpress")
+}
+
+func (s *ArchiveSuite) TestPostMultiSeriesCharm(c *gc.C) {
+	// A charm that did not exist before should get revision 0.
+	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/juju-gui-0", -1), "multi-series")
+}
+
+func (s *ArchiveSuite) TestPostWithNoSeriesInURLOrMetadata(c *gc.C) {
+	s.assertUploadCharmError(
+		c,
+		"POST",
+		charm.MustParseURL("~charmers/juju-gui-0"),
+		nil,
+		"wordpress",
+		http.StatusForbidden,
+		params.Error{
+			Message: "charm cs:~charmers/juju-gui-0 added without any supported series",
+			Code:    params.ErrEntityIdNotAllowed,
+		},
+	)
+}
+
+func (s *ArchiveSuite) TestPostMultiSeriesCharmRevisionAfterAllSingleSeriesOnes(c *gc.C) {
+	// Create some single series versions of the charm
+	s.assertUploadCharm(c, "PUT", newResolvedURL("~charmers/vivid/juju-gui-1", -1), "mysql")
+	s.assertUploadCharm(c, "PUT", newResolvedURL("~charmers/trusty/juju-gui-12", -1), "mysql")
+	s.assertUploadCharm(c, "PUT", newResolvedURL("~charmers/precise/juju-gui-44", -1), "mysql")
+
+	// Check that the new multi-series revision takes the a revision
+	// number larger than the largest of all the single series
+	// revisions.
+	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/juju-gui-45", -1), "multi-series")
+}
+
+func (s *ArchiveSuite) TestPostMultiSeriesPromulgatedRevisionAfterAllSingleSeriesOnes(c *gc.C) {
+	// Create some single series versions of the charm
+	s.assertUploadCharm(c, "PUT", newResolvedURL("~charmers/vivid/juju-gui-1", 0), "mysql")
+	s.assertUploadCharm(c, "PUT", newResolvedURL("~charmers/trusty/juju-gui-12", 9), "mysql")
+	s.assertUploadCharm(c, "PUT", newResolvedURL("~charmers/precise/juju-gui-44", 33), "mysql")
+
+	// Check that the new multi-series promulgated revision takes the
+	// a revision number larger than the largest of all the single
+	// series revisions.
+	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/juju-gui-45", 34), "multi-series")
+}
+
+func (s *ArchiveSuite) TestPostSingleSeriesCharmWhenMultiSeriesVersionExists(c *gc.C) {
+	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/juju-gui-0", -1), "multi-series")
+
+	s.assertUploadCharmError(
+		c,
+		"POST",
+		charm.MustParseURL("~charmers/saucy/juju-gui-0"),
+		nil,
+		"wordpress",
+		http.StatusForbidden,
+		params.Error{
+			Message: "charm name duplicates multi-series charm name cs:~charmers/juju-gui-0",
+			Code:    params.ErrEntityIdNotAllowed,
+		},
+	)
 }
 
 func (s *ArchiveSuite) TestPutCharm(c *gc.C) {
