@@ -513,8 +513,11 @@ type AddParams struct {
 	Contents map[mongodoc.FileId]mongodoc.ZipFile
 }
 
-// AddCharm adds a charm entities collection with the given
-// parameters.
+// AddCharm adds a charm entities collection with the given parameters.
+// If p.URL cannot be used as a name for the charm then the returned
+// error will have the cause params.ErrEntityIdNotAllowed. If the charm
+// duplicates an existing charm then the returned error will have the
+// cause params.ErrDuplicateUpload.
 func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	// Strictly speaking this test is redundant, because a ResolvedURL should
 	// always be canonical, but check just in case anyway, as this is
@@ -526,10 +529,10 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	}
 	if id.Series == "" {
 		if len(c.Meta().Series) == 0 {
-			return errgo.WithCausef(nil, params.ErrBadRequest, "charm %v added without any supported series", &p.URL.URL)
+			return errgo.WithCausef(nil, params.ErrEntityIdNotAllowed, "charm %v added without any supported series", &p.URL.URL)
 		}
 	} else if len(c.Meta().Series) != 0 && !contains(id.Series, c.Meta().Series) {
-		return errgo.WithCausef(nil, params.ErrForbidden, "%s not listed in charm metadata", p.URL.URL.Series)
+		return errgo.WithCausef(nil, params.ErrEntityIdNotAllowed, "%s not listed in charm metadata", p.URL.URL.Series)
 	}
 
 	logger.Infof("add charm url %s; prev %d", &id, p.URL.PromulgatedRevision)
@@ -561,10 +564,10 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	}
 	for _, entity := range entities {
 		if entity.URL.Series == "bundle" {
-			return errgo.WithCausef(err, params.ErrDuplicateUpload, "charm name duplicates bundle name %v", entity.URL)
+			return errgo.WithCausef(err, params.ErrEntityIdNotAllowed, "charm name duplicates bundle name %v", entity.URL)
 		}
 		if id.Series != "" && entity.URL.Series == "" {
-			return errgo.WithCausef(err, params.ErrDuplicateUpload, "charm name duplicates multi-series charm name %v", entity.URL)
+			return errgo.WithCausef(err, params.ErrEntityIdNotAllowed, "charm name duplicates multi-series charm name %v", entity.URL)
 		}
 	}
 	if err := s.insertEntity(entity); err != nil {
@@ -1011,7 +1014,10 @@ func baseURL(url *charm.URL) *charm.URL {
 var errNotImplemented = errgo.Newf("not implemented")
 
 // AddBundle adds a bundle to the entities collection with the given
-// parameters.
+// parameters. If p.URL cannot be used as a name for the bundle then the
+// returned error will have the cause params.ErrEntityIdNotAllowed. If
+// the bundle duplicates an existing bundle then the returned error will
+// have the cause params.ErrDuplicateUpload.
 func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 	// Strictly speaking this test is redundant, because a ResolvedURL should
 	// always be canonical, but check just in case anyway, as this is
@@ -1050,7 +1056,7 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 	}
 	for _, entity := range entities {
 		if entity.URL.Series != "bundle" {
-			return errgo.WithCausef(err, params.ErrDuplicateUpload, "bundle name duplicates charm name %s", entity.URL)
+			return errgo.WithCausef(err, params.ErrEntityIdNotAllowed, "bundle name duplicates charm name %s", entity.URL)
 		}
 	}
 	if err := s.insertEntity(entity); err != nil {

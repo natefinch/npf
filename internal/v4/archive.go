@@ -189,7 +189,7 @@ func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req 
 	}
 
 	if err := h.addBlobAndEntity(rid, req.Body, hash, req.ContentLength); err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrBadRequest))
+		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
 	}
 	return httprequest.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
 		Id:            &rid.URL,
@@ -245,7 +245,7 @@ func (h *ReqHandler) servePutArchive(id *charm.URL, w http.ResponseWriter, req *
 		rid.PromulgatedRevision = pid.Revision
 	}
 	if err := h.addBlobAndEntity(rid, req.Body, hash, req.ContentLength); err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrBadRequest))
+		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
 	}
 	return httprequest.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
 		Id:            id,
@@ -286,7 +286,7 @@ func (h *ReqHandler) addBlobAndEntity(id *router.ResolvedURL, body io.Reader, ha
 	// Add the entity entry to the charm store.
 	sum256 := fmt.Sprintf("%x", hash256.Sum(nil))
 	if err := h.addEntity(id, r, name, hash, sum256, contentLength); err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrBadRequest))
+		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
 	}
 	return nil
 }
@@ -317,7 +317,7 @@ func (h *ReqHandler) addEntity(id *router.ResolvedURL, r io.ReadSeeker, blobName
 			return errgo.Notef(verificationError(err), "bundle verification failed")
 		}
 		if err := h.Store.AddBundle(b, p); err != nil {
-			return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrBadRequest))
+			return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
 		}
 		return nil
 	}
@@ -329,7 +329,7 @@ func (h *ReqHandler) addEntity(id *router.ResolvedURL, r io.ReadSeeker, blobName
 		return errgo.Mask(err)
 	}
 	if err := h.Store.AddCharm(ch, p); err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrBadRequest))
+		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
 	}
 	return nil
 }
