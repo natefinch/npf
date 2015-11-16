@@ -367,10 +367,10 @@ func (s *ArchiveSuite) TestPostWithNoSeriesInURLOrMetadata(c *gc.C) {
 		charm.MustParseURL("~charmers/juju-gui-0"),
 		nil,
 		"wordpress",
-		http.StatusBadRequest,
+		http.StatusForbidden,
 		params.Error{
 			Message: "charm cs:~charmers/juju-gui-0 added without any supported series",
-			Code:    params.ErrBadRequest,
+			Code:    params.ErrEntityIdNotAllowed,
 		},
 	)
 }
@@ -408,10 +408,10 @@ func (s *ArchiveSuite) TestPostSingleSeriesCharmWhenMultiSeriesVersionExists(c *
 		charm.MustParseURL("~charmers/saucy/juju-gui-0"),
 		nil,
 		"wordpress",
-		http.StatusInternalServerError,
+		http.StatusForbidden,
 		params.Error{
 			Message: "charm name duplicates multi-series charm name cs:~charmers/juju-gui-0",
-			Code:    params.ErrDuplicateUpload,
+			Code:    params.ErrEntityIdNotAllowed,
 		},
 	)
 }
