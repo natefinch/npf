@@ -177,8 +177,8 @@ func newReqHandler() *ReqHandler {
 			"id-revision":      h.entityHandler(h.metaIdRevision, "_id"),
 			"id-series":        h.entityHandler(h.metaIdSeries, "_id"),
 			"manifest":         h.entityHandler(h.metaManifest, "blobname"),
-			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "acls"),
-			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "acls"),
+			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "acls", "developmentacls"),
+			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "acls", "developmentacls"),
 			"promulgated":      h.baseEntityHandler(h.metaPromulgated, "promulgated"),
 			"revision-info":    router.SingleIncludeHandler(h.metaRevisionInfo),
 			"stats":            h.entityHandler(h.metaStats),
@@ -235,16 +235,15 @@ func ResolveURL(store *charmstore.Store, url *charm.URL) (*router.ResolvedURL, e
 	if errgo.Cause(err) == params.ErrNotFound {
 		return nil, noMatchingURLError(url)
 	}
-	if url.User == "" {
-		return &router.ResolvedURL{
-			URL:                 *entity.URL,
-			PromulgatedRevision: entity.PromulgatedRevision,
-		}, nil
-	}
-	return &router.ResolvedURL{
+	rurl := &router.ResolvedURL{
 		URL:                 *entity.URL,
 		PromulgatedRevision: -1,
-	}, nil
+		Development:         url.Channel == charm.DevelopmentChannel,
+	}
+	if url.User == "" {
+		rurl.PromulgatedRevision = entity.PromulgatedRevision
+	}
+	return rurl, nil
 }
 
 func noMatchingURLError(url *charm.URL) error {
@@ -825,9 +824,13 @@ func checkExtraInfoKey(key string) error {
 // GET id/meta/perm
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaperm
 func (h *ReqHandler) metaPerm(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	acls := entity.ACLs
+	if id.Development {
+		acls = entity.DevelopmentACLs
+	}
 	return params.PermResponse{
-		Read:  entity.ACLs.Read,
-		Write: entity.ACLs.Write,
+		Read:  acls.Read,
+		Write: acls.Write,
 	}, nil
 }
 
@@ -838,30 +841,33 @@ func (h *ReqHandler) putMetaPerm(id *router.ResolvedURL, path string, val *json.
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
 	}
-	isPublic := false
-	for _, p := range perms.Read {
-		if p == params.Everyone {
-			isPublic = true
-			break
+	field := "acls"
+	if id.Development {
+		field = "developmentacls"
+	} else {
+		isPublic := false
+		for _, p := range perms.Read {
+			if p == params.Everyone {
+				isPublic = true
+				break
+			}
 		}
+		updater.UpdateField("public", isPublic, nil)
 	}
-
-	updater.UpdateField("acls.read", perms.Read, &audit.Entry{
+	updater.UpdateField(field+".read", perms.Read, &audit.Entry{
 		Op:     audit.OpSetPerm,
 		Entity: &id.URL,
 		ACL: &audit.ACL{
 			Read: perms.Read,
 		},
 	})
-	updater.UpdateField("public", isPublic, nil)
-	updater.UpdateField("acls.write", perms.Write, &audit.Entry{
+	updater.UpdateField(field+".write", perms.Write, &audit.Entry{
 		Op:     audit.OpSetPerm,
 		Entity: &id.URL,
 		ACL: &audit.ACL{
 			Write: perms.Write,
 		},
 	})
-
 	updater.UpdateSearch()
 	return nil
 }
@@ -877,11 +883,15 @@ func (h *ReqHandler) metaPromulgated(entity *mongodoc.BaseEntity, id *router.Res
 // GET id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapermkey
 func (h *ReqHandler) metaPermWithKey(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	acls := entity.ACLs
+	if id.Development {
+		acls = entity.DevelopmentACLs
+	}
 	switch path {
 	case "/read":
-		return entity.ACLs.Read, nil
+		return acls.Read, nil
 	case "/write":
-		return entity.ACLs.Write, nil
+		return acls.Write, nil
 	}
 	return nil, errgo.WithCausef(nil, params.ErrNotFound, "unknown permission")
 }
@@ -893,27 +903,33 @@ func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
 	}
-	isPublic := false
-	for _, p := range perms {
-		if p == params.Everyone {
-			isPublic = true
-			break
-		}
+	field := "acls"
+	if id.Development {
+		field = "developmentacls"
 	}
 	switch path {
 	case "/read":
-		updater.UpdateField("acls.read", perms, &audit.Entry{
+		updater.UpdateField(field+".read", perms, &audit.Entry{
 			Op:     audit.OpSetPerm,
 			Entity: &id.URL,
 			ACL: &audit.ACL{
 				Read: perms,
 			},
 		})
-		updater.UpdateField("public", isPublic, nil)
+		if !id.Development {
+			isPublic := false
+			for _, p := range perms {
+				if p == params.Everyone {
+					isPublic = true
+					break
+				}
+			}
+			updater.UpdateField("public", isPublic, nil)
+		}
 		updater.UpdateSearch()
 		return nil
 	case "/write":
-		updater.UpdateField("acls.write", perms, &audit.Entry{
+		updater.UpdateField(field+".write", perms, &audit.Entry{
 			Op:     audit.OpSetPerm,
 			Entity: &id.URL,
 			ACL: &audit.ACL{
