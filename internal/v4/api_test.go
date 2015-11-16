@@ -619,12 +619,16 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		Read:  []string{params.Everyone, "charmers"},
 		Write: []string{"charmers"},
 	})
+	s.assertGet(c, "development/wordpress/meta/perm", params.PermResponse{
+		Read:  []string{params.Everyone, "charmers"},
+		Write: []string{"charmers"},
+	})
 	e, err := s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{params.Everyone, "charmers"})
 
-	// Change the read perms to only include a specific user and the write
-	// perms to include an "admin" user.
+	// Change the published read perms to only include a specific user and the
+	// published write perms to include an "admin" user.
 	s.assertPut(c, "precise/wordpress-23/meta/perm/read", []string{"bob"})
 	s.assertPut(c, "precise/wordpress-23/meta/perm/write", []string{"admin"})
 
@@ -640,6 +644,11 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 				Write: []string{"admin"},
 			},
 		})
+		// The development perms did not mutate.
+		s.assertGet(c, "development/"+u+"/meta/perm", params.PermResponse{
+			Read:  []string{params.Everyone, "charmers"},
+			Write: []string{"charmers"},
+		})
 	}
 	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
@@ -648,14 +657,25 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		Read:  []string{"bob"},
 		Write: []string{"admin"},
 	})
+	c.Assert(e.DevelopmentACLs, jc.DeepEquals, mongodoc.ACL{
+		Read:  []string{params.Everyone, "charmers"},
+		Write: []string{"charmers"},
+	})
 
-	// Try restoring everyone's read permission.
+	// Try restoring everyone's read permission on the published charm, and
+	// adding write permissions to bob for the development charm.
 	s.assertPut(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
+	s.assertPut(c, "development/wordpress/meta/perm/write", []string{"bob", "admin"})
 	s.assertGet(c, "wordpress/meta/perm", params.PermResponse{
 		Read:  []string{"bob", params.Everyone},
 		Write: []string{"admin"},
 	})
+	s.assertGet(c, "development/wordpress/meta/perm", params.PermResponse{
+		Read:  []string{params.Everyone, "charmers"},
+		Write: []string{"bob", "admin"},
+	})
 	s.assertGet(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
+	s.assertGet(c, "development/wordpress/meta/perm/read", []string{params.Everyone, "charmers"})
 	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsTrue)
@@ -663,8 +683,37 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		Read:  []string{"bob", params.Everyone},
 		Write: []string{"admin"},
 	})
+	c.Assert(e.DevelopmentACLs, jc.DeepEquals, mongodoc.ACL{
+		Read:  []string{params.Everyone, "charmers"},
+		Write: []string{"bob", "admin"},
+	})
 
-	// Try deleting all permissions.
+	// Try deleting all development permissions.
+	s.assertPut(c, "development/wordpress/meta/perm/read", []string{})
+	s.assertPut(c, "development/wordpress/meta/perm/write", []string{})
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		Do:           bakeryDo(nil),
+		URL:          storeURL("development/wordpress/meta/perm"),
+		ExpectStatus: http.StatusUnauthorized,
+		ExpectBody: params.Error{
+			Code:    params.ErrUnauthorized,
+			Message: `unauthorized: access denied for user "bob"`,
+		},
+	})
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.DevelopmentACLs, jc.DeepEquals, mongodoc.ACL{})
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.Public, jc.IsTrue)
+	c.Assert(e.DevelopmentACLs, jc.DeepEquals, mongodoc.ACL{})
+	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{
+		Read:  []string{"bob", params.Everyone},
+		Write: []string{"admin"},
+	})
+
+	// Try deleting all published permissions.
 	s.assertPut(c, "wordpress/meta/perm/read", []string{})
 	s.assertPut(c, "wordpress/meta/perm/write", []string{})
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
@@ -683,7 +732,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{})
 	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{})
 
-	// Try setting all permissions in one request
+	// Try setting all published permissions in one request.
 	s.assertPut(c, "wordpress/meta/perm", params.PermRequest{
 		Read:  []string{"bob"},
 		Write: []string{"admin"},
@@ -696,7 +745,20 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		Write: []string{"admin"},
 	})
 
-	// Try only read permissions to meta/perm endpoint
+	// Try setting all development permissions in one request.
+	s.assertPut(c, "development/wordpress/meta/perm", params.PermRequest{
+		Read:  []string{"who", params.Everyone},
+		Write: []string{"who"},
+	})
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.Public, jc.IsFalse)
+	c.Assert(e.DevelopmentACLs, jc.DeepEquals, mongodoc.ACL{
+		Read:  []string{"who", params.Everyone},
+		Write: []string{"who"},
+	})
+
+	// Try only read permissions to published meta/perm endpoint.
 	var readRequest = struct {
 		Read []string
 	}{Read: []string{"joe"}}
@@ -2258,6 +2320,8 @@ func (s *APISuite) addPublicCharm(c *gc.C, charmName string, rurl *router.Resolv
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
 	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", params.Everyone, rurl.URL.User)
+	c.Assert(err, gc.IsNil)
 	return rurl, ch
 }
 
@@ -2266,6 +2330,8 @@ func (s *APISuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.Reso
 	err := s.store.AddBundleWithArchive(rurl, bundle)
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", params.Everyone, rurl.URL.User)
 	c.Assert(err, gc.IsNil)
 	return rurl, bundle
 }

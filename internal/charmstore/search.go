@@ -86,7 +86,7 @@ func (s *Store) UpdateSearch(r *router.ResolvedURL) error {
 	if s.ES == nil || s.ES.Database == nil {
 		return nil
 	}
-	if deprecatedSeries[r.URL.Series] {
+	if deprecatedSeries[r.URL.Series] || r.Development {
 		return nil
 	}
 
