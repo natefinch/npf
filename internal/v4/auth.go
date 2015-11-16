@@ -121,11 +121,7 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityId *router.ResolvedUR
 // AuthorizeEntity checks that the given HTTP request
 // can access the entity with the given id.
 func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) error {
-	field := "acls"
-	if id.Development {
-		field = "developmentacls"
-	}
-	baseEntity, err := h.Store.FindBaseEntity(&id.URL, field)
+	baseEntity, err := h.Store.FindBaseEntity(&id.URL, "acls", "developmentacls")
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
 			return errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
