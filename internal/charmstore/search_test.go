@@ -937,13 +937,13 @@ func (s *StoreSearchSuite) TestMultiSeriesCharmSortsSeriesCorrectly(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	s.store.ES.Database.RefreshIndex(s.TestIndex)
 	var sp SearchParams
-	sp.ParseSortFields("-series")
+	sp.ParseSortFields("-series", "owner")
 	res, err := s.store.Search(sp)
 	c.Assert(err, gc.IsNil)
 	c.Assert(res.Results, jc.DeepEquals, []*router.ResolvedURL{
 		newResolvedURL("cs:~charmers/juju-gui-25", -1),
-		newResolvedURL("cs:~openstack-charmers/trusty/mysql-7", 7),
 		newResolvedURL("cs:~foo/trusty/varnish-1", -1),
+		newResolvedURL("cs:~openstack-charmers/trusty/mysql-7", 7),
 		newResolvedURL("cs:~charmers/precise/wordpress-23", 23),
 		newResolvedURL("cs:~charmers/bundle/wordpress-simple-4", 4),
 	})

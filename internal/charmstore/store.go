@@ -532,14 +532,6 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	if id.Series == "bundle" || id.User == "" || id.Revision == -1 {
 		return errgo.Newf("charm added with invalid id %v", &id)
 	}
-	if id.Series == "" {
-		if len(c.Meta().Series) == 0 {
-			return errgo.WithCausef(nil, params.ErrEntityIdNotAllowed, "charm %v added without any supported series", &p.URL.URL)
-		}
-	} else if len(c.Meta().Series) != 0 && !contains(id.Series, c.Meta().Series) {
-		return errgo.WithCausef(nil, params.ErrEntityIdNotAllowed, "%s not listed in charm metadata", p.URL.URL.Series)
-	}
-
 	logger.Infof("add charm url %s; prev %d", &id, p.URL.PromulgatedRevision)
 	entity := &mongodoc.Entity{
 		URL:                     &id,
@@ -582,16 +574,6 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	return nil
 }
 
-// contains checks if s is in the slice ss.
-func contains(s string, ss []string) bool {
-	for _, t := range ss {
-		if s == t {
-			return true
-		}
-	}
-	return false
-}
-
 // denormalizeEntity sets all denormalized fields in e
 // from their associated canonical fields.
 //
@@ -614,8 +596,6 @@ func denormalizeEntity(e *mongodoc.Entity) {
 		} else {
 			e.SupportedSeries = []string{e.URL.Series}
 		}
-	} else if len(e.SupportedSeries) == 0 {
-		panic("no supported series!")
 	}
 	if e.PromulgatedURL == nil {
 		e.PromulgatedRevision = -1

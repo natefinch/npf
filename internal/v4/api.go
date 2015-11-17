@@ -422,12 +422,6 @@ func (h *ReqHandler) entityQuery(id *router.ResolvedURL, selector map[string]int
 	return val, nil
 }
 
-var ltsReleases = map[string]bool{
-	"lucid":   true,
-	"precise": true,
-	"trusty":  true,
-}
-
 func fieldsFromSelector(selector map[string]int) []string {
 	fields := make([]string, 0, len(selector))
 	for k, v := range selector {
@@ -891,7 +885,7 @@ func (h *ReqHandler) putMetaCommonInfoWithKey(id *router.ResolvedURL, path strin
 
 func checkExtraInfoKey(key string, field string) error {
 	if strings.ContainsAny(key, "./$") {
-		return errgo.WithCausef(nil, params.ErrBadRequest, "bad key for " + field)
+		return errgo.WithCausef(nil, params.ErrBadRequest, "bad key for "+field)
 	}
 	return nil
 }

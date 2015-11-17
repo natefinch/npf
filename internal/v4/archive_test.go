@@ -456,19 +456,63 @@ func (s *ArchiveSuite) TestPostMultiSeriesDevelopmentCharm(c *gc.C) {
 	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/development/juju-gui-0", -1), "multi-series")
 }
 
-func (s *ArchiveSuite) TestPostWithNoSeriesInURLOrMetadata(c *gc.C) {
-	s.assertUploadCharmError(
-		c,
-		"POST",
-		charm.MustParseURL("~charmers/juju-gui-0"),
-		nil,
-		"wordpress",
-		http.StatusForbidden,
-		params.Error{
-			Message: "charm cs:~charmers/juju-gui-0 added without any supported series",
-			Code:    params.ErrEntityIdNotAllowed,
-		},
-	)
+var charmPostErrorTests = []struct {
+	about        string
+	url          *charm.URL
+	charm        string
+	expectStatus int
+	expectBody   interface{}
+}{{
+	about:        "no series",
+	url:          charm.MustParseURL("~charmers/juju-gui-0"),
+	charm:        "wordpress",
+	expectStatus: http.StatusForbidden,
+	expectBody: params.Error{
+		Message: "series not specified in url or charm metadata",
+		Code:    params.ErrEntityIdNotAllowed,
+	},
+}, {
+	about:        "url series not in metadata",
+	url:          charm.MustParseURL("~charmers/precise/juju-gui-0"),
+	charm:        "multi-series",
+	expectStatus: http.StatusForbidden,
+	expectBody: params.Error{
+		Message: `"precise" series not listed in charm metadata`,
+		Code:    params.ErrEntityIdNotAllowed,
+	},
+}, {
+	about:        "bad combination of series",
+	url:          charm.MustParseURL("~charmers/juju-gui-0"),
+	charm:        "multi-series-bad-combination",
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Message: `cannot mix series from ubuntu and windows in single charm`,
+		Code:    params.ErrInvalidEntity,
+	},
+}, {
+	about:        "unknown series",
+	url:          charm.MustParseURL("~charmers/juju-gui-0"),
+	charm:        "multi-series-unknown",
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Message: `unrecognised series "nosuchseries" in metadata`,
+		Code:    params.ErrInvalidEntity,
+	},
+}}
+
+func (s *ArchiveSuite) TestCharmPostError(c *gc.C) {
+	for i, test := range charmPostErrorTests {
+		c.Logf("%d. %s", i, test.about)
+		s.assertUploadCharmError(
+			c,
+			"POST",
+			test.url,
+			nil,
+			test.charm,
+			test.expectStatus,
+			test.expectBody,
+		)
+	}
 }
 
 func (s *ArchiveSuite) TestPostMultiSeriesCharmRevisionAfterAllSingleSeriesOnes(c *gc.C) {
@@ -643,11 +687,11 @@ func invalidZip() io.ReadSeeker {
 }
 
 func (s *ArchiveSuite) TestPostInvalidCharmZip(c *gc.C) {
-	s.assertCannotUpload(c, "~charmers/precise/wordpress", invalidZip(), "cannot read charm archive: zip: not a valid zip file")
+	s.assertCannotUpload(c, "~charmers/precise/wordpress", invalidZip(), http.StatusBadRequest, params.ErrInvalidEntity, "cannot read charm archive: zip: not a valid zip file")
 }
 
 func (s *ArchiveSuite) TestPostInvalidBundleZip(c *gc.C) {
-	s.assertCannotUpload(c, "~charmers/bundle/wordpress", invalidZip(), "cannot read bundle archive: zip: not a valid zip file")
+	s.assertCannotUpload(c, "~charmers/bundle/wordpress", invalidZip(), http.StatusBadRequest, params.ErrInvalidEntity, "cannot read bundle archive: zip: not a valid zip file")
 }
 
 var postInvalidCharmMetadataTests = []struct {
@@ -739,7 +783,7 @@ func (s *ArchiveSuite) TestPostInvalidCharmMetadata(c *gc.C) {
 		c.Logf("test %d: %s", i, test.about)
 		ch := charmtesting.NewCharm(c, test.spec)
 		r := bytes.NewReader(ch.ArchiveBytes())
-		s.assertCannotUpload(c, "~charmers/trusty/wordpress", r, test.expectError)
+		s.assertCannotUpload(c, "~charmers/trusty/wordpress", r, http.StatusBadRequest, params.ErrInvalidEntity, test.expectError)
 	}
 }
 
@@ -754,7 +798,7 @@ func (s *ArchiveSuite) TestPostInvalidBundleData(c *gc.C) {
 		`"relation [\"foo:db\" \"mysql:server\"] refers to service \"foo\" not defined in this bundle",` +
 		`"service \"mysql\" refers to non-existent charm \"mysql\"",` +
 		`"service \"wordpress\" refers to non-existent charm \"wordpress\""]`
-	s.assertCannotUpload(c, "~charmers/bundle/wordpress", f, expectErr)
+	s.assertCannotUpload(c, "~charmers/bundle/wordpress", f, http.StatusBadRequest, params.ErrInvalidEntity, expectErr)
 }
 
 func (s *ArchiveSuite) TestPostCounters(c *gc.C) {
@@ -795,7 +839,7 @@ func (s *ArchiveSuite) TestPostFailureCounters(c *gc.C) {
 	// Send a second invalid request (no hash).
 	doPost("~charmers/utopic/wordpress/archive", http.StatusBadRequest)
 	// Send a third invalid request (invalid zip).
-	doPost("~charmers/utopic/wordpress/archive?hash="+hash, http.StatusInternalServerError)
+	doPost("~charmers/utopic/wordpress/archive?hash="+hash, http.StatusBadRequest)
 
 	// Check that the failed upload count for the entity has been updated.
 	key := []string{params.StatsArchiveFailedUpload, "utopic", "wordpress", "charmers"}
@@ -882,7 +926,7 @@ func (s *ArchiveSuite) TestUploadOfCurrentCharmReadsFully(c *gc.C) {
 	c.Assert(b.Len(), gc.Equals, 0)
 }
 
-func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSeeker, errorMessage string) {
+func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSeeker, httpStatus int, errorCode params.ErrorCode, errorMessage string) {
 	hash, size := hashOf(content)
 	_, err := content.Seek(0, 0)
 	c.Assert(err, gc.IsNil)
@@ -899,9 +943,10 @@ func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSee
 		Body:         content,
 		Username:     testUsername,
 		Password:     testPassword,
-		ExpectStatus: http.StatusInternalServerError,
+		ExpectStatus: httpStatus,
 		ExpectBody: params.Error{
 			Message: errorMessage,
+			Code:    errorCode,
 		},
 	})
 

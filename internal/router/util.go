@@ -77,7 +77,7 @@ func errorToResp1(err error) (int, interface{}) {
 	switch errorBody.Code {
 	case params.ErrNotFound, params.ErrMetadataNotFound:
 		status = http.StatusNotFound
-	case params.ErrBadRequest:
+	case params.ErrBadRequest, params.ErrInvalidEntity:
 		status = http.StatusBadRequest
 	case params.ErrForbidden, params.ErrEntityIdNotAllowed:
 		status = http.StatusForbidden
