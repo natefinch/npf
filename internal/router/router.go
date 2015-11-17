@@ -176,21 +176,28 @@ func MustNewResolvedURL(urlStr string, promulgatedRev int) *ResolvedURL {
 	}
 }
 
+// UserOwnedURL returns the non-promulgated URL for the given id.
+// The returned *charm.URL may be modified freely.
+func (id *ResolvedURL) UserOwnedURL() *charm.URL {
+	u := id.URL
+	if id.Development {
+		u.Channel = charm.DevelopmentChannel
+	}
+	return &u
+}
+
 // PreferredURL returns the promulgated URL for
 // the given id if there is one, otherwise it
 // returns the non-promulgated URL. The returned *charm.URL
 // may be modified freely.
 func (id *ResolvedURL) PreferredURL() *charm.URL {
-	u := id.URL
-	if id.Development {
-		u.Channel = charm.DevelopmentChannel
-	}
+	u := id.UserOwnedURL()
 	if id.PromulgatedRevision == -1 {
-		return &u
+		return u
 	}
 	u.User = ""
 	u.Revision = id.PromulgatedRevision
-	return &u
+	return u
 }
 
 // PromulgatedURL returns the promulgated URL for id if there

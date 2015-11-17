@@ -79,6 +79,51 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
 	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/wordpress-0")
 	assertCacheControl(c, rec.Header(), true)
+
+	// The development version of the entity can also be retrieved.
+	err = s.store.SetPerms(id.URL.WithChannel(charm.DevelopmentChannel), "read", params.Everyone, id.URL.User)
+	c.Assert(err, gc.IsNil)
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("~charmers/development/precise/wordpress-0/archive"),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
+	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
+	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/development/precise/wordpress-0")
+}
+
+func (s *ArchiveSuite) TestGetDevelopment(c *gc.C) {
+	id := newResolvedURL("cs:~charmers/development/trusty/wordpress-0", -1)
+	wordpress := s.assertUploadCharm(c, "POST", id, "wordpress")
+	url := id.PreferredURL()
+	err := s.store.SetPerms(url, "read", params.Everyone, id.URL.User)
+	c.Assert(err, gc.IsNil)
+
+	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
+	c.Assert(err, gc.IsNil)
+
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("~charmers/development/trusty/wordpress-0/archive"),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
+	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
+	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/development/trusty/wordpress-0")
+
+	// It is not possible to use the published URL to retrieve the archive,
+	err = s.store.SetPerms(url.WithChannel(""), "read", params.Everyone, id.URL.User)
+	c.Assert(err, gc.IsNil)
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("~charmers/trusty/wordpress-0/archive"),
+		ExpectStatus: http.StatusNotFound,
+		ExpectBody: params.Error{
+			Code:    params.ErrNotFound,
+			Message: `no matching charm or bundle for "cs:~charmers/trusty/wordpress-0"`,
+		},
+	})
 }
 
 func (s *ArchiveSuite) TestGetWithPartialId(c *gc.C) {
@@ -193,6 +238,12 @@ var archivePostErrorsTests = []struct {
 	expectStatus:    http.StatusBadRequest,
 	expectMessage:   "Content-Length not specified",
 	expectCode:      params.ErrBadRequest,
+}, {
+	about:         "invalid channel",
+	path:          "~charmers/bad-wolf/trusty/wordpress/archive",
+	expectStatus:  http.StatusNotFound,
+	expectMessage: "not found",
+	expectCode:    params.ErrNotFound,
 }}
 
 func (s *ArchiveSuite) TestPostErrors(c *gc.C) {
@@ -342,22 +393,67 @@ func (s *ArchiveSuite) TestPostCharm(c *gc.C) {
 	// A charm that did not exist before should get revision 0.
 	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/precise/wordpress-0", -1), "wordpress")
 
-	// Subsequent charm uploads should increment the
-	// revision by 1.
+	// Subsequent charm uploads should increment the revision by 1.
 	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/precise/wordpress-1", -1), "mysql")
+
+	// Subsequent development charm uploads should increment the revision by 1.
+	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/development/precise/wordpress-2", -1), "wordpress")
+
+	// Retrieving the published version returns the last non-development charm.
+	err := s.store.SetPerms(charm.MustParseURL("~charmers/wordpress"), "read", params.Everyone)
+	c.Assert(err, gc.IsNil)
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("~charmers/wordpress/archive"),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/wordpress-1")
 }
 
 func (s *ArchiveSuite) TestPostCurrentVersion(c *gc.C) {
-	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/precise/wordpress-0", -1), "wordpress")
+	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/development/precise/wordpress-0", -1), "wordpress")
 
-	// Subsequent charm uploads should not increment the revision by
-	// 1.
-	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/precise/wordpress-0", -1), "wordpress")
+	// Subsequent charm uploads should not increment the revision by 1.
+	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/development/precise/wordpress-0", -1), "wordpress")
+}
+
+func (s *ArchiveSuite) TestPostDevelopmentPromulgated(c *gc.C) {
+	s.assertUploadCharm(c, "PUT", newResolvedURL("~charmers/development/trusty/wordpress-0", 0), "wordpress")
+	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/development/trusty/wordpress-1", 1), "mysql")
+	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/development/trusty/wordpress-1", 1), "mysql")
+
+	// The promulgated charm can be accessed via its development URL.
+	err := s.store.SetPerms(charm.MustParseURL("~charmers/development/wordpress"), "read", params.Everyone)
+	c.Assert(err, gc.IsNil)
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("development/wordpress/archive"),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:development/trusty/wordpress-1")
+
+	// The promulgated charm cannot be retrieved using the published URL.
+	err = s.store.SetPerms(charm.MustParseURL("~charmers/wordpress"), "read", params.Everyone)
+	c.Assert(err, gc.IsNil)
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("wordpress/archive"),
+		ExpectStatus: http.StatusNotFound,
+		ExpectBody: params.Error{
+			Code:    params.ErrNotFound,
+			Message: `no matching charm or bundle for "cs:wordpress"`,
+		},
+	})
 }
 
 func (s *ArchiveSuite) TestPostMultiSeriesCharm(c *gc.C) {
 	// A charm that did not exist before should get revision 0.
 	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/juju-gui-0", -1), "multi-series")
+}
+
+func (s *ArchiveSuite) TestPostMultiSeriesDevelopmentCharm(c *gc.C) {
+	// A charm that did not exist before should get revision 0.
+	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/development/juju-gui-0", -1), "multi-series")
 }
 
 func (s *ArchiveSuite) TestPostWithNoSeriesInURLOrMetadata(c *gc.C) {
@@ -818,9 +914,9 @@ func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSee
 // that the charm will be given when uploaded.
 func (s *ArchiveSuite) assertUploadCharm(c *gc.C, method string, url *router.ResolvedURL, charmName string) *charm.CharmArchive {
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), charmName)
-	size := s.assertUpload(c, method, url, ch.Path)
-	s.assertEntityInfo(c, url, entityInfo{
-		Id: &url.URL,
+	id, size := s.assertUpload(c, method, url, ch.Path)
+	s.assertEntityInfo(c, entityInfo{
+		Id: id,
 		Meta: entityMetaInfo{
 			ArchiveSize:  &params.ArchiveSizeResponse{Size: size},
 			CharmMeta:    ch.Meta(),
@@ -838,9 +934,9 @@ func (s *ArchiveSuite) assertUploadBundle(c *gc.C, method string, url *router.Re
 	path := storetesting.Charms.BundleArchivePath(c.MkDir(), bundleName)
 	b, err := charm.ReadBundleArchive(path)
 	c.Assert(err, gc.IsNil)
-	size := s.assertUpload(c, method, url, path)
-	s.assertEntityInfo(c, url, entityInfo{
-		Id: &url.URL,
+	id, size := s.assertUpload(c, method, url, path)
+	s.assertEntityInfo(c, entityInfo{
+		Id: id,
 		Meta: entityMetaInfo{
 			ArchiveSize: &params.ArchiveSizeResponse{Size: size},
 			BundleMeta:  b.Data(),
@@ -849,7 +945,7 @@ func (s *ArchiveSuite) assertUploadBundle(c *gc.C, method string, url *router.Re
 	)
 }
 
-func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *router.ResolvedURL, fileName string) (size int64) {
+func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *router.ResolvedURL, fileName string) (id *charm.URL, size int64) {
 	f, err := os.Open(fileName)
 	c.Assert(err, gc.IsNil)
 	defer f.Close()
@@ -864,15 +960,16 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *router.Resolved
 	_, err = f.Seek(0, 0)
 	c.Assert(err, gc.IsNil)
 
-	uploadURL := url.URL
+	uploadURL := url.UserOwnedURL()
 	if method == "POST" {
 		uploadURL.Revision = -1
 	}
 
 	path := fmt.Sprintf("%s/archive?hash=%s", uploadURL.Path(), hashSum)
-	purl := url.PromulgatedURL()
-	if purl != nil {
-		path += fmt.Sprintf("&promulgated=%s", purl.String())
+	expectId := uploadURL.WithRevision(url.URL.Revision)
+	expectedPromulgatedId := url.PromulgatedURL()
+	if expectedPromulgatedId != nil {
+		path += fmt.Sprintf("&promulgated=%s", expectedPromulgatedId.String())
 	}
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:       s.srv,
@@ -886,24 +983,25 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *router.Resolved
 		Username: testUsername,
 		Password: testPassword,
 		ExpectBody: params.ArchiveUploadResponse{
-			Id:            &url.URL,
-			PromulgatedId: url.PromulgatedURL(),
+			Id:            expectId,
+			PromulgatedId: expectedPromulgatedId,
 		},
 	})
 
 	var entity mongodoc.Entity
-	err = s.store.DB.Entities().FindId(&url.URL).One(&entity)
+	err = s.store.DB.Entities().FindId(expectId.WithChannel("")).One(&entity)
 	c.Assert(err, gc.IsNil)
 	c.Assert(entity.BlobHash, gc.Equals, hashSum)
 	c.Assert(entity.BlobHash256, gc.Equals, hash256Sum)
-	c.Assert(entity.PromulgatedURL, gc.DeepEquals, purl)
+	c.Assert(entity.PromulgatedURL, gc.DeepEquals, expectedPromulgatedId)
+	c.Assert(entity.Development, gc.Equals, url.Development)
 	// Test that the expected entry has been created
 	// in the blob store.
 	r, _, err := s.store.BlobStore.Open(entity.BlobName)
 	c.Assert(err, gc.IsNil)
 	r.Close()
 
-	return size
+	return expectId, size
 }
 
 // assertUploadCharmError attempts to upload the testing charm with the
@@ -1375,11 +1473,11 @@ type entityMetaInfo struct {
 	BundleMeta   *charm.BundleData           `json:"bundle-metadata,omitempty"`
 }
 
-func (s *ArchiveSuite) assertEntityInfo(c *gc.C, url *router.ResolvedURL, expect entityInfo) {
+func (s *ArchiveSuite) assertEntityInfo(c *gc.C, expect entityInfo) {
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: s.srv,
 		URL: storeURL(
-			url.URL.Path() + "/meta/any" +
+			expect.Id.Path() + "/meta/any" +
 				"?include=archive-size" +
 				"&include=charm-metadata" +
 				"&include=charm-config" +

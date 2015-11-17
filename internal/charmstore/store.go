@@ -678,7 +678,7 @@ func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 // If the given URL has no user then it is assumed to be a
 // promulgated entity.
 func (s *Store) FindEntity(url *router.ResolvedURL, fields ...string) (*mongodoc.Entity, error) {
-	entities, err := s.FindEntities(&url.URL, fields...)
+	entities, err := s.FindEntities(url.UserOwnedURL(), fields...)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
@@ -1439,7 +1439,7 @@ func (s *Store) SynchroniseElasticsearch() error {
 }
 
 // EntityResolvedURL returns the ResolvedURL for the entity.
-// It requires the PromulgatedURL field to have been
+// It requires PromulgatedURL and Development fields to have been
 // filled out in the entity.
 func EntityResolvedURL(e *mongodoc.Entity) *router.ResolvedURL {
 	rurl := &router.ResolvedURL{

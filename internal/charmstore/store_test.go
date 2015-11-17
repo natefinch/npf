@@ -267,6 +267,18 @@ var urlFindingTests = []struct {
 	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24"},
 }, {
 	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
+	expand:  "~charmers/precise/wordpress-24",
+	expect:  []string{"24 cs:~charmers/precise/wordpress-24"},
+}, {
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
+	expand:  "~charmers/development/precise/wordpress-25",
+	expect:  []string{"25 cs:~charmers/development/precise/wordpress-25"},
+}, {
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
+	expand:  "~charmers/precise/wordpress-25",
+	expect:  []string{},
+}, {
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
 	expand:  "development/wordpress",
 	expect:  []string{"25 cs:~charmers/development/precise/wordpress-25", "23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24"},
 }, {
@@ -498,10 +510,11 @@ func (s *StoreSuite) TestFindEntity(c *gc.C) {
 			return
 		}
 		rurl := &router.ResolvedURL{
-			URL:                 *expand,
+			URL:                 *expand.WithChannel(""),
 			PromulgatedRevision: -1,
+			Development:         expand.Channel == charm.DevelopmentChannel,
 		}
-		entity, err := store.FindEntity(rurl, "_id", "promulgated-url")
+		entity, err := store.FindEntity(rurl, "_id", "promulgated-url", "development")
 		if len(expect) == 0 {
 			c.Assert(err, gc.ErrorMatches, "entity not found")
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
@@ -510,7 +523,7 @@ func (s *StoreSuite) TestFindEntity(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		c.Assert(len(expect), gc.Equals, 1)
 		c.Assert(entity.BlobName, gc.Equals, "")
-		c.Assert(entity.URL, jc.DeepEquals, expect[0])
+		c.Assert(EntityResolvedURL(entity), jc.DeepEquals, expect[0])
 
 		// Check that it works when returning other fields too.
 		entity, err = store.FindEntity(rurl, "blobname")

@@ -2261,6 +2261,20 @@ func (s *RouterSuite) TestHandlers(c *gc.C) {
 	}
 }
 
+func (s *RouterSuite) TestResolvedURLUserOwnedURL(c *gc.C) {
+	r := MustNewResolvedURL("~charmers/precise/wordpress-23", 4)
+	u := r.UserOwnedURL()
+	c.Assert(u, gc.DeepEquals, charm.MustParseURL("~charmers/precise/wordpress-23"))
+	u.Series = "foo"
+	c.Assert(r.URL.Series, gc.Equals, "precise")
+
+	r = MustNewResolvedURL("~who/development/trusty/wordpress-42", -1)
+	u = r.UserOwnedURL()
+	c.Assert(u, gc.DeepEquals, charm.MustParseURL("~who/development/trusty/wordpress-42"))
+	u.Series = "foo"
+	c.Assert(r.URL.Series, gc.Equals, "trusty")
+}
+
 func (s *RouterSuite) TestResolvedURLPreferredURL(c *gc.C) {
 	r := MustNewResolvedURL("~charmers/precise/wordpress-23", 4)
 	// Ensure it's not aliased.
