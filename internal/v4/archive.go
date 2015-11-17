@@ -29,6 +29,7 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/series"
 )
 
 // GET id/archive
@@ -378,47 +379,13 @@ func checkRelationsAreValid(rels map[string]charm.Relation) error {
 	return nil
 }
 
-type distribution string
-
-const (
-	ubuntu  distribution = "ubuntu"
-	centos  distribution = "centos"
-	windows distribution = "windows"
-)
-
-var distributions = map[string]distribution{
-	// Ubuntu series
-	"oneiric": ubuntu,
-	"precise": ubuntu,
-	"quantal": ubuntu,
-	"raring":  ubuntu,
-	"saucy":   ubuntu,
-	"trusty":  ubuntu,
-	"utopic":  ubuntu,
-	"vivid":   ubuntu,
-	"wily":    ubuntu,
-
-	// Windows series
-	"win2012hvr2": windows,
-	"win2012hv":   windows,
-	"win2012r2":   windows,
-	"win2012":     windows,
-	"win7":        windows,
-	"win8":        windows,
-	"win81":       windows,
-	"win10":       windows,
-
-	// CentOS series
-	"centos7": centos,
-}
-
 // checkConsistentSeries ensures that all of the series listed in the
 // charm metadata come from the same distribution. If an error is
 // returned it will have a cause of params.ErrInvalidEntity.
-func checkConsistentSeries(series []string) error {
-	var dist distribution
-	for _, s := range series {
-		d := distributions[s]
+func checkConsistentSeries(metadataSeries []string) error {
+	var dist series.Distribution
+	for _, s := range metadataSeries {
+		d := series.Series[s].Distribution
 		if d == "" {
 			return errgo.WithCausef(nil, params.ErrInvalidEntity, "unrecognised series %q in metadata", s)
 		}

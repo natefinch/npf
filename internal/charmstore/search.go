@@ -20,6 +20,7 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/elasticsearch"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/series"
 )
 
 type SearchIndex struct {
@@ -33,32 +34,16 @@ const typeName = "entity"
 // series will be boosted. Series are currently ranked in
 // reverse order of LTS releases, followed by the latest
 // non-LTS release, followed by everything else.
-var seriesBoost = map[string]float64{
-	"bundle":      1.1255,
-	"trusty":      1.125,
-	"precise":     1.1125,
-	"utopic":      1.1,
-	"vivid":       1.101,
-	"wily":        1.102,
-	"win2012hvr2": 1.1,
-	"win2012hv":   1.1,
-	"win2012r2":   1.1,
-	"win2012":     1.1,
-	"win7":        1.1,
-	"win8":        1.1,
-	"win81":       1.1,
-	"centos7":     1.1,
-}
-
-// deprecatedSeries are series that should not show up in search
-// results. This list is used to filter out the charms before they are
-// indexed.
-var deprecatedSeries = map[string]bool{
-	"oneiric": true,
-	"quantal": true,
-	"raring":  true,
-	"saucy":   true,
-}
+var seriesBoost = func() map[string]float64 {
+	m := make(map[string]float64)
+	for k, v := range series.Series {
+		if !v.SearchIndex {
+			continue
+		}
+		m[k] = v.SearchBoost
+	}
+	return m
+}()
 
 // SearchDoc is a mongodoc.Entity with additional fields useful for searching.
 // This is the document that is stored in the search index.
@@ -86,7 +71,7 @@ func (s *Store) UpdateSearch(r *router.ResolvedURL) error {
 	if s.ES == nil || s.ES.Database == nil {
 		return nil
 	}
-	if deprecatedSeries[r.URL.Series] || r.Development {
+	if r.Development || r.URL.Series != "" && !series.Series[r.URL.Series].SearchIndex {
 		return nil
 	}
 
@@ -134,7 +119,7 @@ func (s *Store) UpdateSearchBaseURL(baseURL *charm.URL) error {
 	// (2.4) would require every field to be enumerated in this query, which
 	// would make it too fragile.
 	iter := s.DB.Entities().Pipe([]bson.D{
-		{{"$match", bson.D{{"baseurl", baseURL}}}},
+		{{"$match", bson.D{{"baseurl", baseURL}, {"development", false}}}},
 		{{"$sort", bson.D{{"revision", 1}}}},
 		{{"$group", bson.D{
 			{"_id", "$series"},
@@ -146,7 +131,7 @@ func (s *Store) UpdateSearchBaseURL(baseURL *charm.URL) error {
 		URL *charm.URL
 	}
 	for iter.Next(&result) {
-		if deprecatedSeries[result.URL.Series] {
+		if result.URL.Series != "" && !series.Series[result.URL.Series].SearchIndex {
 			continue
 		}
 		if err := s.UpdateSearch(&router.ResolvedURL{URL: *result.URL, PromulgatedRevision: -1}); err != nil {
