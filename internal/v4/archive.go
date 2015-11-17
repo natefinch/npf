@@ -163,7 +163,7 @@ func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req 
 		return badRequestf(nil, "Content-Length not specified")
 	}
 
-	oldId, oldHash, err := h.latestRevisionInfo(id)
+	oldUrl, oldHash, err := h.latestRevisionInfo(id)
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return errgo.Notef(err, "cannot get hash of latest revision")
 	}
@@ -171,17 +171,19 @@ func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req 
 		// The hash matches the hash of the latest revision, so
 		// no need to upload anything.
 		return httprequest.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
-			Id: oldId,
+			Id:            oldUrl.UserOwnedURL(),
+			PromulgatedId: oldUrl.PromulgatedURL(),
 		})
 	}
 	rid := &router.ResolvedURL{
-		URL: *id,
+		URL:         *id.WithChannel(""),
+		Development: id.Channel == charm.DevelopmentChannel,
 	}
 	// Choose the next revision number for the upload.
-	if oldId == nil {
+	if oldUrl == nil {
 		rid.URL.Revision = 0
 	} else {
-		rid.URL.Revision = oldId.Revision + 1
+		rid.URL.Revision = oldUrl.URL.Revision + 1
 	}
 	rid.PromulgatedRevision, err = h.getNewPromulgatedRevision(id)
 	if err != nil {
@@ -192,7 +194,7 @@ func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req 
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
 	}
 	return httprequest.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
-		Id:            &rid.URL,
+		Id:            rid.UserOwnedURL(),
 		PromulgatedId: rid.PromulgatedURL(),
 	})
 }
@@ -216,8 +218,9 @@ func (h *ReqHandler) servePutArchive(id *charm.URL, w http.ResponseWriter, req *
 		return badRequestf(nil, "Content-Length not specified")
 	}
 	rid := &router.ResolvedURL{
-		URL:                 *id,
+		URL:                 *id.WithChannel(""),
 		PromulgatedRevision: -1,
+		Development:         id.Channel == charm.DevelopmentChannel,
 	}
 	// Get the PromulgatedURL from the request parameters. When ingesting
 	// entities might not be added in order and the promulgated revision might
@@ -248,7 +251,7 @@ func (h *ReqHandler) servePutArchive(id *charm.URL, w http.ResponseWriter, req *
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
 	}
 	return httprequest.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
-		Id:            id,
+		Id:            rid.UserOwnedURL(),
 		PromulgatedId: rid.PromulgatedURL(),
 	})
 	return nil
@@ -357,8 +360,8 @@ func checkRelationsAreValid(rels map[string]charm.Relation) error {
 	return nil
 }
 
-func (h *ReqHandler) latestRevisionInfo(id *charm.URL) (*charm.URL, string, error) {
-	entities, err := h.Store.FindEntities(id, "_id", "blobhash")
+func (h *ReqHandler) latestRevisionInfo(id *charm.URL) (*router.ResolvedURL, string, error) {
+	entities, err := h.Store.FindEntities(id, "_id", "blobhash", "promulgated-url", "development")
 	if err != nil {
 		return nil, "", errgo.Mask(err)
 	}
@@ -371,7 +374,7 @@ func (h *ReqHandler) latestRevisionInfo(id *charm.URL) (*charm.URL, string, erro
 			latest = entity
 		}
 	}
-	return latest.URL, latest.BlobHash, nil
+	return charmstore.EntityResolvedURL(latest), latest.BlobHash, nil
 }
 
 func verifyConstraints(s string) error {
@@ -559,6 +562,7 @@ func (h *ReqHandler) getNewPromulgatedRevision(id *charm.URL) (int, error) {
 	query := h.Store.EntitiesQuery(&charm.URL{
 		Series:   id.Series,
 		Name:     id.Name,
+		Channel:  id.Channel,
 		Revision: -1,
 	})
 	var entity mongodoc.Entity
