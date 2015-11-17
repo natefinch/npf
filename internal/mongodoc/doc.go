@@ -163,10 +163,10 @@ type BaseEntity struct {
 	// promulgated.
 	Promulgated IntBool
 
-	// CommonExtraInfo holds arbitrary common extra metadata associated with
+	// CommonInfo holds arbitrary common extra metadata associated with
 	// the base entity. Thhose data apply to all revisions.
 	// The byte slices hold JSON-encoded data.
-	CommonExtraInfo map[string][]byte `bson:",omitempty" json:",omitempty"`
+	CommonInfo map[string][]byte `bson:",omitempty" json:",omitempty"`
 }
 
 // ACL holds lists of users and groups that are

@@ -316,7 +316,7 @@ var metaEndpoints = []metaEndpoint{{
 		c.Assert(data, gc.Equals, "value cs:~charmers/precise/wordpress-23")
 	},
 }, {
-	name: "common-extra-info",
+	name: "common-info",
 	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
 		return map[string]string{
 			"key": "value " + url.URL.String(),
@@ -329,7 +329,7 @@ var metaEndpoints = []metaEndpoint{{
 		})
 	},
 }, {
-	name: "common-extra-info/key",
+	name: "common-info/key",
 	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
 		return "value " + url.URL.String(), nil
 	},
@@ -540,7 +540,7 @@ func (s *APISuite) addTestEntities(c *gc.C) []*router.ResolvedURL {
 		}
 		// Associate some extra-info data with the entity.
 		key := e.URL.Path() + "/meta/extra-info/key"
-		commonkey := e.URL.Path() + "/meta/common-extra-info/key"
+		commonkey := e.URL.Path() + "/meta/common-info/key"
 		s.assertPut(c, key, "value "+e.URL.String())
 		s.assertPut(c, commonkey, "value "+e.URL.String())
 	}
@@ -820,7 +820,7 @@ func (s *APISuite) TestExtraInfo(c *gc.C) {
 	id := "precise/wordpress-23"
 	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/"+id, 23))
 	s.checkInfo(c, "extra-info", id)
-	s.checkInfo(c, "common-extra-info", id)
+	s.checkInfo(c, "common-info", id)
 }
 
 func (s *APISuite) checkInfo(c *gc.C, path string, id string) {
@@ -904,7 +904,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
-		Message: "bad key for extra-info",
+		Message: "bad key for $1",
 	},
 }, {
 	about:        "key with a dot",
@@ -913,7 +913,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
-		Message: "bad key for extra-info",
+		Message: "bad key for $1",
 	},
 }, {
 	about:        "key with a dollar",
@@ -922,7 +922,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
-		Message: "bad key for extra-info",
+		Message: "bad key for $1",
 	},
 }, {
 	about: "multi key with extra element",
@@ -933,7 +933,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
-		Message: "bad key for extra-info",
+		Message: "bad key for $1",
 	},
 }, {
 	about: "multi key with dot",
@@ -944,7 +944,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
-		Message: "bad key for extra-info",
+		Message: "bad key for $1",
 	},
 }, {
 	about: "multi key with dollar",
@@ -955,7 +955,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
-		Message: "bad key for extra-info",
+		Message: "bad key for $1",
 	},
 }, {
 	about:        "multi key with bad map",
@@ -963,7 +963,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	body:         "bad",
 	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
-		Message: `cannot unmarshal extra info body: json: cannot unmarshal string into Go value of type map[string]*json.RawMessage`,
+		Message: `cannot unmarshal $1 body: json: cannot unmarshal string into Go value of type map[string]*json.RawMessage`,
 	},
 }}
 
@@ -976,6 +976,9 @@ func (s *APISuite) TestExtraInfoBadPutRequests(c *gc.C) {
 		if contentType == "" {
 			contentType = "application/json"
 		}
+		extraBodyMessage := strings.Replace(test.expectBody.Message, "$1", "extra-info", -1)
+		commonBodyMessage := strings.Replace(test.expectBody.Message, "$1", "common-info", -1)
+		test.expectBody.Message = extraBodyMessage
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: s.srv,
 			URL:     storeURL(path + "extra-info/" + test.key),
@@ -989,9 +992,10 @@ func (s *APISuite) TestExtraInfoBadPutRequests(c *gc.C) {
 			ExpectStatus: test.expectStatus,
 			ExpectBody:   test.expectBody,
 		})
+		test.expectBody.Message = commonBodyMessage
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: s.srv,
-			URL:     storeURL(path + "common-extra-info/" + test.key),
+			URL:     storeURL(path + "common-info/" + test.key),
 			Method:  "PUT",
 			Header: http.Header{
 				"Content-Type": {contentType},
@@ -1039,7 +1043,7 @@ func (s *APISuite) TestExtraInfoPutUnauthorized(c *gc.C) {
 	})
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: s.srv,
-		URL:     storeURL("precise/wordpress-23/meta/common-extra-info"),
+		URL:     storeURL("precise/wordpress-23/meta/common-info"),
 		Method:  "PUT",
 		Header: http.Header{
 			"Content-Type": {"application/json"},
@@ -1052,7 +1056,7 @@ func (s *APISuite) TestExtraInfoPutUnauthorized(c *gc.C) {
 	})
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: s.srv,
-		URL:     storeURL("precise/wordpress-23/meta/common-extra-info"),
+		URL:     storeURL("precise/wordpress-23/meta/common-info"),
 		Method:  "PUT",
 		Header: http.Header{
 			"Content-Type":            {"application/json"},
@@ -1069,24 +1073,24 @@ func (s *APISuite) TestExtraInfoPutUnauthorized(c *gc.C) {
 	})
 }
 
-func (s *APISuite) TestCommonExtraInfo(c *gc.C) {
+func (s *APISuite) TestCommonInfo(c *gc.C) {
 	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-23", 23))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-24", 24))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/trusty/wordpress-1", 1))
 
-	s.assertPut(c, "wordpress/meta/common-extra-info/key", "something")
+	s.assertPut(c, "wordpress/meta/common-info/key", "something")
 
-	s.assertGet(c, "wordpress/meta/common-extra-info", map[string]string {
+	s.assertGet(c, "wordpress/meta/common-info", map[string]string {
 		"key": "something",
 	})
 	for i, u := range []string{"precise/wordpress-23", "precise/wordpress-24", "trusty/wordpress-1"} {
 		c.Logf("id %d: %q", i, u)
-		s.assertGet(c, u + "/meta/common-extra-info", map[string]string {
+		s.assertGet(c, u + "/meta/common-info", map[string]string {
 			"key": "something",
 		})
 		e, err := s.store.FindBaseEntity(charm.MustParseURL(u))
 		c.Assert(err, gc.IsNil)
-		c.Assert(e.CommonExtraInfo, gc.DeepEquals, map[string][]byte {
+		c.Assert(e.CommonInfo, gc.DeepEquals, map[string][]byte {
 			"key": []byte("\"something\""),
 		})
 	}
