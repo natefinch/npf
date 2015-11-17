@@ -1551,6 +1551,72 @@ Example: `GET ~bob/trusty/wordpress-42/meta/id-series`
 }
 ```
 
+#### GET *id*/meta/common-info
+
+The meta/common-info path reports any common metadata recorded for the base
+entity. This contains only information stored by clients - the API server
+itself does not populate any fields. The resulting object holds an entry for 
+each piece of metadata recorded with a PUT to `meta/common-info`.
+
+```go
+type CommonInfo struct {
+        Values map[string] interface{}
+}
+```
+
+Example: `GET wordpress/meta/common-info`
+         `GET precise/wordpress-32/meta/common-info`
+
+```json
+{
+    "homepage": "http://wordpress.org",
+    "bugs-url": "http://wordpress.org/bugs",
+}
+```
+
+#### GET *id*/meta/common-info/*key*
+
+This path returns the contents of the given `common-info` key. The result is
+exactly the JSON value stored as a result of the PUT request to `common-info` or
+`common-info/key`.
+
+Example: `GET wordpress/meta/common-info/homepage`
+         `GET precise/wordpress-32/meta/common-info/homepage`
+
+```json
+"http://wordpress.org"
+```
+
+#### PUT *id*/meta/common-info
+
+This request updates the value of any metadata values. Any values that are not
+mentioned in the request are left untouched. Any fields with null values are
+deleted.
+
+Example: `PUT precise/wordpress-32/meta/common-info`
+
+Request body:
+```json
+{
+    "bugs-url": "http://wordpress.org/newbugs",
+}
+```
+
+#### PUT *id*/meta/common-info/*key*
+
+This request creates or updates the value for a specific key.
+If the value is null, the key is deleted.
+
+Example: `PUT precise/wordpress-32/meta/common-info/bugs-url`
+
+Request body:
+
+```json
+"http://wordpress.org/newbugs",
+```
+
+The above example is equivalent to the `meta/common-info` example above.
+
 ### Resources
 
 **Not yet implemented**
