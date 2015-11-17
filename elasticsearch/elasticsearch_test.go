@@ -260,8 +260,7 @@ func (s *Suite) TestPutMapping(c *gc.C) {
 		"testtype": map[string]interface{}{
 			"properties": map[string]interface{}{
 				"foo": map[string]interface{}{
-					"stored": true,
-					"type":   "string",
+					"type": "string",
 				},
 			},
 		},
