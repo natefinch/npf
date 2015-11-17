@@ -21,6 +21,8 @@ import (
 	charm "gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
+
+	"gopkg.in/juju/charmstore.v5-unstable/internal/series"
 )
 
 // Implementation note on error handling:
@@ -29,28 +31,6 @@ import (
 // which are the possible places that could be returning an error with a
 // Cause (the only kind of error that can end up setting an HTTP status
 // code)
-
-var knownSeries = map[string]bool{
-	"bundle":      true,
-	"oneiric":     true,
-	"precise":     true,
-	"quantal":     true,
-	"raring":      true,
-	"saucy":       true,
-	"trusty":      true,
-	"utopic":      true,
-	"vivid":       true,
-	"wily":        true,
-	"win2012hvr2": true,
-	"win2012hv":   true,
-	"win2012r2":   true,
-	"win2012":     true,
-	"win7":        true,
-	"win8":        true,
-	"win81":       true,
-	"win10":       true,
-	"centos7":     true,
-}
 
 // BulkIncludeHandler represents a metadata handler that can
 // handle multiple metadata "include" requests in a single batch.
@@ -843,7 +823,7 @@ func splitId(path string) (url *charm.URL, rest string, err error) {
 	}
 
 	// Skip series.
-	if knownSeries[part] {
+	if _, ok := series.Series[part]; ok {
 		part, i = splitPath(path, i)
 	}
 
