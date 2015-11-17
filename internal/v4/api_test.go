@@ -854,7 +854,7 @@ func (s *APISuite) checkInfo(c *gc.C, path string, id string) {
 				"foo": "fooval3",
 				"baz": "bazval",
 			},
-			path+"/frob": []int{1, 4, 6},
+			path + "/frob": []int{1, 4, 6},
 		},
 	})
 	s.assertGet(c, id+"/meta/"+path, map[string]interface{}{
@@ -892,7 +892,7 @@ func (s *APISuite) checkInfo(c *gc.C, path string, id string) {
 
 var extraInfoBadPutRequestsTests = []struct {
 	about        string
-	key         string
+	key          string
 	body         interface{}
 	contentType  string
 	expectStatus int
@@ -908,7 +908,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	},
 }, {
 	about:        "key with a dot",
-	key:         "foo.bar",
+	key:          "foo.bar",
 	body:         "hello",
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
@@ -917,7 +917,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	},
 }, {
 	about:        "key with a dollar",
-	key:         "foo$bar",
+	key:          "foo$bar",
 	body:         "hello",
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
@@ -926,7 +926,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	},
 }, {
 	about: "multi key with extra element",
-	key:  "",
+	key:   "",
 	body: map[string]string{
 		"foo/bar": "value",
 	},
@@ -937,7 +937,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	},
 }, {
 	about: "multi key with dot",
-	key:  "",
+	key:   "",
 	body: map[string]string{
 		".bar": "value",
 	},
@@ -948,7 +948,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	},
 }, {
 	about: "multi key with dollar",
-	key:  "",
+	key:   "",
 	body: map[string]string{
 		"$bar": "value",
 	},
@@ -959,7 +959,7 @@ var extraInfoBadPutRequestsTests = []struct {
 	},
 }, {
 	about:        "multi key with bad map",
-	key:         "",
+	key:          "",
 	body:         "bad",
 	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
@@ -1080,17 +1080,17 @@ func (s *APISuite) TestCommonInfo(c *gc.C) {
 
 	s.assertPut(c, "wordpress/meta/common-info/key", "something")
 
-	s.assertGet(c, "wordpress/meta/common-info", map[string]string {
+	s.assertGet(c, "wordpress/meta/common-info", map[string]string{
 		"key": "something",
 	})
 	for i, u := range []string{"precise/wordpress-23", "precise/wordpress-24", "trusty/wordpress-1"} {
 		c.Logf("id %d: %q", i, u)
-		s.assertGet(c, u + "/meta/common-info", map[string]string {
+		s.assertGet(c, u+"/meta/common-info", map[string]string{
 			"key": "something",
 		})
 		e, err := s.store.FindBaseEntity(charm.MustParseURL(u))
 		c.Assert(err, gc.IsNil)
-		c.Assert(e.CommonInfo, gc.DeepEquals, map[string][]byte {
+		c.Assert(e.CommonInfo, gc.DeepEquals, map[string][]byte{
 			"key": []byte("\"something\""),
 		})
 	}
