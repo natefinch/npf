@@ -144,9 +144,10 @@ func newReqHandler() *ReqHandler {
 			"diagram.svg": h.resolveId(h.authId(h.serveDiagram)),
 			"expand-id":   h.resolveId(h.authId(h.serveExpandId)),
 			"icon.svg":    h.resolveId(h.authId(h.serveIcon)),
+			"promulgate":  h.resolveId(h.serveAdminPromulgate),
+			"publish":     h.servePublish,
 			"readme":      h.resolveId(h.authId(h.serveReadMe)),
 			"resources":   h.resolveId(h.authId(h.serveResources)),
-			"promulgate":  h.resolveId(h.serveAdminPromulgate),
 		},
 		Meta: map[string]router.BulkIncludeHandler{
 			"archive-size":         h.entityHandler(h.metaArchiveSize, "size"),
@@ -1167,6 +1168,61 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 	h.addAudit(e)
 
 	return nil
+}
+
+// PUT id/publish
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idpublish
+func (h *ReqHandler) servePublish(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
+	// Perform basic validation of the request.
+	if req.Method != "PUT" {
+		return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)
+	}
+	if id.Channel == charm.DevelopmentChannel {
+		return errgo.WithCausef(nil, params.ErrForbidden, "cannot publish or unpublish development charm or bundle %q", id)
+	}
+	jsonContentType := "application/json"
+	if ct := req.Header.Get("Content-Type"); ct != jsonContentType {
+		return errgo.WithCausef(nil, params.ErrBadRequest, "unexpected Content-Type %q; expected %q", ct, jsonContentType)
+	}
+
+	// Retrieve the requested action from the request body.
+	var publish params.PublishRequest
+	decoder := json.NewDecoder(req.Body)
+	if err := decoder.Decode(&publish); err != nil {
+		return errgo.WithCausef(err, params.ErrBadRequest, "cannot unmarshal publish request body")
+	}
+
+	// Retrieve the resolved URL for the entity to update. It will be referring
+	// to the entity under development is the action is to publish a charm or
+	// bundle, or the published one otherwise.
+	url := *id
+	if publish.Published {
+		url = *id.WithChannel(charm.DevelopmentChannel)
+	}
+	rurl, err := h.resolveURL(&url)
+	if err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+
+	// Authorize the operation: users must have write permissions on the
+	// published charm or bundle.
+	prurl := *rurl
+	prurl.Development = false
+	if err := h.AuthorizeEntity(&prurl, req); err != nil {
+		return errgo.Mask(err, errgo.Any)
+	}
+
+	// Update the entity.
+	if err := h.Store.SetDevelopment(rurl, !publish.Published); err != nil {
+		return errgo.NoteMask(err, "cannot publish or unpublish charm or bundle", errgo.Is(params.ErrNotFound))
+	}
+
+	// Return information on the updated charm or bundle.
+	rurl.Development = !publish.Published
+	return httprequest.WriteJSON(w, http.StatusOK, &params.PublishResponse{
+		Id:            rurl.UserOwnedURL(),
+		PromulgatedId: rurl.PromulgatedURL(),
+	})
 }
 
 // serveSetAuthCookie sets the provided macaroon slice as a cookie on the

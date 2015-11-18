@@ -2935,6 +2935,438 @@ func (s *APISuite) TestEndpointRequiringBaseEntityWithPromulgatedId(c *gc.C) {
 	})
 }
 
+var publishTests = []struct {
+	about      string
+	db         []*router.ResolvedURL
+	id         string
+	publish    bool
+	expectDB   []*router.ResolvedURL
+	expectBody params.PublishResponse
+}{{
+	about: "publish: one development charm present, fully qualified id, not promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-42", -1),
+	},
+	id:      "~who/wily/django-42",
+	publish: true,
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-42", -1),
+	},
+	expectBody: params.PublishResponse{
+		Id: charm.MustParseURL("~who/wily/django-42"),
+	},
+}, {
+	about: "publish: one development charm present, fully qualified id, promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-42", 47),
+	},
+	id:      "wily/django-47",
+	publish: true,
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-42", 47),
+	},
+	expectBody: params.PublishResponse{
+		Id:            charm.MustParseURL("~who/wily/django-42"),
+		PromulgatedId: charm.MustParseURL("wily/django-47"),
+	},
+}, {
+	about: "publish: one development charm present, partial id, not promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-42", -1),
+	},
+	id:      "~who/wily/django",
+	publish: true,
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-42", -1),
+	},
+	expectBody: params.PublishResponse{
+		Id: charm.MustParseURL("~who/wily/django-42"),
+	},
+}, {
+	about: "publish: one development charm present, partial id, promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-42", 47),
+	},
+	id:      "django",
+	publish: true,
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-42", 47),
+	},
+	expectBody: params.PublishResponse{
+		Id:            charm.MustParseURL("~who/wily/django-42"),
+		PromulgatedId: charm.MustParseURL("wily/django-47"),
+	},
+}, {
+	about: "publish: one published charm present, partial id, not promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-1", -1),
+	},
+	id:      "~who/django",
+	publish: true,
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-1", -1),
+	},
+	expectBody: params.PublishResponse{
+		Id: charm.MustParseURL("~who/wily/django-1"),
+	},
+}, {
+	about: "publish: one published charm present, fully qualified id, promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-2", 0),
+	},
+	id:      "wily/django-0",
+	publish: true,
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-2", 0),
+	},
+	expectBody: params.PublishResponse{
+		Id:            charm.MustParseURL("~who/wily/django-2"),
+		PromulgatedId: charm.MustParseURL("wily/django-0"),
+	},
+}, {
+	about: "publish: multiple development charms present, fully qualified id, not promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-0", -1),
+		newResolvedURL("~who/development/wily/django-1", -1),
+		newResolvedURL("~who/development/wily/django-2", -1),
+		newResolvedURL("~who/development/trusty/django-1", -1),
+	},
+	id:      "~who/wily/django-1",
+	publish: true,
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-0", -1),
+		newResolvedURL("~who/wily/django-1", -1),
+		newResolvedURL("~who/development/wily/django-2", -1),
+		newResolvedURL("~who/development/trusty/django-1", -1),
+	},
+	expectBody: params.PublishResponse{
+		Id: charm.MustParseURL("~who/wily/django-1"),
+	},
+}, {
+	about: "publish: multiple development charms present, fully qualified id, promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-42", 10),
+		newResolvedURL("~who/development/wily/django-43", 11),
+		newResolvedURL("~who/development/wily/django-44", 12),
+		newResolvedURL("~who/development/wily/rails-100", 10),
+	},
+	id:      "wily/django-10",
+	publish: true,
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-42", 10),
+		newResolvedURL("~who/development/wily/django-43", 11),
+		newResolvedURL("~who/development/wily/django-44", 12),
+		newResolvedURL("~who/development/wily/rails-100", 10),
+	},
+	expectBody: params.PublishResponse{
+		Id:            charm.MustParseURL("~who/wily/django-42"),
+		PromulgatedId: charm.MustParseURL("wily/django-10"),
+	},
+}, {
+	about: "publish: multiple development charms present, fully qualified id, promulgated, last one published",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-42", 10),
+		newResolvedURL("~who/development/wily/django-43", 11),
+		newResolvedURL("~who/development/wily/django-44", 12),
+		newResolvedURL("~who/development/wily/rails-100", 10),
+	},
+	id:      "wily/django-12",
+	publish: true,
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-42", 10),
+		newResolvedURL("~who/development/wily/django-43", 11),
+		newResolvedURL("~who/wily/django-44", 12),
+		newResolvedURL("~who/development/wily/rails-100", 10),
+	},
+	expectBody: params.PublishResponse{
+		Id:            charm.MustParseURL("~who/wily/django-44"),
+		PromulgatedId: charm.MustParseURL("wily/django-12"),
+	},
+}, {
+	about: "publish: multiple development charms present, partial id, not promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-0", -1),
+		newResolvedURL("~who/development/wily/django-1", -1),
+		newResolvedURL("~who/development/trusty/django-42", -1),
+		newResolvedURL("~who/development/trusty/django-47", -1),
+	},
+	id:      "~who/wily/django",
+	publish: true,
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-0", -1),
+		newResolvedURL("~who/wily/django-1", -1),
+		newResolvedURL("~who/development/trusty/django-42", -1),
+		newResolvedURL("~who/development/trusty/django-47", -1),
+	},
+	expectBody: params.PublishResponse{
+		Id: charm.MustParseURL("~who/wily/django-1"),
+	},
+}, {
+	about: "publish: multiple development charms present, partial id, promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-0", 0),
+		newResolvedURL("~who/development/wily/django-1", 1),
+		newResolvedURL("~who/development/trusty/django-42", 10),
+		newResolvedURL("~who/development/trusty/django-47", 11),
+	},
+	id:      "django",
+	publish: true,
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-0", 0),
+		newResolvedURL("~who/development/wily/django-1", 1),
+		newResolvedURL("~who/development/trusty/django-42", 10),
+		newResolvedURL("~who/trusty/django-47", 11),
+	},
+	expectBody: params.PublishResponse{
+		Id:            charm.MustParseURL("~who/trusty/django-47"),
+		PromulgatedId: charm.MustParseURL("trusty/django-11"),
+	},
+}, {
+	about: "publish: multiple published charms present, partial id, not promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-0", -1),
+		newResolvedURL("~who/development/wily/django-1", -1),
+		newResolvedURL("~who/development/wily/django-2", -1),
+	},
+	id:      "~who/wily/django",
+	publish: true,
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-0", -1),
+		newResolvedURL("~who/development/wily/django-1", -1),
+		newResolvedURL("~who/wily/django-2", -1),
+	},
+	expectBody: params.PublishResponse{
+		Id: charm.MustParseURL("~who/wily/django-2"),
+	},
+}, {
+	about: "publish: multiple published charms present, partial id, promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/development/trusty/django-42", 10),
+		newResolvedURL("~who/trusty/django-47", 11),
+		newResolvedURL("~who/trusty/django-48", 12),
+		newResolvedURL("~who/development/trusty/django-49", 13),
+	},
+	id:      "django",
+	publish: true,
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/development/trusty/django-42", 10),
+		newResolvedURL("~who/trusty/django-47", 11),
+		newResolvedURL("~who/trusty/django-48", 12),
+		newResolvedURL("~who/trusty/django-49", 13),
+	},
+	expectBody: params.PublishResponse{
+		Id:            charm.MustParseURL("~who/trusty/django-49"),
+		PromulgatedId: charm.MustParseURL("trusty/django-13"),
+	},
+}, {
+	about: "unpublish: one published charm present, partial id, not promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-1", -1),
+	},
+	id: "~who/django",
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-1", -1),
+	},
+	expectBody: params.PublishResponse{
+		Id: charm.MustParseURL("~who/development/wily/django-1"),
+	},
+}, {
+	about: "unpublish: one published charm present, fully qualified id, promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-2", 0),
+	},
+	id: "wily/django-0",
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-2", 0),
+	},
+	expectBody: params.PublishResponse{
+		Id:            charm.MustParseURL("~who/development/wily/django-2"),
+		PromulgatedId: charm.MustParseURL("development/wily/django-0"),
+	},
+}, {
+	about: "unpublish: multiple published charms present, partial id, not promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/wily/django-0", -1),
+		newResolvedURL("~who/development/wily/django-1", -1),
+		newResolvedURL("~who/development/wily/django-2", -1),
+	},
+	id: "~who/wily/django",
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/development/wily/django-0", -1),
+		newResolvedURL("~who/development/wily/django-1", -1),
+		newResolvedURL("~who/development/wily/django-2", -1),
+	},
+	expectBody: params.PublishResponse{
+		Id: charm.MustParseURL("~who/development/wily/django-0"),
+	},
+}, {
+	about: "unpublish: multiple published charms present, partial id, promulgated",
+	db: []*router.ResolvedURL{
+		newResolvedURL("~who/development/trusty/django-42", 10),
+		newResolvedURL("~who/trusty/django-47", 11),
+		newResolvedURL("~who/trusty/django-48", 12),
+		newResolvedURL("~who/development/trusty/django-49", 13),
+	},
+	id: "django",
+	expectDB: []*router.ResolvedURL{
+		newResolvedURL("~who/development/trusty/django-42", 10),
+		newResolvedURL("~who/trusty/django-47", 11),
+		newResolvedURL("~who/development/trusty/django-48", 12),
+		newResolvedURL("~who/development/trusty/django-49", 13),
+	},
+	expectBody: params.PublishResponse{
+		Id:            charm.MustParseURL("~who/development/trusty/django-48"),
+		PromulgatedId: charm.MustParseURL("development/trusty/django-12"),
+	},
+}}
+
+func (s *APISuite) TestPublish(c *gc.C) {
+	for i, test := range publishTests {
+		c.Logf("test %d: %s", i, test.about)
+
+		// Add the initial entities to the database.
+		for _, rurl := range test.db {
+			s.addPublicCharm(c, "wordpress", rurl)
+		}
+
+		// Build the proper request body.
+		body := mustMarshalJSON(params.PublishRequest{
+			Published: test.publish,
+		})
+
+		// Check that the request/response process works as expected.
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler:      s.srv,
+			URL:          storeURL(test.id + "/publish"),
+			Method:       "PUT",
+			Header:       http.Header{"Content-Type": {"application/json"}},
+			Username:     testUsername,
+			Password:     testPassword,
+			Body:         strings.NewReader(body),
+			ExpectStatus: http.StatusOK,
+			ExpectBody:   test.expectBody,
+		})
+
+		// Check that the database now includes the expected entities.
+		for _, rurl := range test.expectDB {
+			e, err := s.store.FindEntity(rurl)
+			c.Assert(err, gc.IsNil)
+			c.Assert(charmstore.EntityResolvedURL(e), jc.DeepEquals, rurl)
+		}
+
+		// Remove all entities from the database.
+		_, err := s.store.DB.Entities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+		_, err = s.store.DB.BaseEntities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+	}
+}
+
+var publishErrorsTests = []struct {
+	about        string
+	method       string
+	id           string
+	contentType  string
+	body         string
+	expectStatus int
+	expectBody   params.Error
+}{{
+	about:        "get method not allowed",
+	method:       "GET",
+	id:           "~who/wily/django-42",
+	expectStatus: http.StatusMethodNotAllowed,
+	expectBody: params.Error{
+		Code:    params.ErrMethodNotAllowed,
+		Message: "GET not allowed",
+	},
+}, {
+	about:        "post method not allowed",
+	method:       "POST",
+	id:           "~who/wily/django-42",
+	expectStatus: http.StatusMethodNotAllowed,
+	expectBody: params.Error{
+		Code:    params.ErrMethodNotAllowed,
+		Message: "POST not allowed",
+	},
+}, {
+	about:        "invalid channel",
+	method:       "PUT",
+	id:           "~who/development/wily/django-42",
+	expectStatus: http.StatusForbidden,
+	expectBody: params.Error{
+		Code:    params.ErrForbidden,
+		Message: `cannot publish or unpublish development charm or bundle "cs:~who/development/wily/django-42"`,
+	},
+}, {
+	about:        "unexpected content type",
+	method:       "PUT",
+	id:           "~who/wily/django-42",
+	contentType:  "text/invalid",
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: `unexpected Content-Type "text/invalid"; expected "application/json"`,
+	},
+}, {
+	about:        "invalid body",
+	method:       "PUT",
+	id:           "~who/wily/django-42",
+	body:         "bad wolf",
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: "cannot unmarshal publish request body: invalid character 'b' looking for beginning of value",
+	},
+}, {
+	about:        "entity to be published not found",
+	method:       "PUT",
+	id:           "~who/wily/django-42",
+	expectStatus: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: `no matching charm or bundle for "cs:~who/development/wily/django-42"`,
+	},
+}, {
+	about:  "entity to be unpublished not found",
+	method: "PUT",
+	id:     "~who/wily/django-42",
+	body: mustMarshalJSON(params.PublishRequest{
+		Published: false,
+	}),
+	expectStatus: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: `no matching charm or bundle for "cs:~who/wily/django-42"`,
+	},
+}}
+
+func (s *APISuite) TestPublishErrors(c *gc.C) {
+	for i, test := range publishErrorsTests {
+		c.Logf("test %d: %s", i, test.about)
+		contentType := test.contentType
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		body := test.body
+		if body == "" {
+			body = mustMarshalJSON(params.PublishRequest{
+				Published: true,
+			})
+		}
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler:      s.srv,
+			URL:          storeURL(test.id + "/publish"),
+			Method:       test.method,
+			Header:       http.Header{"Content-Type": {contentType}},
+			Username:     testUsername,
+			Password:     testPassword,
+			Body:         strings.NewReader(body),
+			ExpectStatus: test.expectStatus,
+			ExpectBody:   test.expectBody,
+		})
+	}
+}
+
 func (s *APISuite) TestTooManyConcurrentRequests(c *gc.C) {
 	// We don't have any control over the number of concurrent
 	// connections allowed by s.srv, so we make our own

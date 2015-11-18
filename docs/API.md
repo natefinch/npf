@@ -263,6 +263,56 @@ Request body:
 }
 ```
 
+### Charm and bundle publishing
+
+#### PUT *id*/publish
+
+A PUT to ~*user*/*anyseries*/*name*-*anyrevision* sets whether the
+corresponding charm or bundle is published and can be accessed through a URL
+with no channel. If the revision number is not specified, the id is resolved to
+the charm or bundle with the latest development revision number. The id must
+not include the development channel.
+
+```go
+type PublishRequest struct {
+    Published bool
+}
+```
+
+If Published is true, the charm or bundle is made available at the
+non-development URL with the same revision number. If Published is false, the
+id is unpublished.
+
+The response include the id and promulgated id of the entity after the action
+is performed:
+
+```go
+type PublishResponse struct {
+    Id            *charm.URL
+    PromulgatedId *charm.URL `json:",omitempty"`
+}
+```
+
+If the charm or bundle have been unpublished, the identifiers in the response
+will represent a development charm or bundle.
+
+Example: `PUT ~charmers/trusty/django-42/publish`
+
+Request body:
+```json
+{
+    "Publish" : true,
+}
+```
+
+Response body:
+```json
+{
+    "Id" : "cs:~charmers/trusty/django-42",
+    "PromulgatedId": "cs:trusty/django-10",
+}
+```
+
 ### Stats
 
 #### GET stats/counter/...
@@ -1555,7 +1605,7 @@ Example: `GET ~bob/trusty/wordpress-42/meta/id-series`
 
 The meta/common-info path reports any common metadata recorded for the base
 entity. This contains only information stored by clients - the API server
-itself does not populate any fields. The resulting object holds an entry for 
+itself does not populate any fields. The resulting object holds an entry for
 each piece of metadata recorded with a PUT to `meta/common-info`.
 
 ```go

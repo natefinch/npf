@@ -839,6 +839,25 @@ func (s *Store) UpdateBaseEntity(url *router.ResolvedURL, update interface{}) er
 	return nil
 }
 
+// SetDevelopment sets whether the entity corresponding to the given URL will
+// be only available in its development version (in essence, not published).
+func (s *Store) SetDevelopment(url *router.ResolvedURL, development bool) error {
+	if err := s.UpdateEntity(url, bson.D{{
+		"$set", bson.D{{"development", development}},
+	}}); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	if !development {
+		// If the entity is published, update the search index.
+		rurl := *url
+		rurl.Development = development
+		if err := s.UpdateSearch(&rurl); err != nil {
+			return errgo.Notef(err, "cannot update search entities for %q", rurl)
+		}
+	}
+	return nil
+}
+
 // SetPromulgated sets whether the base entity of url is promulgated, If
 // promulgated is true it also unsets promulgated on any other base
 // entity for entities with the same name. It also calculates the next
