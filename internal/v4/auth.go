@@ -20,7 +20,7 @@ import (
 
 const (
 	basicRealm        = "CharmStore4"
-	promulgatorsGroup = "promulgators"
+	promulgatorsGroup = "charmers"
 )
 
 // authorize checks that the current user is authorized based on the provided

@@ -2624,7 +2624,9 @@ var promulgateTests = []struct {
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
 	},
 	expectBaseEntities: []*mongodoc.BaseEntity{
-		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(mongodoc.ACL{
+			Write: []string{v4.PromulgatorsGroup},
+		}).WithPromulgated(true).Build(),
 	},
 	expectPromulgate: true,
 	expectUser:       "admin",
@@ -2732,7 +2734,7 @@ var promulgateTests = []struct {
 	id:   "~charmers/wordpress",
 	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: false}),
 	caveats: []checkers.Caveat{
-		checkers.DeclaredCaveat(v4.UsernameAttr, "promulgators"),
+		checkers.DeclaredCaveat(v4.UsernameAttr, v4.PromulgatorsGroup),
 	},
 	expectStatus: http.StatusOK,
 	expectEntities: []*mongodoc.Entity{
@@ -2741,7 +2743,7 @@ var promulgateTests = []struct {
 	expectBaseEntities: []*mongodoc.BaseEntity{
 		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
 	},
-	expectUser: "promulgators",
+	expectUser: v4.PromulgatorsGroup,
 }, {
 	about: "promulgate base entity with macaroon",
 	entities: []*mongodoc.Entity{
@@ -2753,17 +2755,19 @@ var promulgateTests = []struct {
 	id:   "~charmers/wordpress",
 	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
 	caveats: []checkers.Caveat{
-		checkers.DeclaredCaveat(v4.UsernameAttr, "promulgators"),
+		checkers.DeclaredCaveat(v4.UsernameAttr, v4.PromulgatorsGroup),
 	},
 	expectStatus: http.StatusOK,
 	expectEntities: []*mongodoc.Entity{
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
 	},
 	expectBaseEntities: []*mongodoc.BaseEntity{
-		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(mongodoc.ACL{
+			Write: []string{v4.PromulgatorsGroup},
+		}).WithPromulgated(true).Build(),
 	},
 	expectPromulgate: true,
-	expectUser:       "promulgators",
+	expectUser:       v4.PromulgatorsGroup,
 }, {
 	about: "promulgate base entity with group macaroon",
 	entities: []*mongodoc.Entity{
@@ -2778,14 +2782,16 @@ var promulgateTests = []struct {
 		checkers.DeclaredCaveat(v4.UsernameAttr, "bob"),
 	},
 	groups: map[string][]string{
-		"bob": {"promulgators", "yellow"},
+		"bob": {v4.PromulgatorsGroup, "yellow"},
 	},
 	expectStatus: http.StatusOK,
 	expectEntities: []*mongodoc.Entity{
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
 	},
 	expectBaseEntities: []*mongodoc.BaseEntity{
-		storetesting.NewBaseEntity("~charmers/wordpress").WithPromulgated(true).Build(),
+		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(mongodoc.ACL{
+			Write: []string{v4.PromulgatorsGroup},
+		}).WithPromulgated(true).Build(),
 	},
 	expectPromulgate: true,
 	expectUser:       "bob",

@@ -1157,6 +1157,19 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 		return errgo.Mask(err, errgo.Any)
 	}
 
+	if promulgate.Promulgated {
+		// Set write permissions for the non-development entity to promulgators
+		// only, so that the user cannot just publish newer promulgated
+		// versions of the charm or bundle. Promulgators are responsible of
+		// reviewing and publishing subsequent revisions of this entity.
+		if err := h.updateBaseEntity(id, map[string]interface{}{
+			"acls.write": []string{promulgatorsGroup},
+		}, nil); err != nil {
+			return errgo.Notef(err, "cannot set permissions for %q", id)
+		}
+	}
+
+	// Build an audit entry for this promulgation.
 	e := audit.Entry{
 		Entity: &id.URL,
 	}

@@ -110,6 +110,13 @@ func (b BaseEntityBuilder) WithPromulgated(promulgated bool) BaseEntityBuilder {
 	return b
 }
 
+// WithACLs sets the non-development ACLs field on the BaseEntity.
+func (b BaseEntityBuilder) WithACLs(acls mongodoc.ACL) BaseEntityBuilder {
+	b = b.copy()
+	b.baseEntity.ACLs = acls
+	return b
+}
+
 // Build creates a mongodoc.BaseEntity from the BaseEntityBuilder.
 func (b BaseEntityBuilder) Build() *mongodoc.BaseEntity {
 	return b.copy().baseEntity
@@ -127,5 +134,6 @@ func baseURL(url *charm.URL) *charm.URL {
 	baseURL := *url
 	baseURL.Series = ""
 	baseURL.Revision = -1
+	baseURL.Channel = ""
 	return &baseURL
 }

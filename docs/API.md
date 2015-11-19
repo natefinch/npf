@@ -1,6 +1,6 @@
 # Charm store API
 
-The current live api lives at https://api.jujucharms.com/charmstore/v4
+The current live API lives at https://api.jujucharms.com/charmstore/v4
 
 ## Intro
 
