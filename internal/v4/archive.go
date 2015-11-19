@@ -89,7 +89,7 @@ func (h *ReqHandler) authorizeUpload(id *charm.URL, req *http.Request) error {
 		}
 		// If uploading a published entity, also check that the user has
 		// publishing permissions.
-		if id.Channel != charm.DevelopmentChannel {
+		if id.Channel == "" {
 			if err := h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write, nil); err != nil {
 				return errgo.Mask(err, errgo.Any)
 			}
@@ -173,7 +173,7 @@ func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req 
 		return badRequestf(nil, "Content-Length not specified")
 	}
 
-	oldUrl, oldHash, err := h.latestRevisionInfo(id)
+	oldURL, oldHash, err := h.latestRevisionInfo(id)
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return errgo.Notef(err, "cannot get hash of latest revision")
 	}
@@ -182,17 +182,17 @@ func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req 
 		// no need to upload anything. When uploading a published URL and
 		// the latest revision is a development entity, then we need to
 		// actually publish the existing entity. Note that at this point the
-		// user is already known to have required permissions.
+		// user is already known to have the required permissions.
 		underDevelopment := id.Channel == charm.DevelopmentChannel
-		if oldUrl.Development && !underDevelopment {
-			if err := h.Store.SetDevelopment(oldUrl, false); err != nil {
+		if oldURL.Development && !underDevelopment {
+			if err := h.Store.SetDevelopment(oldURL, false); err != nil {
 				return errgo.NoteMask(err, "cannot publish charm or bundle", errgo.Is(params.ErrNotFound))
 			}
 		}
-		oldUrl.Development = underDevelopment
+		oldURL.Development = underDevelopment
 		return httprequest.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
-			Id:            oldUrl.UserOwnedURL(),
-			PromulgatedId: oldUrl.PromulgatedURL(),
+			Id:            oldURL.UserOwnedURL(),
+			PromulgatedId: oldURL.PromulgatedURL(),
 		})
 	}
 	rid := &router.ResolvedURL{
@@ -200,10 +200,10 @@ func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req 
 		Development: id.Channel == charm.DevelopmentChannel,
 	}
 	// Choose the next revision number for the upload.
-	if oldUrl == nil {
+	if oldURL == nil {
 		rid.URL.Revision = 0
 	} else {
-		rid.URL.Revision = oldUrl.URL.Revision + 1
+		rid.URL.Revision = oldURL.URL.Revision + 1
 	}
 	rid.PromulgatedRevision, err = h.getNewPromulgatedRevision(id)
 	if err != nil {

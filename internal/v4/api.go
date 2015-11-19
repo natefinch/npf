@@ -1177,8 +1177,8 @@ func (h *ReqHandler) servePublish(id *charm.URL, w http.ResponseWriter, req *htt
 	if req.Method != "PUT" {
 		return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)
 	}
-	if id.Channel == charm.DevelopmentChannel {
-		return errgo.WithCausef(nil, params.ErrForbidden, "cannot publish or unpublish development charm or bundle %q", id)
+	if id.Channel != "" {
+		return errgo.WithCausef(nil, params.ErrForbidden, "can only set publish on published URL, %q provided", id)
 	}
 	jsonContentType := "application/json"
 	if ct := req.Header.Get("Content-Type"); ct != jsonContentType {

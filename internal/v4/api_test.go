@@ -3295,7 +3295,7 @@ var publishErrorsTests = []struct {
 	expectStatus: http.StatusForbidden,
 	expectBody: params.Error{
 		Code:    params.ErrForbidden,
-		Message: `cannot publish or unpublish development charm or bundle "cs:~who/development/wily/django-42"`,
+		Message: `can only set publish on published URL, "cs:~who/development/wily/django-42" provided`,
 	},
 }, {
 	about:        "unexpected content type",
