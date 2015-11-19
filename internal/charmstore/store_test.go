@@ -1070,7 +1070,7 @@ func (s *StoreSuite) TestBundleMachineCount(c *gc.C) {
 		url := newResolvedURL("cs:~charmers/bundle/django-0", -1)
 		url.URL.Revision = i
 		url.PromulgatedRevision = i
-		err := test.data.Verify(func(string) error { return nil })
+		err := test.data.Verify(nil, nil)
 		c.Assert(err, gc.IsNil)
 		// Add the bundle used for this test.
 		err = store.AddBundle(&testingBundle{

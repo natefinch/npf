@@ -348,7 +348,7 @@ func (h *ReqHandler) addEntity(id *router.ResolvedURL, r io.ReadSeeker, blobName
 		if err != nil {
 			return errgo.Notef(err, "cannot retrieve bundle charms")
 		}
-		if err := bundleData.VerifyWithCharms(verifyConstraints, charms); err != nil {
+		if err := bundleData.VerifyWithCharms(verifyConstraints, verifyStorage, charms); err != nil {
 			// TODO frankban: use multiError (defined in internal/router).
 			return errgo.NoteMask(verificationError(err), "bundle verification failed", errgo.Is(params.ErrInvalidEntity))
 		}
@@ -455,6 +455,11 @@ func (h *ReqHandler) latestRevisionInfo(id *charm.URL) (*router.ResolvedURL, str
 
 func verifyConstraints(s string) error {
 	// TODO(rog) provide some actual constraints checking here.
+	return nil
+}
+
+func verifyStorage(s string) error {
+	// TODO(frankban) provide some actual storage checking here.
 	return nil
 }
 
