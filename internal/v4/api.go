@@ -1180,15 +1180,12 @@ func (h *ReqHandler) servePublish(id *charm.URL, w http.ResponseWriter, req *htt
 	if id.Channel != "" {
 		return errgo.WithCausef(nil, params.ErrForbidden, "can only set publish on published URL, %q provided", id)
 	}
-	jsonContentType := "application/json"
-	if ct := req.Header.Get("Content-Type"); ct != jsonContentType {
-		return errgo.WithCausef(nil, params.ErrBadRequest, "unexpected Content-Type %q; expected %q", ct, jsonContentType)
-	}
 
 	// Retrieve the requested action from the request body.
-	var publish params.PublishRequest
-	decoder := json.NewDecoder(req.Body)
-	if err := decoder.Decode(&publish); err != nil {
+	var publish struct {
+		params.PublishRequest `httprequest:",body"`
+	}
+	if err := httprequest.Unmarshal(httprequest.Params{Request: req}, &publish); err != nil {
 		return errgo.WithCausef(err, params.ErrBadRequest, "cannot unmarshal publish request body")
 	}
 
