@@ -69,7 +69,7 @@ func (s *ArchiveSuiteUnconfiguredTerms) TestGetCharmWithTerms(c *gc.C) {
 		URL:     archiveUrl,
 		Do:      bakeryDo(client),
 	})
-	c.Assert(rec.Code, gc.Equals, http.StatusInternalServerError)
+	c.Assert(rec.Code, gc.Equals, http.StatusUnauthorized)
 }
 
 func (s *ArchiveSuiteUnconfiguredTerms) TestGet(c *gc.C) {
@@ -118,6 +118,12 @@ var _ = gc.Suite(&ArchiveSuite{})
 func (s *ArchiveSuite) SetUpSuite(c *gc.C) {
 	s.commonSuite.SetUpSuite(c)
 	s.enableTerms = true
+	s.enableIdentity = true
+}
+
+func (s *ArchiveSuite) SetUpTest(c *gc.C) {
+	s.commonSuite.SetUpTest(c)
+	s.discharge = dischargeForUser("bob")
 }
 
 func (s *ArchiveSuite) TestGet(c *gc.C) {
@@ -161,12 +167,13 @@ func (s *ArchiveSuite) TestGetUserHasAgreedToTermsAndConditions(c *gc.C) {
 	s.dischargeTerms = func(s1, s2 string) ([]checkers.Caveat, error) {
 		return nil, nil
 	}
+
 	client := httpbakery.NewHTTPClient()
 
 	patchArchiveCacheAges(s)
 	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
 	terms := s.assertUploadCharm(c, "POST", id, "terms")
-	err := s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+	err := s.store.SetPerms(&id.URL, "read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	archiveBytes, err := ioutil.ReadFile(terms.Path)
@@ -182,8 +189,7 @@ func (s *ArchiveSuite) TestGetUserHasAgreedToTermsAndConditions(c *gc.C) {
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
 	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
 	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/terms-0")
-	assertCacheControl(c, rec.Header(), true)
-
+	
 	// Check that the HTTP range logic is plugged in OK. If this
 	// is working, we assume that the whole thing is working OK,
 	// as net/http is well-tested.
@@ -198,7 +204,6 @@ func (s *ArchiveSuite) TestGetUserHasAgreedToTermsAndConditions(c *gc.C) {
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
 	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
 	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/terms-0")
-	assertCacheControl(c, rec.Header(), true)
 }
 
 func (s *ArchiveSuite) TestGetUserHasNotAgreedToTerms(c *gc.C) {
@@ -855,7 +860,7 @@ func (s *ArchiveSuite) TestPostErrorReadsFully(c *gc.C) {
 	c.Assert(b.Len(), gc.Equals, 0)
 }
 
-func (s *ArchiveSuite) TestPostAuthErrorReadsFully(c *gc.C) {
+func (s *ArchiveSuiteUnconfiguredTerms) TestPostAuthErrorReadsFully(c *gc.C) {
 	h := s.handler(c)
 	defer h.Close()
 	id := charm.MustParseReference("~charmers/trusty/wordpress")
@@ -1423,11 +1428,11 @@ func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 	stats.CheckCounterSum(c, s.store, key, false, 1)
 }
 
-func (s *ArchiveSuite) TestPostAuthErrors(c *gc.C) {
+func (s *ArchiveSuiteUnconfiguredTerms) TestPostAuthErrors(c *gc.C) {
 	checkAuthErrors(c, s.srv, "POST", "~charmers/utopic/django/archive")
 }
 
-func (s *ArchiveSuite) TestDeleteAuthErrors(c *gc.C) {
+func (s *ArchiveSuiteUnconfiguredTerms) TestDeleteAuthErrors(c *gc.C) {
 	err := s.store.AddCharmWithArchive(
 		newResolvedURL("~charmers/utopic/django-42", 42),
 		storetesting.Charms.CharmArchive(c.MkDir(), "wordpress"),

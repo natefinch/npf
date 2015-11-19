@@ -5,9 +5,9 @@ package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 import (
 	"encoding/base64"
-	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charmrepo.v1/csclient/params"
@@ -20,8 +20,11 @@ import (
 )
 
 const (
-	basicRealm        = "CharmStore4"
-	promulgatorsGroup = "promulgators"
+	basicRealm            = "CharmStore4"
+	promulgatorsGroup     = "promulgators"
+	opReadArchive         = "read-archive"
+	opOther               = "other-operation"
+	defaultMacaroonExpiry = 24 * time.Hour
 )
 
 // authorize checks that the current user is authorized based on the provided
@@ -52,7 +55,7 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 		}
 	}
 
-	auth, verr := h.checkRequest(req, entityId)
+	auth, verr := h.checkRequest(req, entityId, opOther)
 	if verr == nil {
 		if err := h.checkACLMembership(auth, acl); err != nil {
 			return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "")
@@ -65,10 +68,14 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 	}
 
 	// Macaroon verification failed: mint a new macaroon.
-	m, err := h.newMacaroon()
+	// We need to deny access for opReadArchive operations because they
+	// may require more specific checks that terms and conditions have been
+	// satisfied.
+	m, err := h.newMacaroon(checkers.DenyCaveat(opReadArchive))
 	if err != nil {
 		return authorization{}, errgo.Notef(err, "cannot mint macaroon")
 	}
+
 	// Request that this macaroon be supplied for all requests
 	// to the whole handler.
 	// TODO use a relative URL here: router.RelativeURLPath(req.RequestURI, "/")
@@ -76,41 +83,80 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 	return authorization{}, httpbakery.NewDischargeRequiredErrorForRequest(m, cookiePath, verr, req)
 }
 
-func (h *ReqHandler) checkTerms(id *router.ResolvedURL, req *http.Request) error {
-	user, passwd, err := parseCredentials(req)
-	if err == nil {
-		if user != h.handler.config.AuthUsername || passwd != h.handler.config.AuthPassword {
-			return errgo.WithCausef(nil, params.ErrUnauthorized, "invalid user name or password")
-		}
-		return nil
+// authorizeEntityAndTerms is similar to the authorize method, but
+// in addition it also checks if the entity meta data specifies
+// and terms and conditions that the user needs to agree to. If so,
+// it will require the user to agree to those terms and conditions
+// by adding a third party caveat addressed to the terms service
+// requiring the user to have agreements to specified terms.
+func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityId *router.ResolvedURL) (authorization, error) {
+	logger.Infof(
+		"authorize, auth location %q, terms location %q, path: %q, method: %q",
+		h.handler.config.IdentityLocation,
+		h.handler.config.TermsLocation,
+		req.URL.Path,
+		req.Method)
+
+	if entityId == nil {
+		return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "entity id not specified")
 	}
-	entity, err := h.Store.FindEntity(id)
+	entity, err := h.Store.FindEntity(entityId)
 	if err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+		return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+
+	baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, "acls")
+	if err != nil {
+		return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	if len(entity.CharmMeta.Terms) == 0 {
+		// No need to authenticate if the ACL is open to everyone.
+		if baseEntity.Public {
+			return authorization{}, nil
+		}
+		for _, name := range baseEntity.ACLs.Read {
+			if name == params.Everyone {
+				return authorization{}, nil
+			}
+		}
+	}
+
+	if len(entity.CharmMeta.Terms) > 0 && h.handler.config.TermsLocation == "" {
+		return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "charmstore not configured to serve charms with terms and conditions")
+	}
+
+	auth, verr := h.checkRequest(req, entityId, opReadArchive)
+	if verr == nil {
+		if err := h.checkACLMembership(auth, baseEntity.ACLs.Read); err != nil {
+			return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "")
+		}
+		h.auth = auth
+		return auth, nil
+	}
+	if _, ok := errgo.Cause(verr).(*bakery.VerificationError); !ok {
+		return authorization{}, errgo.Mask(verr, errgo.Is(params.ErrUnauthorized))
+	}
+
+	caveats := []checkers.Caveat{
+		checkers.AllowCaveat(opReadArchive, opOther),
 	}
 	if len(entity.CharmMeta.Terms) > 0 {
-		bk := h.Store.Bakery
-		if h.handler.config.TermsLocation == "" || bk == nil {
-			return errgo.New("charmstore not serving charms requiring agreement to terms and conditions")
-		}
-
-		_, verr := httpbakery.CheckRequest(bk, req, nil, checkers.OperationChecker("get-archive"))
-		if verr == nil {
-			return nil
-		}
-		if _, ok := errgo.Cause(verr).(*bakery.VerificationError); !ok {
-			return errgo.Mask(verr)
-		}
-		m, err := bk.NewMacaroon("", nil, []checkers.Caveat{
-			checkers.Caveat{h.handler.config.TermsLocation, fmt.Sprintf("has-agreed %s", strings.Join(entity.CharmMeta.Terms, ","))},
-			checkers.AllowCaveat("get-archive"),
-		})
-		if err != nil {
-			return errgo.Mask(err)
-		}
-		return httpbakery.NewDischargeRequiredErrorForRequest(m, "/", verr, req)
+		caveats = append(caveats,
+			checkers.Caveat{h.handler.config.TermsLocation, "has-agreed " + strings.Join(entity.CharmMeta.Terms, ",")},
+		)
 	}
-	return nil
+
+	// Macaroon verification failed: mint a new macaroon.
+	m, err := h.newMacaroon(caveats...)
+	if err != nil {
+		return authorization{}, errgo.Notef(err, "cannot mint macaroon")
+	}
+
+	// Request that this macaroon be supplied for all requests
+	// to the whole handler.
+	// TODO use a relative URL here: router.RelativeURLPath(req.RequestURI, "/")
+	cookiePath := "/"
+	return authorization{}, httpbakery.NewDischargeRequiredErrorForRequest(m, cookiePath, verr, req)
 }
 
 // checkRequest checks for any authorization tokens in the request and returns any
@@ -118,7 +164,9 @@ func (h *ReqHandler) checkTerms(id *router.ResolvedURL, req *http.Request) error
 // then a zero valued authorization is returned.
 // It also checks any first party caveats. If the entityId is provided, it will
 // be used to check any "is-entity" first party caveat.
-func (h *ReqHandler) checkRequest(req *http.Request, entityId *router.ResolvedURL) (authorization, error) {
+// In addition it adds a checker that checks if operation specified
+// by the operation parameters is allowed.
+func (h *ReqHandler) checkRequest(req *http.Request, entityId *router.ResolvedURL, operation string) (authorization, error) {
 	user, passwd, err := parseCredentials(req)
 	if err == nil {
 		if user != h.handler.config.AuthUsername || passwd != h.handler.config.AuthPassword {
@@ -146,6 +194,7 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityId *router.ResolvedUR
 				return errgo.Newf("API operation on entity %v, want %v", entityId, arg)
 			},
 		},
+		checkers.OperationChecker(operation),
 	))
 	if err != nil {
 		return authorization{}, errgo.Mask(err, errgo.Any)
@@ -227,14 +276,21 @@ func (h *ReqHandler) checkACLMembership(auth authorization, acl []string) error 
 	return errgo.Newf("access denied for user %q", auth.Username)
 }
 
-func (h *ReqHandler) newMacaroon() (*macaroon.Macaroon, error) {
+func (h *ReqHandler) newMacaroon(caveats ...checkers.Caveat) (*macaroon.Macaroon, error) {
+	caveats = append(caveats,
+		checkers.NeedDeclaredCaveat(
+			checkers.Caveat{
+				Location:  h.handler.config.IdentityLocation,
+				Condition: "is-authenticated-user",
+			},
+			usernameAttr,
+		),
+		checkers.TimeBeforeCaveat(time.Now().Add(defaultMacaroonExpiry)),
+	)
 	// TODO generate different caveats depending on the requested operation
 	// and whether there's a charm id or not.
 	// Mint an appropriate macaroon and send it back to the client.
-	return h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
-		Location:  h.handler.config.IdentityLocation,
-		Condition: "is-authenticated-user",
-	}, usernameAttr)})
+	return h.Store.Bakery.NewMacaroon("", nil, caveats)
 }
 
 var errNoCreds = errgo.New("missing HTTP auth header")

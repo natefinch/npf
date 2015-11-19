@@ -50,7 +50,7 @@ func (h *ReqHandler) serveArchive(id *charm.Reference, w http.ResponseWriter, re
 	case "DELETE":
 		return h.resolveId(h.authId(h.serveDeleteArchive))(id, w, req)
 	case "GET":
-		return h.resolveId(h.authId(h.serveGetArchive))(id, w, req)
+		return h.resolveId(h.serveGetArchive)(id, w, req)
 	case "POST", "PUT":
 		// Make sure we consume the full request body, before responding.
 		//
@@ -98,7 +98,7 @@ func (h *ReqHandler) authorizeUpload(id *charm.Reference, req *http.Request) err
 }
 
 func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-	err := h.checkTerms(id, req)
+	_, err := h.authorizeEntityAndTerms(req, id)
 	if err != nil {
 		return err
 	}

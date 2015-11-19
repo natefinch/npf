@@ -1008,21 +1008,57 @@ func (h *ReqHandler) serveMacaroon(_ http.Header, _ *http.Request) (interface{},
 // GET /delegatable-macaroon
 // See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-delegatable-macaroon
 func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) (interface{}, error) {
+	values, err := url.ParseQuery(req.URL.RawQuery)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	id := values.Get("id")
+	if id == "" {
+		auth, err := h.authorize(req, []string{params.Everyone}, true, nil)
+		if err != nil {
+			return nil, errgo.Mask(err, errgo.Any)
+		}
+		if auth.Username == "" {
+			return nil, errgo.WithCausef(nil, params.ErrForbidden, "delegatable macaroon is not obtainable using admin credentials")
+		}
+		// TODO propagate expiry time from macaroons in request.
+		m, err := h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
+			checkers.DeclaredCaveat(usernameAttr, auth.Username),
+			checkers.TimeBeforeCaveat(time.Now().Add(delegatableMacaroonExpiry)),
+			checkers.DenyCaveat(opReadArchive),
+		})
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+		return m, nil
+	}
+	charmRef, err := charm.ParseReference(id)
+	if err != nil {
+		return nil, errgo.WithCausef(err, params.ErrBadRequest, `bad "id" parameter`)
+	}
+	resolvedURL, err := ResolveURL(h.Store, charmRef)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+
 	// Note that we require authorization even though we allow
 	// anyone to obtain a delegatable macaroon. This means
 	// that we will be able to add the declared caveats to
 	// the returned macaroon.
-	auth, err := h.authorize(req, []string{params.Everyone}, true, nil)
+	auth, err := h.authorizeEntityAndTerms(req, resolvedURL)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Any)
 	}
 	if auth.Username == "" {
 		return nil, errgo.WithCausef(nil, params.ErrForbidden, "delegatable macaroon is not obtainable using admin credentials")
 	}
+
 	// TODO propagate expiry time from macaroons in request.
 	m, err := h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
 		checkers.DeclaredCaveat(usernameAttr, auth.Username),
 		checkers.TimeBeforeCaveat(time.Now().Add(delegatableMacaroonExpiry)),
+		checkers.AllowCaveat(opReadArchive, opOther),
+		checkers.Caveat{Condition: "is-entity " + resolvedURL.String()},
 	})
 	if err != nil {
 		return nil, errgo.Mask(err)
