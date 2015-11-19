@@ -101,7 +101,10 @@ func (h *ReqHandler) authorizeUpload(id *charm.URL, req *http.Request) error {
 	}
 	// The base entity does not currently exist, so we default to
 	// assuming write permissions for the entity user.
-	return errgo.Mask(h.authorizeWithPerms(req, nil, []string{id.User}, nil), errgo.Any)
+	if err := h.authorizeWithPerms(req, nil, []string{id.User}, nil); err != nil {
+		return errgo.Mask(err, errgo.Any)
+	}
+	return nil
 }
 
 func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
