@@ -70,32 +70,41 @@ func (h *ReqHandler) serveArchive(id *charm.URL, w http.ResponseWriter, req *htt
 		}
 		return h.servePutArchive(id, w, req)
 	}
-	// TODO(rog) params.ErrMethodNotAllowed
-	return errgo.Newf("method not allowed")
+	return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)
 }
 
 func (h *ReqHandler) authorizeUpload(id *charm.URL, req *http.Request) error {
 	if id.User == "" {
 		return badRequestf(nil, "user not specified in entity upload URL %q", id)
 	}
+	baseEntity, err := h.Store.FindBaseEntity(id, "acls", "developmentacls")
 	// Note that we pass a nil entity URL to authorizeWithPerms, because
 	// we haven't got a resolved URL at this point. At some
 	// point in the future, we may want to be able to allow
 	// is-entity first-party caveats to be allowed when uploading
 	// at which point we will need to rethink this a little.
-	baseURL := *id
-	baseURL.Revision = -1
-	baseURL.Series = ""
-	baseEntity, err := h.Store.FindBaseEntity(id, "acls")
 	if err == nil {
-		return h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write, nil)
+		if err := h.authorizeWithPerms(req, baseEntity.DevelopmentACLs.Read, baseEntity.DevelopmentACLs.Write, nil); err != nil {
+			return errgo.Mask(err, errgo.Any)
+		}
+		// If uploading a published entity, also check that the user has
+		// publishing permissions.
+		if id.Channel == "" {
+			if err := h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write, nil); err != nil {
+				return errgo.Mask(err, errgo.Any)
+			}
+		}
+		return nil
 	}
 	if errgo.Cause(err) != params.ErrNotFound {
 		return errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}
 	// The base entity does not currently exist, so we default to
 	// assuming write permissions for the entity user.
-	return h.authorizeWithPerms(req, nil, []string{id.User}, nil)
+	if err := h.authorizeWithPerms(req, nil, []string{id.User}, nil); err != nil {
+		return errgo.Mask(err, errgo.Any)
+	}
+	return nil
 }
 
 func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
@@ -164,16 +173,26 @@ func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req 
 		return badRequestf(nil, "Content-Length not specified")
 	}
 
-	oldUrl, oldHash, err := h.latestRevisionInfo(id)
+	oldURL, oldHash, err := h.latestRevisionInfo(id)
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return errgo.Notef(err, "cannot get hash of latest revision")
 	}
 	if oldHash == hash {
 		// The hash matches the hash of the latest revision, so
-		// no need to upload anything.
+		// no need to upload anything. When uploading a published URL and
+		// the latest revision is a development entity, then we need to
+		// actually publish the existing entity. Note that at this point the
+		// user is already known to have the required permissions.
+		underDevelopment := id.Channel == charm.DevelopmentChannel
+		if oldURL.Development && !underDevelopment {
+			if err := h.Store.SetDevelopment(oldURL, false); err != nil {
+				return errgo.NoteMask(err, "cannot publish charm or bundle", errgo.Is(params.ErrNotFound))
+			}
+		}
+		oldURL.Development = underDevelopment
 		return httprequest.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
-			Id:            oldUrl.UserOwnedURL(),
-			PromulgatedId: oldUrl.PromulgatedURL(),
+			Id:            oldURL.UserOwnedURL(),
+			PromulgatedId: oldURL.PromulgatedURL(),
 		})
 	}
 	rid := &router.ResolvedURL{
@@ -181,10 +200,10 @@ func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req 
 		Development: id.Channel == charm.DevelopmentChannel,
 	}
 	// Choose the next revision number for the upload.
-	if oldUrl == nil {
+	if oldURL == nil {
 		rid.URL.Revision = 0
 	} else {
-		rid.URL.Revision = oldUrl.URL.Revision + 1
+		rid.URL.Revision = oldURL.URL.Revision + 1
 	}
 	rid.PromulgatedRevision, err = h.getNewPromulgatedRevision(id)
 	if err != nil {
@@ -418,7 +437,7 @@ func checkIdAllowed(id *router.ResolvedURL, ch charm.Charm) error {
 }
 
 func (h *ReqHandler) latestRevisionInfo(id *charm.URL) (*router.ResolvedURL, string, error) {
-	entities, err := h.Store.FindEntities(id, "_id", "blobhash", "promulgated-url", "development")
+	entities, err := h.Store.FindEntities(id.WithChannel(charm.DevelopmentChannel), "_id", "blobhash", "promulgated-url", "development")
 	if err != nil {
 		return nil, "", errgo.Mask(err)
 	}

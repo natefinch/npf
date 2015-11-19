@@ -446,6 +446,72 @@ func (s *ArchiveSuite) TestPostDevelopmentPromulgated(c *gc.C) {
 	})
 }
 
+var uploadAndPublishTests = []struct {
+	about             string
+	existing          string
+	upload            string
+	expectId          string
+	expectDevelopment bool
+}{{
+	about:             "upload same development entity",
+	existing:          "~who/development/django-0",
+	upload:            "~who/development/django",
+	expectId:          "~who/development/django-0",
+	expectDevelopment: true,
+}, {
+	about:    "upload same published entity",
+	existing: "~who/django-0",
+	upload:   "~who/django",
+	expectId: "~who/django-0",
+}, {
+	about:    "existing development, upload published",
+	existing: "~who/development/django-0",
+	upload:   "~who/django",
+	expectId: "~who/django-0",
+}, {
+	about:    "existing published, upload development",
+	existing: "~who/django-0",
+	upload:   "~who/development/django",
+	expectId: "~who/development/django-0",
+}}
+
+func (s *ArchiveSuite) TestUploadAndPublish(c *gc.C) {
+	for i, test := range uploadAndPublishTests {
+		c.Logf("%d. %s", i, test.about)
+
+		// Upload the pre-existing entity.
+		rurl := newResolvedURL(test.existing, -1)
+		s.assertUploadCharm(c, "POST", rurl, "multi-series")
+
+		// Upload the same charm again, using the upload URL.
+		body, hash, size := archiveInfo(c, "multi-series")
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler:       s.srv,
+			URL:           storeURL(test.upload + "/archive?hash=" + hash),
+			Method:        "POST",
+			ContentLength: size,
+			Header:        http.Header{"Content-Type": {"application/zip"}},
+			Body:          body,
+			Username:      testUsername,
+			Password:      testPassword,
+			ExpectBody: params.ArchiveUploadResponse{
+				Id: charm.MustParseURL(test.expectId),
+			},
+		})
+
+		// Check the development flag of the entity.
+		entity, err := s.store.FindEntity(rurl, "development")
+		c.Assert(err, gc.IsNil)
+		c.Assert(entity.Development, gc.Equals, test.expectDevelopment)
+
+		// Remove all entities from the store.
+		_, err = s.store.DB.Entities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+		_, err = s.store.DB.BaseEntities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+	}
+}
+
 func (s *ArchiveSuite) TestPostMultiSeriesCharm(c *gc.C) {
 	// A charm that did not exist before should get revision 0.
 	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/juju-gui-0", -1), "multi-series")

@@ -527,6 +527,16 @@ var uploadEntityAuthorizationTests = []struct {
 	groups []string
 	// id holds the id of the entity to be uploaded.
 	id string
+	// promulgated holds whether the corresponding promulgated entity must be
+	// already present in the charm store before performing the upload.
+	promulgated bool
+	// developmentWriteAcls can be used to set customized write ACLs for the
+	// development entity before performing the upload. If empty, default ACLs
+	// are used.
+	developmentWriteAcls []string
+	// writeAcls can be used to set customized write ACLs for the published
+	// entity before performing the upload. If empty, default ACLs are used.
+	writeAcls []string
 	// expectStatus is the expected HTTP response status.
 	// Defaults to 200 status OK.
 	expectStatus int
@@ -538,27 +548,60 @@ var uploadEntityAuthorizationTests = []struct {
 	username: "who",
 	id:       "~who/utopic/django",
 }, {
+	about:    "user owned development entity",
+	username: "who",
+	id:       "~who/development/utopic/django",
+}, {
 	about:    "group owned entity",
 	username: "dalek",
 	groups:   []string{"group1", "group2"},
 	id:       "~group1/utopic/django",
+}, {
+	about:    "group owned development entity",
+	username: "dalek",
+	groups:   []string{"group1", "group2"},
+	id:       "~group1/development/utopic/django",
 }, {
 	about:    "specific group",
 	username: "dalek",
 	groups:   []string{"group42"},
 	id:       "~group42/utopic/django",
 }, {
-	about:        "promulgated entity",
+	about:       "promulgated entity",
+	username:    "sisko",
+	groups:      []string{"charmers", "group2"},
+	id:          "~charmers/utopic/django",
+	promulgated: true,
+}, {
+	about:       "promulgated entity in development",
+	username:    "sisko",
+	groups:      []string{"group1", "charmers"},
+	id:          "~charmers/development/utopic/django",
+	promulgated: true,
+}, {
+	about:        "unauthorized: promulgated entity",
 	username:     "sisko",
 	groups:       []string{"group1", "group2"},
 	id:           "~charmers/utopic/django",
+	promulgated:  true,
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "sisko"`,
 	},
 }, {
-	about:        "anonymous user",
+	about:        "unauthorized: promulgated entity in development",
+	username:     "sisko",
+	groups:       []string{"group1", "group2"},
+	id:           "~charmers/development/utopic/django",
+	promulgated:  true,
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "sisko"`,
+	},
+}, {
+	about:        "unauthorized: anonymous user",
 	id:           "~who/utopic/django",
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -566,15 +609,33 @@ var uploadEntityAuthorizationTests = []struct {
 		Message: "unauthorized: no username declared",
 	},
 }, {
-	about:        "anonymous user and promulgated entity",
-	id:           "~charmers/utopic/django",
+	about:        "unauthorized: anonymous user, development entity",
+	id:           "~who/development/utopic/django",
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: "unauthorized: no username declared",
 	},
 }, {
-	about:        "user does not match",
+	about:        "unauthorized: anonymous user and promulgated entity",
+	id:           "~charmers/utopic/django",
+	promulgated:  true,
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: "unauthorized: no username declared",
+	},
+}, {
+	about:        "unauthorized: anonymous user and promulgated entity in development",
+	id:           "~charmers/development/utopic/django",
+	promulgated:  true,
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: "unauthorized: no username declared",
+	},
+}, {
+	about:        "unauthorized: user does not match",
 	username:     "kirk",
 	id:           "~picard/utopic/django",
 	expectStatus: http.StatusUnauthorized,
@@ -583,7 +644,16 @@ var uploadEntityAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
 }, {
-	about:        "group does not match",
+	about:        "unauthorized: user does not match for a development entity",
+	username:     "kirk",
+	id:           "~picard/development/utopic/django",
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:        "unauthorized: group does not match",
 	username:     "kirk",
 	groups:       []string{"group1", "group2", "group3"},
 	id:           "~group0/utopic/django",
@@ -593,14 +663,56 @@ var uploadEntityAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
 }, {
-	about:        "specific group and promulgated entity",
+	about:        "unauthorized: group does not match for a development entity",
+	username:     "kirk",
+	groups:       []string{"group1", "group2", "group3"},
+	id:           "~group0/development/utopic/django",
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:        "unauthorized: specific group and promulgated entity",
 	username:     "janeway",
 	groups:       []string{"group1"},
 	id:           "~charmers/utopic/django",
+	promulgated:  true,
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "janeway"`,
+	},
+}, {
+	about:        "unauthorized: specific group and promulgated entity in development",
+	username:     "janeway",
+	groups:       []string{"group1"},
+	id:           "~charmers/development/utopic/django",
+	promulgated:  true,
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "janeway"`,
+	},
+}, {
+	about:                "unauthorized: published entity no development permissions",
+	username:             "picard",
+	id:                   "~picard/wily/django",
+	developmentWriteAcls: []string{"group2"},
+	expectStatus:         http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "picard"`,
+	},
+}, {
+	about:        "unauthorized: published entity no published permissions",
+	username:     "picard",
+	id:           "~picard/wily/django",
+	writeAcls:    []string{"kirk"},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "picard"`,
 	},
 }}
 
@@ -619,10 +731,26 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 			expectStatus = http.StatusOK
 		}
 
-		// Try to upload the entity.
-		body, hash, size := s.archiveInfo(c)
-		defer body.Close()
+		// Add a pre-existing entity if required.
+		if test.promulgated || len(test.developmentWriteAcls) != 0 || len(test.writeAcls) != 0 {
+			id := charm.MustParseURL(test.id).WithRevision(0)
+			revision := -1
+			if test.promulgated {
+				revision = 1
+			}
+			rurl := newResolvedURL(id.String(), revision)
+			s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
+			if len(test.developmentWriteAcls) != 0 {
+				s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "write", test.developmentWriteAcls...)
+			}
+			if len(test.writeAcls) != 0 {
+				s.store.SetPerms(&rurl.URL, "write", test.writeAcls...)
+			}
+		}
 
+		// Try to upload the entity.
+		body, hash, size := archiveInfo(c, "wordpress")
+		defer body.Close()
 		client := httpbakery.NewHTTPClient()
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler:       s.srv,
@@ -643,6 +771,8 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 		// Remove all entities from the store.
 		_, err := s.store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
+		_, err = s.store.DB.BaseEntities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
 	}
 }
 
@@ -653,8 +783,8 @@ type readSeekCloser interface {
 
 // archiveInfo prepares a zip archive of an entity and return a reader for the
 // archive, its blob hash and size.
-func (s *authSuite) archiveInfo(c *gc.C) (r readSeekCloser, hashSum string, size int64) {
-	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
+func archiveInfo(c *gc.C, name string) (r readSeekCloser, hashSum string, size int64) {
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), name)
 	f, err := os.Open(ch.Path)
 	c.Assert(err, gc.IsNil)
 	hash, size := hashOf(f)

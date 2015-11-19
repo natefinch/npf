@@ -2439,6 +2439,69 @@ func (s *StoreSuite) TestSetPromulgatedUpdateSearch(c *gc.C) {
 	c.Assert(doc.PromulgatedRevision, gc.Equals, -1)
 }
 
+var setDevelopmentTests = []struct {
+	about               string
+	existingDevelopment bool
+	development         bool
+}{{
+	about:               "keep entity under development",
+	existingDevelopment: true,
+	development:         true,
+}, {
+	about:               "publish an entity",
+	existingDevelopment: true,
+}, {
+	about:       "unpublish an entity",
+	development: true,
+}, {
+	about: "keep entity published",
+}}
+
+func (s *StoreSuite) TestSetDevelopment(c *gc.C) {
+	store := s.newStore(c, true)
+	defer store.Close()
+
+	for i, test := range setDevelopmentTests {
+		c.Logf("test %d: %s", i, test.about)
+
+		// Insert the existing entity.
+		url := charm.MustParseURL("~who/wily/django")
+		url.Revision = i
+		if test.existingDevelopment {
+			url.Channel = charm.DevelopmentChannel
+		}
+		rurl := newResolvedURL(url.Path(), -1)
+		err := store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
+		c.Assert(err, gc.IsNil)
+
+		// Set whether the entity is under development or published.
+		err = store.SetDevelopment(rurl, test.development)
+		c.Assert(err, gc.IsNil)
+
+		// Ensure the entity development flag has been correctly set.
+		rurl.Development = test.development
+		e, err := store.FindEntity(rurl, "development")
+		c.Assert(err, gc.IsNil)
+		c.Assert(e.Development, gc.Equals, test.development)
+
+		// Check that the entity can be found in the database if published.
+		if !test.development {
+			found, err := store.ES.HasDocument(s.TestIndex, typeName, store.ES.getID(&rurl.URL))
+			c.Assert(err, gc.IsNil)
+			c.Assert(found, jc.IsTrue)
+		}
+	}
+}
+
+func (s *StoreSuite) TestSetDevelopmentErrorNotFound(c *gc.C) {
+	store := s.newStore(c, false)
+	defer store.Close()
+
+	err := store.SetDevelopment(newResolvedURL("~who/wily/no-such-42", -1), true)
+	c.Assert(err, gc.ErrorMatches, `cannot update "cs:~who/wily/no-such-42": not found`)
+	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
+}
+
 var entityResolvedURLTests = []struct {
 	about  string
 	entity *mongodoc.Entity
