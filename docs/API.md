@@ -270,8 +270,9 @@ Request body:
 A PUT to ~*user*/*anyseries*/*name*-*anyrevision* sets whether the
 corresponding charm or bundle is published and can be accessed through a URL
 with no channel. If the revision number is not specified, the id is resolved to
-the charm or bundle with the latest development revision number. The id must
-not include the development channel.
+the charm or bundle with the latest development revision number when
+publishing, and to the charm or bundle with the latest non-development revision
+number when unpublishing. The id must not include the development channel.
 
 ```go
 type PublishRequest struct {
@@ -283,7 +284,7 @@ If Published is true, the charm or bundle is made available at the
 non-development URL with the same revision number. If Published is false, the
 id is unpublished.
 
-The response include the id and promulgated id of the entity after the action
+The response includes the id and promulgated id of the entity after the action
 is performed:
 
 ```go
@@ -294,14 +295,14 @@ type PublishResponse struct {
 ```
 
 If the charm or bundle have been unpublished, the identifiers in the response
-will represent a development charm or bundle.
+will represent the corresponding development charm or bundle.
 
 Example: `PUT ~charmers/trusty/django-42/publish`
 
 Request body:
 ```json
 {
-    "Publish" : true,
+    "Published" : true,
 }
 ```
 
