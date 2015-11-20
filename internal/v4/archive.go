@@ -108,7 +108,7 @@ func (h *ReqHandler) authorizeUpload(id *charm.URL, req *http.Request) error {
 }
 
 func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-	_, err := h.authorizeEntityAndTerms(req, id)
+	_, err := h.authorizeEntityAndTerms(req, []*router.ResolvedURL{id})
 	if err != nil {
 		return err
 	}

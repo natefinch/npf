@@ -1098,8 +1098,8 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
-	id := values.Get("id")
-	if id == "" {
+	entityIds := values["id"]
+	if len(entityIds) == 0 {
 		auth, err := h.authorize(req, []string{params.Everyone}, true, nil)
 		if err != nil {
 			return nil, errgo.Mask(err, errgo.Any)
@@ -1118,20 +1118,24 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 		}
 		return m, nil
 	}
-	charmRef, err := charm.ParseURL(id)
-	if err != nil {
-		return nil, errgo.WithCausef(err, params.ErrBadRequest, `bad "id" parameter`)
-	}
-	resolvedURL, err := ResolveURL(h.Store, charmRef)
-	if err != nil {
-		return nil, errgo.Mask(err)
+	var resolvedURLs []*router.ResolvedURL
+	for _, id := range entityIds {
+		charmRef, err := charm.ParseURL(id)
+		if err != nil {
+			return nil, errgo.WithCausef(err, params.ErrBadRequest, `bad "id" parameter`)
+		}
+		resolvedURL, err := ResolveURL(h.Store, charmRef)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+		resolvedURLs = append(resolvedURLs, resolvedURL)
 	}
 
 	// Note that we require authorization even though we allow
 	// anyone to obtain a delegatable macaroon. This means
 	// that we will be able to add the declared caveats to
 	// the returned macaroon.
-	auth, err := h.authorizeEntityAndTerms(req, resolvedURL)
+	auth, err := h.authorizeEntityAndTerms(req, resolvedURLs)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Any)
 	}
@@ -1139,12 +1143,17 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 		return nil, errgo.WithCausef(nil, params.ErrForbidden, "delegatable macaroon is not obtainable using admin credentials")
 	}
 
+	resolvedURLstrings := make([]string, len(resolvedURLs))
+	for i, resolvedURL := range resolvedURLs {
+		resolvedURLstrings[i] = resolvedURL.URL.String()
+	}
+
 	// TODO propagate expiry time from macaroons in request.
 	m, err := h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
 		checkers.DeclaredCaveat(usernameAttr, auth.Username),
 		checkers.TimeBeforeCaveat(time.Now().Add(delegatableMacaroonExpiry)),
 		checkers.AllowCaveat(opReadArchive, opOther),
-		checkers.Caveat{Condition: "is-entity " + resolvedURL.String()},
+		checkers.Caveat{Condition: "is-entity " + strings.Join(resolvedURLstrings, " ")},
 	})
 	if err != nil {
 		return nil, errgo.Mask(err)
@@ -1316,12 +1325,10 @@ func (h *ReqHandler) authId(f resolvedIdHandler) resolvedIdHandler {
 // entity ids using h.resolveURL before calling f with the resolved id.
 func (h *ReqHandler) resolveId(f resolvedIdHandler) router.IdHandler {
 	return func(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
-		logger.Errorf("XXX RESOLVE ID %#v", id)
 		rid, err := h.resolveURL(id)
 		if err != nil {
 			return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
-		logger.Errorf("XXX RESOLVED ID %#v", rid.URL)
 		return f(rid, w, req)
 	}
 }

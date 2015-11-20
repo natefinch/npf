@@ -811,16 +811,16 @@ var isEntityCaveatTests = []struct {
 	url: "utopic/wordpress-10/meta/hash",
 }, {
 	url:         "~charmers/utopic/wordpress-41/archive",
-	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:~charmers/utopic/wordpress-41, want cs:~charmers/utopic/wordpress-42`,
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:~charmers/utopic/wordpress-41 not allowed`,
 }, {
 	url:         "~charmers/utopic/wordpress-41/meta/hash",
-	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:~charmers/utopic/wordpress-41, want cs:~charmers/utopic/wordpress-42`,
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:~charmers/utopic/wordpress-41 not allowed`,
 }, {
 	url:         "utopic/wordpress-9/archive",
-	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:utopic/wordpress-9, want cs:~charmers/utopic/wordpress-42`,
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:utopic/wordpress-9 not allowed`,
 }, {
 	url:         "utopic/wordpress-9/meta/hash",
-	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:utopic/wordpress-9, want cs:~charmers/utopic/wordpress-42`,
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:utopic/wordpress-9 not allowed`,
 }, {
 	url:         "log",
 	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation does not involve expected entity cs:~charmers/utopic/wordpress-42`,
@@ -884,6 +884,10 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 	err = s.store.AddCharmWithArchive(id3, storetesting.Charms.CharmDir("terms"))
 	c.Assert(err, jc.ErrorIsNil)
 
+	id4 := newResolvedURL("~charmers/utopic/mysql-17", 17)
+	err = s.store.AddCharmWithArchive(id4, storetesting.Charms.CharmDir("mysql"))
+	c.Assert(err, jc.ErrorIsNil)
+
 	err = s.store.SetPerms(&id1.URL, "read", "bob")
 	c.Assert(err, jc.ErrorIsNil)
 
@@ -893,10 +897,14 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 	err = s.store.SetPerms(&id3.URL, "read", "bob")
 	c.Assert(err, jc.ErrorIsNil)
 
+	err = s.store.SetPerms(&id4.URL, "read", "bob")
+	c.Assert(err, jc.ErrorIsNil)
+
 	target, err := url.Parse(storeURL("delegatable-macaroon"))
 	c.Assert(err, jc.ErrorIsNil)
 	query := target.Query()
-	query.Set("id", id2.URL.String())
+	query.Add("id", id2.URL.String())
+	query.Add("id", id4.URL.String())
 	target.RawQuery = query.Encode()
 
 	// First check that we get a macaraq error when using a vanilla http do
@@ -950,6 +958,8 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 			c.Assert(err, gc.IsNil)
 			c.Assert(t, jc.TimeBetween(now.Add(v4.DelegatableMacaroonExpiry), now.Add(v4.DelegatableMacaroonExpiry+time.Second)))
 			foundExpiry = true
+		case "is-entity":
+			c.Assert(arg, gc.Equals, "cs:~charmers/utopic/wordpress-11 cs:~charmers/utopic/mysql-17")
 		}
 	}
 	c.Assert(foundExpiry, jc.IsTrue)
@@ -1016,6 +1026,14 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 		Do:          bakeryDo(client),
 		ExpectError: ".*third party refused discharge: cannot discharge: no discharge",
 	})
+
+	// Test access to archive of another charm to which access is granted by
+	// the delegatable macaroon.
+	httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("~charmers/utopic/mysql-17/archive"),
+		Do:      bakeryDo(client),
+	})
 }
 
 func (s *authSuite) TestDelegatableMacaroonWithBasicAuth(c *gc.C) {
@@ -1047,8 +1065,11 @@ func (s *authSuite) TestDelegatableMacaroonWithBasicAuth(c *gc.C) {
 func (s *authSuite) TestDelegatableMacaroonWithTerms(c *gc.C) {
 	// Create a new server with a third party discharger.
 	s.discharge = dischargeForUser("bob")
+
+	var terms string
 	// User has agreed to terms.
 	s.dischargeTerms = func(s1, s2 string) ([]checkers.Caveat, error) {
+		terms = s2
 		return nil, nil
 	}
 
@@ -1060,10 +1081,17 @@ func (s *authSuite) TestDelegatableMacaroonWithTerms(c *gc.C) {
 	err = s.store.AddCharmWithArchive(id2, storetesting.Charms.CharmDir("terms"))
 	c.Assert(err, jc.ErrorIsNil)
 
+	id3 := newResolvedURL("~charmers/precise/otherterms-17", 17)
+	err = s.store.AddCharmWithArchive(id3, storetesting.Charms.CharmDir("terms"))
+	c.Assert(err, jc.ErrorIsNil)
+
 	err = s.store.SetPerms(&id1.URL, "read", "bob")
 	c.Assert(err, jc.ErrorIsNil)
 
 	err = s.store.SetPerms(&id2.URL, "read", "bob")
+	c.Assert(err, jc.ErrorIsNil)
+
+	err = s.store.SetPerms(&id3.URL, "read", "bob")
 	c.Assert(err, jc.ErrorIsNil)
 
 	client := httpbakery.NewHTTPClient()
@@ -1071,7 +1099,8 @@ func (s *authSuite) TestDelegatableMacaroonWithTerms(c *gc.C) {
 	target, err := url.Parse(storeURL("delegatable-macaroon"))
 	c.Assert(err, jc.ErrorIsNil)
 	query := target.Query()
-	query.Set("id", id2.URL.String())
+	query.Add("id", id2.URL.String())
+	query.Add("id", id3.URL.String())
 	target.RawQuery = query.Encode()
 
 	now := time.Now()
@@ -1102,9 +1131,21 @@ func (s *authSuite) TestDelegatableMacaroonWithTerms(c *gc.C) {
 			c.Assert(err, gc.IsNil)
 			c.Assert(t, jc.TimeBetween(now.Add(v4.DelegatableMacaroonExpiry), now.Add(v4.DelegatableMacaroonExpiry+time.Second)))
 			foundExpiry = true
+		case "is-entity":
+			c.Assert(arg, gc.Equals, "cs:~charmers/precise/terms-11 cs:~charmers/precise/otherterms-17")
 		}
 	}
 	c.Assert(foundExpiry, jc.IsTrue)
+
+	termMap := map[string]struct{}{}
+	tokens := strings.Split(terms, " ")
+	for _, token := range tokens {
+		termMap[token] = struct{}{}
+	}
+	_, ok := termMap["terms-1/1"]
+	c.Assert(ok, gc.Equals, true)
+	_, ok = termMap["terms-2/5"]
+	c.Assert(ok, gc.Equals, true)
 
 	// Now check that we can use the obtained macaroon to do stuff
 	// as the declared user.
@@ -1159,6 +1200,15 @@ func (s *authSuite) TestDelegatableMacaroonWithTerms(c *gc.C) {
 		Do:          bakeryDo(client),
 		ExpectError: ".*third party refused discharge: cannot discharge: no discharge",
 	})
+
+	// Test access to archive of the other charm which we can access using the
+	// delegatable macaroon
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("~charmers/precise/otherterms-17/archive"),
+		Do:      bakeryDo(client),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 }
 
 func (s *authSuite) TestDelegatableMacaroonWithoutEntityForAccessToCharmWithTerms(c *gc.C) {

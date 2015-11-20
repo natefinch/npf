@@ -1205,7 +1205,6 @@ func (s *Store) SetPerms(id *charm.URL, which string, acl ...string) error {
 	if id.Channel == charm.DevelopmentChannel {
 		field = "developmentacls"
 	}
-	logger.Errorf("XXX SETTING ACLs %#v %#v %#v %#v", id, field, which, acl)
 	return s.DB.BaseEntities().UpdateId(baseURL(id), bson.D{{"$set",
 		bson.D{{field + "." + which, acl}},
 	}})
