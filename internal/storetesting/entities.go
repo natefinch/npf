@@ -21,7 +21,7 @@ type EntityBuilder struct {
 
 // NewEntity creates a new EntityBuilder for the provided URL.
 func NewEntity(url string) EntityBuilder {
-	URL := charm.MustParseReference(url)
+	URL := charm.MustParseURL(url)
 	return EntityBuilder{
 		entity: &mongodoc.Entity{
 			URL:                 URL,
@@ -35,7 +35,7 @@ func NewEntity(url string) EntityBuilder {
 	}
 }
 
-func copyURL(id *charm.Reference) *charm.Reference {
+func copyURL(id *charm.URL) *charm.URL {
 	if id == nil {
 		return nil
 	}
@@ -59,7 +59,7 @@ func (b EntityBuilder) WithPromulgatedURL(url string) EntityBuilder {
 		b.entity.PromulgatedURL = nil
 		b.entity.PromulgatedRevision = -1
 	} else {
-		b.entity.PromulgatedURL = charm.MustParseReference(url)
+		b.entity.PromulgatedURL = charm.MustParseURL(url)
 		b.entity.PromulgatedRevision = b.entity.PromulgatedURL.Revision
 	}
 	return b
@@ -87,7 +87,7 @@ type BaseEntityBuilder struct {
 
 // NewBaseEntity creates a new BaseEntityBuilder for the provided URL.
 func NewBaseEntity(url string) BaseEntityBuilder {
-	URL := charm.MustParseReference(url)
+	URL := charm.MustParseURL(url)
 	return BaseEntityBuilder{
 		baseEntity: &mongodoc.BaseEntity{
 			URL:  URL,
@@ -110,6 +110,13 @@ func (b BaseEntityBuilder) WithPromulgated(promulgated bool) BaseEntityBuilder {
 	return b
 }
 
+// WithACLs sets the non-development ACLs field on the BaseEntity.
+func (b BaseEntityBuilder) WithACLs(acls mongodoc.ACL) BaseEntityBuilder {
+	b = b.copy()
+	b.baseEntity.ACLs = acls
+	return b
+}
+
 // Build creates a mongodoc.BaseEntity from the BaseEntityBuilder.
 func (b BaseEntityBuilder) Build() *mongodoc.BaseEntity {
 	return b.copy().baseEntity
@@ -123,9 +130,10 @@ func AssertBaseEntity(c *gc.C, db *mgo.Collection, expect *mongodoc.BaseEntity) 
 	c.Assert(&baseEntity, jc.DeepEquals, expect)
 }
 
-func baseURL(url *charm.Reference) *charm.Reference {
+func baseURL(url *charm.URL) *charm.URL {
 	baseURL := *url
 	baseURL.Series = ""
 	baseURL.Revision = -1
+	baseURL.Channel = ""
 	return &baseURL
 }

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
@@ -100,21 +100,26 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityId *router
 	if entityId == nil {
 		return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "entity id not specified")
 	}
+
 	entity, err := h.Store.FindEntity(entityId)
 	if err != nil {
 		return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 
-	baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, "acls")
+	baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, "acls", "developmentacls")
 	if err != nil {
 		return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
+
+	acls := baseEntity.ACLs
+	if entityId.Development {
+		acls = baseEntity.DevelopmentACLs
+	}
+	logger.Errorf("XXX ACLS %#v %#v %#v", baseEntity.DevelopmentACLs, baseEntity.URL, entityId.GoString())
+
 	if len(entity.CharmMeta.Terms) == 0 {
 		// No need to authenticate if the ACL is open to everyone.
-		if baseEntity.Public {
-			return authorization{}, nil
-		}
-		for _, name := range baseEntity.ACLs.Read {
+		for _, name := range acls.Read {
 			if name == params.Everyone {
 				return authorization{}, nil
 			}
@@ -127,7 +132,7 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityId *router
 
 	auth, verr := h.checkRequest(req, entityId, opReadArchive)
 	if verr == nil {
-		if err := h.checkACLMembership(auth, baseEntity.ACLs.Read); err != nil {
+		if err := h.checkACLMembership(auth, acls.Read); err != nil {
 			return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "")
 		}
 		h.auth = auth
@@ -208,14 +213,18 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityId *router.ResolvedUR
 // AuthorizeEntity checks that the given HTTP request
 // can access the entity with the given id.
 func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) error {
-	baseEntity, err := h.Store.FindBaseEntity(&id.URL, "acls")
+	baseEntity, err := h.Store.FindBaseEntity(&id.URL, "acls", "developmentacls")
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
 			return errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
 		}
 		return errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}
-	return h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write, id)
+	acls := baseEntity.ACLs
+	if id.Development {
+		acls = baseEntity.DevelopmentACLs
+	}
+	return h.authorizeWithPerms(req, acls.Read, acls.Write, id)
 }
 
 func (h *ReqHandler) authorizeWithPerms(req *http.Request, read, write []string, entityId *router.ResolvedURL) error {

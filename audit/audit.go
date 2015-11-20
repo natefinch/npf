@@ -31,9 +31,9 @@ type ACL struct {
 
 // Entry represents an audit log entry.
 type Entry struct {
-	Time   time.Time        `json:"time"`
-	User   string           `json:"user"`
-	Op     Operation        `json:"op"`
-	Entity *charm.Reference `json:"entity,omitempty"`
-	ACL    *ACL             `json:"acl,omitempty"`
+	Time   time.Time  `json:"time"`
+	User   string     `json:"user"`
+	Op     Operation  `json:"op"`
+	Entity *charm.URL `json:"entity,omitempty"`
+	ACL    *ACL       `json:"acl,omitempty"`
 }

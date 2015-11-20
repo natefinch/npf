@@ -16,7 +16,7 @@ import (
 	"github.com/juju/utils/parallel"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/mgostorage"
 	"gopkg.in/mgo.v2"
@@ -439,6 +439,7 @@ func (s *Store) AddCharmWithArchive(url *router.ResolvedURL, ch charm.Charm) err
 		BlobHash:    blobHash,
 		BlobHash256: blobHash256,
 		BlobSize:    blobSize,
+		Development: url.Development,
 	})
 }
 
@@ -449,9 +450,6 @@ func (s *Store) AddCharmWithArchive(url *router.ResolvedURL, ch charm.Charm) err
 //
 // If purl is not nil then the bundle will also be
 // available at the promulgated url specified.
-//
-// TODO This could take a *router.ResolvedURL as an argument
-// instead of two *charm.References.
 func (s *Store) AddBundleWithArchive(url *router.ResolvedURL, b charm.Bundle) error {
 	blobName, blobHash, blobHash256, size, err := s.uploadCharmOrBundle(b)
 	if err != nil {
@@ -463,6 +461,7 @@ func (s *Store) AddBundleWithArchive(url *router.ResolvedURL, b charm.Bundle) er
 		BlobHash:    blobHash,
 		BlobHash256: blobHash256,
 		BlobSize:    size,
+		Development: url.Development,
 	})
 }
 
@@ -514,21 +513,28 @@ type AddParams struct {
 	// Contents holds references to files inside the
 	// entity's archive blob.
 	Contents map[mongodoc.FileId]mongodoc.ZipFile
+
+	// Development holds whether the entity revision is in development.
+	Development bool
 }
 
-// AddCharm adds a charm entities collection with the given
-// parameters.
+// AddCharm adds a charm entities collection with the given parameters.
+// If p.URL cannot be used as a name for the charm then the returned
+// error will have the cause params.ErrEntityIdNotAllowed. If the charm
+// duplicates an existing charm then the returned error will have the
+// cause params.ErrDuplicateUpload.
 func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	// Strictly speaking this test is redundant, because a ResolvedURL should
 	// always be canonical, but check just in case anyway, as this is
 	// final gateway before a potentially invalid url might be stored
 	// in the database.
-	if p.URL.URL.Series == "bundle" || p.URL.URL.User == "" || p.URL.URL.Revision == -1 || p.URL.URL.Series == "" {
-		return errgo.Newf("charm added with invalid id %v", &p.URL.URL)
+	id := p.URL.URL
+	if id.Series == "bundle" || id.User == "" || id.Revision == -1 {
+		return errgo.Newf("charm added with invalid id %v", &id)
 	}
-	logger.Infof("add charm url %s; prev %d", &p.URL.URL, p.URL.PromulgatedRevision)
+	logger.Infof("add charm url %s; prev %d", &id, p.URL.PromulgatedRevision)
 	entity := &mongodoc.Entity{
-		URL:                     &p.URL.URL,
+		URL:                     &id,
 		PromulgatedURL:          p.URL.PromulgatedURL(),
 		BlobHash:                p.BlobHash,
 		BlobHash256:             p.BlobHash256,
@@ -541,18 +547,25 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 		CharmProvidedInterfaces: interfacesForRelations(c.Meta().Provides),
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
 		Contents:                p.Contents,
+		SupportedSeries:         c.Meta().Series,
+		Development:             p.Development,
 	}
 	denormalizeEntity(entity)
 
 	// Check that we're not going to create a charm that duplicates
-	// the name of a bundle. This is racy, but it's the best we can do.
+	// the name of a bundle. This is racy, but it's the best we can
+	// do. Also check that there isn't an existing multi-series charm
+	// that would be replaced by this one.
 	entities, err := s.FindEntities(entity.BaseURL)
 	if err != nil {
 		return errgo.Notef(err, "cannot check for existing entities")
 	}
 	for _, entity := range entities {
 		if entity.URL.Series == "bundle" {
-			return errgo.Newf("charm name duplicates bundle name %v", entity.URL)
+			return errgo.WithCausef(err, params.ErrEntityIdNotAllowed, "charm name duplicates bundle name %v", entity.URL)
+		}
+		if id.Series != "" && entity.URL.Series == "" {
+			return errgo.WithCausef(err, params.ErrEntityIdNotAllowed, "charm name duplicates multi-series charm name %v", entity.URL)
 		}
 	}
 	if err := s.insertEntity(entity); err != nil {
@@ -583,8 +596,6 @@ func denormalizeEntity(e *mongodoc.Entity) {
 		} else {
 			e.SupportedSeries = []string{e.URL.Series}
 		}
-	} else if len(e.SupportedSeries) == 0 {
-		panic("no supported series!")
 	}
 	if e.PromulgatedURL == nil {
 		e.PromulgatedRevision = -1
@@ -598,16 +609,18 @@ var everyonePerm = []string{params.Everyone}
 func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 	// Add the base entity to the database.
 	perms := []string{entity.User}
+	acls := mongodoc.ACL{
+		Read:  perms,
+		Write: perms,
+	}
 	baseEntity := &mongodoc.BaseEntity{
-		URL:    entity.BaseURL,
-		User:   entity.User,
-		Name:   entity.Name,
-		Public: false,
-		ACLs: mongodoc.ACL{
-			Read:  perms,
-			Write: perms,
-		},
-		Promulgated: entity.PromulgatedURL != nil,
+		URL:             entity.BaseURL,
+		User:            entity.User,
+		Name:            entity.Name,
+		Public:          false,
+		ACLs:            acls,
+		DevelopmentACLs: acls,
+		Promulgated:     entity.PromulgatedURL != nil,
 	}
 	err = s.DB.BaseEntities().Insert(baseEntity)
 	if err != nil && !mgo.IsDup(err) {
@@ -645,7 +658,7 @@ func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 // If the given URL has no user then it is assumed to be a
 // promulgated entity.
 func (s *Store) FindEntity(url *router.ResolvedURL, fields ...string) (*mongodoc.Entity, error) {
-	entities, err := s.FindEntities(&url.URL, fields...)
+	entities, err := s.FindEntities(url.UserOwnedURL(), fields...)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
@@ -660,8 +673,10 @@ func (s *Store) FindEntity(url *router.ResolvedURL, fields ...string) (*mongodoc
 // FindEntities finds all entities in the store matching the given URL.
 // If any fields are specified, only those fields will be
 // populated in the returned entities. If the given URL has no user then
-// only promulgated entities will be queried.
-func (s *Store) FindEntities(url *charm.Reference, fields ...string) ([]*mongodoc.Entity, error) {
+// only promulgated entities will be queried. If the given URL channel does
+// not represent an entity under development then only published entities
+// will be queried.
+func (s *Store) FindEntities(url *charm.URL, fields ...string) ([]*mongodoc.Entity, error) {
 	query := selectFields(s.EntitiesQuery(url), fields)
 	var docs []*mongodoc.Entity
 	err := query.All(&docs)
@@ -675,7 +690,7 @@ func (s *Store) FindEntities(url *charm.Reference, fields ...string) ([]*mongodo
 // the given URL. If any fields are specified, only those fields will be
 // populated in the returned entities. If the given URL has no user then
 // only promulgated entities will be queried.
-func (s *Store) FindBestEntity(url *charm.Reference, fields ...string) (*mongodoc.Entity, error) {
+func (s *Store) FindBestEntity(url *charm.URL, fields ...string) (*mongodoc.Entity, error) {
 	if len(fields) > 0 {
 		// Make sure we have all the fields we need to make a decision.
 		fields = append(fields, "_id", "promulgated-url", "promulgated-revision", "series", "revision")
@@ -732,11 +747,16 @@ var seriesBundleOrEmpty = bson.D{{"$or", []bson.D{{{"series", "bundle"}}, {{"ser
 
 // EntitiesQuery creates a mgo.Query object that can be used to find
 // entities matching the given URL. If the given URL has no user then
-// the produced query will only match promulgated entities.
-func (s *Store) EntitiesQuery(url *charm.Reference) *mgo.Query {
+// the produced query will only match promulgated entities. If the given URL
+// channel is not "development" then the produced query will only match
+// published entities.
+func (s *Store) EntitiesQuery(url *charm.URL) *mgo.Query {
 	entities := s.DB.Entities()
-	query := make(bson.D, 1, 4)
+	query := make(bson.D, 1, 5)
 	query[0] = bson.DocElem{"name", url.Name}
+	if url.Channel != charm.DevelopmentChannel {
+		query = append(query, bson.DocElem{"development", false})
+	}
 	if url.User == "" {
 		if url.Revision > -1 {
 			query = append(query, bson.DocElem{"promulgated-revision", url.Revision})
@@ -768,7 +788,7 @@ func (s *Store) EntitiesQuery(url *charm.Reference) *mgo.Query {
 // which can either represent a fully qualified entity or a base id.
 // If any fields are specified, only those fields will be populated in the
 // returned base entity.
-func (s *Store) FindBaseEntity(url *charm.Reference, fields ...string) (*mongodoc.BaseEntity, error) {
+func (s *Store) FindBaseEntity(url *charm.URL, fields ...string) (*mongodoc.BaseEntity, error) {
 	var query *mgo.Query
 	if url.User == "" {
 		query = s.DB.BaseEntities().Find(bson.D{{"name", url.Name}, {"promulgated", 1}})
@@ -815,6 +835,25 @@ func (s *Store) UpdateBaseEntity(url *router.ResolvedURL, update interface{}) er
 			return errgo.WithCausef(err, params.ErrNotFound, "cannot update base entity for %q", url)
 		}
 		return errgo.Notef(err, "cannot update base entity for %q", url)
+	}
+	return nil
+}
+
+// SetDevelopment sets whether the entity corresponding to the given URL will
+// be only available in its development version (in essence, not published).
+func (s *Store) SetDevelopment(url *router.ResolvedURL, development bool) error {
+	if err := s.UpdateEntity(url, bson.D{{
+		"$set", bson.D{{"development", development}},
+	}}); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	if !development {
+		// If the entity is published, update the search index.
+		rurl := *url
+		rurl.Development = development
+		if err := s.UpdateSearch(&rurl); err != nil {
+			return errgo.Notef(err, "cannot update search entities for %q", rurl)
+		}
 	}
 	return nil
 }
@@ -979,17 +1018,21 @@ func interfacesForRelations(rels map[string]charm.Relation) []string {
 	return result
 }
 
-func baseURL(url *charm.Reference) *charm.Reference {
+func baseURL(url *charm.URL) *charm.URL {
 	newURL := *url
 	newURL.Revision = -1
 	newURL.Series = ""
+	newURL.Channel = ""
 	return &newURL
 }
 
 var errNotImplemented = errgo.Newf("not implemented")
 
 // AddBundle adds a bundle to the entities collection with the given
-// parameters.
+// parameters. If p.URL cannot be used as a name for the bundle then the
+// returned error will have the cause params.ErrEntityIdNotAllowed. If
+// the bundle duplicates an existing bundle then the returned error will
+// have the cause params.ErrDuplicateUpload.
 func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 	// Strictly speaking this test is redundant, because a ResolvedURL should
 	// always be canonical, but check just in case anyway, as this is
@@ -1017,6 +1060,7 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 		BundleCharms:       urls,
 		Contents:           p.Contents,
 		PromulgatedURL:     p.URL.PromulgatedURL(),
+		Development:        p.Development,
 	}
 	denormalizeEntity(entity)
 
@@ -1028,7 +1072,7 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 	}
 	for _, entity := range entities {
 		if entity.URL.Series != "bundle" {
-			return errgo.Newf("bundle name duplicates charm name %s", entity.URL)
+			return errgo.WithCausef(err, params.ErrEntityIdNotAllowed, "bundle name duplicates charm name %s", entity.URL)
 		}
 	}
 	if err := s.insertEntity(entity); err != nil {
@@ -1156,9 +1200,14 @@ func (s *Store) findZipFile(blob io.ReadSeeker, size int64, isFile func(f *zip.F
 // SetPerms sets the permissions for the base entity with
 // the given id for "which" operations ("read" or "write")
 // to the given ACL. This is mostly provided for testing.
-func (s *Store) SetPerms(id *charm.Reference, which string, acl ...string) error {
+func (s *Store) SetPerms(id *charm.URL, which string, acl ...string) error {
+	field := "acls"
+	if id.Channel == charm.DevelopmentChannel {
+		field = "developmentacls"
+	}
+	logger.Errorf("XXX SETTING ACLs %#v %#v %#v %#v", id, field, which, acl)
 	return s.DB.BaseEntities().UpdateId(baseURL(id), bson.D{{"$set",
-		bson.D{{"acls." + which, acl}},
+		bson.D{{field + "." + which, acl}},
 	}})
 }
 
@@ -1211,12 +1260,12 @@ func bundleMachineCount(b *charm.BundleData) int {
 
 // bundleCharms returns all the charm URLs used by a bundle,
 // without duplicates.
-func bundleCharms(data *charm.BundleData) ([]*charm.Reference, error) {
+func bundleCharms(data *charm.BundleData) ([]*charm.URL, error) {
 	// Use a map to de-duplicate the URL list: a bundle can include services
 	// deployed by the same charm.
-	urlMap := make(map[string]*charm.Reference)
+	urlMap := make(map[string]*charm.URL)
 	for _, service := range data.Services {
-		url, err := charm.ParseReference(service.Charm)
+		url, err := charm.ParseURL(service.Charm)
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}
@@ -1225,7 +1274,7 @@ func bundleCharms(data *charm.BundleData) ([]*charm.Reference, error) {
 		base := baseURL(url)
 		urlMap[base.String()] = base
 	}
-	urls := make([]*charm.Reference, 0, len(urlMap))
+	urls := make([]*charm.URL, 0, len(urlMap))
 	for _, url := range urlMap {
 		urls = append(urls, url)
 	}
@@ -1233,7 +1282,7 @@ func bundleCharms(data *charm.BundleData) ([]*charm.Reference, error) {
 }
 
 // AddLog adds a log message to the database.
-func (s *Store) AddLog(data *json.RawMessage, logLevel mongodoc.LogLevel, logType mongodoc.LogType, urls []*charm.Reference) error {
+func (s *Store) AddLog(data *json.RawMessage, logLevel mongodoc.LogLevel, logType mongodoc.LogType, urls []*charm.URL) error {
 	// Encode the JSON data.
 	b, err := json.Marshal(data)
 	if err != nil {
@@ -1242,7 +1291,7 @@ func (s *Store) AddLog(data *json.RawMessage, logLevel mongodoc.LogLevel, logTyp
 
 	// Add the base URLs to the list of references associated with the log.
 	// Also remove duplicate URLs while maintaining the references' order.
-	var allUrls []*charm.Reference
+	var allUrls []*charm.URL
 	urlMap := make(map[string]bool)
 	for _, url := range urls {
 		urlStr := url.String()
@@ -1390,15 +1439,16 @@ func (s *Store) SynchroniseElasticsearch() error {
 }
 
 // EntityResolvedURL returns the ResolvedURL for the entity.
-// It requires the PromulgatedURL field to have been
+// It requires PromulgatedURL and Development fields to have been
 // filled out in the entity.
 func EntityResolvedURL(e *mongodoc.Entity) *router.ResolvedURL {
-	promulgatedRev := -1
-	if e.PromulgatedURL != nil {
-		promulgatedRev = e.PromulgatedURL.Revision
-	}
-	return &router.ResolvedURL{
+	rurl := &router.ResolvedURL{
 		URL:                 *e.URL,
-		PromulgatedRevision: promulgatedRev,
+		PromulgatedRevision: -1,
+		Development:         e.Development,
 	}
+	if e.PromulgatedURL != nil {
+		rurl.PromulgatedRevision = e.PromulgatedURL.Revision
+	}
+	return rurl
 }

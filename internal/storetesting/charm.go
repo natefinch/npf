@@ -4,7 +4,7 @@
 package storetesting // import "gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 
 import (
-	"gopkg.in/juju/charmrepo.v1/testing"
+	"gopkg.in/juju/charmrepo.v2-unstable/testing"
 )
 
 var Charms = testing.NewRepo("charm-repo", "quantal")

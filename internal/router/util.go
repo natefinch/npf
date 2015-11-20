@@ -14,7 +14,7 @@ import (
 	"github.com/juju/httprequest"
 	"github.com/juju/loggo"
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 )
 
@@ -77,9 +77,9 @@ func errorToResp1(err error) (int, interface{}) {
 	switch errorBody.Code {
 	case params.ErrNotFound, params.ErrMetadataNotFound:
 		status = http.StatusNotFound
-	case params.ErrBadRequest:
+	case params.ErrBadRequest, params.ErrInvalidEntity:
 		status = http.StatusBadRequest
-	case params.ErrForbidden:
+	case params.ErrForbidden, params.ErrEntityIdNotAllowed:
 		status = http.StatusForbidden
 	case params.ErrUnauthorized:
 		status = http.StatusUnauthorized

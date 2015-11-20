@@ -10,6 +10,7 @@ var (
 	ParamsLogLevels           = paramsLogLevels
 	ParamsLogTypes            = paramsLogTypes
 	ProcessIcon               = processIcon
+	PromulgatorsGroup         = promulgatorsGroup
 	ErrProbablyNotXML         = errProbablyNotXML
 	UsernameAttr              = usernameAttr
 	DelegatableMacaroonExpiry = delegatableMacaroonExpiry

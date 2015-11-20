@@ -22,13 +22,14 @@ import (
 	"github.com/juju/httprequest"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/series"
 )
 
 // GET id/archive
@@ -45,7 +46,7 @@ import (
 // rather than choosing a new one. As this feature is to support legacy
 // ingestion methods, and will be removed in the future, it has no entry
 // in the specification.
-func (h *ReqHandler) serveArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) serveArchive(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
 	case "DELETE":
 		return h.resolveId(h.authId(h.serveDeleteArchive))(id, w, req)
@@ -69,32 +70,41 @@ func (h *ReqHandler) serveArchive(id *charm.Reference, w http.ResponseWriter, re
 		}
 		return h.servePutArchive(id, w, req)
 	}
-	// TODO(rog) params.ErrMethodNotAllowed
-	return errgo.Newf("method not allowed")
+	return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)
 }
 
-func (h *ReqHandler) authorizeUpload(id *charm.Reference, req *http.Request) error {
+func (h *ReqHandler) authorizeUpload(id *charm.URL, req *http.Request) error {
 	if id.User == "" {
 		return badRequestf(nil, "user not specified in entity upload URL %q", id)
 	}
+	baseEntity, err := h.Store.FindBaseEntity(id, "acls", "developmentacls")
 	// Note that we pass a nil entity URL to authorizeWithPerms, because
 	// we haven't got a resolved URL at this point. At some
 	// point in the future, we may want to be able to allow
 	// is-entity first-party caveats to be allowed when uploading
 	// at which point we will need to rethink this a little.
-	baseURL := *id
-	baseURL.Revision = -1
-	baseURL.Series = ""
-	baseEntity, err := h.Store.FindBaseEntity(id, "acls")
 	if err == nil {
-		return h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write, nil)
+		if err := h.authorizeWithPerms(req, baseEntity.DevelopmentACLs.Read, baseEntity.DevelopmentACLs.Write, nil); err != nil {
+			return errgo.Mask(err, errgo.Any)
+		}
+		// If uploading a published entity, also check that the user has
+		// publishing permissions.
+		if id.Channel == "" {
+			if err := h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write, nil); err != nil {
+				return errgo.Mask(err, errgo.Any)
+			}
+		}
+		return nil
 	}
 	if errgo.Cause(err) != params.ErrNotFound {
 		return errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}
 	// The base entity does not currently exist, so we default to
 	// assuming write permissions for the entity user.
-	return h.authorizeWithPerms(req, nil, []string{id.User}, nil)
+	if err := h.authorizeWithPerms(req, nil, []string{id.User}, nil); err != nil {
+		return errgo.Mask(err, errgo.Any)
+	}
+	return nil
 }
 
 func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
@@ -139,7 +149,7 @@ func (h *ReqHandler) serveDeleteArchive(id *router.ResolvedURL, w http.ResponseW
 	return nil
 }
 
-func (h *ReqHandler) updateStatsArchiveUpload(id *charm.Reference, err *error) {
+func (h *ReqHandler) updateStatsArchiveUpload(id *charm.URL, err *error) {
 	// Upload stats don't include revision: it is assumed that each
 	// entity revision is only uploaded once.
 	id.Revision = -1
@@ -150,12 +160,9 @@ func (h *ReqHandler) updateStatsArchiveUpload(id *charm.Reference, err *error) {
 	h.Store.IncCounterAsync(charmstore.EntityStatsKey(id, kind))
 }
 
-func (h *ReqHandler) servePostArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
+func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req *http.Request) (err error) {
 	defer h.updateStatsArchiveUpload(id, &err)
 
-	if id.Series == "" {
-		return badRequestf(nil, "series not specified")
-	}
 	if id.Revision != -1 {
 		return badRequestf(nil, "revision specified, but should not be specified")
 	}
@@ -170,25 +177,37 @@ func (h *ReqHandler) servePostArchive(id *charm.Reference, w http.ResponseWriter
 		return badRequestf(nil, "Content-Length not specified")
 	}
 
-	oldId, oldHash, err := h.latestRevisionInfo(id)
+	oldURL, oldHash, err := h.latestRevisionInfo(id)
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return errgo.Notef(err, "cannot get hash of latest revision")
 	}
 	if oldHash == hash {
 		// The hash matches the hash of the latest revision, so
-		// no need to upload anything.
+		// no need to upload anything. When uploading a published URL and
+		// the latest revision is a development entity, then we need to
+		// actually publish the existing entity. Note that at this point the
+		// user is already known to have the required permissions.
+		underDevelopment := id.Channel == charm.DevelopmentChannel
+		if oldURL.Development && !underDevelopment {
+			if err := h.Store.SetDevelopment(oldURL, false); err != nil {
+				return errgo.NoteMask(err, "cannot publish charm or bundle", errgo.Is(params.ErrNotFound))
+			}
+		}
+		oldURL.Development = underDevelopment
 		return httprequest.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
-			Id: oldId,
+			Id:            oldURL.UserOwnedURL(),
+			PromulgatedId: oldURL.PromulgatedURL(),
 		})
 	}
 	rid := &router.ResolvedURL{
-		URL: *id,
+		URL:         *id.WithChannel(""),
+		Development: id.Channel == charm.DevelopmentChannel,
 	}
 	// Choose the next revision number for the upload.
-	if oldId == nil {
+	if oldURL == nil {
 		rid.URL.Revision = 0
 	} else {
-		rid.URL.Revision = oldId.Revision + 1
+		rid.URL.Revision = oldURL.URL.Revision + 1
 	}
 	rid.PromulgatedRevision, err = h.getNewPromulgatedRevision(id)
 	if err != nil {
@@ -196,15 +215,19 @@ func (h *ReqHandler) servePostArchive(id *charm.Reference, w http.ResponseWriter
 	}
 
 	if err := h.addBlobAndEntity(rid, req.Body, hash, req.ContentLength); err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
+		return errgo.Mask(err,
+			errgo.Is(params.ErrDuplicateUpload),
+			errgo.Is(params.ErrEntityIdNotAllowed),
+			errgo.Is(params.ErrInvalidEntity),
+		)
 	}
 	return httprequest.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
-		Id:            &rid.URL,
+		Id:            rid.UserOwnedURL(),
 		PromulgatedId: rid.PromulgatedURL(),
 	})
 }
 
-func (h *ReqHandler) servePutArchive(id *charm.Reference, w http.ResponseWriter, req *http.Request) (err error) {
+func (h *ReqHandler) servePutArchive(id *charm.URL, w http.ResponseWriter, req *http.Request) (err error) {
 	defer h.updateStatsArchiveUpload(id, &err)
 	if id.Series == "" {
 		return badRequestf(nil, "series not specified")
@@ -223,17 +246,18 @@ func (h *ReqHandler) servePutArchive(id *charm.Reference, w http.ResponseWriter,
 		return badRequestf(nil, "Content-Length not specified")
 	}
 	rid := &router.ResolvedURL{
-		URL:                 *id,
+		URL:                 *id.WithChannel(""),
 		PromulgatedRevision: -1,
+		Development:         id.Channel == charm.DevelopmentChannel,
 	}
 	// Get the PromulgatedURL from the request parameters. When ingesting
 	// entities might not be added in order and the promulgated revision might
 	// not match the non-promulgated revision, so the full promulgated URL
 	// needs to be specified.
 	promulgatedURL := req.Form.Get("promulgated")
-	var pid *charm.Reference
+	var pid *charm.URL
 	if promulgatedURL != "" {
-		pid, err = charm.ParseReference(promulgatedURL)
+		pid, err = charm.ParseURL(promulgatedURL)
 		if err != nil {
 			return badRequestf(err, "cannot parse promulgated url")
 		}
@@ -252,10 +276,14 @@ func (h *ReqHandler) servePutArchive(id *charm.Reference, w http.ResponseWriter,
 		rid.PromulgatedRevision = pid.Revision
 	}
 	if err := h.addBlobAndEntity(rid, req.Body, hash, req.ContentLength); err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
+		return errgo.Mask(err,
+			errgo.Is(params.ErrDuplicateUpload),
+			errgo.Is(params.ErrEntityIdNotAllowed),
+			errgo.Is(params.ErrInvalidEntity),
+		)
 	}
 	return httprequest.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
-		Id:            id,
+		Id:            rid.UserOwnedURL(),
 		PromulgatedId: rid.PromulgatedURL(),
 	})
 	return nil
@@ -292,8 +320,12 @@ func (h *ReqHandler) addBlobAndEntity(id *router.ResolvedURL, body io.Reader, ha
 
 	// Add the entity entry to the charm store.
 	sum256 := fmt.Sprintf("%x", hash256.Sum(nil))
-	if err := h.addEntity(id, r, name, hash, sum256, contentLength); err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
+	if err = h.addEntity(id, r, name, hash, sum256, contentLength); err != nil {
+		return errgo.Mask(err,
+			errgo.Is(params.ErrDuplicateUpload),
+			errgo.Is(params.ErrEntityIdNotAllowed),
+			errgo.Is(params.ErrInvalidEntity),
+		)
 	}
 	return nil
 }
@@ -308,35 +340,39 @@ func (h *ReqHandler) addEntity(id *router.ResolvedURL, r io.ReadSeeker, blobName
 		BlobHash:    hash,
 		BlobHash256: hash256,
 		BlobSize:    contentLength,
+		Development: id.Development,
 	}
 	if id.URL.Series == "bundle" {
 		b, err := charm.ReadBundleArchiveFromReader(readerAt, contentLength)
 		if err != nil {
-			return errgo.Notef(err, "cannot read bundle archive")
+			return readError(err, "cannot read bundle archive")
 		}
 		bundleData := b.Data()
 		charms, err := h.bundleCharms(bundleData.RequiredCharms())
 		if err != nil {
 			return errgo.Notef(err, "cannot retrieve bundle charms")
 		}
-		if err := bundleData.VerifyWithCharms(verifyConstraints, charms); err != nil {
+		if err := bundleData.VerifyWithCharms(verifyConstraints, verifyStorage, charms); err != nil {
 			// TODO frankban: use multiError (defined in internal/router).
-			return errgo.Notef(verificationError(err), "bundle verification failed")
+			return errgo.NoteMask(verificationError(err), "bundle verification failed", errgo.Is(params.ErrInvalidEntity))
 		}
 		if err := h.Store.AddBundle(b, p); err != nil {
-			return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
+			return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
 		}
 		return nil
 	}
 	ch, err := charm.ReadCharmArchiveFromReader(readerAt, contentLength)
 	if err != nil {
-		return errgo.Notef(err, "cannot read charm archive")
+		return readError(err, "cannot read charm archive")
 	}
 	if err := checkCharmIsValid(ch); err != nil {
-		return errgo.Mask(err)
+		return errgo.Mask(err, errgo.Is(params.ErrInvalidEntity))
+	}
+	if err := checkIdAllowed(id, ch); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrEntityIdNotAllowed))
 	}
 	if err := h.Store.AddCharm(ch, p); err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
+		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
 	}
 	return nil
 }
@@ -345,8 +381,11 @@ func checkCharmIsValid(ch charm.Charm) error {
 	m := ch.Meta()
 	for _, rels := range []map[string]charm.Relation{m.Provides, m.Requires, m.Peers} {
 		if err := checkRelationsAreValid(rels); err != nil {
-			return errgo.Mask(err)
+			return errgo.Mask(err, errgo.Is(params.ErrInvalidEntity))
 		}
+	}
+	if err := checkConsistentSeries(m.Series); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrInvalidEntity))
 	}
 	return nil
 }
@@ -354,17 +393,55 @@ func checkCharmIsValid(ch charm.Charm) error {
 func checkRelationsAreValid(rels map[string]charm.Relation) error {
 	for _, rel := range rels {
 		if rel.Name == "relation-name" {
-			return errgo.Newf("relation %s has almost certainly not been changed from the template", rel.Name)
+			return errgo.WithCausef(nil, params.ErrInvalidEntity, "relation %s has almost certainly not been changed from the template", rel.Name)
 		}
 		if rel.Interface == "interface-name" {
-			return errgo.Newf("interface %s in relation %s has almost certainly not been changed from the template", rel.Interface, rel.Name)
+			return errgo.WithCausef(nil, params.ErrInvalidEntity, "interface %s in relation %s has almost certainly not been changed from the template", rel.Interface, rel.Name)
 		}
 	}
 	return nil
 }
 
-func (h *ReqHandler) latestRevisionInfo(id *charm.Reference) (*charm.Reference, string, error) {
-	entities, err := h.Store.FindEntities(id, "_id", "blobhash")
+// checkConsistentSeries ensures that all of the series listed in the
+// charm metadata come from the same distribution. If an error is
+// returned it will have a cause of params.ErrInvalidEntity.
+func checkConsistentSeries(metadataSeries []string) error {
+	var dist series.Distribution
+	for _, s := range metadataSeries {
+		d := series.Series[s].Distribution
+		if d == "" {
+			return errgo.WithCausef(nil, params.ErrInvalidEntity, "unrecognised series %q in metadata", s)
+		}
+		if dist == "" {
+			dist = d
+		} else if dist != d {
+			return errgo.WithCausef(nil, params.ErrInvalidEntity, "cannot mix series from %s and %s in single charm", dist, d)
+		}
+	}
+	return nil
+}
+
+// checkIdAllowed ensures that the given id may be used for the provided
+// charm. If an error is returned it will have a cause of
+// params.ErrEntityIdNotAllowed.
+func checkIdAllowed(id *router.ResolvedURL, ch charm.Charm) error {
+	m := ch.Meta()
+	if id.URL.Series == "" && len(m.Series) == 0 {
+		return errgo.WithCausef(nil, params.ErrEntityIdNotAllowed, "series not specified in url or charm metadata")
+	} else if id.URL.Series == "" || len(m.Series) == 0 {
+		return nil
+	}
+	// if we get here we have series in both the id and metadata, ensure they agree.
+	for _, s := range m.Series {
+		if s == id.URL.Series {
+			return nil
+		}
+	}
+	return errgo.WithCausef(nil, params.ErrEntityIdNotAllowed, "%q series not listed in charm metadata", id.URL.Series)
+}
+
+func (h *ReqHandler) latestRevisionInfo(id *charm.URL) (*router.ResolvedURL, string, error) {
+	entities, err := h.Store.FindEntities(id.WithChannel(charm.DevelopmentChannel), "_id", "blobhash", "promulgated-url", "development")
 	if err != nil {
 		return nil, "", errgo.Mask(err)
 	}
@@ -377,11 +454,16 @@ func (h *ReqHandler) latestRevisionInfo(id *charm.Reference) (*charm.Reference, 
 			latest = entity
 		}
 	}
-	return latest.URL, latest.BlobHash, nil
+	return charmstore.EntityResolvedURL(latest), latest.BlobHash, nil
 }
 
 func verifyConstraints(s string) error {
 	// TODO(rog) provide some actual constraints checking here.
+	return nil
+}
+
+func verifyStorage(s string) error {
+	// TODO(frankban) provide some actual storage checking here.
 	return nil
 }
 
@@ -428,7 +510,7 @@ func (h *ReqHandler) serveArchiveFile(id *router.ResolvedURL, w http.ResponseWri
 	return errgo.WithCausef(nil, params.ErrNotFound, "file %q not found in the archive", filePath)
 }
 
-func (h *ReqHandler) isPublic(id charm.Reference) bool {
+func (h *ReqHandler) isPublic(id charm.URL) bool {
 	baseEntity, err := h.Store.FindBaseEntity(&id, "acls")
 	if err == nil {
 		for _, p := range baseEntity.ACLs.Read {
@@ -443,11 +525,11 @@ func (h *ReqHandler) isPublic(id charm.Reference) bool {
 
 func (h *ReqHandler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 	numIds := len(ids)
-	urls := make([]*charm.Reference, 0, numIds)
+	urls := make([]*charm.URL, 0, numIds)
 	idKeys := make([]string, 0, numIds)
 	// TODO resolve ids concurrently.
 	for _, id := range ids {
-		url, err := charm.ParseReference(id)
+		url, err := charm.ParseURL(id)
 		if err != nil {
 			// Ignore this error. This will be caught in the bundle
 			// verification process (see bundleData.VerifyWithCharms) and will
@@ -473,7 +555,7 @@ func (h *ReqHandler) bundleCharms(ids []string) (map[string]charm.Charm, error) 
 		return nil, err
 	}
 
-	entityCharms := make(map[charm.Reference]charm.Charm, len(entities))
+	entityCharms := make(map[charm.URL]charm.Charm, len(entities))
 	for i, entity := range entities {
 		entityCharms[*entity.URL] = &entityCharm{entities[i]}
 	}
@@ -529,7 +611,7 @@ func verificationError(err error) error {
 		// This should never happen.
 		return err
 	}
-	return errgo.New(string(encodedMessages))
+	return errgo.WithCausef(nil, params.ErrInvalidEntity, string(encodedMessages))
 }
 
 var (
@@ -554,7 +636,7 @@ func setArchiveCacheControl(h http.Header, isPublic bool) {
 // getNewPromulgatedRevision returns the promulgated revision
 // to give to a newly uploaded charm with the given id.
 // It returns -1 if the charm is not promulgated.
-func (h *ReqHandler) getNewPromulgatedRevision(id *charm.Reference) (int, error) {
+func (h *ReqHandler) getNewPromulgatedRevision(id *charm.URL) (int, error) {
 	baseEntity, err := h.Store.FindBaseEntity(id, "promulgated")
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return 0, errgo.Mask(err)
@@ -562,9 +644,10 @@ func (h *ReqHandler) getNewPromulgatedRevision(id *charm.Reference) (int, error)
 	if baseEntity == nil || !baseEntity.Promulgated {
 		return -1, nil
 	}
-	query := h.Store.EntitiesQuery(&charm.Reference{
+	query := h.Store.EntitiesQuery(&charm.URL{
 		Series:   id.Series,
 		Name:     id.Name,
+		Channel:  id.Channel,
 		Revision: -1,
 	})
 	var entity mongodoc.Entity
@@ -576,4 +659,18 @@ func (h *ReqHandler) getNewPromulgatedRevision(id *charm.Reference) (int, error)
 		return 0, errgo.Mask(err)
 	}
 	return entity.PromulgatedRevision + 1, nil
+}
+
+// readError creates an appropriate error for errors in reading an
+// uploaded archive. If the archive could not be read because the data
+// uploaded is invalid then an error with a cause of
+// params.ErrInvalidEntity will be returned. The given message will be
+// added as context.
+func readError(err error, msg string) error {
+	switch errgo.Cause(err) {
+	case zip.ErrFormat, zip.ErrAlgorithm, zip.ErrChecksum:
+		return errgo.WithCausef(err, params.ErrInvalidEntity, msg)
+
+	}
+	return errgo.Notef(err, msg)
 }

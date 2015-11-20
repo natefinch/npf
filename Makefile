@@ -103,6 +103,9 @@ else
 	@echo on OS X with homebrew try: brew install bazaar mongodb elasticsearch
 endif
 
+gopkg:
+	@echo $(PROJECT)
+
 help:
 	@echo -e 'Charmstore - list of make targets:\n'
 	@echo 'make - Build the package.'
@@ -115,5 +118,6 @@ help:
 	@echo 'make create-deps - Generate the Go dependencies file.'
 	@echo 'make format - Format the source files.'
 	@echo 'make simplify - Format and simplify the source files.'
+	@echo 'make gopkg - Output the current gopkg repository path and version.'
 
-.PHONY: build check install clean format simplify sysdeps help
+.PHONY: build check clean format gopkg help install simplify sysdeps

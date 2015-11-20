@@ -16,7 +16,7 @@ import (
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/macaroon.v1"
@@ -57,7 +57,7 @@ func (s *SearchSuite) SetUpTest(c *gc.C) {
 	s.addCharmsToStore(c)
 	// hide the riak charm
 	err := s.store.DB.BaseEntities().UpdateId(
-		charm.MustParseReference("cs:~charmers/riak"),
+		charm.MustParseURL("cs:~charmers/riak"),
 		bson.D{{"$set", map[string]mongodoc.ACL{
 			"acls": {
 				Read: []string{"charmers", "test-user"},
@@ -747,11 +747,11 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 // TODO(mhilton) remove this test when removing legacy counts logic.
 func (s *SearchSuite) TestLegacyStatsUpdatesSearch(c *gc.C) {
 	patchLegacyDownloadCountsEnabled(s.AddCleanup, true)
-	doc, err := s.store.ES.GetSearchDocument(charm.MustParseReference("~openstack-charmers/trusty/mysql-7"))
+	doc, err := s.store.ES.GetSearchDocument(charm.MustParseURL("~openstack-charmers/trusty/mysql-7"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(doc.TotalDownloads, gc.Equals, int64(0))
 	s.assertPut(c, "~openstack-charmers/trusty/mysql-7/meta/extra-info/"+params.LegacyDownloadStats, 57)
-	doc, err = s.store.ES.GetSearchDocument(charm.MustParseReference("~openstack-charmers/trusty/mysql-7"))
+	doc, err = s.store.ES.GetSearchDocument(charm.MustParseURL("~openstack-charmers/trusty/mysql-7"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(doc.TotalDownloads, gc.Equals, int64(57))
 }

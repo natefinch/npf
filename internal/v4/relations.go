@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
@@ -214,7 +214,7 @@ func (h *ReqHandler) metaBundlesContaining(entity *mongodoc.Entity, id *router.R
 		return false
 	})
 
-	var latest map[charm.Reference]int
+	var latest map[charm.URL]int
 	if !allResults {
 		// Include only the latest revision of any bundle.
 		// This is made somewhat tricky by the fact that
@@ -227,12 +227,12 @@ func (h *ReqHandler) metaBundlesContaining(entity *mongodoc.Entity, id *router.R
 		// promulgated and non-promulgated revisions
 		// and then include entities that have the latest
 		// revision for either.
-		latest = make(map[charm.Reference]int)
+		latest = make(map[charm.URL]int)
 
 		// updateLatest updates the latest revision for u
 		// without its revision if it's greater than the existing
 		// entry.
-		updateLatest := func(u *charm.Reference) {
+		updateLatest := func(u *charm.URL) {
 			u1 := *u
 			u1.Revision = -1
 			if rev, ok := latest[u1]; !ok || rev < u.Revision {

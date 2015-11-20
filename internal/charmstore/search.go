@@ -13,13 +13,14 @@ import (
 	"github.com/juju/utils"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/elasticsearch"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/series"
 )
 
 type SearchIndex struct {
@@ -33,32 +34,16 @@ const typeName = "entity"
 // series will be boosted. Series are currently ranked in
 // reverse order of LTS releases, followed by the latest
 // non-LTS release, followed by everything else.
-var seriesBoost = map[string]float64{
-	"bundle":      1.1255,
-	"trusty":      1.125,
-	"precise":     1.1125,
-	"utopic":      1.1,
-	"vivid":       1.101,
-	"wily":        1.102,
-	"win2012hvr2": 1.1,
-	"win2012hv":   1.1,
-	"win2012r2":   1.1,
-	"win2012":     1.1,
-	"win7":        1.1,
-	"win8":        1.1,
-	"win81":       1.1,
-	"centos7":     1.1,
-}
-
-// deprecatedSeries are series that should not show up in search
-// results. This list is used to filter out the charms before they are
-// indexed.
-var deprecatedSeries = map[string]bool{
-	"oneiric": true,
-	"quantal": true,
-	"raring":  true,
-	"saucy":   true,
-}
+var seriesBoost = func() map[string]float64 {
+	m := make(map[string]float64)
+	for k, v := range series.Series {
+		if !v.SearchIndex {
+			continue
+		}
+		m[k] = v.SearchBoost
+	}
+	return m
+}()
 
 // SearchDoc is a mongodoc.Entity with additional fields useful for searching.
 // This is the document that is stored in the search index.
@@ -66,6 +51,7 @@ type SearchDoc struct {
 	*mongodoc.Entity
 	TotalDownloads int64
 	ReadACLs       []string
+	Series         []string
 }
 
 // UpdateSearchAsync will update the search record for the entity
@@ -85,7 +71,7 @@ func (s *Store) UpdateSearch(r *router.ResolvedURL) error {
 	if s.ES == nil || s.ES.Database == nil {
 		return nil
 	}
-	if deprecatedSeries[r.URL.Series] {
+	if r.Development || r.URL.Series != "" && !series.Series[r.URL.Series].SearchIndex {
 		return nil
 	}
 
@@ -115,7 +101,7 @@ func (s *Store) UpdateSearch(r *router.ResolvedURL) error {
 // UpdateSearchBaseURL updates the search record for all entities with
 // the specified base URL. It must be called whenever the entry for the
 // given URL in the BaseEntitites collection has changed.
-func (s *Store) UpdateSearchBaseURL(baseURL *charm.Reference) error {
+func (s *Store) UpdateSearchBaseURL(baseURL *charm.URL) error {
 	if s.ES == nil || s.ES.Database == nil {
 		return nil
 	}
@@ -133,7 +119,7 @@ func (s *Store) UpdateSearchBaseURL(baseURL *charm.Reference) error {
 	// (2.4) would require every field to be enumerated in this query, which
 	// would make it too fragile.
 	iter := s.DB.Entities().Pipe([]bson.D{
-		{{"$match", bson.D{{"baseurl", baseURL}}}},
+		{{"$match", bson.D{{"baseurl", baseURL}, {"development", false}}}},
 		{{"$sort", bson.D{{"revision", 1}}}},
 		{{"$group", bson.D{
 			{"_id", "$series"},
@@ -142,10 +128,10 @@ func (s *Store) UpdateSearchBaseURL(baseURL *charm.Reference) error {
 	}).Iter()
 	defer iter.Close()
 	var result struct {
-		URL *charm.Reference
+		URL *charm.URL
 	}
 	for iter.Next(&result) {
-		if deprecatedSeries[result.URL.Series] {
+		if result.URL.Series != "" && !series.Series[result.URL.Series].SearchIndex {
 			continue
 		}
 		if err := s.UpdateSearch(&router.ResolvedURL{URL: *result.URL, PromulgatedRevision: -1}); err != nil {
@@ -210,6 +196,11 @@ func (s *Store) searchDocFromEntity(e *mongodoc.Entity, be *mongodoc.BaseEntity)
 		return nil, errgo.Mask(err)
 	}
 	doc.TotalDownloads = allRevisions.Total
+	if doc.Entity.Series == "bundle" {
+		doc.Series = []string{"bundle"}
+	} else {
+		doc.Series = doc.Entity.SupportedSeries
+	}
 	return &doc, nil
 }
 
@@ -230,13 +221,28 @@ func (si *SearchIndex) update(doc *SearchDoc) error {
 	if err != nil && err != elasticsearch.ErrConflict {
 		return errgo.Mask(err)
 	}
+	if doc.Entity.URL.Series != "" {
+		return nil
+	}
+	// This document represents a multi-series charm. It might be
+	// replacing existing documents for previous single-series
+	// charms. Remove any documents that this replaces.
+	for _, series := range doc.Entity.SupportedSeries {
+		u := *doc.Entity.URL
+		u.Series = series
+		err := si.DeleteDocument(si.Index, typeName, si.getID(&u))
+		if err != nil && errgo.Cause(err) != elasticsearch.ErrNotFound {
+			u.Revision = -1
+			logger.Errorf("cannot remove old search document for %q: %s", u, err)
+		}
+	}
 	return nil
 }
 
 // getID returns an ID for the elasticsearch document based on the contents of the
 // mongoDB document. This is to allow elasticsearch documents to be replaced with
 // updated versions when charm data is changed.
-func (si *SearchIndex) getID(r *charm.Reference) string {
+func (si *SearchIndex) getID(r *charm.URL) string {
 	ref := *r
 	ref.Revision = -1
 	b := sha1.Sum([]byte(ref.String()))
@@ -265,7 +271,7 @@ func (si *SearchIndex) search(sp SearchParams) (SearchResult, error) {
 	}
 	for _, h := range esr.Hits.Hits {
 		urlStr := h.Fields.GetString("URL")
-		url, err := charm.ParseReference(urlStr)
+		url, err := charm.ParseURL(urlStr)
 		if err != nil {
 			return SearchResult{}, errgo.Notef(err, "invalid URL in result %q", urlStr)
 		}
@@ -274,7 +280,7 @@ func (si *SearchIndex) search(sp SearchParams) (SearchResult, error) {
 		}
 
 		if purlStr := h.Fields.GetString("PromulgatedURL"); purlStr != "" {
-			purl, err := charm.ParseReference(purlStr)
+			purl, err := charm.ParseURL(purlStr)
 			if err != nil {
 				return SearchResult{}, errgo.Notef(err, "invalid promulgated URL in result %q", purlStr)
 			}
@@ -289,7 +295,7 @@ func (si *SearchIndex) search(sp SearchParams) (SearchResult, error) {
 
 // GetSearchDocument retrieves the current search record for the charm
 // reference id.
-func (si *SearchIndex) GetSearchDocument(id *charm.Reference) (*SearchDoc, error) {
+func (si *SearchIndex) GetSearchDocument(id *charm.URL) (*SearchDoc, error) {
 	if si == nil || si.Database == nil {
 		return &SearchDoc{}, nil
 	}
