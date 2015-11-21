@@ -32,11 +32,23 @@ func (s *migrationsSuite) SetUpTest(c *gc.C) {
 	s.executed = nil
 }
 
+const (
+	beforeAllMigrations mongodoc.MigrationName = "start"
+	afterAllMigrations  mongodoc.MigrationName = "end"
+)
+
 var (
-	// migrationFields holds the fields added to mongodoc.Entity,
+	// migrationEntityFields holds the fields added to mongodoc.Entity,
 	// keyed by the migration step that added them.
 	migrationEntityFields = map[mongodoc.MigrationName][]string{
 		migrationAddSupportedSeries: {"supportedseries"},
+		migrationAddDevelopment:     {"development"},
+	}
+
+	// migrationBaseEntityFields holds the fields added to mongodoc.BaseEntity,
+	// keyed by the migration step that added them.
+	migrationBaseEntityFields = map[mongodoc.MigrationName][]string{
+		migrationAddDevelopmentACLs: {"developmentacls"},
 	}
 
 	// initialFields holds all the mongodoc.Entity fields
@@ -68,23 +80,56 @@ var (
 		"promulgated-revision",
 	}
 
-	// finalEntityFields holds all the entity fields after all the migrations
-	// have taken place.
-	finalEntityFields []string
+	// initialBaseEntityFields holds all the mongodoc.BaseEntity fields
+	// at the dawn of migration time.
+	initialBaseEntityFields = []string{
+		"_id",
+		"user",
+		"name",
+		"public",
+		"acls",
+		"promulgated",
+	}
 
 	// entityFields holds all the fields in mongodoc.Entity just
 	// before the named migration (the key) has been applied.
 	entityFields = make(map[mongodoc.MigrationName][]string)
+
+	// baseEntityFields holds all the fields in mongodoc.Entity just
+	// before the named migration (the key) has been applied.
+	baseEntityFields = make(map[mongodoc.MigrationName][]string)
+
+	// postMigrationEntityFields holds all the fields in mongodoc.Entity just
+	// after the named migration (the key) has been applied.
+	postMigrationEntityFields = make(map[mongodoc.MigrationName][]string)
+
+	// postMigrationBaseEntityFields holds all the fields in
+	// mongodoc.BaseEntity just after the named migration (the key) has been
+	// applied.
+	postMigrationBaseEntityFields = make(map[mongodoc.MigrationName][]string)
 )
 
 func init() {
-	// Initialize entityFields using the information specified in migrationFields.
-	allFields := initialEntityFields
+	// Initialize entityFields and baseEntityFields using the information
+	// specified in migrationEntityFields and migrationBaseEntityFields.
+	allEntityFields := initialEntityFields
+	allBaseEntityFields := initialBaseEntityFields
+	entityFields[beforeAllMigrations] = allEntityFields
+	baseEntityFields[beforeAllMigrations] = allBaseEntityFields
+	postMigrationEntityFields[beforeAllMigrations] = allEntityFields
+	postMigrationBaseEntityFields[beforeAllMigrations] = allBaseEntityFields
 	for _, m := range migrations {
-		entityFields[m.name] = allFields
-		allFields = append(allFields, migrationEntityFields[m.name]...)
+		entityFields[m.name] = allEntityFields
+		allEntityFields = append(allEntityFields, migrationEntityFields[m.name]...)
+		postMigrationEntityFields[m.name] = allEntityFields
+		baseEntityFields[m.name] = allBaseEntityFields
+		allBaseEntityFields = append(allBaseEntityFields, migrationBaseEntityFields[m.name]...)
+		postMigrationBaseEntityFields[m.name] = allBaseEntityFields
 	}
-	finalEntityFields = allFields
+	entityFields[afterAllMigrations] = allEntityFields
+	baseEntityFields[afterAllMigrations] = allBaseEntityFields
+	postMigrationEntityFields[afterAllMigrations] = allEntityFields
+	postMigrationBaseEntityFields[afterAllMigrations] = allBaseEntityFields
 }
 
 func (s *migrationsSuite) newServer(c *gc.C) error {
@@ -251,19 +296,19 @@ func (s *migrationsSuite) TestMigrateParallelMigration(c *gc.C) {
 
 	// Prepare a database for the migration.
 	e1 := &mongodoc.Entity{
-		URL:            charm.MustParseReference("~charmers/trusty/django-42"),
-		PromulgatedURL: charm.MustParseReference("trusty/django-3"),
+		URL:            charm.MustParseURL("~charmers/trusty/django-42"),
+		PromulgatedURL: charm.MustParseURL("trusty/django-3"),
 		Size:           12,
 	}
 	denormalizeEntity(e1)
-	s.insertEntity(c, e1, initialEntityFields)
+	s.insertEntity(c, e1, beforeAllMigrations)
 
 	e2 := &mongodoc.Entity{
-		URL:  charm.MustParseReference("~who/utopic/rails-47"),
+		URL:  charm.MustParseURL("~who/utopic/rails-47"),
 		Size: 13,
 	}
 	denormalizeEntity(e2)
-	s.insertEntity(c, e2, initialEntityFields)
+	s.insertEntity(c, e2, beforeAllMigrations)
 
 	// Run the migrations in parallel.
 	var wg sync.WaitGroup
@@ -286,27 +331,27 @@ func (s *migrationsSuite) TestMigrateParallelMigration(c *gc.C) {
 	// Ensure entities have been updated correctly by all the migrations.
 	// TODO when there are migrations, update e1 and e2 accordingly.
 	s.checkCount(c, s.db.Entities(), 2)
-	s.checkEntity(c, e1)
-	s.checkEntity(c, e2)
+	s.checkEntity(c, e1, afterAllMigrations)
+	s.checkEntity(c, e2, afterAllMigrations)
 }
 
-func (s *migrationsSuite) TestAddSupportedSeries(c *gc.C) {
+func (s *migrationsSuite) TestMigrateAddSupportedSeries(c *gc.C) {
 	s.patchMigrations(c, getMigrations(migrationAddSupportedSeries))
 
 	entities := []*mongodoc.Entity{{
-		URL:            charm.MustParseReference("~charmers/trusty/django-42"),
-		PromulgatedURL: charm.MustParseReference("trusty/django-3"),
+		URL:            charm.MustParseURL("~charmers/trusty/django-42"),
+		PromulgatedURL: charm.MustParseURL("trusty/django-3"),
 		Size:           12,
 	}, {
-		URL:  charm.MustParseReference("~who/utopic/rails-47"),
+		URL:  charm.MustParseURL("~who/utopic/rails-47"),
 		Size: 13,
 	}, {
-		URL:  charm.MustParseReference("~who/bundle/something-47"),
+		URL:  charm.MustParseURL("~who/bundle/something-47"),
 		Size: 13,
 	}}
 	for _, e := range entities {
 		denormalizeEntity(e)
-		s.insertEntity(c, e, entityFields[migrationAddSupportedSeries])
+		s.insertEntity(c, e, migrationAddSupportedSeries)
 	}
 
 	// Start the server.
@@ -316,7 +361,85 @@ func (s *migrationsSuite) TestAddSupportedSeries(c *gc.C) {
 	// Ensure entities have been updated correctly.
 	s.checkCount(c, s.db.Entities(), len(entities))
 	for _, e := range entities {
-		s.checkEntity(c, e)
+		s.checkEntity(c, e, migrationAddSupportedSeries)
+	}
+}
+
+func (s *migrationsSuite) TestMigrateAddDevelopment(c *gc.C) {
+	s.patchMigrations(c, getMigrations(migrationAddDevelopment))
+
+	// Populate the database with some entities.
+	entities := []*mongodoc.Entity{{
+		URL:            charm.MustParseURL("~charmers/trusty/django-42"),
+		PromulgatedURL: charm.MustParseURL("trusty/django-3"),
+		Size:           47,
+	}, {
+		URL:  charm.MustParseURL("~who/utopic/rails-47"),
+		Size: 48,
+	}, {
+		URL:  charm.MustParseURL("~who/bundle/solution-0"),
+		Size: 1,
+	}}
+	for _, e := range entities {
+		denormalizeEntity(e)
+		s.insertEntity(c, e, migrationAddDevelopment)
+	}
+
+	// Start the server.
+	err := s.newServer(c)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure entities have been updated correctly.
+	s.checkCount(c, s.db.Entities(), len(entities))
+	for _, e := range entities {
+		var rawEntity map[string]interface{}
+		err := s.db.Entities().FindId(e.URL).One(&rawEntity)
+		c.Assert(err, gc.IsNil)
+		v, ok := rawEntity["development"]
+		c.Assert(ok, jc.IsTrue, gc.Commentf("development field not present in entity %s", rawEntity["_id"]))
+		c.Assert(v, jc.IsFalse, gc.Commentf("development field unexpectedly not false in entity %s", rawEntity["_id"]))
+	}
+}
+
+func (s *migrationsSuite) TestMigrateAddDevelopmentACLs(c *gc.C) {
+	s.patchMigrations(c, getMigrations(migrationAddDevelopmentACLs))
+
+	// Populate the database with some entities.
+	entities := []*mongodoc.BaseEntity{{
+		URL:  charm.MustParseURL("~charmers/django"),
+		Name: "django",
+		ACLs: mongodoc.ACL{
+			Read:  []string{"user", "group"},
+			Write: []string{"user"},
+		},
+	}, {
+		URL:  charm.MustParseURL("~who/rails"),
+		Name: "rails",
+		ACLs: mongodoc.ACL{
+			Read:  []string{"everyone"},
+			Write: []string{},
+		},
+	}, {
+		URL:  charm.MustParseURL("~who/mediawiki-scalable"),
+		Name: "mediawiki-scalable",
+		ACLs: mongodoc.ACL{
+			Read:  []string{"who"},
+			Write: []string{"dalek"},
+		},
+	}}
+	for _, e := range entities {
+		s.insertBaseEntity(c, e, migrationAddDevelopmentACLs)
+	}
+
+	// Start the server.
+	err := s.newServer(c)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure base entities have been updated correctly.
+	s.checkCount(c, s.db.BaseEntities(), len(entities))
+	for _, e := range entities {
+		e.DevelopmentACLs = e.ACLs
+		s.checkBaseEntity(c, e, migrationAddDevelopmentACLs)
 	}
 }
 
@@ -341,44 +464,73 @@ func getMigrations(names ...mongodoc.MigrationName) (ms []migration) {
 	return ms
 }
 
-func (s *migrationsSuite) checkEntity(c *gc.C, expectEntity *mongodoc.Entity) {
-	var entity mongodoc.Entity
-	err := s.db.Entities().FindId(expectEntity.URL).One(&entity)
-	c.Assert(err, gc.IsNil)
-
-	c.Assert(&entity, jc.DeepEquals, expectEntity)
-}
-
 func (s *migrationsSuite) checkCount(c *gc.C, coll *mgo.Collection, expectCount int) {
 	count, err := coll.Count()
 	c.Assert(err, gc.IsNil)
 	c.Assert(count, gc.Equals, expectCount)
 }
 
-func (s *migrationsSuite) checkBaseEntity(c *gc.C, expectEntity *mongodoc.BaseEntity) {
+// checkEntity checks the entity stored in the database with the ID
+// expectEntity.URL is the same as expectEntity for all fields that exist
+// in the database following completion of the given migration.
+func (s *migrationsSuite) checkEntity(c *gc.C, expectEntity *mongodoc.Entity, name mongodoc.MigrationName) {
+	var entity mongodoc.Entity
+	err := s.db.Entities().FindId(expectEntity.URL).One(&entity)
+	c.Assert(err, gc.IsNil)
+	obtained := entityWithFields(c, &entity, postMigrationEntityFields[name])
+	expected := entityWithFields(c, expectEntity, postMigrationEntityFields[name])
+	c.Assert(obtained, jc.DeepEquals, expected)
+}
+
+// checkBaseEntity checks the base entity stored in the database with the ID
+// expectEntity.URL is the same as expectEntity for all fields that exist
+// in the database following completion of the given migration.
+func (s *migrationsSuite) checkBaseEntity(c *gc.C, expectEntity *mongodoc.BaseEntity, name mongodoc.MigrationName) {
 	var entity mongodoc.BaseEntity
 	err := s.db.BaseEntities().FindId(expectEntity.URL).One(&entity)
 	c.Assert(err, gc.IsNil)
-	c.Assert(&entity, jc.DeepEquals, expectEntity)
+	obtained := baseEntityWithFields(c, &entity, postMigrationBaseEntityFields[name])
+	expected := baseEntityWithFields(c, expectEntity, postMigrationBaseEntityFields[name])
+	c.Assert(obtained, jc.DeepEquals, expected)
 }
 
-func (s *migrationsSuite) checkBaseEntitiesCount(c *gc.C, expectCount int) {
-	count, err := s.db.Entities().Count()
+// insertEntity inserts the given entity. The migration that the entity
+// is to be inserted for is specified in name; only fields that existed
+// prior to that migration will be inserted.
+func (s *migrationsSuite) insertEntity(c *gc.C, e *mongodoc.Entity, name mongodoc.MigrationName) {
+	err := s.db.Entities().Insert(entityWithFields(c, e, entityFields[name]))
 	c.Assert(err, gc.IsNil)
-	c.Assert(count, gc.Equals, expectCount)
 }
 
-// insertEntity inserts the given entity. Only the fields specified in includeFields
-// will be inserted.
-func (s *migrationsSuite) insertEntity(c *gc.C, e *mongodoc.Entity, includeFields []string) {
-	c.Assert(includeFields, gc.Not(gc.HasLen), 0)
+// insertBaseEntity inserts the given base entity. The migration that the
+// entity is to be inserted for is specified in name; only fields that existed
+// prior to that migration will be inserted.
+func (s *migrationsSuite) insertBaseEntity(c *gc.C, e *mongodoc.BaseEntity, name mongodoc.MigrationName) {
+	err := s.db.BaseEntities().Insert(baseEntityWithFields(c, e, baseEntityFields[name]))
+	c.Assert(err, gc.IsNil)
+}
 
+// entityWithFields creates a version of the specified mongodoc.Entity as
+// it would appear if it only contained the specified fields. This is to
+// simulate previous versions of documents in the database.
+func entityWithFields(c *gc.C, e *mongodoc.Entity, includeFields []string) map[string]interface{} {
 	data, err := bson.Marshal(e)
 	c.Assert(err, gc.IsNil)
-	var rawEntity map[string]interface{}
-	err = bson.Unmarshal(data, &rawEntity)
-	c.Assert(err, gc.IsNil)
+	return withFields(c, data, includeFields)
+}
 
+// baseEntityWithFields creates a version of the specified mongodoc.BaseEntity
+// as it would appear if it only contained the specified fields. This is to
+// simulate previous versions of documents in the database.
+func baseEntityWithFields(c *gc.C, e *mongodoc.BaseEntity, includeFields []string) map[string]interface{} {
+	data, err := bson.Marshal(e)
+	c.Assert(err, gc.IsNil)
+	return withFields(c, data, includeFields)
+}
+
+func withFields(c *gc.C, data []byte, includeFields []string) (rawEntity map[string]interface{}) {
+	err := bson.Unmarshal(data, &rawEntity)
+	c.Assert(err, gc.IsNil)
 loop:
 	for k := range rawEntity {
 		for _, inc := range includeFields {
@@ -388,6 +540,5 @@ loop:
 		}
 		delete(rawEntity, k)
 	}
-	err = s.db.Entities().Insert(rawEntity)
-	c.Assert(err, gc.IsNil)
+	return rawEntity
 }

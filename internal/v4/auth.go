@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
@@ -40,11 +40,12 @@ const (
 // This method also sets h.auth to the returned authorization info.
 func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool, entityId *router.ResolvedURL) (authorization, error) {
 	logger.Infof(
-		"authorize, auth location %q, acl %q, path: %q, method: %q",
+		"authorize, auth location %q, acl %q, path: %q, method: %q, entity: %#v",
 		h.handler.config.IdentityLocation,
 		acl,
 		req.URL.Path,
-		req.Method)
+		req.Method,
+		entityId)
 
 	if !alwaysAuth {
 		// No need to authenticate if the ACL is open to everyone.
@@ -54,8 +55,12 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 			}
 		}
 	}
+	entities := []*router.ResolvedURL{}
+	if entityId != nil {
+		entities = append(entities, entityId)
+	}
 
-	auth, verr := h.checkRequest(req, entityId, opOther)
+	auth, verr := h.checkRequest(req, entities, opOther)
 	if verr == nil {
 		if err := h.checkACLMembership(auth, acl); err != nil {
 			return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "")
@@ -89,46 +94,70 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 // it will require the user to agree to those terms and conditions
 // by adding a third party caveat addressed to the terms service
 // requiring the user to have agreements to specified terms.
-func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityId *router.ResolvedURL) (authorization, error) {
+func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*router.ResolvedURL) (authorization, error) {
 	logger.Infof(
-		"authorize, auth location %q, terms location %q, path: %q, method: %q",
+		"authorize entity and terms, auth location %q, terms location %q, path: %q, method: %q, entities: %#v",
 		h.handler.config.IdentityLocation,
 		h.handler.config.TermsLocation,
 		req.URL.Path,
-		req.Method)
+		req.Method,
+		entityIds)
 
-	if entityId == nil {
+	if len(entityIds) == 0 {
 		return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "entity id not specified")
 	}
-	entity, err := h.Store.FindEntity(entityId)
-	if err != nil {
-		return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
-	}
 
-	baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, "acls")
-	if err != nil {
-		return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
-	}
-	if len(entity.CharmMeta.Terms) == 0 {
-		// No need to authenticate if the ACL is open to everyone.
-		if baseEntity.Public {
-			return authorization{}, nil
+	ACLs := make([][]string, len(entityIds))
+	requiredTerms := make(map[string]struct{})
+	allowAuth := true
+	for i, entityId := range entityIds {
+		entity, err := h.Store.FindEntity(entityId)
+		if err != nil {
+			return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
-		for _, name := range baseEntity.ACLs.Read {
-			if name == params.Everyone {
-				return authorization{}, nil
+
+		baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, "acls", "developmentacls")
+		if err != nil {
+			return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+		}
+
+		ACLs[i] = baseEntity.ACLs.Read
+		if entityId.Development {
+			ACLs[i] = baseEntity.DevelopmentACLs.Read
+		}
+
+		if len(entity.CharmMeta.Terms) == 0 {
+			// No need to authenticate if the ACL is open to everyone.
+			open := false
+			for _, name := range ACLs[i] {
+				if name == params.Everyone {
+					open = true
+					break
+				}
+			}
+			allowAuth = allowAuth && open
+		} else {
+			allowAuth = false
+			for _, term := range entity.CharmMeta.Terms {
+				requiredTerms[term] = struct{}{}
 			}
 		}
 	}
+	// if all entities are open to everyone and non of the entities defines any Terms, then we return nil
+	if allowAuth {
+		return authorization{}, nil
+	}
 
-	if len(entity.CharmMeta.Terms) > 0 && h.handler.config.TermsLocation == "" {
+	if len(requiredTerms) > 0 && h.handler.config.TermsLocation == "" {
 		return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "charmstore not configured to serve charms with terms and conditions")
 	}
 
-	auth, verr := h.checkRequest(req, entityId, opReadArchive)
+	auth, verr := h.checkRequest(req, entityIds, opReadArchive)
 	if verr == nil {
-		if err := h.checkACLMembership(auth, baseEntity.ACLs.Read); err != nil {
-			return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "")
+		for _, acl := range ACLs {
+			if err := h.checkACLMembership(auth, acl); err != nil {
+				return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "")
+			}
 		}
 		h.auth = auth
 		return auth, nil
@@ -140,9 +169,13 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityId *router
 	caveats := []checkers.Caveat{
 		checkers.AllowCaveat(opReadArchive, opOther),
 	}
-	if len(entity.CharmMeta.Terms) > 0 {
+	if len(requiredTerms) > 0 {
+		terms := []string{}
+		for term, _ := range requiredTerms {
+			terms = append(terms, term)
+		}
 		caveats = append(caveats,
-			checkers.Caveat{h.handler.config.TermsLocation, "has-agreed " + strings.Join(entity.CharmMeta.Terms, ",")},
+			checkers.Caveat{h.handler.config.TermsLocation, "has-agreed " + strings.Join(terms, " ")},
 		)
 	}
 
@@ -166,7 +199,7 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityId *router
 // be used to check any "is-entity" first party caveat.
 // In addition it adds a checker that checks if operation specified
 // by the operation parameters is allowed.
-func (h *ReqHandler) checkRequest(req *http.Request, entityId *router.ResolvedURL, operation string) (authorization, error) {
+func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.ResolvedURL, operation string) (authorization, error) {
 	user, passwd, err := parseCredentials(req)
 	if err == nil {
 		if user != h.handler.config.AuthUsername || passwd != h.handler.config.AuthPassword {
@@ -178,20 +211,32 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityId *router.ResolvedUR
 	if errgo.Cause(err) != errNoCreds || bk == nil || h.handler.config.IdentityLocation == "" {
 		return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "authentication failed")
 	}
+
 	attrMap, err := httpbakery.CheckRequest(bk, req, nil, checkers.New(
 		checkers.CheckerFunc{
 			Condition_: "is-entity",
-			Check_: func(_, arg string) error {
-				if entityId == nil {
-					return errgo.Newf("API operation does not involve expected entity %v", arg)
+			Check_: func(_, args string) error {
+				tokens := strings.Split(args, " ")
+				allowedEntities := make(map[string]struct{})
+				for _, token := range tokens {
+					allowedEntities[strings.TrimSpace(token)] = struct{}{}
 				}
-				purl := entityId.PromulgatedURL()
-				if entityId.URL.String() == arg || purl != nil && purl.String() == arg {
-					// We allow either the non-promulgated or the promulgated
-					// URL form.
-					return nil
+				if len(entityIds) == 0 {
+					return errgo.Newf("API operation does not involve expected entity %v", args)
 				}
-				return errgo.Newf("API operation on entity %v, want %v", entityId, arg)
+
+				for _, entityId := range entityIds {
+					var ok, okPromulgated bool
+					_, ok = allowedEntities[entityId.URL.String()]
+					purl := entityId.PromulgatedURL()
+					if purl != nil {
+						_, okPromulgated = allowedEntities[purl.String()]
+					}
+					if !ok && !okPromulgated {
+						return errgo.Newf("API operation on entity %v not allowed", entityId)
+					}
+				}
+				return nil
 			},
 		},
 		checkers.OperationChecker(operation),
@@ -208,14 +253,18 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityId *router.ResolvedUR
 // AuthorizeEntity checks that the given HTTP request
 // can access the entity with the given id.
 func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) error {
-	baseEntity, err := h.Store.FindBaseEntity(&id.URL, "acls")
+	baseEntity, err := h.Store.FindBaseEntity(&id.URL, "acls", "developmentacls")
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
 			return errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
 		}
 		return errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}
-	return h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write, id)
+	acls := baseEntity.ACLs
+	if id.Development {
+		acls = baseEntity.DevelopmentACLs
+	}
+	return h.authorizeWithPerms(req, acls.Read, acls.Write, id)
 }
 
 func (h *ReqHandler) authorizeWithPerms(req *http.Request, read, write []string, entityId *router.ResolvedURL) error {

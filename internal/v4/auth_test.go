@@ -20,7 +20,7 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/macaroon.v1"
@@ -313,41 +313,56 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		}
 
 		// Add a charm to the store, used for testing.
-		err := s.store.AddCharmWithArchive(
-			newResolvedURL("~charmers/utopic/wordpress-42", -1),
-			storetesting.Charms.CharmDir("wordpress"),
-		)
-		c.Assert(err, gc.IsNil)
-		baseURL := charm.MustParseReference("~charmers/wordpress")
-
-		// Change the ACLs for the testing charm.
-		err = s.store.SetPerms(baseURL, "read", test.readPerm...)
+		rurl := newResolvedURL("~charmers/utopic/wordpress-42", -1)
+		err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
 
-		// Prepare the expected status.
-		expectStatus := test.expectStatus
-		if expectStatus == 0 {
-			expectStatus = http.StatusOK
-		}
+		// Change the ACLs for the testing charm
+		// (both published and development versions).
+		err = s.store.SetPerms(&rurl.URL, "read", test.readPerm...)
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", test.readPerm...)
+		c.Assert(err, gc.IsNil)
 
 		// Define an helper function used to send requests and check responses.
-		makeRequest := func(path string) {
+		makeRequest := func(path string, expectStatus int, expectBody interface{}) {
 			rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 				Handler: s.srv,
 				Do:      bakeryDo(nil),
 				URL:     storeURL(path),
 			})
+			if expectStatus == 0 {
+				expectStatus = http.StatusOK
+			}
 			c.Assert(rec.Code, gc.Equals, expectStatus, gc.Commentf("body: %s", rec.Body))
-			if test.expectBody != nil {
-				c.Assert(rec.Body.String(), jc.JSONEquals, test.expectBody)
+			if expectBody != nil {
+				c.Assert(rec.Body.String(), jc.JSONEquals, expectBody)
 			}
 		}
 
-		// Perform a meta request.
-		makeRequest("~charmers/wordpress/meta/archive-size")
+		// Perform meta and id requests.
+		makeRequest("~charmers/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
+		makeRequest("~charmers/wordpress/expand-id", test.expectStatus, test.expectBody)
 
-		// Perform an id request.
-		makeRequest("~charmers/wordpress/expand-id")
+		// Perform meta and id requests to the development channel.
+		makeRequest("~charmers/development/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
+		makeRequest("~charmers/development/wordpress/expand-id", test.expectStatus, test.expectBody)
+
+		// Remove permissions for the published charm.
+		err = s.store.SetPerms(&rurl.URL, "read")
+		c.Assert(err, gc.IsNil)
+
+		// Check that now accessing the published charm is not allowed,
+		// but accessing the development charm still works as expected.
+		makeRequest("~charmers/wordpress/meta/archive-size", http.StatusUnauthorized, nil)
+		makeRequest("~charmers/development/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
+
+		// Remove permissions for the development charm as well.
+		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read")
+		c.Assert(err, gc.IsNil)
+
+		// Check that now accessing the development charm is also denied.
+		makeRequest("~charmers/development/wordpress/meta/archive-size", http.StatusUnauthorized, nil)
 
 		// Remove all entities from the store.
 		_, err = s.store.DB.Entities().RemoveAll(nil)
@@ -446,38 +461,55 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 		}
 
 		// Add a charm to the store, used for testing.
-		err := s.store.AddCharmWithArchive(
-			newResolvedURL("~charmers/utopic/wordpress-42", -1),
-			storetesting.Charms.CharmDir("wordpress"))
+		rurl := newResolvedURL("~charmers/utopic/wordpress-42", -1)
+		err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
-		baseURL := charm.MustParseReference("~charmers/wordpress")
 
 		// Change the ACLs for the testing charm.
-		err = s.store.SetPerms(baseURL, "write", test.writePerm...)
+		// (both published and development versions).
+		err = s.store.SetPerms(&rurl.URL, "write", test.writePerm...)
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "write", test.writePerm...)
 		c.Assert(err, gc.IsNil)
 
-		// Prepare the expected status.
-		expectStatus := test.expectStatus
-		if expectStatus == 0 {
-			expectStatus = http.StatusOK
+		makeRequest := func(path string, expectStatus int, expectBody interface{}) {
+			client := httpbakery.NewHTTPClient()
+			rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+				Handler: s.srv,
+				Do:      bakeryDo(client),
+				URL:     storeURL(path),
+				Method:  "PUT",
+				Header:  http.Header{"Content-Type": {"application/json"}},
+				Body:    strings.NewReader("42"),
+			})
+			if expectStatus == 0 {
+				expectStatus = http.StatusOK
+			}
+			c.Assert(rec.Code, gc.Equals, expectStatus, gc.Commentf("body: %s", rec.Body))
+			if expectBody != nil {
+				c.Assert(rec.Body.String(), jc.JSONEquals, expectBody)
+			}
 		}
 
-		client := httpbakery.NewHTTPClient()
-		// Perform a meta PUT request.
-		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-			Handler: s.srv,
-			Do:      bakeryDo(client),
-			URL:     storeURL("~charmers/wordpress/meta/extra-info/key"),
-			Method:  "PUT",
-			Header: http.Header{
-				"Content-Type": {"application/json"},
-			},
-			Body: strings.NewReader("42"),
-		})
-		c.Assert(rec.Code, gc.Equals, expectStatus, gc.Commentf("body: %s", rec.Body))
-		if test.expectBody != nil {
-			c.Assert(rec.Body.String(), jc.JSONEquals, test.expectBody)
-		}
+		// Perform a meta PUT request to the published and development URLs.
+		makeRequest("~charmers/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
+		makeRequest("~charmers/development/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
+
+		// Remove permissions to write on the published entity.
+		err = s.store.SetPerms(&rurl.URL, "write")
+		c.Assert(err, gc.IsNil)
+
+		// Check that now writing to the published charm is not allowed,
+		// but accessing the development charm still works as expected.
+		makeRequest("~charmers/wordpress/meta/extra-info/key", http.StatusUnauthorized, nil)
+		makeRequest("~charmers/development/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
+
+		// Remove write permissions for the development charm as well.
+		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "write")
+		c.Assert(err, gc.IsNil)
+
+		// Check that now modifying the development charm is also denied.
+		makeRequest("~charmers/development/wordpress/meta/extra-info/key", http.StatusUnauthorized, nil)
 
 		// Remove all entities from the store.
 		_, err = s.store.DB.Entities().RemoveAll(nil)
@@ -496,6 +528,16 @@ var uploadEntityAuthorizationTests = []struct {
 	groups []string
 	// id holds the id of the entity to be uploaded.
 	id string
+	// promulgated holds whether the corresponding promulgated entity must be
+	// already present in the charm store before performing the upload.
+	promulgated bool
+	// developmentWriteAcls can be used to set customized write ACLs for the
+	// development entity before performing the upload. If empty, default ACLs
+	// are used.
+	developmentWriteAcls []string
+	// writeAcls can be used to set customized write ACLs for the published
+	// entity before performing the upload. If empty, default ACLs are used.
+	writeAcls []string
 	// expectStatus is the expected HTTP response status.
 	// Defaults to 200 status OK.
 	expectStatus int
@@ -507,27 +549,60 @@ var uploadEntityAuthorizationTests = []struct {
 	username: "who",
 	id:       "~who/utopic/django",
 }, {
+	about:    "user owned development entity",
+	username: "who",
+	id:       "~who/development/utopic/django",
+}, {
 	about:    "group owned entity",
 	username: "dalek",
 	groups:   []string{"group1", "group2"},
 	id:       "~group1/utopic/django",
+}, {
+	about:    "group owned development entity",
+	username: "dalek",
+	groups:   []string{"group1", "group2"},
+	id:       "~group1/development/utopic/django",
 }, {
 	about:    "specific group",
 	username: "dalek",
 	groups:   []string{"group42"},
 	id:       "~group42/utopic/django",
 }, {
-	about:        "promulgated entity",
+	about:       "promulgated entity",
+	username:    "sisko",
+	groups:      []string{"charmers", "group2"},
+	id:          "~charmers/utopic/django",
+	promulgated: true,
+}, {
+	about:       "promulgated entity in development",
+	username:    "sisko",
+	groups:      []string{"group1", "charmers"},
+	id:          "~charmers/development/utopic/django",
+	promulgated: true,
+}, {
+	about:        "unauthorized: promulgated entity",
 	username:     "sisko",
 	groups:       []string{"group1", "group2"},
 	id:           "~charmers/utopic/django",
+	promulgated:  true,
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "sisko"`,
 	},
 }, {
-	about:        "anonymous user",
+	about:        "unauthorized: promulgated entity in development",
+	username:     "sisko",
+	groups:       []string{"group1", "group2"},
+	id:           "~charmers/development/utopic/django",
+	promulgated:  true,
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "sisko"`,
+	},
+}, {
+	about:        "unauthorized: anonymous user",
 	id:           "~who/utopic/django",
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -535,15 +610,33 @@ var uploadEntityAuthorizationTests = []struct {
 		Message: "unauthorized: no username declared",
 	},
 }, {
-	about:        "anonymous user and promulgated entity",
-	id:           "~charmers/utopic/django",
+	about:        "unauthorized: anonymous user, development entity",
+	id:           "~who/development/utopic/django",
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: "unauthorized: no username declared",
 	},
 }, {
-	about:        "user does not match",
+	about:        "unauthorized: anonymous user and promulgated entity",
+	id:           "~charmers/utopic/django",
+	promulgated:  true,
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: "unauthorized: no username declared",
+	},
+}, {
+	about:        "unauthorized: anonymous user and promulgated entity in development",
+	id:           "~charmers/development/utopic/django",
+	promulgated:  true,
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: "unauthorized: no username declared",
+	},
+}, {
+	about:        "unauthorized: user does not match",
 	username:     "kirk",
 	id:           "~picard/utopic/django",
 	expectStatus: http.StatusUnauthorized,
@@ -552,7 +645,16 @@ var uploadEntityAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
 }, {
-	about:        "group does not match",
+	about:        "unauthorized: user does not match for a development entity",
+	username:     "kirk",
+	id:           "~picard/development/utopic/django",
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:        "unauthorized: group does not match",
 	username:     "kirk",
 	groups:       []string{"group1", "group2", "group3"},
 	id:           "~group0/utopic/django",
@@ -562,14 +664,56 @@ var uploadEntityAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
 }, {
-	about:        "specific group and promulgated entity",
+	about:        "unauthorized: group does not match for a development entity",
+	username:     "kirk",
+	groups:       []string{"group1", "group2", "group3"},
+	id:           "~group0/development/utopic/django",
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:        "unauthorized: specific group and promulgated entity",
 	username:     "janeway",
 	groups:       []string{"group1"},
 	id:           "~charmers/utopic/django",
+	promulgated:  true,
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "janeway"`,
+	},
+}, {
+	about:        "unauthorized: specific group and promulgated entity in development",
+	username:     "janeway",
+	groups:       []string{"group1"},
+	id:           "~charmers/development/utopic/django",
+	promulgated:  true,
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "janeway"`,
+	},
+}, {
+	about:                "unauthorized: published entity no development permissions",
+	username:             "picard",
+	id:                   "~picard/wily/django",
+	developmentWriteAcls: []string{"group2"},
+	expectStatus:         http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "picard"`,
+	},
+}, {
+	about:        "unauthorized: published entity no published permissions",
+	username:     "picard",
+	id:           "~picard/wily/django",
+	writeAcls:    []string{"kirk"},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "picard"`,
 	},
 }}
 
@@ -588,10 +732,26 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 			expectStatus = http.StatusOK
 		}
 
-		// Try to upload the entity.
-		body, hash, size := s.archiveInfo(c)
-		defer body.Close()
+		// Add a pre-existing entity if required.
+		if test.promulgated || len(test.developmentWriteAcls) != 0 || len(test.writeAcls) != 0 {
+			id := charm.MustParseURL(test.id).WithRevision(0)
+			revision := -1
+			if test.promulgated {
+				revision = 1
+			}
+			rurl := newResolvedURL(id.String(), revision)
+			s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
+			if len(test.developmentWriteAcls) != 0 {
+				s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "write", test.developmentWriteAcls...)
+			}
+			if len(test.writeAcls) != 0 {
+				s.store.SetPerms(&rurl.URL, "write", test.writeAcls...)
+			}
+		}
 
+		// Try to upload the entity.
+		body, hash, size := archiveInfo(c, "wordpress")
+		defer body.Close()
 		client := httpbakery.NewHTTPClient()
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler:       s.srv,
@@ -612,6 +772,8 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 		// Remove all entities from the store.
 		_, err := s.store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
+		_, err = s.store.DB.BaseEntities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
 	}
 }
 
@@ -622,8 +784,8 @@ type readSeekCloser interface {
 
 // archiveInfo prepares a zip archive of an entity and return a reader for the
 // archive, its blob hash and size.
-func (s *authSuite) archiveInfo(c *gc.C) (r readSeekCloser, hashSum string, size int64) {
-	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
+func archiveInfo(c *gc.C, name string) (r readSeekCloser, hashSum string, size int64) {
+	ch := storetesting.Charms.CharmArchive(c.MkDir(), name)
 	f, err := os.Open(ch.Path)
 	c.Assert(err, gc.IsNil)
 	hash, size := hashOf(f)
@@ -649,16 +811,16 @@ var isEntityCaveatTests = []struct {
 	url: "utopic/wordpress-10/meta/hash",
 }, {
 	url:         "~charmers/utopic/wordpress-41/archive",
-	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:~charmers/utopic/wordpress-41, want cs:~charmers/utopic/wordpress-42`,
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:~charmers/utopic/wordpress-41 not allowed`,
 }, {
 	url:         "~charmers/utopic/wordpress-41/meta/hash",
-	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:~charmers/utopic/wordpress-41, want cs:~charmers/utopic/wordpress-42`,
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:~charmers/utopic/wordpress-41 not allowed`,
 }, {
 	url:         "utopic/wordpress-9/archive",
-	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:utopic/wordpress-9, want cs:~charmers/utopic/wordpress-42`,
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:utopic/wordpress-9 not allowed`,
 }, {
 	url:         "utopic/wordpress-9/meta/hash",
-	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:utopic/wordpress-9, want cs:~charmers/utopic/wordpress-42`,
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:utopic/wordpress-9 not allowed`,
 }, {
 	url:         "log",
 	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation does not involve expected entity cs:~charmers/utopic/wordpress-42`,
@@ -683,7 +845,7 @@ func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
 	// Change the ACLs for the testing charm.
-	err = s.store.SetPerms(charm.MustParseReference("cs:~charmers/wordpress"), "read", "bob")
+	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	for i, test := range isEntityCaveatTests {
@@ -722,6 +884,10 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 	err = s.store.AddCharmWithArchive(id3, storetesting.Charms.CharmDir("terms"))
 	c.Assert(err, jc.ErrorIsNil)
 
+	id4 := newResolvedURL("~charmers/utopic/mysql-17", 17)
+	err = s.store.AddCharmWithArchive(id4, storetesting.Charms.CharmDir("mysql"))
+	c.Assert(err, jc.ErrorIsNil)
+
 	err = s.store.SetPerms(&id1.URL, "read", "bob")
 	c.Assert(err, jc.ErrorIsNil)
 
@@ -731,10 +897,14 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 	err = s.store.SetPerms(&id3.URL, "read", "bob")
 	c.Assert(err, jc.ErrorIsNil)
 
+	err = s.store.SetPerms(&id4.URL, "read", "bob")
+	c.Assert(err, jc.ErrorIsNil)
+
 	target, err := url.Parse(storeURL("delegatable-macaroon"))
 	c.Assert(err, jc.ErrorIsNil)
 	query := target.Query()
-	query.Set("id", id2.URL.String())
+	query.Add("id", id2.URL.String())
+	query.Add("id", id4.URL.String())
 	target.RawQuery = query.Encode()
 
 	// First check that we get a macaraq error when using a vanilla http do
@@ -788,6 +958,8 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 			c.Assert(err, gc.IsNil)
 			c.Assert(t, jc.TimeBetween(now.Add(v4.DelegatableMacaroonExpiry), now.Add(v4.DelegatableMacaroonExpiry+time.Second)))
 			foundExpiry = true
+		case "is-entity":
+			c.Assert(arg, gc.Equals, "cs:~charmers/utopic/wordpress-11 cs:~charmers/utopic/mysql-17")
 		}
 	}
 	c.Assert(foundExpiry, jc.IsTrue)
@@ -854,6 +1026,14 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 		Do:          bakeryDo(client),
 		ExpectError: ".*third party refused discharge: cannot discharge: no discharge",
 	})
+
+	// Test access to archive of another charm to which access is granted by
+	// the delegatable macaroon.
+	httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("~charmers/utopic/mysql-17/archive"),
+		Do:      bakeryDo(client),
+	})
 }
 
 func (s *authSuite) TestDelegatableMacaroonWithBasicAuth(c *gc.C) {
@@ -885,8 +1065,11 @@ func (s *authSuite) TestDelegatableMacaroonWithBasicAuth(c *gc.C) {
 func (s *authSuite) TestDelegatableMacaroonWithTerms(c *gc.C) {
 	// Create a new server with a third party discharger.
 	s.discharge = dischargeForUser("bob")
+
+	var terms string
 	// User has agreed to terms.
 	s.dischargeTerms = func(s1, s2 string) ([]checkers.Caveat, error) {
+		terms = s2
 		return nil, nil
 	}
 
@@ -898,10 +1081,17 @@ func (s *authSuite) TestDelegatableMacaroonWithTerms(c *gc.C) {
 	err = s.store.AddCharmWithArchive(id2, storetesting.Charms.CharmDir("terms"))
 	c.Assert(err, jc.ErrorIsNil)
 
+	id3 := newResolvedURL("~charmers/precise/otherterms-17", 17)
+	err = s.store.AddCharmWithArchive(id3, storetesting.Charms.CharmDir("terms"))
+	c.Assert(err, jc.ErrorIsNil)
+
 	err = s.store.SetPerms(&id1.URL, "read", "bob")
 	c.Assert(err, jc.ErrorIsNil)
 
 	err = s.store.SetPerms(&id2.URL, "read", "bob")
+	c.Assert(err, jc.ErrorIsNil)
+
+	err = s.store.SetPerms(&id3.URL, "read", "bob")
 	c.Assert(err, jc.ErrorIsNil)
 
 	client := httpbakery.NewHTTPClient()
@@ -909,7 +1099,8 @@ func (s *authSuite) TestDelegatableMacaroonWithTerms(c *gc.C) {
 	target, err := url.Parse(storeURL("delegatable-macaroon"))
 	c.Assert(err, jc.ErrorIsNil)
 	query := target.Query()
-	query.Set("id", id2.URL.String())
+	query.Add("id", id2.URL.String())
+	query.Add("id", id3.URL.String())
 	target.RawQuery = query.Encode()
 
 	now := time.Now()
@@ -940,9 +1131,21 @@ func (s *authSuite) TestDelegatableMacaroonWithTerms(c *gc.C) {
 			c.Assert(err, gc.IsNil)
 			c.Assert(t, jc.TimeBetween(now.Add(v4.DelegatableMacaroonExpiry), now.Add(v4.DelegatableMacaroonExpiry+time.Second)))
 			foundExpiry = true
+		case "is-entity":
+			c.Assert(arg, gc.Equals, "cs:~charmers/precise/terms-11 cs:~charmers/precise/otherterms-17")
 		}
 	}
 	c.Assert(foundExpiry, jc.IsTrue)
+
+	termMap := map[string]struct{}{}
+	tokens := strings.Split(terms, " ")
+	for _, token := range tokens {
+		termMap[token] = struct{}{}
+	}
+	_, ok := termMap["terms-1/1"]
+	c.Assert(ok, gc.Equals, true)
+	_, ok = termMap["terms-2/5"]
+	c.Assert(ok, gc.Equals, true)
 
 	// Now check that we can use the obtained macaroon to do stuff
 	// as the declared user.
@@ -997,6 +1200,15 @@ func (s *authSuite) TestDelegatableMacaroonWithTerms(c *gc.C) {
 		Do:          bakeryDo(client),
 		ExpectError: ".*third party refused discharge: cannot discharge: no discharge",
 	})
+
+	// Test access to archive of the other charm which we can access using the
+	// delegatable macaroon
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("~charmers/precise/otherterms-17/archive"),
+		Do:      bakeryDo(client),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 }
 
 func (s *authSuite) TestDelegatableMacaroonWithoutEntityForAccessToCharmWithTerms(c *gc.C) {

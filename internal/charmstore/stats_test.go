@@ -13,7 +13,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
@@ -443,7 +443,7 @@ type testStatsEntity struct {
 var archiveDownloadCountsTests = []struct {
 	about              string
 	charms             []testStatsEntity
-	id                 *charm.Reference
+	id                 *charm.URL
 	expectThisRevision charmstore.AggregatedCounts
 	expectAllRevisions charmstore.AggregatedCounts
 }{{
@@ -456,7 +456,7 @@ var archiveDownloadCountsTests = []struct {
 		total:       4,
 		legacyTotal: 0,
 	}},
-	id: charm.MustParseReference("~charmers/trusty/wordpress-0"),
+	id: charm.MustParseURL("~charmers/trusty/wordpress-0"),
 	expectThisRevision: charmstore.AggregatedCounts{
 		LastDay:   1,
 		LastWeek:  3,
@@ -479,7 +479,7 @@ var archiveDownloadCountsTests = []struct {
 		total:       4,
 		legacyTotal: 10,
 	}},
-	id: charm.MustParseReference("~charmers/trusty/wordpress-0"),
+	id: charm.MustParseURL("~charmers/trusty/wordpress-0"),
 	expectThisRevision: charmstore.AggregatedCounts{
 		LastDay:   1,
 		LastWeek:  3,
@@ -509,7 +509,7 @@ var archiveDownloadCountsTests = []struct {
 		total:       5,
 		legacyTotal: 0,
 	}},
-	id: charm.MustParseReference("~charmers/trusty/wordpress-1"),
+	id: charm.MustParseURL("~charmers/trusty/wordpress-1"),
 	expectThisRevision: charmstore.AggregatedCounts{
 		LastDay:   2,
 		LastWeek:  5,
@@ -539,7 +539,7 @@ var archiveDownloadCountsTests = []struct {
 		total:       5,
 		legacyTotal: 100,
 	}},
-	id: charm.MustParseReference("~charmers/trusty/wordpress-1"),
+	id: charm.MustParseURL("~charmers/trusty/wordpress-1"),
 	expectThisRevision: charmstore.AggregatedCounts{
 		LastDay:   2,
 		LastWeek:  5,
@@ -562,7 +562,7 @@ var archiveDownloadCountsTests = []struct {
 		total:       4,
 		legacyTotal: 0,
 	}},
-	id: charm.MustParseReference("trusty/wordpress-0"),
+	id: charm.MustParseURL("trusty/wordpress-0"),
 	expectThisRevision: charmstore.AggregatedCounts{
 		LastDay:   1,
 		LastWeek:  3,
@@ -585,7 +585,7 @@ var archiveDownloadCountsTests = []struct {
 		total:       4,
 		legacyTotal: 10,
 	}},
-	id: charm.MustParseReference("trusty/wordpress-0"),
+	id: charm.MustParseURL("trusty/wordpress-0"),
 	expectThisRevision: charmstore.AggregatedCounts{
 		LastDay:   1,
 		LastWeek:  3,
@@ -629,7 +629,7 @@ var archiveDownloadCountsTests = []struct {
 		total:       4000,
 		legacyTotal: 0,
 	}},
-	id: charm.MustParseReference("trusty/wordpress-1"),
+	id: charm.MustParseURL("trusty/wordpress-1"),
 	expectThisRevision: charmstore.AggregatedCounts{
 		LastDay:   4,
 		LastWeek:  44,
@@ -685,7 +685,7 @@ func (s *StatsSuite) TestArchiveDownloadCounts(c *gc.C) {
 	}
 }
 
-func setDownloadCounts(c *gc.C, s *charmstore.Store, id *charm.Reference, t time.Time, n int) {
+func setDownloadCounts(c *gc.C, s *charmstore.Store, id *charm.URL, t time.Time, n int) {
 	kind := params.StatsArchiveDownload
 	if id.User == "" {
 		kind = params.StatsArchiveDownloadPromulgated
@@ -710,11 +710,11 @@ func (s *StatsSuite) TestIncrementDownloadCounts(c *gc.C) {
 		LastMonth: 1,
 		Total:     1,
 	}
-	thisRevision, allRevisions, err := s.store.ArchiveDownloadCounts(charm.MustParseReference("~charmers/trusty/wordpress-1"), false)
+	thisRevision, allRevisions, err := s.store.ArchiveDownloadCounts(charm.MustParseURL("~charmers/trusty/wordpress-1"), false)
 	c.Assert(err, gc.IsNil)
 	c.Assert(thisRevision, jc.DeepEquals, expect)
 	c.Assert(allRevisions, jc.DeepEquals, expect)
-	thisRevision, allRevisions, err = s.store.ArchiveDownloadCounts(charm.MustParseReference("trusty/wordpress-0"), false)
+	thisRevision, allRevisions, err = s.store.ArchiveDownloadCounts(charm.MustParseURL("trusty/wordpress-0"), false)
 	c.Assert(err, gc.IsNil)
 	c.Assert(thisRevision, jc.DeepEquals, expect)
 	c.Assert(allRevisions, jc.DeepEquals, expect)
@@ -739,16 +739,16 @@ func (s *StatsSuite) TestIncrementDownloadCountsWithNoCache(c *gc.C) {
 		LastMonth: 2,
 		Total:     2,
 	}
-	thisRevision, allRevisions, err := s.store.ArchiveDownloadCounts(charm.MustParseReference("~charmers/trusty/wordpress-1"), false)
+	thisRevision, allRevisions, err := s.store.ArchiveDownloadCounts(charm.MustParseURL("~charmers/trusty/wordpress-1"), false)
 	c.Assert(err, gc.IsNil)
 	c.Assert(thisRevision, jc.DeepEquals, expect)
 	c.Assert(allRevisions, jc.DeepEquals, expect)
 	err = s.store.IncrementDownloadCounts(id)
-	thisRevision, allRevisions, err = s.store.ArchiveDownloadCounts(charm.MustParseReference("~charmers/trusty/wordpress-1"), false)
+	thisRevision, allRevisions, err = s.store.ArchiveDownloadCounts(charm.MustParseURL("~charmers/trusty/wordpress-1"), false)
 	c.Assert(err, gc.IsNil)
 	c.Assert(thisRevision, jc.DeepEquals, expect)
 	c.Assert(allRevisions, jc.DeepEquals, expect)
-	thisRevision, allRevisions, err = s.store.ArchiveDownloadCounts(charm.MustParseReference("~charmers/trusty/wordpress-1"), true)
+	thisRevision, allRevisions, err = s.store.ArchiveDownloadCounts(charm.MustParseURL("~charmers/trusty/wordpress-1"), true)
 	c.Assert(err, gc.IsNil)
 	c.Assert(thisRevision, jc.DeepEquals, expectAfter)
 	c.Assert(allRevisions, jc.DeepEquals, expectAfter)

@@ -63,11 +63,11 @@ func (s *DocSuite) TestIntBoolSetBSONInvalidValue(c *gc.C) {
 
 func (s *DocSuite) TestPreferredURL(c *gc.C) {
 	e1 := &mongodoc.Entity{
-		URL: charm.MustParseReference("~ken/trusty/b-1"),
+		URL: charm.MustParseURL("~ken/trusty/b-1"),
 	}
 	e2 := &mongodoc.Entity{
-		URL:            charm.MustParseReference("~dmr/trusty/c-1"),
-		PromulgatedURL: charm.MustParseReference("trusty/c-1"),
+		URL:            charm.MustParseURL("~dmr/trusty/c-1"),
+		PromulgatedURL: charm.MustParseURL("trusty/c-1"),
 	}
 
 	c.Assert(e1.PreferredURL(false), gc.Equals, e1.URL)

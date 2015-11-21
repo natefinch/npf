@@ -1,6 +1,6 @@
 # Charm store API
 
-The current live api lives at https://api.jujucharms.com/charmstore/v4
+The current live API lives at https://api.jujucharms.com/charmstore/v4
 
 ## Intro
 
@@ -30,7 +30,7 @@ prefers the latest LTS series).
 All endpoints that do not produce binary data produce a single JSON object as
 their result. These will be described in terms of the Go types that produce and
 consume the format, along with an example. A charm id is represented as a
-`charm.Reference type`.
+`charm.URL type`.
 
 
 ### Errors
@@ -263,6 +263,57 @@ Request body:
 }
 ```
 
+### Charm and bundle publishing
+
+#### PUT *id*/publish
+
+A PUT to ~*user*/*anyseries*/*name*-*anyrevision* sets whether the
+corresponding charm or bundle is published and can be accessed through a URL
+with no channel. If the revision number is not specified, the id is resolved to
+the charm or bundle with the latest development revision number when
+publishing, and to the charm or bundle with the latest non-development revision
+number when unpublishing. The id must not include the development channel.
+
+```go
+type PublishRequest struct {
+    Published bool
+}
+```
+
+If Published is true, the charm or bundle is made available at the
+non-development URL with the same revision number. If Published is false, the
+id is unpublished.
+
+The response includes the id and promulgated id of the entity after the action
+is performed:
+
+```go
+type PublishResponse struct {
+    Id            *charm.URL
+    PromulgatedId *charm.URL `json:",omitempty"`
+}
+```
+
+If the charm or bundle have been unpublished, the identifiers in the response
+will represent the corresponding development charm or bundle.
+
+Example: `PUT ~charmers/trusty/django-42/publish`
+
+Request body:
+```json
+{
+    "Published" : true,
+}
+```
+
+Response body:
+```json
+{
+    "Id" : "cs:~charmers/trusty/django-42",
+    "PromulgatedId": "cs:trusty/django-10",
+}
+```
+
 ### Stats
 
 #### GET stats/counter/...
@@ -363,7 +414,7 @@ We need to provide aggregated stats for downloads:
 This endpoint can be used to increase the stats related to an entity.
 This will increase the download stats by one for the entity provided and at the time stamp provided.
 It can for future purpose include the client issuing the requests.
-This is used when charmstore is in front of a cache server that will not call the real /archive endpoint and 
+This is used when charmstore is in front of a cache server that will not call the real /archive endpoint and
 as such will not increase the download counts.
 
 <pre>
@@ -375,7 +426,7 @@ Request body:
 type StatsUpdateRequest struct {
 	Timestamp      time.Time
 	Type           string
-	CharmReference *charm.Reference
+	CharmReference *charm.URL
 }
 ```
 Example: `PUT stats/update`
@@ -1398,8 +1449,8 @@ ordered list from newest to oldest revision. Note that the current revision
 will be included in the list as it is also an available revision.
 
 ```go
-type RevisionInfo struct {
-        Revisions []*charm.Reference
+type RevisionInfoResponse struct {
+        Revisions []*charm.URL
 }
 ```
 
@@ -1423,8 +1474,8 @@ its various components, including the id itself. The information is exactly
 that contained within the entity id.
 
 ```go
-type Id struct {
-        Id *charm.Reference
+type IdResponse struct {
+        Id *charm.URL
         User string
         Series string `json:",omitempty"`
         Name string
@@ -1550,6 +1601,72 @@ Example: `GET ~bob/trusty/wordpress-42/meta/id-series`
     "Series": "trusty"
 }
 ```
+
+#### GET *id*/meta/common-info
+
+The meta/common-info path reports any common metadata recorded for the base
+entity. This contains only information stored by clients - the API server
+itself does not populate any fields. The resulting object holds an entry for
+each piece of metadata recorded with a PUT to `meta/common-info`.
+
+```go
+type CommonInfo struct {
+        Values map[string] interface{}
+}
+```
+
+Example: `GET wordpress/meta/common-info`
+         `GET precise/wordpress-32/meta/common-info`
+
+```json
+{
+    "homepage": "http://wordpress.org",
+    "bugs-url": "http://wordpress.org/bugs",
+}
+```
+
+#### GET *id*/meta/common-info/*key*
+
+This path returns the contents of the given `common-info` key. The result is
+exactly the JSON value stored as a result of the PUT request to `common-info` or
+`common-info/key`.
+
+Example: `GET wordpress/meta/common-info/homepage`
+         `GET precise/wordpress-32/meta/common-info/homepage`
+
+```json
+"http://wordpress.org"
+```
+
+#### PUT *id*/meta/common-info
+
+This request updates the value of any metadata values. Any values that are not
+mentioned in the request are left untouched. Any fields with null values are
+deleted.
+
+Example: `PUT precise/wordpress-32/meta/common-info`
+
+Request body:
+```json
+{
+    "bugs-url": "http://wordpress.org/newbugs",
+}
+```
+
+#### PUT *id*/meta/common-info/*key*
+
+This request creates or updates the value for a specific key.
+If the value is null, the key is deleted.
+
+Example: `PUT precise/wordpress-32/meta/common-info/bugs-url`
+
+Request body:
+
+```json
+"http://wordpress.org/newbugs",
+```
+
+The above example is equivalent to the `meta/common-info` example above.
 
 ### Resources
 
@@ -1902,7 +2019,7 @@ type LogResponse struct {
         Type LogType
 
         // URLs holds a slice of entity URLs associated with the log message.
-        URLs []`*`charm.Reference `json:",omitempty"`
+        URLs []`*`charm.URL `json:",omitempty"`
 
         // Time holds the time of the log.
         Time time.Time
@@ -1936,7 +2053,7 @@ type Log struct {
         Type LogType
 
         // URLs holds a slice of entity URLs associated with the log message.
-        URLs []*charm.Reference `json:",omitempty"`
+        URLs []*charm.URL `json:",omitempty"`
 }
 ```
 

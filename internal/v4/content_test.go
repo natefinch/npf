@@ -18,7 +18,7 @@ import (
 	"github.com/juju/xml"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
@@ -45,13 +45,6 @@ var serveDiagramErrorsTests = []struct {
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
 		Message: "diagrams not supported for charms",
-	},
-}, {
-	about:        "bundle with no position info",
-	url:          "~charmers/nopositionbundle/diagram.svg",
-	expectStatus: http.StatusInternalServerError,
-	expectBody: params.Error{
-		Message: `cannot create canvas: service "mysql" does not have a valid position`,
 	},
 }}
 
@@ -143,6 +136,45 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 		"wordpress icon": isStartElementWithAttr("image", "href", "../wordpress/icon.svg"),
 		"mysql icon":     isStartElementWithAttr("image", "href", "../utopic/mysql-23/icon.svg"),
 	})
+}
+
+func (s *APISuite) TestServeDiagramNoPosition(c *gc.C) {
+	patchArchiveCacheAges(s)
+	bundle := &testingBundle{
+		data: &charm.BundleData{
+			Services: map[string]*charm.ServiceSpec{
+				"wordpress": {
+					Charm: "wordpress",
+				},
+				"mysql": {
+					Charm: "utopic/mysql-23",
+					Annotations: map[string]string{
+						"gui-x": "200",
+						"gui-y": "200",
+					},
+				},
+			},
+		},
+	}
+
+	url := newResolvedURL("cs:~charmers/bundle/wordpressbundle-42", 42)
+	err := s.store.AddBundle(bundle, charmstore.AddParams{
+		URL:      url,
+		BlobName: "blobName",
+		BlobHash: fakeBlobHash,
+		BlobSize: fakeBlobSize,
+	})
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+	c.Assert(err, gc.IsNil)
+
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("bundle/wordpressbundle/diagram.svg"),
+	})
+	// Check that the request succeeds and has the expected content type.
+	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %q", rec.Body.Bytes()))
+	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
 }
 
 var serveReadMeTests = []struct {

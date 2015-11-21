@@ -18,7 +18,7 @@ import (
 	"github.com/juju/loggo"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charmrepo.v1/csclient/params"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
@@ -144,9 +144,10 @@ func newReqHandler() *ReqHandler {
 			"diagram.svg": h.resolveId(h.authId(h.serveDiagram)),
 			"expand-id":   h.resolveId(h.authId(h.serveExpandId)),
 			"icon.svg":    h.resolveId(h.authId(h.serveIcon)),
+			"promulgate":  h.resolveId(h.serveAdminPromulgate),
+			"publish":     h.servePublish,
 			"readme":      h.resolveId(h.authId(h.serveReadMe)),
 			"resources":   h.resolveId(h.authId(h.serveResources)),
-			"promulgate":  h.resolveId(h.serveAdminPromulgate),
 		},
 		Meta: map[string]router.BulkIncludeHandler{
 			"archive-size":         h.entityHandler(h.metaArchiveSize, "size"),
@@ -169,6 +170,16 @@ func newReqHandler() *ReqHandler {
 				h.putMetaExtraInfoWithKey,
 				"extrainfo",
 			),
+			"common-info": h.puttableBaseEntityHandler(
+				h.metaCommonInfo,
+				h.putMetaCommonInfo,
+				"commoninfo",
+			),
+			"common-info/": h.puttableBaseEntityHandler(
+				h.metaCommonInfoWithKey,
+				h.putMetaCommonInfoWithKey,
+				"commoninfo",
+			),
 			"hash":             h.entityHandler(h.metaHash, "blobhash"),
 			"hash256":          h.entityHandler(h.metaHash256, "blobhash256"),
 			"id":               h.entityHandler(h.metaId, "_id"),
@@ -177,8 +188,8 @@ func newReqHandler() *ReqHandler {
 			"id-revision":      h.entityHandler(h.metaIdRevision, "_id"),
 			"id-series":        h.entityHandler(h.metaIdSeries, "_id"),
 			"manifest":         h.entityHandler(h.metaManifest, "blobname"),
-			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "acls"),
-			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "acls"),
+			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "acls", "developmentacls"),
+			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "acls", "developmentacls"),
 			"promulgated":      h.baseEntityHandler(h.metaPromulgated, "promulgated"),
 			"revision-info":    router.SingleIncludeHandler(h.metaRevisionInfo),
 			"stats":            h.entityHandler(h.metaStats),
@@ -227,7 +238,7 @@ func (h *ReqHandler) Close() {
 
 // ResolveURL resolves the series and revision of the given URL if either is
 // unspecified by filling them out with information retrieved from the store.
-func ResolveURL(store *charmstore.Store, url *charm.Reference) (*router.ResolvedURL, error) {
+func ResolveURL(store *charmstore.Store, url *charm.URL) (*router.ResolvedURL, error) {
 	entity, err := store.FindBestEntity(url, "_id", "promulgated-revision")
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return nil, errgo.Mask(err)
@@ -235,23 +246,22 @@ func ResolveURL(store *charmstore.Store, url *charm.Reference) (*router.Resolved
 	if errgo.Cause(err) == params.ErrNotFound {
 		return nil, noMatchingURLError(url)
 	}
-	if url.User == "" {
-		return &router.ResolvedURL{
-			URL:                 *entity.URL,
-			PromulgatedRevision: entity.PromulgatedRevision,
-		}, nil
-	}
-	return &router.ResolvedURL{
+	rurl := &router.ResolvedURL{
 		URL:                 *entity.URL,
 		PromulgatedRevision: -1,
-	}, nil
+		Development:         url.Channel == charm.DevelopmentChannel,
+	}
+	if url.User == "" {
+		rurl.PromulgatedRevision = entity.PromulgatedRevision
+	}
+	return rurl, nil
 }
 
-func noMatchingURLError(url *charm.Reference) error {
+func noMatchingURLError(url *charm.URL) error {
 	return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
 }
 
-func (h *ReqHandler) resolveURL(url *charm.Reference) (*router.ResolvedURL, error) {
+func (h *ReqHandler) resolveURL(url *charm.URL) (*router.ResolvedURL, error) {
 	return ResolveURL(h.Store, url)
 }
 
@@ -411,12 +421,6 @@ func (h *ReqHandler) entityQuery(id *router.ResolvedURL, selector map[string]int
 		return nil, errgo.Mask(err)
 	}
 	return val, nil
-}
-
-var ltsReleases = map[string]bool{
-	"lucid":   true,
-	"precise": true,
-	"trusty":  true,
 }
 
 func fieldsFromSelector(selector map[string]int) []string {
@@ -778,11 +782,11 @@ func (h *ReqHandler) metaExtraInfoWithKey(entity *mongodoc.Entity, id *router.Re
 func (h *ReqHandler) putMetaExtraInfo(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
 	var fields map[string]*json.RawMessage
 	if err := json.Unmarshal(*val, &fields); err != nil {
-		return errgo.Notef(err, "cannot unmarshal extra info body")
+		return errgo.Notef(err, "cannot unmarshal extra-info body")
 	}
 	// Check all the fields are OK before adding any fields to be updated.
 	for key := range fields {
-		if err := checkExtraInfoKey(key); err != nil {
+		if err := checkExtraInfoKey(key, "extra-info"); err != nil {
 			return err
 		}
 	}
@@ -802,7 +806,7 @@ var nullBytes = []byte("null")
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetaextra-infokey
 func (h *ReqHandler) putMetaExtraInfoWithKey(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
 	key := strings.TrimPrefix(path, "/")
-	if err := checkExtraInfoKey(key); err != nil {
+	if err := checkExtraInfoKey(key, "extra-info"); err != nil {
 		return err
 	}
 	// If the user puts null, we treat that as if they want to
@@ -815,9 +819,74 @@ func (h *ReqHandler) putMetaExtraInfoWithKey(id *router.ResolvedURL, path string
 	return nil
 }
 
-func checkExtraInfoKey(key string) error {
+// GET id/meta/common-info
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacommon-info
+func (h *ReqHandler) metaCommonInfo(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	// The common-info is stored in mongo as simple byte
+	// slices, so convert the values to json.RawMessages
+	// so that the client will see the original JSON.
+	m := make(map[string]*json.RawMessage)
+	for key, val := range entity.CommonInfo {
+		jmsg := json.RawMessage(val)
+		m[key] = &jmsg
+	}
+	return m, nil
+}
+
+// GET id/meta/common-info/key
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacommon-infokey
+func (h *ReqHandler) metaCommonInfoWithKey(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	path = strings.TrimPrefix(path, "/")
+	var data json.RawMessage = entity.CommonInfo[path]
+	if len(data) == 0 {
+		return nil, nil
+	}
+	return &data, nil
+}
+
+// PUT id/meta/common-info
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetacommon-info
+func (h *ReqHandler) putMetaCommonInfo(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+	var fields map[string]*json.RawMessage
+	if err := json.Unmarshal(*val, &fields); err != nil {
+		return errgo.Notef(err, "cannot unmarshal common-info body")
+	}
+	// Check all the fields are OK before adding any fields to be updated.
+	for key := range fields {
+		if err := checkExtraInfoKey(key, "common-info"); err != nil {
+			return err
+		}
+	}
+	for key, val := range fields {
+		if val == nil {
+			updater.UpdateField("commoninfo."+key, nil, nil)
+		} else {
+			updater.UpdateField("commoninfo."+key, *val, nil)
+		}
+	}
+	return nil
+}
+
+// PUT id/meta/common-info/key
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetacommon-infokey
+func (h *ReqHandler) putMetaCommonInfoWithKey(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+	key := strings.TrimPrefix(path, "/")
+	if err := checkExtraInfoKey(key, "common-info"); err != nil {
+		return err
+	}
+	// If the user puts null, we treat that as if they want to
+	// delete the field.
+	if val == nil || bytes.Equal(*val, nullBytes) {
+		updater.UpdateField("commoninfo."+key, nil, nil)
+	} else {
+		updater.UpdateField("commoninfo."+key, *val, nil)
+	}
+	return nil
+}
+
+func checkExtraInfoKey(key string, field string) error {
 	if strings.ContainsAny(key, "./$") {
-		return errgo.WithCausef(nil, params.ErrBadRequest, "bad key for extra-info")
+		return errgo.WithCausef(nil, params.ErrBadRequest, "bad key for "+field)
 	}
 	return nil
 }
@@ -825,9 +894,13 @@ func checkExtraInfoKey(key string) error {
 // GET id/meta/perm
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaperm
 func (h *ReqHandler) metaPerm(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	acls := entity.ACLs
+	if id.Development {
+		acls = entity.DevelopmentACLs
+	}
 	return params.PermResponse{
-		Read:  entity.ACLs.Read,
-		Write: entity.ACLs.Write,
+		Read:  acls.Read,
+		Write: acls.Write,
 	}, nil
 }
 
@@ -838,30 +911,33 @@ func (h *ReqHandler) putMetaPerm(id *router.ResolvedURL, path string, val *json.
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
 	}
-	isPublic := false
-	for _, p := range perms.Read {
-		if p == params.Everyone {
-			isPublic = true
-			break
+	field := "acls"
+	if id.Development {
+		field = "developmentacls"
+	} else {
+		isPublic := false
+		for _, p := range perms.Read {
+			if p == params.Everyone {
+				isPublic = true
+				break
+			}
 		}
+		updater.UpdateField("public", isPublic, nil)
 	}
-
-	updater.UpdateField("acls.read", perms.Read, &audit.Entry{
+	updater.UpdateField(field+".read", perms.Read, &audit.Entry{
 		Op:     audit.OpSetPerm,
 		Entity: &id.URL,
 		ACL: &audit.ACL{
 			Read: perms.Read,
 		},
 	})
-	updater.UpdateField("public", isPublic, nil)
-	updater.UpdateField("acls.write", perms.Write, &audit.Entry{
+	updater.UpdateField(field+".write", perms.Write, &audit.Entry{
 		Op:     audit.OpSetPerm,
 		Entity: &id.URL,
 		ACL: &audit.ACL{
 			Write: perms.Write,
 		},
 	})
-
 	updater.UpdateSearch()
 	return nil
 }
@@ -877,11 +953,15 @@ func (h *ReqHandler) metaPromulgated(entity *mongodoc.BaseEntity, id *router.Res
 // GET id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapermkey
 func (h *ReqHandler) metaPermWithKey(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	acls := entity.ACLs
+	if id.Development {
+		acls = entity.DevelopmentACLs
+	}
 	switch path {
 	case "/read":
-		return entity.ACLs.Read, nil
+		return acls.Read, nil
 	case "/write":
-		return entity.ACLs.Write, nil
+		return acls.Write, nil
 	}
 	return nil, errgo.WithCausef(nil, params.ErrNotFound, "unknown permission")
 }
@@ -893,27 +973,33 @@ func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
 	}
-	isPublic := false
-	for _, p := range perms {
-		if p == params.Everyone {
-			isPublic = true
-			break
-		}
+	field := "acls"
+	if id.Development {
+		field = "developmentacls"
 	}
 	switch path {
 	case "/read":
-		updater.UpdateField("acls.read", perms, &audit.Entry{
+		updater.UpdateField(field+".read", perms, &audit.Entry{
 			Op:     audit.OpSetPerm,
 			Entity: &id.URL,
 			ACL: &audit.ACL{
 				Read: perms,
 			},
 		})
-		updater.UpdateField("public", isPublic, nil)
+		if !id.Development {
+			isPublic := false
+			for _, p := range perms {
+				if p == params.Everyone {
+					isPublic = true
+					break
+				}
+			}
+			updater.UpdateField("public", isPublic, nil)
+		}
 		updater.UpdateSearch()
 		return nil
 	case "/write":
-		updater.UpdateField("acls.write", perms, &audit.Entry{
+		updater.UpdateField(field+".write", perms, &audit.Entry{
 			Op:     audit.OpSetPerm,
 			Entity: &id.URL,
 			ACL: &audit.ACL{
@@ -934,7 +1020,7 @@ func (h *ReqHandler) metaArchiveUploadTime(entity *mongodoc.Entity, id *router.R
 }
 
 type PublishedResponse struct {
-	Id        *charm.Reference
+	Id        *charm.URL
 	Published time.Time
 }
 
@@ -1012,8 +1098,8 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
-	id := values.Get("id")
-	if id == "" {
+	entityIds := values["id"]
+	if len(entityIds) == 0 {
 		auth, err := h.authorize(req, []string{params.Everyone}, true, nil)
 		if err != nil {
 			return nil, errgo.Mask(err, errgo.Any)
@@ -1032,20 +1118,24 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 		}
 		return m, nil
 	}
-	charmRef, err := charm.ParseReference(id)
-	if err != nil {
-		return nil, errgo.WithCausef(err, params.ErrBadRequest, `bad "id" parameter`)
-	}
-	resolvedURL, err := ResolveURL(h.Store, charmRef)
-	if err != nil {
-		return nil, errgo.Mask(err)
+	var resolvedURLs []*router.ResolvedURL
+	for _, id := range entityIds {
+		charmRef, err := charm.ParseURL(id)
+		if err != nil {
+			return nil, errgo.WithCausef(err, params.ErrBadRequest, `bad "id" parameter`)
+		}
+		resolvedURL, err := ResolveURL(h.Store, charmRef)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+		resolvedURLs = append(resolvedURLs, resolvedURL)
 	}
 
 	// Note that we require authorization even though we allow
 	// anyone to obtain a delegatable macaroon. This means
 	// that we will be able to add the declared caveats to
 	// the returned macaroon.
-	auth, err := h.authorizeEntityAndTerms(req, resolvedURL)
+	auth, err := h.authorizeEntityAndTerms(req, resolvedURLs)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Any)
 	}
@@ -1053,12 +1143,17 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 		return nil, errgo.WithCausef(nil, params.ErrForbidden, "delegatable macaroon is not obtainable using admin credentials")
 	}
 
+	resolvedURLstrings := make([]string, len(resolvedURLs))
+	for i, resolvedURL := range resolvedURLs {
+		resolvedURLstrings[i] = resolvedURL.URL.String()
+	}
+
 	// TODO propagate expiry time from macaroons in request.
 	m, err := h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
 		checkers.DeclaredCaveat(usernameAttr, auth.Username),
 		checkers.TimeBeforeCaveat(time.Now().Add(delegatableMacaroonExpiry)),
 		checkers.AllowCaveat(opReadArchive, opOther),
-		checkers.Caveat{Condition: "is-entity " + resolvedURL.String()},
+		checkers.Caveat{Condition: "is-entity " + strings.Join(resolvedURLstrings, " ")},
 	})
 	if err != nil {
 		return nil, errgo.Mask(err)
@@ -1107,6 +1202,19 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 		return errgo.Mask(err, errgo.Any)
 	}
 
+	if promulgate.Promulgated {
+		// Set write permissions for the non-development entity to promulgators
+		// only, so that the user cannot just publish newer promulgated
+		// versions of the charm or bundle. Promulgators are responsible of
+		// reviewing and publishing subsequent revisions of this entity.
+		if err := h.updateBaseEntity(id, map[string]interface{}{
+			"acls.write": []string{promulgatorsGroup},
+		}, nil); err != nil {
+			return errgo.Notef(err, "cannot set permissions for %q", id)
+		}
+	}
+
+	// Build an audit entry for this promulgation.
 	e := audit.Entry{
 		Entity: &id.URL,
 	}
@@ -1118,6 +1226,58 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 	h.addAudit(e)
 
 	return nil
+}
+
+// PUT id/publish
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idpublish
+func (h *ReqHandler) servePublish(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
+	// Perform basic validation of the request.
+	if req.Method != "PUT" {
+		return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)
+	}
+	if id.Channel != "" {
+		return errgo.WithCausef(nil, params.ErrForbidden, "can only set publish on published URL, %q provided", id)
+	}
+
+	// Retrieve the requested action from the request body.
+	var publish struct {
+		params.PublishRequest `httprequest:",body"`
+	}
+	if err := httprequest.Unmarshal(httprequest.Params{Request: req}, &publish); err != nil {
+		return errgo.WithCausef(err, params.ErrBadRequest, "cannot unmarshal publish request body")
+	}
+
+	// Retrieve the resolved URL for the entity to update. It will be referring
+	// to the entity under development is the action is to publish a charm or
+	// bundle, or the published one otherwise.
+	url := *id
+	if publish.Published {
+		url = *id.WithChannel(charm.DevelopmentChannel)
+	}
+	rurl, err := h.resolveURL(&url)
+	if err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+
+	// Authorize the operation: users must have write permissions on the
+	// published charm or bundle.
+	prurl := *rurl
+	prurl.Development = false
+	if err := h.AuthorizeEntity(&prurl, req); err != nil {
+		return errgo.Mask(err, errgo.Any)
+	}
+
+	// Update the entity.
+	if err := h.Store.SetDevelopment(rurl, !publish.Published); err != nil {
+		return errgo.NoteMask(err, "cannot publish or unpublish charm or bundle", errgo.Is(params.ErrNotFound))
+	}
+
+	// Return information on the updated charm or bundle.
+	rurl.Development = !publish.Published
+	return httprequest.WriteJSON(w, http.StatusOK, &params.PublishResponse{
+		Id:            rurl.UserOwnedURL(),
+		PromulgatedId: rurl.PromulgatedURL(),
+	})
 }
 
 // serveSetAuthCookie sets the provided macaroon slice as a cookie on the
@@ -1164,7 +1324,7 @@ func (h *ReqHandler) authId(f resolvedIdHandler) resolvedIdHandler {
 // resolveId returns an id handler that resolves any non-fully-specified
 // entity ids using h.resolveURL before calling f with the resolved id.
 func (h *ReqHandler) resolveId(f resolvedIdHandler) router.IdHandler {
-	return func(id *charm.Reference, w http.ResponseWriter, req *http.Request) error {
+	return func(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
 		rid, err := h.resolveURL(id)
 		if err != nil {
 			return errgo.Mask(err, errgo.Is(params.ErrNotFound))
