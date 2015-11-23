@@ -2,7 +2,7 @@
 date = 2015-06-02T17:00:00Z
 title = "Pie"
 menu = "code"
-repo = "pie"
+vanity = "https://github.com/natefinch/pie"
 
 [[badges]]
 	alt = "godoc"

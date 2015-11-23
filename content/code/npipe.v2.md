@@ -1,8 +1,9 @@
+
 +++
 date = 2014-08-01T10:15:15Z
 title = "npipe"
 menu = "code"
-repo = "npipe.v2"
+vanity = "https://gopkg.in/natefinch/npipe.v2"
 norss = true
 
 [[badges]]
