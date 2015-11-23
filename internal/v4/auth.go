@@ -115,10 +115,16 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 		if err != nil {
 			return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
+		if entity == nil {
+			return authorization{}, errgo.WithCausef(nil, params.ErrNotFound, "could not find entity %q", entityId.String())
+		}
 
 		baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, "acls", "developmentacls")
 		if err != nil {
 			return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+		}
+		if baseEntity == nil {
+			return authorization{}, errgo.WithCausef(nil, params.ErrNotFound, "cound not find the base entity %v", entityId.URL.String())
 		}
 
 		ACLs[i] = baseEntity.ACLs.Read
@@ -126,7 +132,7 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 			ACLs[i] = baseEntity.DevelopmentACLs.Read
 		}
 
-		if len(entity.CharmMeta.Terms) == 0 {
+		if (entity.CharmMeta == nil) || len(entity.CharmMeta.Terms) == 0 {
 			// No need to authenticate if the ACL is open to everyone.
 			open := false
 			for _, name := range ACLs[i] {
