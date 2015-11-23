@@ -1425,6 +1425,33 @@ func (store *Store) Search(sp SearchParams) (SearchResult, error) {
 	return result, nil
 }
 
+// List lists the store for the given ListParams.
+// It returns a ListResult containing the results of the list.
+func (store *Store) List(sp ListParams) (ListResult, error) {
+	query := store.DB.Entities().Find(sp.Filters)
+	if sp.sort == nil {
+		query = query.Sort("_id")
+	} else {
+		query = query.Sort(sp.sort...)
+	}
+
+	//Only select needed field
+	query = query.Select(bson.D{{"_id", 1}, {"url", 1}, {"development", 1}, {"promulgated-url", 1}})
+
+	r := ListResult{
+		Results:    make([]*router.ResolvedURL, 0),
+	}
+	var entity mongodoc.Entity
+	iter := query.Iter()
+	for iter.Next(&entity) {
+		r.Results = append(r.Results, EntityResolvedURL(&entity))
+	}
+	if err := iter.Close(); err != nil {
+		return ListResult{}, errgo.Mask(err)
+	}
+	return r, nil
+}
+
 // SynchroniseElasticsearch creates new indexes in elasticsearch
 // and populates them with the current data from the mongodb database.
 func (s *Store) SynchroniseElasticsearch() error {

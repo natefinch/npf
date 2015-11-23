@@ -53,7 +53,7 @@ func (h *ReqHandler) doSearch(sp charmstore.SearchParams, req *http.Request) (in
 	response := params.SearchResponse{
 		SearchTime: results.SearchTime,
 		Total:      results.Total,
-		Results:    make([]params.SearchResult, len(results.Results)),
+		Results:    make([]params.EntityResult, len(results.Results)),
 	}
 	run := parallel.NewRun(maxConcurrency)
 	var missing int32
@@ -69,7 +69,7 @@ func (h *ReqHandler) doSearch(sp charmstore.SearchParams, req *http.Request) (in
 				atomic.AddInt32(&missing, 1)
 				return nil
 			}
-			response.Results[i] = params.SearchResult{
+			response.Results[i] = params.EntityResult{
 				Id:   ref.PreferredURL(),
 				Meta: meta,
 			}

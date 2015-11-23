@@ -464,6 +464,16 @@ type SearchParams struct {
 	sort []sortParam
 }
 
+// ListParams represents the list parameters used to search the store.
+type ListParams struct {
+	// Limit the items list with attributes that match the specified filter value.
+	Filters map[string]interface{}
+	// Include the following metadata items in the search results.
+	Include []string
+	// Sort the returned items.
+	sort []string
+}
+
 func (sp *SearchParams) ParseSortFields(f ...string) error {
 	for _, s := range f {
 		for _, s := range strings.Split(s, ",") {
@@ -474,6 +484,23 @@ func (sp *SearchParams) ParseSortFields(f ...string) error {
 			}
 			sort.Field = sortFields[s]
 			if sort.Field == "" {
+				return errgo.Newf("%s", s)
+			}
+			sp.sort = append(sp.sort, sort)
+		}
+	}
+
+	return nil
+}
+
+func (sp *ListParams) ParseSortFieldsList(f ...string) error {
+	for _, s := range f {
+		for _, s := range strings.Split(s, ",") {
+			sort := sortListFields[s]
+			if strings.HasPrefix(s, "-") {
+				sort = "-" + sortListFields[s[1:]]
+			}
+			if sort == "" {
 				return errgo.Newf("%s", s)
 			}
 			sp.sort = append(sp.sort, sort)
@@ -505,10 +532,22 @@ var sortFields = map[string]string{
 	"downloads": "TotalDownloads",
 }
 
+// sortListFields contains a mapping from api fieldnames to the entity fields to list.
+var sortListFields = map[string]string{
+	"name":      "name",
+	"owner":     "user",
+	"series":    "series",
+}
+
 // SearchResult represents the result of performing a search.
 type SearchResult struct {
 	SearchTime time.Duration
 	Total      int
+	Results    []*router.ResolvedURL
+}
+
+// ListResult represents the result of performing a list.
+type ListResult struct {
 	Results    []*router.ResolvedURL
 }
 
