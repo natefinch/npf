@@ -1111,7 +1111,7 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 		m, err := h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
 			checkers.DeclaredCaveat(usernameAttr, auth.Username),
 			checkers.TimeBeforeCaveat(time.Now().Add(delegatableMacaroonExpiry)),
-			checkers.DenyCaveat(opReadArchive),
+			checkers.DenyCaveat(opAccessCharmWithTerms),
 		})
 		if err != nil {
 			return nil, errgo.Mask(err)
@@ -1152,7 +1152,7 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 	m, err := h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
 		checkers.DeclaredCaveat(usernameAttr, auth.Username),
 		checkers.TimeBeforeCaveat(time.Now().Add(delegatableMacaroonExpiry)),
-		checkers.AllowCaveat(opReadArchive, opOther),
+		checkers.AllowCaveat(opAccessCharmWithTerms, opOther),
 		checkers.Caveat{Condition: "is-entity " + strings.Join(resolvedURLstrings, " ")},
 	})
 	if err != nil {

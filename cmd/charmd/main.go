@@ -13,6 +13,7 @@ import (
 	"github.com/juju/loggo"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/macaroon-bakery.v1/bakery"
+	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/natefinch/lumberjack.v2"
 
@@ -73,10 +74,12 @@ func serve(confPath string) error {
 
 	logger.Infof("setting up the API server")
 	cfg := charmstore.ServerParams{
-		AuthUsername:            conf.AuthUsername,
-		AuthPassword:            conf.AuthPassword,
-		IdentityLocation:        conf.IdentityLocation,
-		IdentityAPIURL:          conf.IdentityAPIURL,
+		AuthUsername:     conf.AuthUsername,
+		AuthPassword:     conf.AuthPassword,
+		IdentityLocation: conf.IdentityLocation,
+		IdentityAPIURL:   conf.IdentityAPIURL,
+		TermsLocation:    conf.TermsLocation,
+
 		AgentUsername:           conf.AgentUsername,
 		AgentKey:                conf.AgentKey,
 		StatsCacheMaxAge:        conf.StatsCacheMaxAge.Duration,
@@ -94,7 +97,32 @@ func serve(confPath string) error {
 	}
 
 	ring := bakery.NewPublicKeyRing()
+	if conf.IdentityPublicKey != nil {
+		ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, conf.IdentityPublicKey)
+	} else {
+		pubKey, err := httpbakery.PublicKeyForLocation(http.DefaultClient, cfg.IdentityLocation)
+		if err != nil {
+			return errgo.Mask(err)
+		}
+		err = ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, pubKey)
+		if err != nil {
+			return errgo.Mask(err)
+		}
+	}
 	ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, conf.IdentityPublicKey)
+	if conf.TermsPublicKey != nil {
+		ring.AddPublicKeyForLocation(cfg.TermsLocation, false, conf.TermsPublicKey)
+	} else {
+		pubKey, err := httpbakery.PublicKeyForLocation(http.DefaultClient, cfg.TermsLocation)
+		if err != nil {
+			return errgo.Mask(err)
+		}
+		err = ring.AddPublicKeyForLocation(cfg.TermsLocation, false, pubKey)
+		if err != nil {
+			return errgo.Mask(err)
+		}
+	}
+
 	cfg.PublicKeyLocator = ring
 	server, err := charmstore.NewServer(db, es, "cs", cfg, charmstore.Legacy, charmstore.V4)
 	if err != nil {

@@ -20,11 +20,11 @@ import (
 )
 
 const (
-	basicRealm            = "CharmStore4"
-	promulgatorsGroup     = "promulgators"
-	opReadArchive         = "read-archive"
-	opOther               = "other-operation"
-	defaultMacaroonExpiry = 24 * time.Hour
+	basicRealm             = "CharmStore4"
+	promulgatorsGroup      = "promulgators"
+	opAccessCharmWithTerms = "access-operation"
+	opOther                = "other-operation"
+	defaultMacaroonExpiry  = 24 * time.Hour
 )
 
 // authorize checks that the current user is authorized based on the provided
@@ -73,10 +73,10 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 	}
 
 	// Macaroon verification failed: mint a new macaroon.
-	// We need to deny access for opReadArchive operations because they
+	// We need to deny access for opAccessCharmWithTerms operations because they
 	// may require more specific checks that terms and conditions have been
 	// satisfied.
-	m, err := h.newMacaroon(checkers.DenyCaveat(opReadArchive))
+	m, err := h.newMacaroon(checkers.DenyCaveat(opAccessCharmWithTerms))
 	if err != nil {
 		return authorization{}, errgo.Notef(err, "cannot mint macaroon")
 	}
@@ -158,7 +158,7 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 		return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "charmstore not configured to serve charms with terms and conditions")
 	}
 
-	auth, verr := h.checkRequest(req, entityIds, opReadArchive)
+	auth, verr := h.checkRequest(req, entityIds, opAccessCharmWithTerms)
 	if verr == nil {
 		for _, acl := range ACLs {
 			if err := h.checkACLMembership(auth, acl); err != nil {
@@ -173,7 +173,7 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 	}
 
 	caveats := []checkers.Caveat{
-		checkers.AllowCaveat(opReadArchive, opOther),
+		checkers.AllowCaveat(opAccessCharmWithTerms, opOther),
 	}
 	if len(requiredTerms) > 0 {
 		terms := []string{}
@@ -222,9 +222,8 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.Resolve
 		checkers.CheckerFunc{
 			Condition_: "is-entity",
 			Check_: func(_, args string) error {
-				tokens := strings.Split(args, " ")
 				allowedEntities := make(map[string]struct{})
-				for _, token := range tokens {
+				for _, token := range strings.Fields(args) {
 					allowedEntities[strings.TrimSpace(token)] = struct{}{}
 				}
 				if len(entityIds) == 0 {
@@ -245,7 +244,38 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.Resolve
 				return nil
 			},
 		},
-		checkers.OperationChecker(operation),
+		checkers.CheckerFunc{
+			Condition_: "",
+			Check_: func(cond, args string) error {
+				if operation != opAccessCharmWithTerms {
+					return nil
+				}
+				allowAccessCharmWithTerms := false
+				switch cond {
+				case checkers.CondAllow:
+					for _, op := range strings.Fields(args) {
+						if op == opAccessCharmWithTerms {
+							allowAccessCharmWithTerms = true
+						}
+					}
+				case checkers.CondDeny:
+				default:
+					return checkers.ErrCaveatNotRecognized
+				}
+				if !allowAccessCharmWithTerms {
+					for _, entityId := range entityIds {
+						entity, err := h.Store.FindEntity(entityId)
+						if err != nil {
+							return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+						}
+						if len(entity.CharmMeta.Terms) > 0 {
+							return errgo.New("access denied")
+						}
+					}
+				}
+				return nil
+			},
+		},
 	))
 	if err != nil {
 		return authorization{}, errgo.Mask(err, errgo.Any)
