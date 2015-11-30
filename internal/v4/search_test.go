@@ -667,17 +667,17 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 		about: "owner ascending",
 		query: "sort=owner,name",
 		results: []*router.ResolvedURL{
-			exportTestCharms["mysql"],
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
 			exportTestCharms["varnish"],
+			exportTestCharms["mysql"],
 		},
 	}, {
 		about: "owner descending",
 		query: "sort=-owner&sort=name",
 		results: []*router.ResolvedURL{
-			exportTestCharms["varnish"],
 			exportTestCharms["mysql"],
+			exportTestCharms["varnish"],
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
 		},
@@ -691,7 +691,12 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 		var sr params.SearchResponse
 		err := json.Unmarshal(rec.Body.Bytes(), &sr)
 		c.Assert(err, gc.IsNil)
-		assertResultSet(c, sr, test.results)
+		// Not using assertResultSet(c, sr, test.results) as it does sort internally
+		c.Assert(sr.Results, gc.HasLen, len(test.results), gc.Commentf("expected %#v", test.results))
+		c.Logf("results: %s", rec.Body.Bytes())
+		for i := range test.results {
+			c.Assert(sr.Results[i].Id.String(), gc.Equals, test.results[i].PreferredURL().String(), gc.Commentf("element %d"))
+		}
 	}
 }
 
@@ -704,7 +709,7 @@ func (s *SearchSuite) TestSortUnsupportedField(c *gc.C) {
 	err := json.Unmarshal(rec.Body.Bytes(), &e)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Code, gc.Equals, params.ErrBadRequest)
-	c.Assert(e.Message, gc.Equals, "invalid sort field: foo")
+	c.Assert(e.Message, gc.Equals, "invalid sort field: unrecognized sort parameter \"foo\"")
 }
 
 func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
@@ -886,7 +891,7 @@ func assertResultSet(c *gc.C, sr params.SearchResponse, expected []*router.Resol
 	}
 }
 
-type searchResultById []params.SearchResult
+type searchResultById []params.EntityResult
 
 func (s searchResultById) Len() int      { return len(s) }
 func (s searchResultById) Swap(i, j int) { s[i], s[j] = s[j], s[i] }

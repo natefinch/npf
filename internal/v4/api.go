@@ -127,6 +127,7 @@ func newReqHandler() *ReqHandler {
 			"debug":                http.HandlerFunc(h.serveDebug),
 			"debug/pprof/":         newPprofHandler(&h),
 			"debug/status":         router.HandleJSON(h.serveDebugStatus),
+			"list":                 router.HandleJSON(h.serveList),
 			"log":                  router.HandleErrors(h.serveLog),
 			"search":               router.HandleJSON(h.serveSearch),
 			"search/interesting":   http.HandlerFunc(h.serveSearchInteresting),

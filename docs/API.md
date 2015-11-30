@@ -1808,6 +1808,88 @@ The Meta field is populated according to the include flag  - see the `meta`
 path for more info on how to use this.
 The `limit` flag is the same as for the "search" path.
 
+### List
+
+#### GET list
+
+The `list` path lists charms and bundles within the store.
+
+<pre>
+GET list[?filter=<i>value</i>...][&include=<i>meta</i>[&include=<i>meta</i>...]][&sort=<i>field</i>]
+</pre>
+
+Any number of filters may be specified, limiting the list to items with attributes that
+match the specified filter value. Items matching any of the selected values for
+a filter are selected, so `name=1&name=2` would match items whose name was
+either 1 or 2. However, if multiple filters are specified, the charm must match
+all of them, so `name=1&series=2` will only match charms whose name is 1 and
+whose series is 2. Available filters are:
+
+* name - the charm's name.
+* owner - the charm's owner (the ~user element of the charm id)
+* promulgated - the charm has been promulgated.
+* series - the charm's series.
+* type - "charm" or "bundle" to search only one doctype or the other.
+
+
+Notes
+
+1. the promulgated filter is only applied if specified. If the value is "1" then only
+   promulgated entities are returned if it is any other value only non-promulgated
+   entities are returned.
+
+The response contains a list of information on the charms or bundles that were
+matched by the request. If no parameters are specified, all charms and bundles
+will match.  By default, only the charm store id is included.
+
+The results are sorted according to the given sort field, which may be one of
+`owner`, `name` or `series`, corresponding to the filters of the same names. If
+the field is prefixed with a hyphen (-), the sorting order will be reversed. If
+the sort field is not specified the order will be a server side logical order. 
+It is possible to specify more than one sort field to get
+multi-level sorting, e.g. sort=name,-series will get charms in order of the
+charm name and then in reverse order of series.
+
+The Meta field is populated according to the include flag  - see the `meta`
+path for more info on how to use this.
+
+```go
+[]EntityResult
+
+type EntityResult struct {
+        Id string
+        // Meta holds at most one entry for each meta value
+        // specified in the include flags, holding the
+        // data that would be returned by reading /meta/meta?id=id.
+        // Metadata not relevant to a particular result will not
+        // be included.
+        Meta map[string] interface{} `json:",omitempty"`
+}
+```
+
+Example: `GET list?name=wordpress&include=archive-size`
+
+```json
+[
+    {
+        "Id": "precise/wordpress-1",
+        "Meta": {
+            "archive-size": {
+                "Size": 1024
+            }
+        }
+    },
+    {
+        "Id": "precise/wordpress-2",
+        "Meta": {
+            "archive-size": {
+                "Size": 4242
+            }
+        }
+    }
+]
+```
+
 ### Debug info
 
 #### GET /debug

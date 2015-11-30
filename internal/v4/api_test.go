@@ -2555,7 +2555,7 @@ func (s *APISuite) TestWhoAmIFailWithNoMacaroon(c *gc.C) {
 func (s *APISuite) TestWhoAmIReturnsNameAndGroups(c *gc.C) {
 	s.discharge = dischargeForUser("who")
 	s.idM.groups = map[string][]string{
-		"who": []string{"foo", "bar"},
+		"who": {"foo", "bar"},
 	}
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
