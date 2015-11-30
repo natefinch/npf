@@ -1434,6 +1434,19 @@ var listFilters = map[string]string{
 }
 
 func prepareList(sp SearchParams) (filters map[string]interface{}, sort []string, err error) {
+	if len(sp.Text) > 0 {
+		return nil, nil, errgo.New("text not allowed")
+	}
+	if sp.Limit > 0 {
+		return nil, nil, errgo.New("limit not allowed")
+	}
+	if sp.Skip > 0 {
+		return nil, nil, errgo.New("skip not allowed")
+	}
+	if sp.AutoComplete {
+		return nil, nil, errgo.New("autocomplete not allowed")
+	}
+
 	filters = make(map[string]interface{})
 	for k, v := range sp.Filters {
 		switch k {
@@ -1504,7 +1517,7 @@ func (store *Store) List(sp SearchParams) (ListResult, error) {
 		query = query.Sort(sort...)
 	}
 
-	//Only select needed field
+	//Only select the fields that are needed.
 	query = query.Select(bson.D{{"_id", 1}, {"url", 1}, {"development", 1}, {"promulgated-url", 1}})
 
 	r := ListResult{

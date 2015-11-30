@@ -401,13 +401,13 @@ func (s *ListSuite) TestSortingList(c *gc.C) {
 func (s *ListSuite) TestSortUnsupportedListField(c *gc.C) {
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
-		URL:     storeURL("list?sort=foo"),
+		URL:     storeURL("list?sort=text"),
 	})
 	var e params.Error
 	err := json.Unmarshal(rec.Body.Bytes(), &e)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Code, gc.Equals, params.ErrBadRequest)
-	c.Assert(e.Message, gc.Equals, "invalid sort field: unrecognized sort parameter \"foo\"")
+	c.Assert(e.Message, gc.Equals, "invalid sort field: unrecognized sort parameter \"text\"")
 }
 
 func (s *ListSuite) assertPut(c *gc.C, url string, val interface{}) {

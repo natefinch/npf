@@ -96,8 +96,8 @@ func (h *ReqHandler) addMetaData(results []*router.ResolvedURL, include []string
 			j++
 		}
 	}
-	entities = entities[0:j]
-	return entities
+
+	return entities[0:j]
 }
 
 // GET search/interesting[?limit=limit][&include=meta]
