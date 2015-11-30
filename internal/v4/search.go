@@ -50,17 +50,22 @@ func (h *ReqHandler) doSearch(sp charmstore.SearchParams, req *http.Request) (in
 	if err != nil {
 		return nil, errgo.Notef(err, "error performing search")
 	}
-	response := params.SearchResponse{
+	return params.SearchResponse{
 		SearchTime: results.SearchTime,
 		Total:      results.Total,
-		Results:    make([]params.EntityResult, len(results.Results)),
-	}
+		Results:    h.addMetaData(results.Results, sp.Include, req),
+	}, nil
+}
+
+//addMetada adds the requested meta data with the include list.
+func (h *ReqHandler) addMetaData(results []*router.ResolvedURL, include []string, req *http.Request) ([]params.EntityResult){
+	entities := make([]params.EntityResult, len(results))
 	run := parallel.NewRun(maxConcurrency)
 	var missing int32
-	for i, ref := range results.Results {
+	for i, ref := range results {
 		i, ref := i, ref
 		run.Do(func() error {
-			meta, err := h.Router.GetMetadata(ref, sp.Include, req)
+			meta, err := h.Router.GetMetadata(ref, include, req)
 			if err != nil {
 				// Unfortunately it is possible to get errors here due to
 				// internal inconsistency, so rather than throwing away
@@ -69,7 +74,7 @@ func (h *ReqHandler) doSearch(sp charmstore.SearchParams, req *http.Request) (in
 				atomic.AddInt32(&missing, 1)
 				return nil
 			}
-			response.Results[i] = params.EntityResult{
+			entities[i] = params.EntityResult{
 				Id:   ref.PreferredURL(),
 				Meta: meta,
 			}
@@ -80,19 +85,19 @@ func (h *ReqHandler) doSearch(sp charmstore.SearchParams, req *http.Request) (in
 	// check the error here.
 	run.Wait()
 	if missing == 0 {
-		return response, nil
+		return entities
 	}
 	// We're missing some results - shuffle all the results down to
 	// fill the gaps.
 	j := 0
-	for _, result := range response.Results {
+	for _, result := range entities {
 		if result.Id != nil {
-			response.Results[j] = result
+			entities[j] = result
 			j++
 		}
 	}
-	response.Results = response.Results[0:j]
-	return response, nil
+	entities = entities[0:j]
+	return entities
 }
 
 // GET search/interesting[?limit=limit][&include=meta]

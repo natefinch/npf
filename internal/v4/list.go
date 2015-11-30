@@ -5,9 +5,7 @@ package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 import (
 	"net/http"
-	"sync/atomic"
 
-	"github.com/juju/utils/parallel"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 
@@ -40,53 +38,9 @@ func (h *ReqHandler) doList(lp charmstore.ListParams, req *http.Request) (interf
 			filteredACLResults = append(filteredACLResults, result)
 		}
 	}
-	results.Results = filteredACLResults
-	return h.addMetaData(results, lp.Include, req)
-}
-
-//addMetada adds the requested meta data with the include list.
-func (h *ReqHandler) addMetaData(results charmstore.ListResult, include []string, req *http.Request) (interface{}, error){
-	response := params.ListResponse{
-		Results:    make([]params.EntityResult, len(results.Results)),
-	}
-	run := parallel.NewRun(maxConcurrency)
-	var missing int32
-	for i, ref := range results.Results {
-		i, ref := i, ref
-		run.Do(func() error {
-			meta, err := h.Router.GetMetadata(ref, include, req)
-			if err != nil {
-				// Unfortunately it is possible to get errors here due to
-				// internal inconsistency, so rather than throwing away
-				// all the search results, we just log the error and move on.
-				logger.Errorf("cannot retrieve metadata for %v: %v", ref, err)
-				atomic.AddInt32(&missing, 1)
-				return nil
-			}
-			response.Results[i] = params.EntityResult{
-				Id:   ref.PreferredURL(),
-				Meta: meta,
-			}
-			return nil
-		})
-	}
-	// We never return an error from the Do function above, so no need to
-	// check the error here.
-	run.Wait()
-	if missing == 0 {
-		return response, nil
-	}
-	// We're missing some results - shuffle all the results down to
-	// fill the gaps.
-	j := 0
-	for _, result := range response.Results {
-		if result.Id != nil {
-			response.Results[j] = result
-			j++
-		}
-	}
-	response.Results = response.Results[0:j]
-	return response, nil
+	return params.ListResponse{
+		Results: h.addMetaData(filteredACLResults, lp.Include, req),
+	}, nil
 }
 
 // parseListParms extracts the list parameters from the request
