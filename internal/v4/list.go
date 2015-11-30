@@ -27,7 +27,7 @@ func (h *ReqHandler) serveList(_ http.Header, req *http.Request) (interface{}, e
 
 	// TODO 30th Nov 2015 Fabrice:
 	// we should follow the same pattern as search, and put the user, admin and groups
-    // into the SearchParams and leave the charmstore package to be responsible for filtering
+	// into the SearchParams and leave the charmstore package to be responsible for filtering
 	// For performance, we should also look at not having n request to mongo.
 	filteredACLResults := make([]*router.ResolvedURL, 0)
 	for _, result := range results.Results {

@@ -1464,7 +1464,7 @@ func prepareList(sp SearchParams) (filters map[string]interface{}, sort []string
 			}
 		case "promulgated":
 			if v[0] != "0" {
-				filters["promulgated-revision"] = map[string]interface{}{"$gt": 0}
+				filters["promulgated-revision"] = map[string]interface{}{"$gte": 0}
 			} else {
 				filters["promulgated-revision"] = map[string]interface{}{"$lt": 0}
 			}

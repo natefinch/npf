@@ -1854,9 +1854,9 @@ The Meta field is populated according to the include flag  - see the `meta`
 path for more info on how to use this.
 
 ```go
-[]ListResult
+[]EntityResult
 
-type ListResult struct {
+type EntityResult struct {
         Id string
         // Meta holds at most one entry for each meta value
         // specified in the include flags, holding the
