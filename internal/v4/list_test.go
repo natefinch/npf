@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
-	"net/url"
 	"sort"
 	"strings"
 
@@ -22,11 +21,9 @@ import (
 	"gopkg.in/macaroon.v1"
 	"gopkg.in/mgo.v2/bson"
 
-	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 )
 
 type ListSuite struct {
@@ -100,117 +97,6 @@ func getListBundle(name string) *charm.BundleDir {
 	ba := storetesting.Charms.BundleDir(name)
 	ba.Data().Tags = append(strings.Split(name, "-"), "baz")
 	return ba
-}
-
-func (s *ListSuite) TestParseListParams(c *gc.C) {
-	tests := []struct {
-		about        string
-		query        string
-		expectParams charmstore.ListParams
-		expectError  string
-	}{{
-		about: "bare list",
-		query: "",
-	}, {
-		about: "include",
-		query: "include=archive-size",
-		expectParams: charmstore.ListParams{
-			Include: []string{"archive-size"},
-		},
-	}, {
-		about: "include many",
-		query: "include=archive-size&include=bundle-data",
-		expectParams: charmstore.ListParams{
-			Include: []string{"archive-size", "bundle-data"},
-		},
-	}, {
-		about: "include many with blanks",
-		query: "include=archive-size&include=&include=bundle-data",
-		expectParams: charmstore.ListParams{
-			Include: []string{"archive-size", "bundle-data"},
-		},
-	}, {
-		about: "name filter",
-		query: "name=text",
-		expectParams: charmstore.ListParams{
-			Filters: map[string]interface{}{
-				"name": "text",
-			},
-		},
-	}, {
-		about: "owner filter",
-		query: "owner=text",
-		expectParams: charmstore.ListParams{
-			Filters: map[string]interface{}{
-				"user": "text",
-			},
-		},
-	}, {
-		about: "series filter",
-		query: "series=text",
-		expectParams: charmstore.ListParams{
-			Filters: map[string]interface{}{
-				"series": "text",
-			},
-		},
-	}, {
-		about: "type filter",
-		query: "type=bundle",
-		expectParams: charmstore.ListParams{
-			Filters: map[string]interface{}{
-				"series": "bundle",
-			},
-		},
-	}, {
-		about: "type filter",
-		query: "type=charm",
-		expectParams: charmstore.ListParams{
-			Filters: map[string]interface{}{
-				"series": map[string]interface{}{"$ne":"bundle"},
-			},
-		},
-	}, {
-		about: "many filters",
-		query: "name=name&owner=owner&series=series1",
-		expectParams: charmstore.ListParams{
-			Filters: map[string]interface{}{
-				"name":   "name",
-				"user":  "owner",
-				"series": "series1",
-			},
-		},
-	}, {
-		about:       "bad parameter",
-		query:       "a=b",
-		expectError: "invalid parameter: a",
-	}, {
-		about: "promulgated filter",
-		query: "promulgated=1",
-		expectParams: charmstore.ListParams{
-			Filters: map[string]interface{}{
-				"promulgated-revision": map[string]interface{}{"$gt":0},
-			},
-		},
-	}, {
-		about:       "promulgated filter - bad",
-		query:       "promulgated=bad",
-		expectError: `invalid promulgated filter parameter: unexpected bool value "bad" (must be "0" or "1")`,
-	}}
-	for i, test := range tests {
-		c.Logf("test %d. %s", i, test.about)
-		var req http.Request
-		var err error
-		req.Form, err = url.ParseQuery(test.query)
-		c.Assert(err, gc.IsNil)
-		sp, err := v4.ParseListParams(&req)
-		if test.expectError != "" {
-			c.Assert(err, gc.Not(gc.IsNil))
-			c.Assert(err.Error(), gc.Equals, test.expectError)
-		} else {
-			c.Assert(err, gc.IsNil)
-		}
-		c.Assert(sp, jc.DeepEquals, test.expectParams)
-	}
 }
 
 func (s *ListSuite) TestSuccessfulList(c *gc.C) {
@@ -521,7 +407,7 @@ func (s *ListSuite) TestSortUnsupportedListField(c *gc.C) {
 	err := json.Unmarshal(rec.Body.Bytes(), &e)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Code, gc.Equals, params.ErrBadRequest)
-	c.Assert(e.Message, gc.Equals, "invalid sort field: foo")
+	c.Assert(e.Message, gc.Equals, "invalid sort field: unrecognized sort parameter \"foo\"")
 }
 
 func (s *ListSuite) assertPut(c *gc.C, url string, val interface{}) {

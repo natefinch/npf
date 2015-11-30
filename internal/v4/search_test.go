@@ -709,7 +709,7 @@ func (s *SearchSuite) TestSortUnsupportedField(c *gc.C) {
 	err := json.Unmarshal(rec.Body.Bytes(), &e)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Code, gc.Equals, params.ErrBadRequest)
-	c.Assert(e.Message, gc.Equals, "invalid sort field: foo")
+	c.Assert(e.Message, gc.Equals, "invalid sort field: unrecognized sort parameter \"foo\"")
 }
 
 func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {

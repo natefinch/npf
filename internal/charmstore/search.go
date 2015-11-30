@@ -464,14 +464,11 @@ type SearchParams struct {
 	sort []sortParam
 }
 
-// ListParams represents the list parameters used to search the store.
-type ListParams struct {
-	// Limit the items list with attributes that match the specified filter value.
-	Filters map[string]interface{}
-	// Include the following metadata items in the search results.
-	Include []string
-	// Sort the returned items.
-	sort []string
+var allowedSortFields = map[string]bool{
+	"name":      true,
+	"owner":     true,
+	"series":    true,
+	"downloads": true,
 }
 
 func (sp *SearchParams) ParseSortFields(f ...string) error {
@@ -482,27 +479,10 @@ func (sp *SearchParams) ParseSortFields(f ...string) error {
 				sort.Order = sortDescending
 				s = s[1:]
 			}
-			sort.Field = sortFields[s]
-			if sort.Field == "" {
-				return errgo.Newf("%s", s)
+			if !allowedSortFields[s] {
+				return errgo.Newf("unrecognized sort parameter %q", s)
 			}
-			sp.sort = append(sp.sort, sort)
-		}
-	}
-
-	return nil
-}
-
-func (sp *ListParams) ParseSortFieldsList(f ...string) error {
-	for _, s := range f {
-		for _, s := range strings.Split(s, ",") {
-			sort := sortListFields[s]
-			if strings.HasPrefix(s, "-") {
-				sort = "-" + sortListFields[s[1:]]
-			}
-			if sort == "" {
-				return errgo.Newf("%s", s)
-			}
+			sort.Field = s
 			sp.sort = append(sp.sort, sort)
 		}
 	}
@@ -524,21 +504,6 @@ type sortParam struct {
 	Order sortOrder
 }
 
-// sortFields contains a mapping from api fieldnames to the entity fields to search.
-var sortFields = map[string]string{
-	"name":      "Name",
-	"owner":     "User",
-	"series":    "Series",
-	"downloads": "TotalDownloads",
-}
-
-// sortListFields contains a mapping from api fieldnames to the entity fields to list.
-var sortListFields = map[string]string{
-	"name":      "name",
-	"owner":     "user",
-	"series":    "series",
-}
-
 // SearchResult represents the result of performing a search.
 type SearchResult struct {
 	SearchTime time.Duration
@@ -548,7 +513,7 @@ type SearchResult struct {
 
 // ListResult represents the result of performing a list.
 type ListResult struct {
-	Results    []*router.ResolvedURL
+	Results []*router.ResolvedURL
 }
 
 // queryFields provides a map of fields to weighting to use with the
@@ -635,7 +600,7 @@ func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 
 	// Sorting
 	for _, s := range sp.sort {
-		qdsl.Sort = append(qdsl.Sort, createSort(s))
+		qdsl.Sort = append(qdsl.Sort, createElasticSort(s))
 	}
 
 	return qdsl
@@ -829,10 +794,18 @@ func typeFilter(value string) elasticsearch.Filter {
 	return elasticsearch.NotFilter{bundleFilter}
 }
 
+// sortFields contains a mapping from api fieldnames to the entity fields to search.
+var sortESFields = map[string]string{
+	"name":      "Name",
+	"owner":     "User",
+	"series":    "Series",
+	"downloads": "TotalDownloads",
+}
+
 // createSort creates an elasticsearch.Sort query parameter out of a Sort parameter.
-func createSort(s sortParam) elasticsearch.Sort {
+func createElasticSort(s sortParam) elasticsearch.Sort {
 	sort := elasticsearch.Sort{
-		Field: s.Field,
+		Field: sortESFields[s.Field],
 		Order: elasticsearch.Ascending,
 	}
 	if s.Order == sortDescending {

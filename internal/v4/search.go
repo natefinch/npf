@@ -58,7 +58,7 @@ func (h *ReqHandler) doSearch(sp charmstore.SearchParams, req *http.Request) (in
 }
 
 //addMetada adds the requested meta data with the include list.
-func (h *ReqHandler) addMetaData(results []*router.ResolvedURL, include []string, req *http.Request) ([]params.EntityResult){
+func (h *ReqHandler) addMetaData(results []*router.ResolvedURL, include []string, req *http.Request) []params.EntityResult {
 	entities := make([]params.EntityResult, len(results))
 	run := parallel.NewRun(maxConcurrency)
 	var missing int32

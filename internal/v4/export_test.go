@@ -5,7 +5,6 @@ package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 var (
 	ParseSearchParams         = parseSearchParams
-	ParseListParams           = parseListParams
 	DefaultIcon               = defaultIcon
 	ArchiveCachePublicMaxAge  = &archiveCachePublicMaxAge
 	ParamsLogLevels           = paramsLogLevels

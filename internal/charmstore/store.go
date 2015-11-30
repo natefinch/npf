@@ -1425,21 +1425,90 @@ func (store *Store) Search(sp SearchParams) (SearchResult, error) {
 	return result, nil
 }
 
+var listFilters = map[string]string{
+	"name":        "name",
+	"owner":       "user",
+	"series":      "serties",
+	"type":        "type",
+	"promulgated": "promulgated-revision",
+}
+
+func prepareList(sp SearchParams) (filters map[string]interface{}, sort []string, err error) {
+	filters = make(map[string]interface{})
+	for k, v := range sp.Filters {
+		switch k {
+		case "name":
+			filters[k] = v[0]
+		case "owner":
+			filters["user"] = v[0]
+		case "series":
+			filters["series"] = v[0]
+		case "type":
+			if v[0] == "bundle" {
+				filters["series"] = "bundle"
+			} else {
+				filters["series"] = map[string]interface{}{"$ne": "bundle"}
+			}
+		case "promulgated":
+			if v[0] != "0" {
+				filters["promulgated-revision"] = map[string]interface{}{"$gt": 0}
+			} else {
+				filters["promulgated-revision"] = map[string]interface{}{"$lt": 0}
+			}
+		default:
+			return nil, nil, errgo.Newf("filter %q not allowed", k)
+		}
+	}
+
+	sort, err = createMongoSort(sp)
+	if err != nil {
+		return nil, nil, errgo.Newf("invalid parameters: %s", err)
+	}
+	return filters, sort, nil
+}
+
+// sortFields contains a mapping from api fieldnames to the entity fields to search.
+var sortMongoFields = map[string]string{
+	"name":   "name",
+	"owner":  "user",
+	"series": "series",
+}
+
+// createSort creates a sort query parameters for mongo out of a Sort parameter.
+func createMongoSort(sp SearchParams) ([]string, error) {
+	sort := make([]string, len(sp.sort))
+	for i, s := range sp.sort {
+		field := sortMongoFields[s.Field]
+		sort[i] = field
+		if field == "" {
+			return nil, errgo.Newf("sort %q not allowed", s.Field)
+		}
+		if s.Order == sortDescending {
+			sort[i] = "-" + field
+		}
+	}
+	return sort, nil
+}
+
 // List lists the store for the given ListParams.
 // It returns a ListResult containing the results of the list.
-func (store *Store) List(sp ListParams) (ListResult, error) {
-	query := store.DB.Entities().Find(sp.Filters)
-	if sp.sort == nil {
+func (store *Store) List(sp SearchParams) (ListResult, error) {
+	filters, sort, err := prepareList(sp)
+	if err != nil {
+		return ListResult{}, errgo.Mask(err)
+	}
+	query := store.DB.Entities().Find(filters)
+	if len(sort) == 0 {
 		query = query.Sort("_id")
 	} else {
-		query = query.Sort(sp.sort...)
+		query = query.Sort(sort...)
 	}
 
 	//Only select needed field
 	query = query.Select(bson.D{{"_id", 1}, {"url", 1}, {"development", 1}, {"promulgated-url", 1}})
 
 	r := ListResult{
-		Results:    make([]*router.ResolvedURL, 0),
+		Results: make([]*router.ResolvedURL, 0),
 	}
 	var entity mongodoc.Entity
 	iter := query.Iter()
