@@ -98,7 +98,10 @@ func serve(confPath string) error {
 
 	ring := bakery.NewPublicKeyRing()
 	if conf.IdentityPublicKey != nil {
-		ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, conf.IdentityPublicKey)
+		err = ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, conf.IdentityPublicKey)
+		if err != nil {
+			return errgo.Mask(err)
+		}
 	} else {
 		pubKey, err := httpbakery.PublicKeyForLocation(http.DefaultClient, cfg.IdentityLocation)
 		if err != nil {
@@ -109,10 +112,9 @@ func serve(confPath string) error {
 			return errgo.Mask(err)
 		}
 	}
-	ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, conf.IdentityPublicKey)
 	if conf.TermsPublicKey != nil {
 		ring.AddPublicKeyForLocation(cfg.TermsLocation, false, conf.TermsPublicKey)
-	} else {
+	} else if cfg.TermsLocation != "" {
 		pubKey, err := httpbakery.PublicKeyForLocation(http.DefaultClient, cfg.TermsLocation)
 		if err != nil {
 			return errgo.Mask(err)
