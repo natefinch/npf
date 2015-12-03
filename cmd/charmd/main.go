@@ -113,7 +113,10 @@ func serve(confPath string) error {
 		}
 	}
 	if conf.TermsPublicKey != nil {
-		ring.AddPublicKeyForLocation(cfg.TermsLocation, false, conf.TermsPublicKey)
+		err = ring.AddPublicKeyForLocation(cfg.TermsLocation, false, conf.TermsPublicKey)
+		if err != nil {
+			return errgo.Mask(err)
+		}
 	} else if cfg.TermsLocation != "" {
 		pubKey, err := httpbakery.PublicKeyForLocation(http.DefaultClient, cfg.TermsLocation)
 		if err != nil {

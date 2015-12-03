@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gopkg.in/errgo.v1"
+	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
@@ -223,8 +224,16 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.Resolve
 			Condition_: "is-entity",
 			Check_: func(_, args string) error {
 				allowedEntities := make(map[string]struct{})
-				for _, token := range strings.Fields(args) {
-					allowedEntities[strings.TrimSpace(token)] = struct{}{}
+				for _, curl := range strings.Fields(args) {
+					charmRef, err := charm.ParseURL(strings.TrimSpace(curl))
+					if err != nil {
+						return errgo.Mask(err)
+					}
+					resolvedCURL, err := h.resolveURL(charmRef)
+					if err != nil {
+						return errgo.Mask(err)
+					}
+					allowedEntities[resolvedCURL.URL.String()] = struct{}{}
 				}
 				if len(entityIds) == 0 {
 					return errgo.Newf("API operation does not involve expected entity %v", args)
@@ -238,7 +247,7 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.Resolve
 						_, okPromulgated = allowedEntities[purl.String()]
 					}
 					if !ok && !okPromulgated {
-						return errgo.Newf("API operation on entity %v not allowed", entityId)
+						return errgo.Newf("API operation on entity %v not allowed", entityId.String())
 					}
 				}
 				return nil
@@ -268,7 +277,7 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.Resolve
 						if err != nil {
 							return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 						}
-						if len(entity.CharmMeta.Terms) > 0 {
+						if entity.CharmMeta != nil && len(entity.CharmMeta.Terms) > 0 {
 							return errgo.New("access denied")
 						}
 					}

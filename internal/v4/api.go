@@ -1124,7 +1124,7 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 		if err != nil {
 			return nil, errgo.WithCausef(err, params.ErrBadRequest, `bad "id" parameter`)
 		}
-		resolvedURL, err := ResolveURL(h.Store, charmRef)
+		resolvedURL, err := h.resolveURL(charmRef)
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}
