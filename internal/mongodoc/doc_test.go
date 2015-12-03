@@ -61,17 +61,45 @@ func (s *DocSuite) TestIntBoolSetBSONInvalidValue(c *gc.C) {
 	c.Assert(err, gc.ErrorMatches, `invalid value 2`)
 }
 
-func (s *DocSuite) TestPreferredURL(c *gc.C) {
-	e1 := &mongodoc.Entity{
+var preferredURLTests = []struct {
+	entity         *mongodoc.Entity
+	usePromulgated bool
+	expectURLFalse string
+	expectURLTrue  string
+}{{
+	entity: &mongodoc.Entity{
 		URL: charm.MustParseURL("~ken/trusty/b-1"),
-	}
-	e2 := &mongodoc.Entity{
+	},
+	expectURLFalse: "cs:~ken/trusty/b-1",
+	expectURLTrue:  "cs:~ken/trusty/b-1",
+}, {
+	entity: &mongodoc.Entity{
 		URL:            charm.MustParseURL("~dmr/trusty/c-1"),
-		PromulgatedURL: charm.MustParseURL("trusty/c-1"),
-	}
+		PromulgatedURL: charm.MustParseURL("trusty/c-2"),
+	},
+	expectURLFalse: "cs:~dmr/trusty/c-1",
+	expectURLTrue:  "cs:trusty/c-2",
+}, {
+	entity: &mongodoc.Entity{
+		URL:            charm.MustParseURL("~dmr/trusty/c-1"),
+		PromulgatedURL: charm.MustParseURL("trusty/c-2"),
+		Development:    true,
+	},
+	expectURLFalse: "cs:~dmr/development/trusty/c-1",
+	expectURLTrue:  "cs:development/trusty/c-2",
+}, {
+	entity: &mongodoc.Entity{
+		URL:         charm.MustParseURL("~dmr/trusty/c-1"),
+		Development: true,
+	},
+	expectURLFalse: "cs:~dmr/development/trusty/c-1",
+	expectURLTrue:  "cs:~dmr/development/trusty/c-1",
+}}
 
-	c.Assert(e1.PreferredURL(false), gc.Equals, e1.URL)
-	c.Assert(e1.PreferredURL(true), gc.Equals, e1.URL)
-	c.Assert(e2.PreferredURL(false), gc.Equals, e2.URL)
-	c.Assert(e2.PreferredURL(true), gc.Equals, e2.PromulgatedURL)
+func (s *DocSuite) TestPreferredURL(c *gc.C) {
+	for i, test := range preferredURLTests {
+		c.Logf("test %d: %#v", i, test.entity)
+		c.Assert(test.entity.PreferredURL(false).String(), gc.Equals, test.expectURLFalse)
+		c.Assert(test.entity.PreferredURL(true).String(), gc.Equals, test.expectURLTrue)
+	}
 }
