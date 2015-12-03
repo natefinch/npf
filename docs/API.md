@@ -118,6 +118,9 @@ signifying true, or empty or "0", signifying false.
 The expand-id path expands a general id into a set of specific ids. It strips
 any revision number and series from id, and returns a slice of all the possible
 ids matched by that, including all the versions and series.
+If *id* is in the development channel, all development and non-development
+revisions will be returned; if it is not, then only non-development
+revisions will be returned.
 
 ```go
 []Id
@@ -131,10 +134,10 @@ Example: `GET wordpress/expand-id`
 
 ```json
 [
-    {"Id": "precise/wordpress-1"},
-    {"Id": "precise/wordpress-2"},
-    {"Id": "trusty/wordpress-1"},
     {"Id": "trusty/wordpress-2"}
+    {"Id": "trusty/wordpress-1"},
+    {"Id": "precise/wordpress-2"},
+    {"Id": "precise/wordpress-1"},
 ]
 ```
 
@@ -142,11 +145,23 @@ Example: `GET precise/wordpress-34/expand-id`
 
 ```json
 [
-    {"Id": "precise/wordpress-1"},
-    {"Id": "precise/wordpress-2"},
-    {"Id": "trusty/wordpress-1"},
     {"Id": "trusty/wordpress-2"}
+    {"Id": "trusty/wordpress-1"},
+    {"Id": "precise/wordpress-2"},
+    {"Id": "precise/wordpress-1"},
 ]
+```
+
+Example: `GET development/precise/wordpress-34/expand-id`
+
+```json
+[
+    {"Id": "development/trusty/wordpress-3"},
+    {"Id": "trusty/wordpress-2"},
+    {"Id": "trusty/wordpress-1"},
+    {"Id": "precise/wordpress-2"},
+    {"Id": "precise/wordpress-1"},
+ ]
 ```
 
 

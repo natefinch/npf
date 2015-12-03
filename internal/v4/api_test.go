@@ -1602,6 +1602,50 @@ var serveExpandIdTests = []struct {
 	expect: []params.ExpandedId{
 		{Id: "cs:~charmers/utopic/wordpress-42"},
 		{Id: "cs:~charmers/trusty/wordpress-47"},
+		{Id: "cs:~charmers/wordpress-5"},
+	},
+}, {
+	about: "fully qualified development URL",
+	url:   "~charmers/development/trusty/wordpress-47",
+	expect: []params.ExpandedId{
+		{Id: "cs:~charmers/utopic/wordpress-42"},
+		{Id: "cs:~charmers/development/trusty/wordpress-48"},
+		{Id: "cs:~charmers/trusty/wordpress-47"},
+		{Id: "cs:~charmers/development/wordpress-7"},
+		{Id: "cs:~charmers/development/wordpress-6"},
+		{Id: "cs:~charmers/wordpress-5"},
+	},
+}, {
+	about: "promulgated URL",
+	url:   "trusty/wordpress-47",
+	expect: []params.ExpandedId{
+		{Id: "cs:utopic/wordpress-42"},
+		{Id: "cs:trusty/wordpress-47"},
+		{Id: "cs:wordpress-49"},
+	},
+}, {
+	about: "development promulgated URL",
+	url:   "development/trusty/wordpress-48",
+	expect: []params.ExpandedId{
+		{Id: "cs:utopic/wordpress-42"},
+		{Id: "cs:development/trusty/wordpress-48"},
+		{Id: "cs:trusty/wordpress-47"},
+		{Id: "cs:development/wordpress-51"},
+		{Id: "cs:development/wordpress-50"},
+		{Id: "cs:wordpress-49"},
+	},
+}, {
+	about: "non-promulgated charm",
+	url:   "~bob/precise/builder",
+	expect: []params.ExpandedId{
+		{Id: "cs:~bob/precise/builder-5"},
+	},
+}, {
+	about: "non-promulgated charm with development URL",
+	url:   "~bob/development/precise/builder",
+	expect: []params.ExpandedId{
+		{Id: "cs:~bob/development/precise/builder-6"},
+		{Id: "cs:~bob/precise/builder-5"},
 	},
 }, {
 	about: "partial URL",
@@ -1638,8 +1682,17 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 	// so it is ok to reuse the same charm for all the entities.
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/utopic/wordpress-42", 42))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-47", 47))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/development/trusty/wordpress-48", 48))
+	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/wordpress-5", 49))
+	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/development/wordpress-6", 50))
+	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/development/wordpress-7", 51))
+
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/precise/haproxy-1", 1))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/haproxy-1", 1))
+
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/precise/builder-5", -1))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/development/precise/builder-6", -1))
+
 	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/mongo-0", 0))
 	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/wordpress-simple-0", 0))
 

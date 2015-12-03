@@ -468,7 +468,16 @@ func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter
 	// to return entities that match appropriately.
 
 	// Retrieve all the entities with the same base URL.
-	q := h.Store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}})
+	// Note that we don't do any permission checking of the returned URLs.
+	// This is because we know that the user is allowed to read at
+	// least the resolved URL passed into serveExpandId.
+	// If this does not specify "development", then no development
+	// revisions will be chosen, so the single ACL already checked
+	// is sufficient. If it *does* specify "development", then we assume
+	// that the development ACLs are more restrictive than the
+	// non-development ACLs, and given that, we can allow all
+	// the URLs.
+	q := h.Store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}, {"development", 1}})
 	if id.PromulgatedRevision != -1 {
 		q = q.Sort("-series", "-promulgated-revision")
 	} else {
