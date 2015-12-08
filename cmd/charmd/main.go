@@ -129,7 +129,7 @@ func serve(confPath string) error {
 	}
 
 	cfg.PublicKeyLocator = ring
-	server, err := charmstore.NewServer(db, es, "cs", cfg, charmstore.Legacy, charmstore.V4)
+	server, err := charmstore.NewServer(db, es, "cs", cfg, charmstore.Legacy, charmstore.V4, charmstore.V5)
 	if err != nil {
 		return errgo.Notef(err, "cannot create new server at %q", conf.APIAddr)
 	}

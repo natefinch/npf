@@ -1,4 +1,4 @@
-package v4_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+package v5_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
 	"encoding/json"
@@ -20,7 +20,7 @@ import (
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 )
 
 var mgoLogger = loggo.GetLogger("mgo")
@@ -136,6 +136,9 @@ func (s *commonSuite) TearDownTest(c *gc.C) {
 		s.discharger.Close()
 		s.idMServer.Close()
 	}
+	if s.termsDischarger != nil {
+		s.termsDischarger.Close()
+	}
 	s.IsolatedMgoSuite.TearDownTest(c)
 }
 
@@ -185,7 +188,7 @@ func (s *commonSuite) startServer(c *gc.C) {
 	}
 	db := s.Session.DB("charmstore")
 	var err error
-	s.srv, err = charmstore.NewServer(db, si, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v4.NewAPIHandler})
+	s.srv, err = charmstore.NewServer(db, si, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v5.NewAPIHandler})
 	c.Assert(err, gc.IsNil)
 	s.srvParams = config
 
@@ -193,7 +196,7 @@ func (s *commonSuite) startServer(c *gc.C) {
 		config.IdentityLocation = ""
 		config.PublicKeyLocator = nil
 		config.IdentityAPIURL = ""
-		s.noMacaroonSrv, err = charmstore.NewServer(db, si, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v4.NewAPIHandler})
+		s.noMacaroonSrv, err = charmstore.NewServer(db, si, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v5.NewAPIHandler})
 		c.Assert(err, gc.IsNil)
 	} else {
 		s.noMacaroonSrv = s.srv
@@ -205,8 +208,8 @@ func (s *commonSuite) startServer(c *gc.C) {
 // handler returns a request handler that can be
 // used to invoke private methods. The caller
 // is responsible for calling Put on the returned handler.
-func (s *commonSuite) handler(c *gc.C) v4.ReqHandler {
-	h := v4.New(s.store.Pool(), s.srvParams)
+func (s *commonSuite) handler(c *gc.C) *v5.ReqHandler {
+	h := v5.New(s.store.Pool(), s.srvParams)
 	defer h.Close()
 	rh, err := h.NewReqHandler()
 	c.Assert(err, gc.IsNil)

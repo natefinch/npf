@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+package v5 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
 	"encoding/base64"
@@ -21,8 +21,7 @@ import (
 )
 
 const (
-	basicRealm             = "CharmStore4"
-	promulgatorsGroup      = "promulgators"
+	PromulgatorsGroup      = "charmers"
 	opAccessCharmWithTerms = "access-operation"
 	opOther                = "other-operation"
 	defaultMacaroonExpiry  = 24 * time.Hour
@@ -291,7 +290,7 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.Resolve
 	}
 	return authorization{
 		Admin:    false,
-		Username: attrMap[usernameAttr],
+		Username: attrMap[UsernameAttr],
 	}, nil
 }
 
@@ -324,7 +323,7 @@ func (h *ReqHandler) authorizeWithPerms(req *http.Request, read, write []string,
 	return err
 }
 
-const usernameAttr = "username"
+const UsernameAttr = "username"
 
 // authorization conatains authorization information extracted from an HTTP request.
 // The zero value for a authorization contains no privileges.
@@ -377,7 +376,7 @@ func (h *ReqHandler) newMacaroon(caveats ...checkers.Caveat) (*macaroon.Macaroon
 				Location:  h.handler.config.IdentityLocation,
 				Condition: "is-authenticated-user",
 			},
-			usernameAttr,
+			UsernameAttr,
 		),
 		checkers.TimeBeforeCaveat(time.Now().Add(defaultMacaroonExpiry)),
 	)
