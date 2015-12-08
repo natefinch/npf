@@ -1211,6 +1211,138 @@ func (s *authSuite) TestDelegatableMacaroonWithTerms(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 }
 
+func (s *authSuite) TestOldDelegatableMacaroon(c *gc.C) {
+	// Create a new server with a third party discharger.
+	s.discharge = dischargeForUser("bob")
+
+	// User has agreed to terms.
+	s.dischargeTerms = func(s1, s2 string) ([]checkers.Caveat, error) {
+		return nil, nil
+	}
+
+	id1 := newResolvedURL("~charmers/precise/wordpress-10", 10)
+	err := s.store.AddCharmWithArchive(id1, storetesting.Charms.CharmDir("wordpress"))
+	c.Assert(err, jc.ErrorIsNil)
+
+	id2 := newResolvedURL("~charmers/precise/terms-11", 11)
+	err = s.store.AddCharmWithArchive(id2, storetesting.Charms.CharmDir("terms"))
+	c.Assert(err, jc.ErrorIsNil)
+
+	id3 := newResolvedURL("~charmers/precise/otherterms-17", 17)
+	err = s.store.AddCharmWithArchive(id3, storetesting.Charms.CharmDir("terms"))
+	c.Assert(err, jc.ErrorIsNil)
+
+	err = s.store.SetPerms(&id1.URL, "read", "bob")
+	c.Assert(err, jc.ErrorIsNil)
+
+	err = s.store.SetPerms(&id2.URL, "read", "bob")
+	c.Assert(err, jc.ErrorIsNil)
+
+	err = s.store.SetPerms(&id3.URL, "read", "bob")
+	c.Assert(err, jc.ErrorIsNil)
+
+	client := httpbakery.NewHTTPClient()
+
+	now := time.Now()
+	var gotBody json.RawMessage
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL("delegatable-macaroon"),
+		ExpectBody: httptesting.BodyAsserter(func(c *gc.C, m json.RawMessage) {
+			gotBody = m
+		}),
+		Do:           bakeryDo(nil),
+		ExpectStatus: http.StatusOK,
+	})
+
+	c.Assert(gotBody, gc.NotNil)
+	var m macaroon.Macaroon
+	err = json.Unmarshal(gotBody, &m)
+	c.Assert(err, gc.IsNil)
+
+	err = m.AddFirstPartyCaveat("is-entity " + id1.URL.String() + " " + id2.URL.String())
+
+	caveats := m.Caveats()
+	foundExpiry := false
+	for _, cav := range caveats {
+		cond, arg, err := checkers.ParseCaveat(cav.Id)
+		c.Assert(err, gc.IsNil)
+		switch cond {
+		case checkers.CondTimeBefore:
+			t, err := time.Parse(time.RFC3339Nano, arg)
+			c.Assert(err, gc.IsNil)
+			c.Assert(t, jc.TimeBetween(now.Add(v4.DelegatableMacaroonExpiry), now.Add(v4.DelegatableMacaroonExpiry+time.Second)))
+			foundExpiry = true
+		case "is-entity":
+			c.Assert(arg, gc.Equals, "cs:~charmers/precise/wordpress-10 cs:~charmers/precise/terms-11")
+		}
+	}
+	c.Assert(foundExpiry, jc.IsTrue)
+
+	// Now check that we can use the obtained macaroon to do stuff
+	// as the declared user.
+	s.discharge = func(_, _ string) ([]checkers.Caveat, error) {
+		return nil, errgo.New("no discharge")
+	}
+	s.dischargeTerms = func(_, _ string) ([]checkers.Caveat, error) {
+		return nil, errgo.New("no discharge")
+	}
+
+	// First check that we require authorization to access the charm.
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("~charmers/precise/terms/meta/id-name"),
+		Method:  "GET",
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusProxyAuthRequired)
+
+	// Then check that the request succeeds if we provide the delegatable
+	// macaroon.
+
+	client = httpbakery.NewHTTPClient()
+	u, err := url.Parse("http://127.0.0.1")
+	c.Assert(err, gc.IsNil)
+	err = httpbakery.SetCookie(client.Jar, u, macaroon.Slice{&m})
+	c.Assert(err, gc.IsNil)
+
+	// Test access to metadata.
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL("~charmers/precise/terms/meta/id-name"),
+		ExpectBody: params.IdNameResponse{
+			Name: "terms",
+		},
+
+		ExpectStatus: http.StatusOK,
+		Do:           bakeryDo(client),
+	})
+
+	// Test access to archive.
+	httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler:     s.srv,
+		URL:         storeURL("~charmers/precise/terms/archive"),
+		Do:          bakeryDo(client),
+		ExpectError: ".*third party refused discharge: cannot discharge: no discharge",
+	})
+
+	// Test access to archive of another charm.
+	response := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("~charmers/precise/wordpress-10/archive"),
+		Do:      bakeryDo(client),
+	})
+	c.Assert(response.Code, gc.Equals, http.StatusOK)
+
+	// Test access to archive of the other charm which we can access using the
+	// delegatable macaroon
+	httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler:     s.srv,
+		URL:         storeURL("~charmers/precise/terms-11/archive"),
+		Do:          bakeryDo(client),
+		ExpectError: ".*third party refused discharge: cannot discharge: no discharge",
+	})
+}
+
 func (s *authSuite) TestDelegatableMacaroonWithoutEntityForAccessToCharmWithTerms(c *gc.C) {
 	// Create a new server with a third party discharger.
 	s.discharge = dischargeForUser("bob")

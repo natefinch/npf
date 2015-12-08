@@ -20,3 +20,5 @@ identity-api-url: http://localhost:8081
 #stats-cache-max-age: 1h
 #request-timeout: 500ms
 #search-cache-max-age: 0s
+# Uncomment to test with a terms service running locally
+#terms-location: localhost:8081
