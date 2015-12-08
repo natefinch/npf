@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package v4_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+package v5_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
 	"bytes"
@@ -34,11 +34,13 @@ var logResponses = map[string]*params.LogResponse{
 		Data:  rawMessage("info data 1"),
 		Level: params.InfoLevel,
 		Type:  params.IngestionType,
+		URLs:  nil,
 	},
 	"error1": {
 		Data:  rawMessage("error data 1"),
 		Level: params.ErrorLevel,
 		Type:  params.IngestionType,
+		URLs:  nil,
 	},
 	"info2": {
 		Data:  rawMessage("info data 2"),
@@ -54,6 +56,7 @@ var logResponses = map[string]*params.LogResponse{
 		Data:  rawMessage("warning data 1"),
 		Level: params.WarningLevel,
 		Type:  params.IngestionType,
+		URLs:  nil,
 	},
 	"error2": {
 		Data:  rawMessage("error data 2"),
@@ -89,6 +92,7 @@ var logResponses = map[string]*params.LogResponse{
 		Data:  rawMessage("statistics info data"),
 		Level: params.InfoLevel,
 		Type:  params.LegacyStatisticsType,
+		URLs:  nil,
 	},
 }
 

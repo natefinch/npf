@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+package v5 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
 	"archive/zip"
@@ -112,7 +112,7 @@ func (h *ReqHandler) serveIcon(id *router.ResolvedURL, w http.ResponseWriter, re
 		}
 		setArchiveCacheControl(w.Header(), h.isPublic(id.URL))
 		w.Header().Set("Content-Type", "image/svg+xml")
-		io.Copy(w, strings.NewReader(defaultIcon))
+		io.Copy(w, strings.NewReader(DefaultIcon))
 		return nil
 	}
 	defer r.Close()
@@ -121,7 +121,7 @@ func (h *ReqHandler) serveIcon(id *router.ResolvedURL, w http.ResponseWriter, re
 	if err := processIcon(w, r); err != nil {
 		if errgo.Cause(err) == errProbablyNotXML {
 			logger.Errorf("cannot process icon.svg from %s: %v", id, err)
-			io.Copy(w, strings.NewReader(defaultIcon))
+			io.Copy(w, strings.NewReader(DefaultIcon))
 			return nil
 		}
 		return errgo.Mask(err)

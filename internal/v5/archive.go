@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+package v5 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
 	"archive/zip"
@@ -610,11 +610,9 @@ func verificationError(err error) error {
 	return errgo.WithCausef(nil, params.ErrInvalidEntity, string(encodedMessages))
 }
 
-var (
-	// archiveCachePublicMaxAge specifies the cache expiry duration for items
-	// returned from the archive where the id represents the id of a public entity.
-	archiveCachePublicMaxAge = 1 * time.Hour
-)
+// ArchiveCachePublicMaxAge specifies the cache expiry duration for items
+// returned from the archive where the id represents the id of a public entity.
+const ArchiveCachePublicMaxAge = 1 * time.Hour
 
 // setArchiveCacheControl sets cache control headers
 // in a response to an archive-derived endpoint.
@@ -622,7 +620,7 @@ var (
 // the entity id can or not be cached .
 func setArchiveCacheControl(h http.Header, isPublic bool) {
 	if isPublic {
-		seconds := int(archiveCachePublicMaxAge / time.Second)
+		seconds := int(ArchiveCachePublicMaxAge / time.Second)
 		h.Set("Cache-Control", "public, max-age="+strconv.Itoa(seconds))
 	} else {
 		h.Set("Cache-Control", "no-cache, must-revalidate")

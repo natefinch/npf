@@ -1489,7 +1489,7 @@ var sortMongoFields = map[string]string{
 
 // createSort creates a sort query parameters for mongo out of a Sort parameter.
 func createMongoSort(sp SearchParams) (bson.D, error) {
-	sort := make (bson.D, len(sp.sort))
+	sort := make(bson.D, len(sp.sort))
 
 	for i, s := range sp.sort {
 		field := sortMongoFields[s.Field]
@@ -1517,30 +1517,30 @@ func (store *Store) List(sp SearchParams) (ListResult, error) {
 
 	d := bson.M{
 		"_id": bson.M{
-			"$concat" : []interface{}{
+			"$concat": []interface{}{
 				"$baseurl",
 				"$series",
-				bson.M {
-					"$cond": []string{"$development", "true", "false",},
+				bson.M{
+					"$cond": []string{"$development", "true", "false"},
 				},
 			},
 		},
 		"promulgated-url": bson.M{"$last": "$promulgated-url"},
-		"development": bson.M{"$last": "$development"},
-		"name": bson.M{"$last": "$name"},
-		"user": bson.M{"$last": "$user"},
-		"series": bson.M{"$last": "$series"},
-		"url": bson.M{"$last": "$_id"},
+		"development":     bson.M{"$last": "$development"},
+		"name":            bson.M{"$last": "$name"},
+		"user":            bson.M{"$last": "$user"},
+		"series":          bson.M{"$last": "$series"},
+		"url":             bson.M{"$last": "$_id"},
 	}
-	group := bson.M{"$group": d }
+	group := bson.M{"$group": d}
 	q = append(q, group)
 	project := bson.M{
 		"$project": bson.M{
-			"_id" : "$url",
-			"development": "$development",
-			"name": "$name",
-			"user": "$user",
-			"series": "$series",
+			"_id":             "$url",
+			"development":     "$development",
+			"name":            "$name",
+			"user":            "$user",
+			"series":          "$series",
 			"promulgated-url": "$promulgated-url",
 		},
 	}

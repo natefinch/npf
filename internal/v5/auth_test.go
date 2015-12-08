@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package v4_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+package v5_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
 	"encoding/json"
@@ -26,7 +26,7 @@ import (
 	"gopkg.in/macaroon.v1"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 )
 
 func (s *commonSuite) AssertEndpointAuth(c *gc.C, p httptesting.JSONCallParams) {
@@ -297,7 +297,7 @@ var readAuthorizationTests = []struct {
 func dischargeForUser(username string) func(_, _ string) ([]checkers.Caveat, error) {
 	return func(_, _ string) ([]checkers.Caveat, error) {
 		return []checkers.Caveat{
-			checkers.DeclaredCaveat(v4.UsernameAttr, username),
+			checkers.DeclaredCaveat(v5.UsernameAttr, username),
 		}, nil
 	}
 }
@@ -830,7 +830,7 @@ func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
 		return []checkers.Caveat{{
 			Condition: "is-entity cs:~charmers/utopic/wordpress-42",
 		},
-			checkers.DeclaredCaveat(v4.UsernameAttr, "bob"),
+			checkers.DeclaredCaveat(v5.UsernameAttr, "bob"),
 		}, nil
 	}
 
@@ -920,7 +920,7 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 		case checkers.CondTimeBefore:
 			t, err := time.Parse(time.RFC3339Nano, arg)
 			c.Assert(err, gc.IsNil)
-			c.Assert(t, jc.TimeBetween(now.Add(v4.DelegatableMacaroonExpiry), now.Add(v4.DelegatableMacaroonExpiry+time.Second)))
+			c.Assert(t, jc.TimeBetween(now.Add(v5.DelegatableMacaroonExpiry), now.Add(v5.DelegatableMacaroonExpiry+time.Second)))
 			foundExpiry = true
 		}
 	}
@@ -980,6 +980,66 @@ func (s *authSuite) TestDelegatableMacaroonWithBasicAuth(c *gc.C) {
 		},
 		ExpectStatus: http.StatusForbidden,
 	})
+}
+
+func (s *authSuite) TestGroupsForUserSuccess(c *gc.C) {
+	h := s.handler(c)
+	defer h.Close()
+	s.idM.groups = map[string][]string{
+		"bob": {"one", "two"},
+	}
+	groups, err := v5.GroupsForUser(h, "bob")
+	c.Assert(err, gc.IsNil)
+	c.Assert(groups, jc.DeepEquals, []string{"one", "two"})
+}
+
+func (s *authSuite) TestGroupsForUserWithNoIdentity(c *gc.C) {
+	h := s.handler(c)
+	defer h.Close()
+	groups, err := v5.GroupsForUser(h, "someone")
+	c.Assert(err, gc.IsNil)
+	c.Assert(groups, gc.HasLen, 0)
+}
+
+func (s *authSuite) TestGroupsForUserWithInvalidIdentityURL(c *gc.C) {
+	s.PatchValue(&s.srvParams.IdentityAPIURL, ":::::")
+	h := s.handler(c)
+	defer h.Close()
+	groups, err := v5.GroupsForUser(h, "someone")
+	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: cannot GET \"/v1/u/someone/groups\": cannot create request for \":::::/v1/u/someone/groups\": parse :::::/v1/u/someone/groups: missing protocol scheme`)
+	c.Assert(groups, gc.HasLen, 0)
+}
+
+func (s *authSuite) TestGroupsForUserWithInvalidBody(c *gc.C) {
+	h := s.handler(c)
+	defer h.Close()
+	s.idM.body = "bad"
+	s.idM.contentType = "application/json"
+	groups, err := v5.GroupsForUser(h, "someone")
+	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: cannot unmarshal response: invalid character 'b' looking for beginning of value`)
+	c.Assert(groups, gc.HasLen, 0)
+}
+
+func (s *authSuite) TestGroupsForUserWithErrorResponse(c *gc.C) {
+	h := s.handler(c)
+	defer h.Close()
+	s.idM.body = `{"message":"some error","code":"some code"}`
+	s.idM.status = http.StatusUnauthorized
+	s.idM.contentType = "application/json"
+	groups, err := v5.GroupsForUser(h, "someone")
+	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: some error`)
+	c.Assert(groups, gc.HasLen, 0)
+}
+
+func (s *authSuite) TestGroupsForUserWithBadErrorResponse(c *gc.C) {
+	h := s.handler(c)
+	defer h.Close()
+	s.idM.body = `{"message":"some error"`
+	s.idM.status = http.StatusUnauthorized
+	s.idM.contentType = "application/json"
+	groups, err := v5.GroupsForUser(h, "someone")
+	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: bad status "401 Unauthorized"`)
+	c.Assert(groups, gc.HasLen, 0)
 }
 
 type errorTransport string

@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package v4_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+package v5_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
@@ -21,7 +22,7 @@ import (
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 )
 
 var serveDiagramErrorsTests = []struct {
@@ -327,7 +328,7 @@ func (s *APISuite) TestServeDefaultIcon(c *gc.C) {
 		URL:     storeURL(url.URL.Path() + "/icon.svg"),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	c.Assert(rec.Body.String(), gc.Equals, v4.DefaultIcon)
+	c.Assert(rec.Body.String(), gc.Equals, v5.DefaultIcon)
 	c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
 	assertCacheControl(c, rec.Header(), true)
 }
@@ -355,9 +356,31 @@ func (s *APISuite) TestServeDefaultIconForBadXML(c *gc.C) {
 			URL:     storeURL(url.URL.Path() + "/icon.svg"),
 		})
 		c.Assert(rec.Code, gc.Equals, http.StatusOK)
-		c.Assert(rec.Body.String(), gc.Equals, v4.DefaultIcon)
+		c.Assert(rec.Body.String(), gc.Equals, v5.DefaultIcon)
 		c.Assert(rec.Header().Get("Content-Type"), gc.Equals, "image/svg+xml")
 		assertCacheControl(c, rec.Header(), true)
+	}
+}
+
+func (s *APISuite) TestProcessIconWorksOnDefaultIcon(c *gc.C) {
+	var buf bytes.Buffer
+	err := v5.ProcessIcon(&buf, strings.NewReader(v5.DefaultIcon))
+	c.Assert(err, gc.IsNil)
+	assertXMLEqual(c, buf.Bytes(), []byte(v5.DefaultIcon))
+}
+
+func (s *APISuite) TestProcessIconDoesNotQuoteNewlines(c *gc.C) {
+	// Note: this is important because Chrome does not like
+	// to see &#xA; before the opening <svg> tag.
+	icon := `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+  <svg></svg>
+`
+	var buf bytes.Buffer
+	err := v5.ProcessIcon(&buf, strings.NewReader(icon))
+	c.Assert(err, gc.IsNil)
+	if strings.Contains(buf.String(), "&#x") {
+		c.Errorf("newlines were quoted in processed icon output")
 	}
 }
 
