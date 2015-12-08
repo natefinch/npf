@@ -410,6 +410,52 @@ func (s *ListSuite) TestSortUnsupportedListField(c *gc.C) {
 	c.Assert(e.Message, gc.Equals, "invalid sort field: unrecognized sort parameter \"text\"")
 }
 
+func (s *ListSuite) TestGetLatestRevisionOnly(c *gc.C) {
+	id := newResolvedURL("cs:~charmers/precise/wordpress-24", 24)
+	err := s.store.AddCharmWithArchive(id, getCharm("wordpress"))
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+
+	testresults := []*router.ResolvedURL{
+		exportTestBundles["wordpress-simple"],
+		id,
+		exportTestCharms["varnish"],
+		exportTestCharms["mysql"],
+	}
+
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("list"),
+	})
+	var sr params.ListResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &sr)
+	c.Assert(err, gc.IsNil)
+	c.Assert(sr.Results, gc.HasLen, 4, gc.Commentf("expected %#v", testresults))
+	c.Logf("results: %s", rec.Body.Bytes())
+	for i := range testresults {
+		c.Assert(sr.Results[i].Id.String(), gc.Equals, testresults[i].PreferredURL().String(), gc.Commentf("element %d"))
+	}
+
+
+	testresults = []*router.ResolvedURL{
+		exportTestCharms["mysql"],
+		exportTestCharms["varnish"],
+		id,
+		exportTestBundles["wordpress-simple"],
+	}
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("list?sort=name"),
+	})
+	err = json.Unmarshal(rec.Body.Bytes(), &sr)
+	c.Assert(err, gc.IsNil)
+	c.Assert(sr.Results, gc.HasLen, 4, gc.Commentf("expected %#v", testresults))
+	c.Logf("results: %s", rec.Body.Bytes())
+	for i := range testresults {
+		c.Assert(sr.Results[i].Id.String(), gc.Equals, testresults[i].PreferredURL().String(), gc.Commentf("element %d"))
+	}
+}
+
 func (s *ListSuite) assertPut(c *gc.C, url string, val interface{}) {
 	body, err := json.Marshal(val)
 	c.Assert(err, gc.IsNil)

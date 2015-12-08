@@ -1433,7 +1433,7 @@ var listFilters = map[string]string{
 	"promulgated": "promulgated-revision",
 }
 
-func prepareList(sp SearchParams) (filters map[string]interface{}, sort []string, err error) {
+func prepareList(sp SearchParams) (filters map[string]interface{}, sort bson.D, err error) {
 	if len(sp.Text) > 0 {
 		return nil, nil, errgo.New("text not allowed")
 	}
@@ -1488,17 +1488,19 @@ var sortMongoFields = map[string]string{
 }
 
 // createSort creates a sort query parameters for mongo out of a Sort parameter.
-func createMongoSort(sp SearchParams) ([]string, error) {
-	sort := make([]string, len(sp.sort))
+func createMongoSort(sp SearchParams) (bson.D, error) {
+	sort := make (bson.D, len(sp.sort))
+
 	for i, s := range sp.sort {
 		field := sortMongoFields[s.Field]
-		sort[i] = field
 		if field == "" {
 			return nil, errgo.Newf("sort %q not allowed", s.Field)
 		}
+		order := 1
 		if s.Order == sortDescending {
-			sort[i] = "-" + field
+			order = -1
 		}
+		sort[i] = bson.DocElem{field, order}
 	}
 	return sort, nil
 }
@@ -1510,21 +1512,53 @@ func (store *Store) List(sp SearchParams) (ListResult, error) {
 	if err != nil {
 		return ListResult{}, errgo.Mask(err)
 	}
-	query := store.DB.Entities().Find(filters)
+	q := []bson.M{{"$match": filters}}
+	q = append(q, bson.M{"$sort": bson.D{{"revision", 1}}})
+
+	d := bson.M{
+		"_id": bson.M{
+			"$concat" : []interface{}{
+				"$baseurl",
+				"$series",
+				bson.M {
+					"$cond": []string{"$development", "true", "false",},
+				},
+			},
+		},
+		"promulgated-url": bson.M{"$last": "$promulgated-url"},
+		"development": bson.M{"$last": "$development"},
+		"name": bson.M{"$last": "$name"},
+		"user": bson.M{"$last": "$user"},
+		"series": bson.M{"$last": "$series"},
+		"url": bson.M{"$last": "$_id"},
+	}
+	group := bson.M{"$group": d }
+	q = append(q, group)
+	project := bson.M{
+		"$project": bson.M{
+			"_id" : "$url",
+			"development": "$development",
+			"name": "$name",
+			"user": "$user",
+			"series": "$series",
+			"promulgated-url": "$promulgated-url",
+		},
+	}
+	q = append(q, project)
 	if len(sort) == 0 {
-		query = query.Sort("_id")
+		q = append(q, bson.M{
+			"$sort": bson.D{{"_id", 1}},
+		})
 	} else {
-		query = query.Sort(sort...)
+		q = append(q, bson.M{"$sort": sort})
 	}
 
-	//Only select the fields that are needed.
-	query = query.Select(bson.D{{"_id", 1}, {"url", 1}, {"development", 1}, {"promulgated-url", 1}})
-
+	pipe := store.DB.Entities().Pipe(q)
 	r := ListResult{
 		Results: make([]*router.ResolvedURL, 0),
 	}
 	var entity mongodoc.Entity
-	iter := query.Iter()
+	iter := pipe.Iter()
 	for iter.Next(&entity) {
 		r.Results = append(r.Results, EntityResolvedURL(&entity))
 	}
