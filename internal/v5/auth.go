@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+package v5 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
 	"encoding/base64"
@@ -20,7 +20,7 @@ import (
 
 const (
 	basicRealm        = "CharmStore4"
-	promulgatorsGroup = "charmers"
+	PromulgatorsGroup = "charmers"
 )
 
 // authorize checks that the current user is authorized based on the provided
@@ -114,7 +114,7 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityId *router.ResolvedUR
 	}
 	return authorization{
 		Admin:    false,
-		Username: attrMap[usernameAttr],
+		Username: attrMap[UsernameAttr],
 	}, nil
 }
 
@@ -147,7 +147,7 @@ func (h *ReqHandler) authorizeWithPerms(req *http.Request, read, write []string,
 	return err
 }
 
-const usernameAttr = "username"
+const UsernameAttr = "username"
 
 // authorization conatains authorization information extracted from an HTTP request.
 // The zero value for a authorization contains no privileges.
@@ -200,7 +200,7 @@ func (h *ReqHandler) newMacaroon() (*macaroon.Macaroon, error) {
 	return h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
 		Location:  h.handler.config.IdentityLocation,
 		Condition: "is-authenticated-user",
-	}, usernameAttr)})
+	}, UsernameAttr)})
 }
 
 var errNoCreds = errgo.New("missing HTTP auth header")

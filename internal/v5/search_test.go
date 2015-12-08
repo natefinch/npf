@@ -1,12 +1,13 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package v4_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+package v5_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -21,10 +22,11 @@ import (
 	"gopkg.in/macaroon.v1"
 	"gopkg.in/mgo.v2/bson"
 
+	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 )
 
 type SearchSuite struct {
@@ -98,6 +100,185 @@ func getBundle(name string) *charm.BundleDir {
 	ba := storetesting.Charms.BundleDir(name)
 	ba.Data().Tags = append(strings.Split(name, "-"), "baz")
 	return ba
+}
+
+func (s *SearchSuite) TestParseSearchParams(c *gc.C) {
+	tests := []struct {
+		about        string
+		query        string
+		expectParams charmstore.SearchParams
+		expectError  string
+	}{{
+		about: "bare search",
+		query: "",
+	}, {
+		about: "text search",
+		query: "text=test",
+		expectParams: charmstore.SearchParams{
+			Text: "test",
+		},
+	}, {
+		about: "autocomplete",
+		query: "autocomplete=1",
+		expectParams: charmstore.SearchParams{
+			AutoComplete: true,
+		},
+	}, {
+		about:       "invalid autocomplete",
+		query:       "autocomplete=true",
+		expectError: `invalid autocomplete parameter: unexpected bool value "true" (must be "0" or "1")`,
+	}, {
+		about: "limit",
+		query: "limit=20",
+		expectParams: charmstore.SearchParams{
+			Limit: 20,
+		},
+	}, {
+		about:       "invalid limit",
+		query:       "limit=twenty",
+		expectError: `invalid limit parameter: could not parse integer: strconv.ParseInt: parsing "twenty": invalid syntax`,
+	}, {
+		about:       "limit too low",
+		query:       "limit=-1",
+		expectError: "invalid limit parameter: expected integer greater than zero",
+	}, {
+		about: "include",
+		query: "include=archive-size",
+		expectParams: charmstore.SearchParams{
+			Include: []string{"archive-size"},
+		},
+	}, {
+		about: "include many",
+		query: "include=archive-size&include=bundle-data",
+		expectParams: charmstore.SearchParams{
+			Include: []string{"archive-size", "bundle-data"},
+		},
+	}, {
+		about: "include many with blanks",
+		query: "include=archive-size&include=&include=bundle-data",
+		expectParams: charmstore.SearchParams{
+			Include: []string{"archive-size", "bundle-data"},
+		},
+	}, {
+		about: "description filter",
+		query: "description=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"description": {"text"},
+			},
+		},
+	}, {
+		about: "name filter",
+		query: "name=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"name": {"text"},
+			},
+		},
+	}, {
+		about: "owner filter",
+		query: "owner=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"owner": {"text"},
+			},
+		},
+	}, {
+		about: "provides filter",
+		query: "provides=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"provides": {"text"},
+			},
+		},
+	}, {
+		about: "requires filter",
+		query: "requires=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"requires": {"text"},
+			},
+		},
+	}, {
+		about: "series filter",
+		query: "series=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"series": {"text"},
+			},
+		},
+	}, {
+		about: "tags filter",
+		query: "tags=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"tags": {"text"},
+			},
+		},
+	}, {
+		about: "type filter",
+		query: "type=text",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"type": {"text"},
+			},
+		},
+	}, {
+		about: "many filters",
+		query: "name=name&owner=owner&series=series1&series=series2",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"name":   {"name"},
+				"owner":  {"owner"},
+				"series": {"series1", "series2"},
+			},
+		},
+	}, {
+		about:       "bad parameter",
+		query:       "a=b",
+		expectError: "invalid parameter: a",
+	}, {
+		about: "skip",
+		query: "skip=20",
+		expectParams: charmstore.SearchParams{
+			Skip: 20,
+		},
+	}, {
+		about:       "invalid skip",
+		query:       "skip=twenty",
+		expectError: `invalid skip parameter: could not parse integer: strconv.ParseInt: parsing "twenty": invalid syntax`,
+	}, {
+		about:       "skip too low",
+		query:       "skip=-1",
+		expectError: "invalid skip parameter: expected non-negative integer",
+	}, {
+		about: "promulgated filter",
+		query: "promulgated=1",
+		expectParams: charmstore.SearchParams{
+			Filters: map[string][]string{
+				"promulgated": {"1"},
+			},
+		},
+	}, {
+		about:       "promulgated filter - bad",
+		query:       "promulgated=bad",
+		expectError: `invalid promulgated filter parameter: unexpected bool value "bad" (must be "0" or "1")`,
+	}}
+	for i, test := range tests {
+		c.Logf("test %d. %s", i, test.about)
+		var req http.Request
+		var err error
+		req.Form, err = url.ParseQuery(test.query)
+		c.Assert(err, gc.IsNil)
+		sp, err := v5.ParseSearchParams(&req)
+		if test.expectError != "" {
+			c.Assert(err, gc.Not(gc.IsNil))
+			c.Assert(err.Error(), gc.Equals, test.expectError)
+		} else {
+			c.Assert(err, gc.IsNil)
+		}
+		c.Assert(sp, jc.DeepEquals, test.expectParams)
+	}
 }
 
 func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
@@ -647,7 +828,7 @@ func (s *SearchSuite) TestSearchWithUserMacaroon(c *gc.C) {
 
 func (s *SearchSuite) TestSearchWithUserInGroups(c *gc.C) {
 	m, err := s.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
-		checkers.DeclaredCaveat(v4.UsernameAttr, "bob"),
+		checkers.DeclaredCaveat(v5.UsernameAttr, "bob"),
 	})
 	c.Assert(err, gc.IsNil)
 	macaroonCookie, err := httpbakery.NewCookie(macaroon.Slice{m})

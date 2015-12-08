@@ -1,9 +1,12 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+package v5 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
-var defaultIcon = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+// DefaultIcon holds the default charm icon SVG content.
+const DefaultIcon = defaultIcon
+
+const defaultIcon = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg

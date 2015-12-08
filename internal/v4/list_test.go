@@ -436,7 +436,6 @@ func (s *ListSuite) TestGetLatestRevisionOnly(c *gc.C) {
 		c.Assert(sr.Results[i].Id.String(), gc.Equals, testresults[i].PreferredURL().String(), gc.Commentf("element %d"))
 	}
 
-
 	testresults = []*router.ResolvedURL{
 		exportTestCharms["mysql"],
 		exportTestCharms["varnish"],

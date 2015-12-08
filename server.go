@@ -17,17 +17,20 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/legacy"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 )
 
 // Versions of the API that can be served.
 const (
-	V4     = "v4"
 	Legacy = ""
+	V4     = "v4"
+	V5     = "v5"
 )
 
 var versions = map[string]charmstore.NewAPIHandlerFunc{
-	V4:     v4.NewAPIHandler,
 	Legacy: legacy.NewAPIHandler,
+	V4:     v4.NewAPIHandler,
+	V5:     v5.NewAPIHandler,
 }
 
 // HTTPCloseHandler represents a HTTP handler that
