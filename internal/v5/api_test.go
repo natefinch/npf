@@ -1,7 +1,7 @@
 // Copyright 2014 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-package v4_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+package v5_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
 	"archive/zip"
@@ -31,13 +31,14 @@ import (
 	"gopkg.in/macaroon.v1"
 	"gopkg.in/mgo.v2/bson"
 
+	"gopkg.in/juju/charmstore.v5-unstable/audit"
 	"gopkg.in/juju/charmstore.v5-unstable/elasticsearch"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting/hashtesting"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 )
 
 var testPublicKey = bakery.PublicKey{
@@ -577,6 +578,58 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 			c.Errorf("endpoint %q is null for all endpoints, so is not properly tested", ep.name)
 		}
 	}
+}
+
+func (s *APISuite) TestMetaPermAudit(c *gc.C) {
+	var calledEntities []audit.Entry
+	s.PatchValue(v5.TestAddAuditCallback, func(e audit.Entry) {
+		calledEntities = append(calledEntities, e)
+	})
+	s.discharge = dischargeForUser("bob")
+
+	url := newResolvedURL("~bob/precise/wordpress-23", 23)
+	s.addPublicCharm(c, "wordpress", url)
+	s.assertPutNonAdmin(c, "precise/wordpress-23/meta/perm/read", []string{"charlie"})
+	c.Assert(calledEntities, jc.DeepEquals, []audit.Entry{{
+		User: "bob",
+		Op:   audit.OpSetPerm,
+		ACL: &audit.ACL{
+			Read: []string{"charlie"},
+		},
+		Entity: charm.MustParseURL("~bob/precise/wordpress-23"),
+	}})
+	calledEntities = []audit.Entry{}
+
+	s.assertPut(c, "precise/wordpress-23/meta/perm/write", []string{"bob", "foo"})
+	c.Assert(calledEntities, jc.DeepEquals, []audit.Entry{{
+		User: "admin",
+		Op:   audit.OpSetPerm,
+		ACL: &audit.ACL{
+			Write: []string{"bob", "foo"},
+		},
+		Entity: charm.MustParseURL("~bob/precise/wordpress-23"),
+	}})
+	calledEntities = []audit.Entry{}
+
+	s.assertPutNonAdmin(c, "precise/wordpress-23/meta/perm", params.PermRequest{
+		Read:  []string{"a"},
+		Write: []string{"b", "c"},
+	})
+	c.Assert(calledEntities, jc.DeepEquals, []audit.Entry{{
+		User: "bob",
+		Op:   audit.OpSetPerm,
+		ACL: &audit.ACL{
+			Read: []string{"a"},
+		},
+		Entity: charm.MustParseURL("~bob/precise/wordpress-23"),
+	}, {
+		User: "bob",
+		Op:   audit.OpSetPerm,
+		ACL: &audit.ACL{
+			Write: []string{"b", "c"},
+		},
+		Entity: charm.MustParseURL("~bob/precise/wordpress-23"),
+	}})
 }
 
 func (s *APISuite) TestMetaPerm(c *gc.C) {
@@ -1526,7 +1579,7 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 	for i, test := range resolveURLTests {
 		c.Logf("test %d: %s", i, test.url)
 		url := charm.MustParseURL(test.url)
-		rurl, err := v4.ResolveURL(s.store, url)
+		rurl, err := v5.ResolveURL(s.store, url)
 		if test.notFound {
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 			c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for ".*"`)
@@ -2625,7 +2678,7 @@ var promulgateTests = []struct {
 	},
 	expectBaseEntities: []*mongodoc.BaseEntity{
 		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(mongodoc.ACL{
-			Write: []string{v4.PromulgatorsGroup},
+			Write: []string{v5.PromulgatorsGroup},
 		}).WithPromulgated(true).Build(),
 	},
 	expectPromulgate: true,
@@ -2734,7 +2787,7 @@ var promulgateTests = []struct {
 	id:   "~charmers/wordpress",
 	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: false}),
 	caveats: []checkers.Caveat{
-		checkers.DeclaredCaveat(v4.UsernameAttr, v4.PromulgatorsGroup),
+		checkers.DeclaredCaveat(v5.UsernameAttr, v5.PromulgatorsGroup),
 	},
 	expectStatus: http.StatusOK,
 	expectEntities: []*mongodoc.Entity{
@@ -2743,7 +2796,7 @@ var promulgateTests = []struct {
 	expectBaseEntities: []*mongodoc.BaseEntity{
 		storetesting.NewBaseEntity("~charmers/wordpress").Build(),
 	},
-	expectUser: v4.PromulgatorsGroup,
+	expectUser: v5.PromulgatorsGroup,
 }, {
 	about: "promulgate base entity with macaroon",
 	entities: []*mongodoc.Entity{
@@ -2755,7 +2808,7 @@ var promulgateTests = []struct {
 	id:   "~charmers/wordpress",
 	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
 	caveats: []checkers.Caveat{
-		checkers.DeclaredCaveat(v4.UsernameAttr, v4.PromulgatorsGroup),
+		checkers.DeclaredCaveat(v5.UsernameAttr, v5.PromulgatorsGroup),
 	},
 	expectStatus: http.StatusOK,
 	expectEntities: []*mongodoc.Entity{
@@ -2763,11 +2816,11 @@ var promulgateTests = []struct {
 	},
 	expectBaseEntities: []*mongodoc.BaseEntity{
 		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(mongodoc.ACL{
-			Write: []string{v4.PromulgatorsGroup},
+			Write: []string{v5.PromulgatorsGroup},
 		}).WithPromulgated(true).Build(),
 	},
 	expectPromulgate: true,
-	expectUser:       v4.PromulgatorsGroup,
+	expectUser:       v5.PromulgatorsGroup,
 }, {
 	about: "promulgate base entity with group macaroon",
 	entities: []*mongodoc.Entity{
@@ -2779,10 +2832,10 @@ var promulgateTests = []struct {
 	id:   "~charmers/wordpress",
 	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
 	caveats: []checkers.Caveat{
-		checkers.DeclaredCaveat(v4.UsernameAttr, "bob"),
+		checkers.DeclaredCaveat(v5.UsernameAttr, "bob"),
 	},
 	groups: map[string][]string{
-		"bob": {v4.PromulgatorsGroup, "yellow"},
+		"bob": {v5.PromulgatorsGroup, "yellow"},
 	},
 	expectStatus: http.StatusOK,
 	expectEntities: []*mongodoc.Entity{
@@ -2790,7 +2843,7 @@ var promulgateTests = []struct {
 	},
 	expectBaseEntities: []*mongodoc.BaseEntity{
 		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(mongodoc.ACL{
-			Write: []string{v4.PromulgatorsGroup},
+			Write: []string{v5.PromulgatorsGroup},
 		}).WithPromulgated(true).Build(),
 	},
 	expectPromulgate: true,
@@ -2825,7 +2878,7 @@ var promulgateTests = []struct {
 	id:   "~charmers/wordpress",
 	body: storetesting.JSONReader(params.PromulgateRequest{Promulgated: true}),
 	caveats: []checkers.Caveat{
-		checkers.DeclaredCaveat(v4.UsernameAttr, "bob"),
+		checkers.DeclaredCaveat(v5.UsernameAttr, "bob"),
 	},
 	groups: map[string][]string{
 		"bob": {"yellow"},
@@ -2862,6 +2915,11 @@ func (s *APISuite) TestPromulgate(c *gc.C) {
 			test.method = "PUT"
 		}
 
+		var calledEntities []audit.Entry
+		s.PatchValue(v5.TestAddAuditCallback, func(e audit.Entry) {
+			calledEntities = append(calledEntities, e)
+		})
+
 		client := httpbakery.NewHTTPClient()
 		s.discharge = func(_, _ string) ([]checkers.Caveat, error) {
 			return test.caveats, nil
@@ -2894,6 +2952,25 @@ func (s *APISuite) TestPromulgate(c *gc.C) {
 		for _, e := range test.expectBaseEntities {
 			storetesting.AssertBaseEntity(c, s.store.DB.BaseEntities(), e)
 		}
+
+		if test.expectStatus == http.StatusOK {
+			ref := charm.MustParseURL(test.id)
+			ref.Series = "trusty"
+			ref.Revision = 0
+
+			e := audit.Entry{
+				User:   test.expectUser,
+				Op:     audit.OpUnpromulgate,
+				Entity: ref,
+			}
+			if test.expectPromulgate {
+				e.Op = audit.OpPromulgate
+			}
+			c.Assert(calledEntities, jc.DeepEquals, []audit.Entry{e})
+		} else {
+			c.Assert(len(calledEntities), gc.Equals, 0)
+		}
+		calledEntities = nil
 	}
 }
 
@@ -3357,7 +3434,7 @@ func (s *APISuite) TestTooManyConcurrentRequests(c *gc.C) {
 		MaxMgoSessions: 1,
 	}
 	db := s.Session.DB("charmstore")
-	srv, err := charmstore.NewServer(db, nil, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v4.NewAPIHandler})
+	srv, err := charmstore.NewServer(db, nil, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v5.NewAPIHandler})
 	c.Assert(err, gc.IsNil)
 	defer srv.Close()
 

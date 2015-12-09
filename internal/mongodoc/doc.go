@@ -125,10 +125,14 @@ type Entity struct {
 // the entity has a promulgated URL and usePromulgated is true then the
 // promulgated URL will be used, otherwise the standard URL is used.
 func (e *Entity) PreferredURL(usePromulgated bool) *charm.URL {
+	u := e.URL
 	if usePromulgated && e.PromulgatedURL != nil {
-		return e.PromulgatedURL
+		u = e.PromulgatedURL
 	}
-	return e.URL
+	if e.Development {
+		u = u.WithChannel(charm.DevelopmentChannel)
+	}
+	return u
 }
 
 // BaseEntity holds metadata for a charm or bundle

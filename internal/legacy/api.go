@@ -85,11 +85,11 @@ import (
 )
 
 type Handler struct {
-	v4 *v4.Handler
+	v4 v4.Handler
 }
 
 type reqHandler struct {
-	v4    *v4.ReqHandler
+	v4    v4.ReqHandler
 	mux   *http.ServeMux
 	store *charmstore.Store
 }
@@ -152,7 +152,7 @@ func (h *reqHandler) handle(path string, handler http.Handler) {
 
 func (h *reqHandler) close() {
 	h.v4.Close()
-	h.v4 = nil
+	h.v4 = v4.ReqHandler{}
 	reqHandlerPool.Put(h)
 }
 
