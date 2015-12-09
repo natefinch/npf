@@ -71,6 +71,12 @@ func (s *APISuite) SetUpSuite(c *gc.C) {
 
 var newResolvedURL = router.MustNewResolvedURL
 
+func newResolvedURLWithPreferredSeries(urlStr string, promulgatedRev int, series string) *router.ResolvedURL {
+	rurl := newResolvedURL(urlStr, promulgatedRev)
+	rurl.PreferredSeries = series
+	return rurl
+}
+
 var _ = gc.Suite(&APISuite{})
 
 // patchLegacyDownloadCountsEnabled sets LegacyDownloadCountsEnabled to the
@@ -1505,6 +1511,14 @@ var resolveURLTests = []struct {
 }, {
 	url:      "development/haproxy",
 	notFound: true,
+}, {
+	// V4 SPECIFIC
+	url:    "~bob/multi-series",
+	expect: newResolvedURLWithPreferredSeries("cs:~bob/multi-series-0", -1, "trusty"),
+}, {
+	// V4 SPECIFIC
+	url:    "~bob/utopic/multi-series",
+	expect: newResolvedURLWithPreferredSeries("cs:~bob/multi-series-0", -1, "utopic"),
 }}
 
 func (s *APISuite) TestResolveURL(c *gc.C) {
@@ -1522,6 +1536,7 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/wordpress-simple-10", 10))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/development/wily/django-47", 27))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/development/trusty/haproxy-0", -1))
+	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~bob/multi-series-0", -1))
 
 	for i, test := range resolveURLTests {
 		c.Logf("test %d: %s", i, test.url)

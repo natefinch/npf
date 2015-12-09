@@ -12,4 +12,5 @@ var (
 	BundleCharms              = (*ReqHandler).bundleCharms
 	GetNewPromulgatedRevision = (*ReqHandler).getNewPromulgatedRevision
 	GroupsForUser             = (*ReqHandler).groupsForUser
+	ResolveURL                = resolveURL
 )

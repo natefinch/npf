@@ -47,16 +47,13 @@ var reqHandlerPool = mempool.Pool{
 }
 
 type Handler struct {
-	// ResolveURL holds the function used to resolve charm
-	// and bundle URLs. By default this is set to the ResolveURL
-	// global function, but can be set after creating the Handler
-	// to obtain different URL-resolving behaviour.
-	ResolveURL func(store *charmstore.Store, url *charm.URL) (*router.ResolvedURL, error)
+	// Pool holds the store pool that the handler was created
+	// with.
+	Pool *charmstore.Pool
 
 	config         charmstore.ServerParams
 	locator        *bakery.PublicKeyRing
 	identityClient *identity.Client
-	pool           *charmstore.Pool
 
 	// searchCache is a cache of search results keyed on the query
 	// parameters of the search. It should only be used for searches
@@ -68,8 +65,14 @@ type Handler struct {
 // It uses an independent mgo session from the handler
 // used by other requests.
 type ReqHandler struct {
-	*router.Router
-	handler *Handler
+	// Router holds the router that the ReqHandler will use
+	// to route HTTP requests. This is usually set by
+	// Handler.NewReqHandler to the result of RouterHandlers.
+	Router *router.Router
+
+	// Handler holds the Handler that the ReqHandler
+	// is derived from.
+	Handler *Handler
 
 	// Store holds the charmstore Store instance
 	// for the request.
@@ -87,8 +90,7 @@ const (
 
 func New(pool *charmstore.Pool, config charmstore.ServerParams) *Handler {
 	h := &Handler{
-		pool:        pool,
-		ResolveURL:  ResolveURL,
+		Pool:        pool,
 		config:      config,
 		searchCache: cache.New(config.SearchCacheMaxAge),
 		locator:     bakery.NewPublicKeyRing(),
@@ -111,7 +113,7 @@ func (h *Handler) Close() {
 // If no handlers are available, it returns an error with
 // a charmstore.ErrTooManySessions cause.
 func (h *Handler) NewReqHandler() (*ReqHandler, error) {
-	store, err := h.pool.RequestStore()
+	store, err := h.Pool.RequestStore()
 	if err != nil {
 		if errgo.Cause(err) == charmstore.ErrTooManySessions {
 			return nil, errgo.WithCausef(err, params.ErrServiceUnavailable, "")
@@ -119,20 +121,21 @@ func (h *Handler) NewReqHandler() (*ReqHandler, error) {
 		return nil, errgo.Mask(err)
 	}
 	rh := reqHandlerPool.Get().(*ReqHandler)
-	rh.handler = h
+	rh.Handler = h
 	rh.Store = store
 	return rh, nil
 }
 
-// newReqHandler returns a new instance of the v4 API handler.
-// The returned value has nil handler and store fields.
-func newReqHandler() *ReqHandler {
-	var h ReqHandler
-	h.Router = router.New(&router.Handlers{
+// RouterHandlers returns router handlers that will route requests to
+// the given ReqHandler. This is provided so that different API versions
+// can override selected parts of the handlers to serve their own API
+// while still using ReqHandler to serve the majority of the API.
+func RouterHandlers(h *ReqHandler) *router.Handlers {
+	return &router.Handlers{
 		Global: map[string]http.Handler{
 			"changes/published":    router.HandleJSON(h.serveChangesPublished),
 			"debug":                http.HandlerFunc(h.serveDebug),
-			"debug/pprof/":         newPprofHandler(&h),
+			"debug/pprof/":         newPprofHandler(h),
 			"debug/status":         router.HandleJSON(h.serveDebugStatus),
 			"list":                 router.HandleJSON(h.serveList),
 			"log":                  router.HandleErrors(h.serveLog),
@@ -207,10 +210,20 @@ func newReqHandler() *ReqHandler {
 			// endpoints not yet implemented:
 			// "color": router.SingleIncludeHandler(h.metaColor),
 		},
-	}, h.resolveURL, h.AuthorizeEntity, h.entityExists)
+	}
+}
+
+// newReqHandler returns a new instance of the v4 API handler.
+// The returned value has nil handler and store fields.
+func newReqHandler() *ReqHandler {
+	var h ReqHandler
+	h.Router = router.New(RouterHandlers(&h), &h)
 	return &h
 }
 
+// ServeHTTP implements http.Handler by first retrieving a
+// request-specific instance of ReqHandler and
+// calling ServeHTTP on that.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// When requests in this handler use router.RelativeURL, we want
 	// the "absolute path" there to be interpreted relative to the
@@ -224,7 +237,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	defer rh.Close()
-	rh.Router.ServeHTTP(w, req)
+	rh.ServeHTTP(w, req)
+}
+
+// ServeHTTP implements http.Handler by calling h.Router.ServeHTTP.
+func (h *ReqHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	h.Router.ServeHTTP(w, req)
 }
 
 // NewAPIHandler returns a new Handler as an http Handler.
@@ -238,15 +256,27 @@ func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams) charms
 // ReqHandler is done with.
 func (h *ReqHandler) Close() {
 	h.Store.Close()
-	h.Store = nil
-	h.handler = nil
-	h.auth = authorization{}
+	h.Reset()
 	reqHandlerPool.Put(h)
 }
 
-// ResolveURL resolves the series and revision of the given URL if either is
-// unspecified by filling them out with information retrieved from the store.
-func ResolveURL(store *charmstore.Store, url *charm.URL) (*router.ResolvedURL, error) {
+// Reset resets the request-specific fields of the ReqHandler
+// so that it's suitable for putting back into a pool for reuse.
+func (h *ReqHandler) Reset() {
+	h.Store = nil
+	h.Handler = nil
+	h.auth = authorization{}
+}
+
+// ResolveURL implements router.Context.ResolveURL.
+func (h ReqHandler) ResolveURL(url *charm.URL) (*router.ResolvedURL, error) {
+	return resolveURL(h.Store, url)
+}
+
+// resolveURL implements URL resolving for the ReqHandler.
+// It's defined as a separate function so it can be more
+// easily unit-tested.
+func resolveURL(store *charmstore.Store, url *charm.URL) (*router.ResolvedURL, error) {
 	entity, err := store.FindBestEntity(url, "_id", "promulgated-revision")
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return nil, errgo.Mask(err)
@@ -384,18 +414,6 @@ func (h *ReqHandler) updateSearchBase(id *router.ResolvedURL, fields map[string]
 		return errgo.Mask(err)
 	}
 	return nil
-}
-
-func (h *ReqHandler) entityExists(id *router.ResolvedURL, req *http.Request) (bool, error) {
-	// TODO add http.Request to entityExists params
-	_, err := h.entityQuery(id, nil, req)
-	if errgo.Cause(err) == params.ErrNotFound {
-		return false, nil
-	}
-	if err != nil {
-		return false, errgo.Mask(err)
-	}
-	return true, nil
 }
 
 func (h *ReqHandler) baseEntityQuery(id *router.ResolvedURL, selector map[string]int, req *http.Request) (interface{}, error) {
@@ -1032,11 +1050,6 @@ func (h *ReqHandler) metaArchiveUploadTime(entity *mongodoc.Entity, id *router.R
 	}, nil
 }
 
-type PublishedResponse struct {
-	Id        *charm.URL
-	Published time.Time
-}
-
 // GET changes/published[?limit=$count][&from=$fromdate][&to=$todate]
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-changespublished
 func (h *ReqHandler) serveChangesPublished(_ http.Header, r *http.Request) (interface{}, error) {
@@ -1222,7 +1235,7 @@ func (h *ReqHandler) servePublish(id *charm.URL, w http.ResponseWriter, req *htt
 	if publish.Published {
 		url = *id.WithChannel(charm.DevelopmentChannel)
 	}
-	rurl, err := h.resolveURL(&url)
+	rurl, err := h.Router.Context.ResolveURL(&url)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
@@ -1289,15 +1302,11 @@ func (h *ReqHandler) authId(f resolvedIdHandler) resolvedIdHandler {
 	}
 }
 
-func (h *ReqHandler) resolveURL(url *charm.URL) (*router.ResolvedURL, error) {
-	return h.handler.ResolveURL(h.Store, url)
-}
-
 // resolveId returns an id handler that resolves any non-fully-specified
 // entity ids using h.resolveURL before calling f with the resolved id.
 func (h *ReqHandler) resolveId(f resolvedIdHandler) router.IdHandler {
 	return func(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
-		rid, err := h.resolveURL(id)
+		rid, err := h.Router.Context.ResolveURL(id)
 		if err != nil {
 			return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}

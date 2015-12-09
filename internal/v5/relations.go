@@ -281,7 +281,7 @@ func (h *ReqHandler) metaBundlesContaining(entity *mongodoc.Entity, id *router.R
 }
 
 func (h *ReqHandler) getMetadataForEntity(e *mongodoc.Entity, includes []string, req *http.Request) (map[string]interface{}, error) {
-	return h.GetMetadata(charmstore.EntityResolvedURL(e), includes, req)
+	return h.Router.GetMetadata(charmstore.EntityResolvedURL(e), includes, req)
 }
 
 // filterEntities deletes all entities from *entities for which

@@ -587,17 +587,14 @@ var routerGetTests = []struct {
 }, {
 	about:        "meta/any, no includes, id exists",
 	urlStr:       "/precise/wordpress-42/meta/any",
-	exists:       alwaysExists,
 	expectStatus: http.StatusOK,
 	expectBody: params.MetaAnyResponse{
 		Id: charm.MustParseURL("cs:precise/wordpress-42"),
 	},
 }, {
-	about:  "meta/any, no includes, id does not exist",
-	urlStr: "/precise/wordpress/meta/any",
-	exists: func(id *ResolvedURL, req *http.Request) (bool, error) {
-		return false, nil
-	},
+	about:        "meta/any, no includes, id does not exist",
+	urlStr:       "/precise/wordpress/meta/any",
+	resolveURL:   resolveURLError(params.ErrNotFound),
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
@@ -1102,19 +1099,14 @@ func alwaysResolveURL(u *charm.URL) (*ResolvedURL, error) {
 func (s *RouterSuite) TestRouterGet(c *gc.C) {
 	for i, test := range routerGetTests {
 		c.Logf("test %d: %s", i, test.about)
-		resolve := alwaysResolveURL
+		ctxt := alwaysContext
 		if test.resolveURL != nil {
-			resolve = test.resolveURL
+			ctxt.resolveURL = test.resolveURL
 		}
-		authorize := alwaysAuthorize
 		if test.authorize != nil {
-			authorize = test.authorize
+			ctxt.authorizeURL = test.authorize
 		}
-		exists := alwaysExists
-		if test.exists != nil {
-			exists = test.exists
-		}
-		router := New(&test.handlers, resolve, authorize, exists)
+		router := New(&test.handlers, ctxt)
 		// Note that fieldSelectHandler increments queryCount each time
 		// a query is made.
 		queryCount = 0
@@ -1126,6 +1118,19 @@ func (s *RouterSuite) TestRouterGet(c *gc.C) {
 		})
 		c.Assert(queryCount, gc.Equals, test.expectQueryCount)
 	}
+}
+
+type funcContext struct {
+	resolveURL   func(id *charm.URL) (*ResolvedURL, error)
+	authorizeURL func(id *ResolvedURL, req *http.Request) error
+}
+
+func (ctxt funcContext) ResolveURL(id *charm.URL) (*ResolvedURL, error) {
+	return ctxt.resolveURL(id)
+}
+
+func (ctxt funcContext) AuthorizeEntity(id *ResolvedURL, req *http.Request) error {
+	return ctxt.authorizeURL(id, req)
 }
 
 var parseBoolTests = []struct {
@@ -1157,12 +1162,17 @@ func (s *RouterSuite) TestParseBool(c *gc.C) {
 	}
 }
 
+var alwaysContext = funcContext{
+	resolveURL:   alwaysResolveURL,
+	authorizeURL: alwaysAuthorize,
+}
+
 func (s *RouterSuite) TestCORSHeaders(c *gc.C) {
 	h := New(&Handlers{
 		Global: map[string]http.Handler{
 			"foo": http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {}),
 		},
-	}, alwaysResolveURL, alwaysAuthorize, alwaysExists)
+	}, alwaysContext)
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: h,
 		URL:     "/foo",
@@ -1216,7 +1226,7 @@ func (s *RouterSuite) TestHTTPRequestPassedThroughToMeta(c *gc.C) {
 				Update:    update,
 			}),
 		},
-	}, alwaysResolveURL, alwaysAuthorize, alwaysExists)
+	}, alwaysContext)
 	resp := httptest.NewRecorder()
 	h.ServeHTTP(resp, testReq)
 	c.Assert(resp.Code, gc.Equals, http.StatusOK, gc.Commentf("response body: %s", resp.Body))
@@ -1233,7 +1243,7 @@ func (s *RouterSuite) TestHTTPRequestPassedThroughToMeta(c *gc.C) {
 }
 
 func (s *RouterSuite) TestOptionsHTTPMethod(c *gc.C) {
-	h := New(&Handlers{}, alwaysResolveURL, alwaysAuthorize, alwaysExists)
+	h := New(&Handlers{}, alwaysContext)
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: h,
 		Method:  "OPTIONS",
@@ -1789,7 +1799,9 @@ func (s *RouterSuite) TestRouterPut(c *gc.C) {
 		}
 		bodyVal, err := json.Marshal(test.body)
 		c.Assert(err, gc.IsNil)
-		router := New(&test.handlers, resolve, alwaysAuthorize, alwaysExists)
+		ctxt := alwaysContext
+		ctxt.resolveURL = resolve
+		router := New(&test.handlers, ctxt)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: router,
 			URL:     test.urlStr,
@@ -1858,7 +1870,7 @@ func (s *RouterSuite) TestRouterPutWithInvalidContent(c *gc.C) {
 				"foo": testMetaHandler(0),
 			},
 		}
-		router := New(handlers, alwaysResolveURL, alwaysAuthorize, alwaysExists)
+		router := New(handlers, alwaysContext)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: router,
 			URL:     test.urlStr,
@@ -1940,7 +1952,7 @@ func (s *RouterSuite) TestGetMetadata(c *gc.C) {
 				"item2": fieldSelectHandler("handler2", 0, "item2"),
 				"test":  testMetaHandler(0),
 			},
-		}, alwaysResolveURL, alwaysAuthorize, alwaysExists)
+		}, alwaysContext)
 		result, err := router.GetMetadata(test.id, test.includes, nil)
 		if test.expectError != "" {
 			c.Assert(err, gc.ErrorMatches, test.expectError)
@@ -2261,46 +2273,60 @@ func (s *RouterSuite) TestHandlers(c *gc.C) {
 	}
 }
 
-func (s *RouterSuite) TestResolvedURLUserOwnedURL(c *gc.C) {
-	r := MustNewResolvedURL("~charmers/precise/wordpress-23", 4)
-	u := r.UserOwnedURL()
-	c.Assert(u, gc.DeepEquals, charm.MustParseURL("~charmers/precise/wordpress-23"))
-	u.Series = "foo"
-	c.Assert(r.URL.Series, gc.Equals, "precise")
+var resolvedURLTests = []struct {
+	rurl                 *ResolvedURL
+	expectUserOwnedURL   *charm.URL
+	expectPreferredURL   *charm.URL
+	expectPromulgatedURL *charm.URL
+}{{
+	rurl:                 MustNewResolvedURL("~charmers/precise/wordpress-23", 4),
+	expectUserOwnedURL:   charm.MustParseURL("~charmers/precise/wordpress-23"),
+	expectPreferredURL:   charm.MustParseURL("precise/wordpress-4"),
+	expectPromulgatedURL: charm.MustParseURL("precise/wordpress-4"),
+}, {
+	rurl:               MustNewResolvedURL("~who/development/trusty/wordpress-42", -1),
+	expectUserOwnedURL: charm.MustParseURL("~who/development/trusty/wordpress-42"),
+	expectPreferredURL: charm.MustParseURL("~who/development/trusty/wordpress-42"),
+}, {
+	rurl:               MustNewResolvedURL("~charmers/precise/wordpress-23", -1),
+	expectUserOwnedURL: charm.MustParseURL("~charmers/precise/wordpress-23"),
+	expectPreferredURL: charm.MustParseURL("~charmers/precise/wordpress-23"),
+}, {
+	rurl:                 MustNewResolvedURL("~charmers/development/trusty/wordpress-42", 0),
+	expectUserOwnedURL:   charm.MustParseURL("~charmers/development/trusty/wordpress-42"),
+	expectPreferredURL:   charm.MustParseURL("development/trusty/wordpress-0"),
+	expectPromulgatedURL: charm.MustParseURL("development/trusty/wordpress-0"),
+}, {
+	rurl:                 withPreferredSeries(MustNewResolvedURL("~charmers/wordpress-42", 0), "trusty"),
+	expectUserOwnedURL:   charm.MustParseURL("~charmers/wordpress-42"),
+	expectPreferredURL:   charm.MustParseURL("trusty/wordpress-0"),
+	expectPromulgatedURL: charm.MustParseURL("wordpress-0"),
+}, {
+	rurl:               withPreferredSeries(MustNewResolvedURL("~charmers/wordpress-42", -1), "trusty"),
+	expectUserOwnedURL: charm.MustParseURL("~charmers/wordpress-42"),
+	expectPreferredURL: charm.MustParseURL("~charmers/trusty/wordpress-42"),
+}}
 
-	r = MustNewResolvedURL("~who/development/trusty/wordpress-42", -1)
-	u = r.UserOwnedURL()
-	c.Assert(u, gc.DeepEquals, charm.MustParseURL("~who/development/trusty/wordpress-42"))
-	u.Series = "foo"
-	c.Assert(r.URL.Series, gc.Equals, "trusty")
+func withPreferredSeries(r *ResolvedURL, series string) *ResolvedURL {
+	r.PreferredSeries = series
+	return r
 }
 
-func (s *RouterSuite) TestResolvedURLPreferredURL(c *gc.C) {
-	r := MustNewResolvedURL("~charmers/precise/wordpress-23", 4)
-	// Ensure it's not aliased.
-	u := r.PreferredURL()
-	c.Assert(u, gc.DeepEquals, charm.MustParseURL("precise/wordpress-4"))
-	u.Series = "foo"
-	c.Assert(r.URL.Series, gc.Equals, "precise")
+func (*RouterSuite) TestResolvedURL(c *gc.C) {
+	testMethod := func(name string, rurl *ResolvedURL, m func() *charm.URL, expect *charm.URL) {
+		c.Logf("- method %s", name)
+		u := m()
+		c.Assert(u, jc.DeepEquals, expect)
+		// Ensure it's not aliased.
+		c.Assert(u, gc.Not(gc.Equals), &rurl.URL)
+	}
+	for i, test := range resolvedURLTests {
+		c.Logf("test %d: %#v", i, test.rurl)
+		testMethod("UserOwnedURL", test.rurl, test.rurl.UserOwnedURL, test.expectUserOwnedURL)
+		testMethod("PromulgatedURL", test.rurl, test.rurl.PromulgatedURL, test.expectPromulgatedURL)
 
-	r = MustNewResolvedURL("~charmers/precise/wordpress-23", -1)
-	// Ensure it's not aliased.
-	u = r.PreferredURL()
-	c.Assert(u, gc.DeepEquals, charm.MustParseURL("~charmers/precise/wordpress-23"))
-	u.Series = "foo"
-	c.Assert(r.URL.Series, gc.Equals, "precise")
-
-	r = MustNewResolvedURL("~charmers/development/trusty/wordpress-42", 0)
-	c.Assert(r.URL.Channel, gc.Equals, charm.Channel(""))
-	c.Assert(r.Development, jc.IsTrue)
-	u = r.PreferredURL()
-	c.Assert(u, gc.DeepEquals, charm.MustParseURL("development/trusty/wordpress-0"))
-
-	r = MustNewResolvedURL("~charmers/development/trusty/wordpress-42", -1)
-	c.Assert(r.URL.Channel, gc.Equals, charm.Channel(""))
-	c.Assert(r.Development, jc.IsTrue)
-	u = r.PreferredURL()
-	c.Assert(u, gc.DeepEquals, charm.MustParseURL("~charmers/development/trusty/wordpress-42"))
+		testMethod("PreferredURL", test.rurl, test.rurl.PreferredURL, test.expectPreferredURL)
+	}
 }
 
 func errorIdHandler(charmId *charm.URL, w http.ResponseWriter, req *http.Request) error {

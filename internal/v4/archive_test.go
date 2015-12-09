@@ -1007,6 +1007,12 @@ func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSee
 func (s *ArchiveSuite) assertUploadCharm(c *gc.C, method string, url *router.ResolvedURL, charmName string) *charm.CharmArchive {
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), charmName)
 	id, size := s.assertUpload(c, method, url, ch.Path)
+	if url.URL.Series == "" {
+		// V4 SPECIFIC:
+		// We're uploading a multi-series charm, but we always
+		// return charm ids with a series.
+		id.Series = ch.Meta().Series[0]
+	}
 	s.assertEntityInfo(c, entityInfo{
 		Id: id,
 		Meta: entityMetaInfo{

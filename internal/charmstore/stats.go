@@ -638,7 +638,7 @@ func (s *Store) IncrementDownloadCountsAtTime(id *router.ResolvedURL, t time.Tim
 		id.PromulgatedRevision = entity.PromulgatedRevision
 	}
 	if id.PromulgatedRevision != -1 {
-		key := EntityStatsKey(id.PreferredURL(), params.StatsArchiveDownloadPromulgated)
+		key := EntityStatsKey(id.PromulgatedURL(), params.StatsArchiveDownloadPromulgated)
 		if err := s.IncCounterAtTime(key, t); err != nil {
 			return errgo.Notef(err, "cannot increase stats counter for %v", key)
 		}

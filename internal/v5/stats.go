@@ -134,7 +134,7 @@ func (h *ReqHandler) serveStatsUpdate(w http.ResponseWriter, r *http.Request) er
 
 	errors := make([]error, 0)
 	for _, entry := range req.Entries {
-		rid, err := h.resolveURL(entry.CharmReference)
+		rid, err := h.Router.Context.ResolveURL(entry.CharmReference)
 		if err != nil {
 			errors = append(errors, errgo.Notef(err, "cannot find entity for url %s", entry.CharmReference))
 			continue
