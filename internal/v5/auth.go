@@ -43,7 +43,7 @@ const (
 func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool, entityId *router.ResolvedURL) (authorization, error) {
 	logger.Infof(
 		"authorize, auth location %q, acl %q, path: %q, method: %q, entity: %#v",
-		h.handler.config.IdentityLocation,
+		h.Handler.config.IdentityLocation,
 		acl,
 		req.URL.Path,
 		req.Method,
@@ -99,8 +99,8 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*router.ResolvedURL) (authorization, error) {
 	logger.Infof(
 		"authorize entity and terms, auth location %q, terms location %q, path: %q, method: %q, entities: %#v",
-		h.handler.config.IdentityLocation,
-		h.handler.config.TermsLocation,
+		h.Handler.config.IdentityLocation,
+		h.Handler.config.TermsLocation,
 		req.URL.Path,
 		req.Method,
 		entityIds)
@@ -156,7 +156,7 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 		return authorization{}, nil
 	}
 
-	if len(requiredTerms) > 0 && h.handler.config.TermsLocation == "" {
+	if len(requiredTerms) > 0 && h.Handler.config.TermsLocation == "" {
 		return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "charmstore not configured to serve charms with terms and conditions")
 	}
 
@@ -186,7 +186,7 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 			terms = append(terms, term)
 		}
 		caveats = append(caveats,
-			checkers.Caveat{h.handler.config.TermsLocation, "has-agreed " + strings.Join(terms, " ")},
+			checkers.Caveat{h.Handler.config.TermsLocation, "has-agreed " + strings.Join(terms, " ")},
 		)
 	}
 
@@ -213,13 +213,13 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.ResolvedURL, operation string) (authorization, error) {
 	user, passwd, err := parseCredentials(req)
 	if err == nil {
-		if user != h.handler.config.AuthUsername || passwd != h.handler.config.AuthPassword {
+		if user != h.Handler.config.AuthUsername || passwd != h.Handler.config.AuthPassword {
 			return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "invalid user name or password")
 		}
 		return authorization{Admin: true}, nil
 	}
 	bk := h.Store.Bakery
-	if errgo.Cause(err) != errNoCreds || bk == nil || h.handler.config.IdentityLocation == "" {
+	if errgo.Cause(err) != errNoCreds || bk == nil || h.Handler.config.IdentityLocation == "" {
 		return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "authentication failed")
 	}
 
@@ -306,12 +306,12 @@ type authorization struct {
 }
 
 func (h *ReqHandler) groupsForUser(username string) ([]string, error) {
-	if h.handler.config.IdentityAPIURL == "" {
+	if h.Handler.config.IdentityAPIURL == "" {
 		logger.Debugf("IdentityAPIURL not configured, not retrieving groups for %s", username)
 		return nil, nil
 	}
 	// TODO cache groups for a user
-	return h.handler.identityClient.GroupsForUser(username)
+	return h.Handler.identityClient.GroupsForUser(username)
 }
 
 func (h *ReqHandler) checkACLMembership(auth authorization, acl []string) error {
@@ -346,7 +346,7 @@ func (h *ReqHandler) newMacaroon(caveats ...checkers.Caveat) (*macaroon.Macaroon
 	caveats = append(caveats,
 		checkers.NeedDeclaredCaveat(
 			checkers.Caveat{
-				Location:  h.handler.config.IdentityLocation,
+				Location:  h.Handler.config.IdentityLocation,
 				Condition: "is-authenticated-user",
 			},
 			UsernameAttr,
