@@ -20,15 +20,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/juju/errgo"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	charmtesting "gopkg.in/juju/charmrepo.v2-unstable/testing"
-	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
-	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
@@ -40,88 +37,11 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 )
 
-type commonArchiveSuite struct {
+type ArchiveSuite struct {
 	commonSuite
 }
 
-type ArchiveSuiteUnconfiguredTerms struct {
-	commonArchiveSuite
-}
-
-var _ = gc.Suite(&ArchiveSuiteUnconfiguredTerms{})
-
-func (s *ArchiveSuiteUnconfiguredTerms) TestGetCharmWithTerms(c *gc.C) {
-	s.dischargeTerms = func(s1, s2 string) ([]checkers.Caveat, error) {
-		return nil, nil
-	}
-	client := httpbakery.NewHTTPClient()
-
-	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
-	s.assertUploadCharm(c, "POST", id, "terms")
-	err := s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
-	c.Assert(err, gc.IsNil)
-
-	archiveUrl := storeURL("~charmers/precise/terms-0/archive")
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     archiveUrl,
-		Do:      bakeryDo(client),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusUnauthorized)
-}
-
-func (s *ArchiveSuiteUnconfiguredTerms) TestGet(c *gc.C) {
-	id := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
-	wordpress := s.assertUploadCharm(c, "POST", id, "wordpress")
-	err := s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
-	c.Assert(err, gc.IsNil)
-
-	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
-	c.Assert(err, gc.IsNil)
-
-	archiveUrl := storeURL("~charmers/precise/wordpress-0/archive")
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     archiveUrl,
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/wordpress-0")
-	assertCacheControl(c, rec.Header(), true)
-
-	// Check that the HTTP range logic is plugged in OK. If this
-	// is working, we assume that the whole thing is working OK,
-	// as net/http is well-tested.
-	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     archiveUrl,
-		Header:  http.Header{"Range": {"bytes=10-100"}},
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
-	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/wordpress-0")
-	assertCacheControl(c, rec.Header(), true)
-}
-
-type ArchiveSuite struct {
-	commonArchiveSuite
-}
-
 var _ = gc.Suite(&ArchiveSuite{})
-
-func (s *ArchiveSuite) SetUpSuite(c *gc.C) {
-	s.commonSuite.SetUpSuite(c)
-	s.enableTerms = true
-	s.enableIdentity = true
-}
-
-func (s *ArchiveSuite) SetUpTest(c *gc.C) {
-	s.commonSuite.SetUpTest(c)
-	s.discharge = dischargeForUser("bob")
-}
 
 func (s *ArchiveSuite) TestGet(c *gc.C) {
 	id := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
@@ -202,111 +122,6 @@ func (s *ArchiveSuite) TestGetDevelopment(c *gc.C) {
 			Message: `no matching charm or bundle for "cs:~charmers/trusty/wordpress-0"`,
 		},
 	})
-}
-
-func (s *ArchiveSuite) TestGetUserHasAgreedToTermsAndConditions(c *gc.C) {
-	s.dischargeTerms = func(s1, s2 string) ([]checkers.Caveat, error) {
-		return nil, nil
-	}
-
-	client := httpbakery.NewHTTPClient()
-
-	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
-	terms := s.assertUploadCharm(c, "POST", id, "terms")
-	err := s.store.SetPerms(&id.URL, "read", "bob")
-	c.Assert(err, gc.IsNil)
-
-	archiveBytes, err := ioutil.ReadFile(terms.Path)
-	c.Assert(err, gc.IsNil)
-
-	archiveUrl := storeURL("~charmers/precise/terms-0/archive")
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     archiveUrl,
-		Do:      bakeryDo(client),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/terms-0")
-
-	// Check that the HTTP range logic is plugged in OK. If this
-	// is working, we assume that the whole thing is working OK,
-	// as net/http is well-tested.
-	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     archiveUrl,
-		Header:  http.Header{"Range": {"bytes=10-100"}},
-		Do:      bakeryDo(client),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
-	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/terms-0")
-}
-
-func (s *ArchiveSuite) TestGetUserHasNotAgreedToTerms(c *gc.C) {
-	s.dischargeTerms = func(_, _ string) ([]checkers.Caveat, error) {
-		return nil, errgo.New("user has not agreed to specified terms and conditions")
-	}
-	client := httpbakery.NewHTTPClient()
-
-	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
-	s.assertUploadCharm(c, "POST", id, "terms")
-	err := s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
-	c.Assert(err, gc.IsNil)
-
-	archiveUrl := storeURL("~charmers/precise/terms-0/archive")
-	httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler:     s.srv,
-		URL:         archiveUrl,
-		Do:          bakeryDo(client),
-		ExpectError: ".*third party refused discharge: cannot discharge: user has not agreed to specified terms and conditions",
-	})
-}
-
-func (s *ArchiveSuite) TestGetIgnorningTermsWithBasicAuth(c *gc.C) {
-	s.dischargeTerms = func(_, _ string) ([]checkers.Caveat, error) {
-		return nil, errgo.New("user has not agreed to specified terms and conditions")
-	}
-
-	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
-	terms := s.assertUploadCharm(c, "POST", id, "terms")
-	err := s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
-	c.Assert(err, gc.IsNil)
-
-	archiveBytes, err := ioutil.ReadFile(terms.Path)
-	c.Assert(err, gc.IsNil)
-
-	archiveUrl := storeURL("~charmers/precise/terms-0/archive")
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     archiveUrl,
-		Header:  basicAuthHeader(testUsername, testPassword),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/terms-0")
-	assertCacheControl(c, rec.Header(), true)
-
-	// Check that the HTTP range logic is plugged in OK. If this
-	// is working, we assume that the whole thing is working OK,
-	// as net/http is well-tested.
-	header := basicAuthHeader(testUsername, testPassword)
-	header.Set("Range", "bytes=10-100")
-	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     archiveUrl,
-		Header:  header,
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
-	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/terms-0")
-	assertCacheControl(c, rec.Header(), true)
 }
 
 func (s *ArchiveSuite) TestGetWithPartialId(c *gc.C) {
@@ -1110,7 +925,7 @@ func (s *ArchiveSuite) TestPostErrorReadsFully(c *gc.C) {
 	c.Assert(b.Len(), gc.Equals, 0)
 }
 
-func (s *ArchiveSuiteUnconfiguredTerms) TestPostAuthErrorReadsFully(c *gc.C) {
+func (s *ArchiveSuite) TestPostAuthErrorReadsFully(c *gc.C) {
 	h := s.handler(c)
 	defer h.Close()
 	b := bytes.NewBuffer([]byte("test body"))
@@ -1189,9 +1004,15 @@ func (s *ArchiveSuite) assertCannotUpload(c *gc.C, id string, content io.ReadSee
 // assertUploadCharm uploads the testing charm with the given name
 // through the API. The URL must hold the expected revision
 // that the charm will be given when uploaded.
-func (s *commonArchiveSuite) assertUploadCharm(c *gc.C, method string, url *router.ResolvedURL, charmName string) *charm.CharmArchive {
+func (s *ArchiveSuite) assertUploadCharm(c *gc.C, method string, url *router.ResolvedURL, charmName string) *charm.CharmArchive {
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), charmName)
 	id, size := s.assertUpload(c, method, url, ch.Path)
+	if url.URL.Series == "" {
+		// V4 SPECIFIC:
+		// We're uploading a multi-series charm, but we always
+		// return charm ids with a series.
+		id.Series = ch.Meta().Series[0]
+	}
 	s.assertEntityInfo(c, entityInfo{
 		Id: id,
 		Meta: entityMetaInfo{
@@ -1207,7 +1028,7 @@ func (s *commonArchiveSuite) assertUploadCharm(c *gc.C, method string, url *rout
 // assertUploadBundle uploads the testing bundle with the given name
 // through the API. The URL must hold the expected revision
 // that the bundle will be given when uploaded.
-func (s *commonArchiveSuite) assertUploadBundle(c *gc.C, method string, url *router.ResolvedURL, bundleName string) {
+func (s *ArchiveSuite) assertUploadBundle(c *gc.C, method string, url *router.ResolvedURL, bundleName string) {
 	path := storetesting.Charms.BundleArchivePath(c.MkDir(), bundleName)
 	b, err := charm.ReadBundleArchive(path)
 	c.Assert(err, gc.IsNil)
@@ -1222,7 +1043,7 @@ func (s *commonArchiveSuite) assertUploadBundle(c *gc.C, method string, url *rou
 	)
 }
 
-func (s *commonArchiveSuite) assertUpload(c *gc.C, method string, url *router.ResolvedURL, fileName string) (id *charm.URL, size int64) {
+func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *router.ResolvedURL, fileName string) (id *charm.URL, size int64) {
 	f, err := os.Open(fileName)
 	c.Assert(err, gc.IsNil)
 	defer f.Close()
@@ -1568,11 +1389,11 @@ func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 	stats.CheckCounterSum(c, s.store, key, false, 1)
 }
 
-func (s *ArchiveSuiteUnconfiguredTerms) TestPostAuthErrors(c *gc.C) {
+func (s *ArchiveSuite) TestPostAuthErrors(c *gc.C) {
 	checkAuthErrors(c, s.srv, "POST", "~charmers/utopic/django/archive")
 }
 
-func (s *ArchiveSuiteUnconfiguredTerms) TestDeleteAuthErrors(c *gc.C) {
+func (s *ArchiveSuite) TestDeleteAuthErrors(c *gc.C) {
 	err := s.store.AddCharmWithArchive(
 		newResolvedURL("~charmers/utopic/django-42", 42),
 		storetesting.Charms.CharmArchive(c.MkDir(), "wordpress"),
@@ -1650,7 +1471,7 @@ type entityMetaInfo struct {
 	BundleMeta   *charm.BundleData           `json:"bundle-metadata,omitempty"`
 }
 
-func (s *commonArchiveSuite) assertEntityInfo(c *gc.C, expect entityInfo) {
+func (s *ArchiveSuite) assertEntityInfo(c *gc.C, expect entityInfo) {
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: s.srv,
 		URL: storeURL(

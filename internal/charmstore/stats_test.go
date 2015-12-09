@@ -678,7 +678,7 @@ func (s *StatsSuite) TestArchiveDownloadCounts(c *gc.C) {
 			}})
 			c.Assert(err, gc.IsNil)
 		}
-		thisRevision, allRevisions, err := s.store.ArchiveDownloadCounts(test.id, false)
+		thisRevision, allRevisions, err := s.store.ArchiveDownloadCounts(test.id, true)
 		c.Assert(err, gc.IsNil)
 		c.Assert(thisRevision, jc.DeepEquals, test.expectThisRevision)
 		c.Assert(allRevisions, jc.DeepEquals, test.expectAllRevisions)
@@ -710,17 +710,64 @@ func (s *StatsSuite) TestIncrementDownloadCounts(c *gc.C) {
 		LastMonth: 1,
 		Total:     1,
 	}
-	thisRevision, allRevisions, err := s.store.ArchiveDownloadCounts(charm.MustParseURL("~charmers/trusty/wordpress-1"), false)
+	thisRevision, allRevisions, err := s.store.ArchiveDownloadCounts(charm.MustParseURL("~charmers/trusty/wordpress-1"), true)
 	c.Assert(err, gc.IsNil)
 	c.Assert(thisRevision, jc.DeepEquals, expect)
 	c.Assert(allRevisions, jc.DeepEquals, expect)
-	thisRevision, allRevisions, err = s.store.ArchiveDownloadCounts(charm.MustParseURL("trusty/wordpress-0"), false)
+	thisRevision, allRevisions, err = s.store.ArchiveDownloadCounts(charm.MustParseURL("trusty/wordpress-0"), true)
 	c.Assert(err, gc.IsNil)
 	c.Assert(thisRevision, jc.DeepEquals, expect)
 	c.Assert(allRevisions, jc.DeepEquals, expect)
 }
 
-func (s *StatsSuite) TestIncrementDownloadCountsWithNoCache(c *gc.C) {
+func (s *StatsSuite) TestIncrementDownloadCountsOnPromulgatedMultiSeriesCharm(c *gc.C) {
+	ch := storetesting.Charms.CharmDir("multi-series")
+	id := charmstore.MustParseResolvedURL("0 ~charmers/wordpress-1")
+	err := s.store.AddCharmWithArchive(id, ch)
+	c.Assert(err, gc.IsNil)
+	err = s.store.IncrementDownloadCounts(id)
+	c.Assert(err, gc.IsNil)
+	expect := charmstore.AggregatedCounts{
+		LastDay:   1,
+		LastWeek:  1,
+		LastMonth: 1,
+		Total:     1,
+	}
+	thisRevision, allRevisions, err := s.store.ArchiveDownloadCounts(charm.MustParseURL("~charmers/wordpress-1"), true)
+	c.Assert(err, gc.IsNil)
+	c.Assert(thisRevision, jc.DeepEquals, expect)
+	c.Assert(allRevisions, jc.DeepEquals, expect)
+	thisRevision, allRevisions, err = s.store.ArchiveDownloadCounts(charm.MustParseURL("wordpress-0"), true)
+	c.Assert(err, gc.IsNil)
+	c.Assert(thisRevision, jc.DeepEquals, expect)
+	c.Assert(allRevisions, jc.DeepEquals, expect)
+}
+
+func (s *StatsSuite) TestIncrementDownloadCountsOnIdWithPreferredSeries(c *gc.C) {
+	ch := storetesting.Charms.CharmDir("multi-series")
+	id := charmstore.MustParseResolvedURL("0 ~charmers/wordpress-1")
+	id.PreferredSeries = "trusty"
+	err := s.store.AddCharmWithArchive(id, ch)
+	c.Assert(err, gc.IsNil)
+	err = s.store.IncrementDownloadCounts(id)
+	c.Assert(err, gc.IsNil)
+	expect := charmstore.AggregatedCounts{
+		LastDay:   1,
+		LastWeek:  1,
+		LastMonth: 1,
+		Total:     1,
+	}
+	thisRevision, allRevisions, err := s.store.ArchiveDownloadCounts(charm.MustParseURL("~charmers/wordpress-1"), true)
+	c.Assert(err, gc.IsNil)
+	c.Assert(thisRevision, jc.DeepEquals, expect)
+	c.Assert(allRevisions, jc.DeepEquals, expect)
+	thisRevision, allRevisions, err = s.store.ArchiveDownloadCounts(charm.MustParseURL("wordpress-0"), true)
+	c.Assert(err, gc.IsNil)
+	c.Assert(thisRevision, jc.DeepEquals, expect)
+	c.Assert(allRevisions, jc.DeepEquals, expect)
+}
+
+func (s *StatsSuite) TestIncrementDownloadCountsCaching(c *gc.C) {
 	ch := storetesting.Charms.CharmDir("wordpress")
 	id := charmstore.MustParseResolvedURL("0 ~charmers/trusty/wordpress-1")
 	err := s.store.AddCharmWithArchive(id, ch)

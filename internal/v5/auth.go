@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
@@ -21,10 +20,13 @@ import (
 )
 
 const (
-	PromulgatorsGroup      = "charmers"
-	opAccessCharmWithTerms = "access-operation"
-	opOther                = "other-operation"
-	defaultMacaroonExpiry  = 24 * time.Hour
+	PromulgatorsGroup = "charmers"
+	// opAccessCharmWitTerms indicates an operation of accessing the archive of
+	// a charm that requires agreement to certain terms and conditions.
+	opAccessCharmWithTerms = "op-get-with-terms"
+	// opOther indicated all other operations.
+	opOther               = "op-other"
+	defaultMacaroonExpiry = 24 * time.Hour
 )
 
 // authorize checks that the current user is authorized based on the provided
@@ -41,7 +43,7 @@ const (
 func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool, entityId *router.ResolvedURL) (authorization, error) {
 	logger.Infof(
 		"authorize, auth location %q, acl %q, path: %q, method: %q, entity: %#v",
-		h.handler.config.IdentityLocation,
+		h.Handler.config.IdentityLocation,
 		acl,
 		req.URL.Path,
 		req.Method,
@@ -97,8 +99,8 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*router.ResolvedURL) (authorization, error) {
 	logger.Infof(
 		"authorize entity and terms, auth location %q, terms location %q, path: %q, method: %q, entities: %#v",
-		h.handler.config.IdentityLocation,
-		h.handler.config.TermsLocation,
+		h.Handler.config.IdentityLocation,
+		h.Handler.config.TermsLocation,
 		req.URL.Path,
 		req.Method,
 		entityIds)
@@ -124,7 +126,7 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 			return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
 		if baseEntity == nil {
-			return authorization{}, errgo.WithCausef(nil, params.ErrNotFound, "cound not find the base entity %v", entityId.URL.String())
+			return authorization{}, errgo.WithCausef(nil, params.ErrNotFound, "could not find the base entity %v", entityId.URL.String())
 		}
 
 		ACLs[i] = baseEntity.ACLs.Read
@@ -154,11 +156,16 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 		return authorization{}, nil
 	}
 
-	if len(requiredTerms) > 0 && h.handler.config.TermsLocation == "" {
+	if len(requiredTerms) > 0 && h.Handler.config.TermsLocation == "" {
 		return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "charmstore not configured to serve charms with terms and conditions")
 	}
 
-	auth, verr := h.checkRequest(req, entityIds, opAccessCharmWithTerms)
+	operation := opOther
+	if len(requiredTerms) > 0 {
+		operation = opAccessCharmWithTerms
+	}
+
+	auth, verr := h.checkRequest(req, entityIds, operation)
 	if verr == nil {
 		for _, acl := range ACLs {
 			if err := h.checkACLMembership(auth, acl); err != nil {
@@ -172,16 +179,14 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 		return authorization{}, errgo.Mask(verr, errgo.Is(params.ErrUnauthorized))
 	}
 
-	caveats := []checkers.Caveat{
-		checkers.AllowCaveat(opAccessCharmWithTerms, opOther),
-	}
+	caveats := []checkers.Caveat{}
 	if len(requiredTerms) > 0 {
 		terms := []string{}
 		for term, _ := range requiredTerms {
 			terms = append(terms, term)
 		}
 		caveats = append(caveats,
-			checkers.Caveat{h.handler.config.TermsLocation, "has-agreed " + strings.Join(terms, " ")},
+			checkers.Caveat{h.Handler.config.TermsLocation, "has-agreed " + strings.Join(terms, " ")},
 		)
 	}
 
@@ -208,13 +213,13 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.ResolvedURL, operation string) (authorization, error) {
 	user, passwd, err := parseCredentials(req)
 	if err == nil {
-		if user != h.handler.config.AuthUsername || passwd != h.handler.config.AuthPassword {
+		if user != h.Handler.config.AuthUsername || passwd != h.Handler.config.AuthPassword {
 			return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "invalid user name or password")
 		}
 		return authorization{Admin: true}, nil
 	}
 	bk := h.Store.Bakery
-	if errgo.Cause(err) != errNoCreds || bk == nil || h.handler.config.IdentityLocation == "" {
+	if errgo.Cause(err) != errNoCreds || bk == nil || h.Handler.config.IdentityLocation == "" {
 		return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "authentication failed")
 	}
 
@@ -222,68 +227,10 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.Resolve
 		checkers.CheckerFunc{
 			Condition_: "is-entity",
 			Check_: func(_, args string) error {
-				allowedEntities := make(map[string]struct{})
-				for _, curl := range strings.Fields(args) {
-					charmRef, err := charm.ParseURL(strings.TrimSpace(curl))
-					if err != nil {
-						return errgo.Mask(err)
-					}
-					resolvedCURL, err := h.resolveURL(charmRef)
-					if err != nil {
-						return errgo.Mask(err)
-					}
-					allowedEntities[resolvedCURL.URL.String()] = struct{}{}
-				}
-				if len(entityIds) == 0 {
-					return errgo.Newf("API operation does not involve expected entity %v", args)
-				}
-
-				for _, entityId := range entityIds {
-					var ok, okPromulgated bool
-					_, ok = allowedEntities[entityId.URL.String()]
-					purl := entityId.PromulgatedURL()
-					if purl != nil {
-						_, okPromulgated = allowedEntities[purl.String()]
-					}
-					if !ok && !okPromulgated {
-						return errgo.Newf("API operation on entity %v not allowed", entityId.String())
-					}
-				}
-				return nil
+				return areAllowedEntities(entityIds, args)
 			},
 		},
-		checkers.CheckerFunc{
-			Condition_: "",
-			Check_: func(cond, args string) error {
-				if operation != opAccessCharmWithTerms {
-					return nil
-				}
-				allowAccessCharmWithTerms := false
-				switch cond {
-				case checkers.CondAllow:
-					for _, op := range strings.Fields(args) {
-						if op == opAccessCharmWithTerms {
-							allowAccessCharmWithTerms = true
-						}
-					}
-				case checkers.CondDeny:
-				default:
-					return checkers.ErrCaveatNotRecognized
-				}
-				if !allowAccessCharmWithTerms {
-					for _, entityId := range entityIds {
-						entity, err := h.Store.FindEntity(entityId)
-						if err != nil {
-							return errgo.Mask(err, errgo.Is(params.ErrNotFound))
-						}
-						if entity.CharmMeta != nil && len(entity.CharmMeta.Terms) > 0 {
-							return errgo.New("access denied")
-						}
-					}
-				}
-				return nil
-			},
-		},
+		checkers.OperationChecker(operation),
 	))
 	if err != nil {
 		return authorization{}, errgo.Mask(err, errgo.Any)
@@ -292,6 +239,32 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.Resolve
 		Admin:    false,
 		Username: attrMap[UsernameAttr],
 	}, nil
+}
+
+// areAllowedEntities checks if all entityIds are in the allowedEntities list (space
+// separated).
+func areAllowedEntities(entityIds []*router.ResolvedURL, allowedEntities string) error {
+	allowedEntitiesMap := make(map[string]bool)
+	for _, curl := range strings.Fields(allowedEntities) {
+		allowedEntitiesMap[curl] = true
+	}
+	if len(entityIds) == 0 {
+		return errgo.Newf("API operation does not involve expected entity %v", allowedEntities)
+	}
+
+	for _, entityId := range entityIds {
+		if allowedEntitiesMap[entityId.URL.String()] {
+			continue
+		}
+		purl := entityId.PromulgatedURL()
+		if purl != nil {
+			if allowedEntitiesMap[purl.String()] {
+				continue
+			}
+		}
+		return errgo.Newf("API operation on entity %v not allowed", entityId.String())
+	}
+	return nil
 }
 
 // AuthorizeEntity checks that the given HTTP request
@@ -333,12 +306,12 @@ type authorization struct {
 }
 
 func (h *ReqHandler) groupsForUser(username string) ([]string, error) {
-	if h.handler.config.IdentityAPIURL == "" {
+	if h.Handler.config.IdentityAPIURL == "" {
 		logger.Debugf("IdentityAPIURL not configured, not retrieving groups for %s", username)
 		return nil, nil
 	}
 	// TODO cache groups for a user
-	return h.handler.identityClient.GroupsForUser(username)
+	return h.Handler.identityClient.GroupsForUser(username)
 }
 
 func (h *ReqHandler) checkACLMembership(auth authorization, acl []string) error {
@@ -373,7 +346,7 @@ func (h *ReqHandler) newMacaroon(caveats ...checkers.Caveat) (*macaroon.Macaroon
 	caveats = append(caveats,
 		checkers.NeedDeclaredCaveat(
 			checkers.Caveat{
-				Location:  h.handler.config.IdentityLocation,
+				Location:  h.Handler.config.IdentityLocation,
 				Condition: "is-authenticated-user",
 			},
 			UsernameAttr,

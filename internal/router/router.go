@@ -116,22 +116,29 @@ type Handlers struct {
 
 // Router represents a charm store HTTP request router.
 type Router struct {
-	handlers   *Handlers
-	handler    http.Handler
-	resolveURL func(id *charm.URL) (*ResolvedURL, error)
-	authorize  func(id *ResolvedURL, req *http.Request) error
-	exists     func(id *ResolvedURL, req *http.Request) (bool, error)
+	// Context holds context that the router was created with.
+	Context Context
+
+	handlers *Handlers
+	handler  http.Handler
 }
 
 // ResolvedURL represents a URL that has been resolved by resolveURL.
 type ResolvedURL struct {
-	// URL holds the fully qualified URL. URL.User should always be non-empty
+	// URL holds the canonical URL for the entity, as used as a key into
+	// the Entities collection. URL.User should always be non-empty
 	// and URL.Revision should never be -1. URL.Series will only be non-empty
 	// if the URL refers to a multi-series charm.
 	URL charm.URL
+
+	// PreferredSeries holds the series to return in PreferredURL
+	// if URL itself contains no series.
+	PreferredSeries string
+
 	// PromulgatedRevision holds the revision of the promulgated version of the
 	// charm or -1 if the corresponding entity is not promulgated.
 	PromulgatedRevision int
+
 	// Development holds whether the original entity URL included the
 	// "development" channel.
 	Development bool
@@ -166,12 +173,17 @@ func (id *ResolvedURL) UserOwnedURL() *charm.URL {
 	return &u
 }
 
-// PreferredURL returns the promulgated URL for
-// the given id if there is one, otherwise it
-// returns the non-promulgated URL. The returned *charm.URL
-// may be modified freely.
+// PreferredURL returns the promulgated URL for the given id if there is
+// one, otherwise it returns the non-promulgated URL. The returned
+// *charm.URL may be modified freely.
+//
+// If id.PreferredSeries is non-empty, the returns charm URL
+// will always have a non-empty series.
 func (id *ResolvedURL) PreferredURL() *charm.URL {
 	u := id.UserOwnedURL()
+	if u.Series == "" && id.PreferredSeries != "" {
+		u.Series = id.PreferredSeries
+	}
 	if id.PromulgatedRevision == -1 {
 		return u
 	}
@@ -186,14 +198,27 @@ func (id *ResolvedURL) PromulgatedURL() *charm.URL {
 	if id.PromulgatedRevision == -1 {
 		return nil
 	}
-	return id.PreferredURL()
+	u := id.UserOwnedURL()
+	u.User = ""
+	u.Revision = id.PromulgatedRevision
+	return u
 }
 
 func (id *ResolvedURL) GoString() string {
-	if id.PromulgatedRevision != -1 {
-		return fmt.Sprintf("%d %s", id.PromulgatedRevision, &id.URL)
+	// Make the URL member visible as a string
+	// rather than as a set of members.
+	var gid = struct {
+		URL                 string
+		PreferredSeries     string
+		PromulgatedRevision int
+		Development         bool
+	}{
+		URL:                 id.URL.String(),
+		PreferredSeries:     id.PreferredSeries,
+		PromulgatedRevision: id.PromulgatedRevision,
+		Development:         id.Development,
 	}
-	return id.URL.String()
+	return fmt.Sprintf("%#v", gid)
 }
 
 // String returns the preferred string representation of u.
@@ -202,34 +227,36 @@ func (u *ResolvedURL) String() string {
 	return u.PreferredURL().String()
 }
 
+// Context provides contextual information for a router.
+type Context interface {
+	// ResolveURL will be called to resolve ids in
+	// router paths - it should return the fully
+	// resolved URL corresponding to the given id.
+	// If the entity referred to by the URL does not
+	// exist, it should return an error with a params.ErrNotFound
+	// cause.
+	ResolveURL(id *charm.URL) (*ResolvedURL, error)
+
+	// The AuthorizeEntity function will be called to authorize requests
+	// to any BulkIncludeHandlers. All other handlers are expected
+	// to handle their own authorization.
+	AuthorizeEntity(id *ResolvedURL, req *http.Request) error
+}
+
 // New returns a charm store router that will route requests to
 // the given handlers and retrieve metadata from the given database.
 //
-// The resolveURL function will be called to resolve ids in
-// router paths - it should fill in the Series and Revision
-// fields of its argument URL if they are not specified.
-// The Cause of the resolveURL error will be left unchanged,
+// The Context argument provides additional context to the
+// router. Any errors returned by the context methods will
+// have their cause preserved when creating the error return
 // as for the handlers.
-//
-// The authorize function will be called to authorize the request
-// to any BulkIncludeHandlers. All other handlers are expected
-// to handle their own authorization. The Cause of the authorize
-// error will be left unchanged, as for the handlers.
-//
-// The exists function may be called to test whether an entity
-// exists when an API endpoint needs to know that
-// but has no appropriate handler to call.
 func New(
 	handlers *Handlers,
-	resolveURL func(id *charm.URL) (*ResolvedURL, error),
-	authorize func(id *ResolvedURL, req *http.Request) error,
-	exists func(id *ResolvedURL, req *http.Request) (bool, error),
+	ctxt Context,
 ) *Router {
 	r := &Router{
-		handlers:   handlers,
-		resolveURL: resolveURL,
-		authorize:  authorize,
-		exists:     exists,
+		handlers: handlers,
+		Context:  ctxt,
 	}
 	mux := NewServeMux()
 	mux.Handle("/meta/", http.StripPrefix("/meta", HandleErrors(r.serveBulkMeta)))
@@ -311,7 +338,7 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 		return errgo.WithCausef(nil, params.ErrNotFound, params.ErrNotFound.Error())
 	}
 	// Always resolve the entity id for meta requests.
-	rurl, err := r.resolveURL(url)
+	rurl, err := r.Context.ResolveURL(url)
 	if err != nil {
 		// Note: preserve error cause from resolveURL.
 		return errgo.Mask(err, errgo.Any)
@@ -363,7 +390,7 @@ func (r *Router) serveMeta(id *ResolvedURL, w http.ResponseWriter, req *http.Req
 func (r *Router) serveMetaGet(id *ResolvedURL, req *http.Request) (interface{}, error) {
 	// TODO: consider whether we might want the capability to
 	// have different permissions for different meta endpoints.
-	if err := r.authorize(id, req); err != nil {
+	if err := r.Context.AuthorizeEntity(id, req); err != nil {
 		return nil, errgo.Mask(err, errgo.Any)
 	}
 	key, path := handlerKey(req.URL.Path)
@@ -380,13 +407,6 @@ func (r *Router) serveMetaGet(id *ResolvedURL, req *http.Request) (interface{}, 
 		// a "not found" error when the id doesn't exist, so we need
 		// to check explicitly.
 		if len(includes) == 0 {
-			exists, err := r.exists(id, req)
-			if err != nil {
-				return nil, errgo.Notef(err, "cannot determine existence of %q", id)
-			}
-			if !exists {
-				return nil, errgo.WithCausef(nil, params.ErrNotFound, "")
-			}
 			return params.MetaAnyResponse{Id: id.PreferredURL()}, nil
 		}
 		meta, err := r.GetMetadata(id, includes, req)
@@ -431,7 +451,7 @@ func unmarshalJSONBody(req *http.Request, val interface{}) error {
 // The metadata to be put is in the request body.
 // PUT /$id/meta/...
 func (r *Router) serveMetaPut(id *ResolvedURL, req *http.Request) error {
-	if err := r.authorize(id, req); err != nil {
+	if err := r.Context.AuthorizeEntity(id, req); err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
 	var body json.RawMessage
@@ -555,7 +575,7 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 		if err != nil {
 			return nil, errgo.WithCausef(err, params.ErrBadRequest, "")
 		}
-		rurl, err := r.resolveURL(url)
+		rurl, err := r.Context.ResolveURL(url)
 		if err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				// URLs not found will be omitted from the result.
@@ -635,12 +655,12 @@ func (r *Router) serveBulkMetaPutOne(req *http.Request, id string, val *json.Raw
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	rurl, err := r.resolveURL(url)
+	rurl, err := r.Context.ResolveURL(url)
 	if err != nil {
 		// Note: preserve error cause from resolveURL.
 		return errgo.Mask(err, errgo.Any)
 	}
-	if err := r.authorize(rurl, req); err != nil {
+	if err := r.Context.AuthorizeEntity(rurl, req); err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
 	if err := r.serveMetaPutBody(rurl, req, val); err != nil {
