@@ -164,7 +164,7 @@ func (h *reqHandler) serveCharm(w http.ResponseWriter, req *http.Request) error 
 	if err != nil {
 		return errgo.WithCausef(err, params.ErrNotFound, "")
 	}
-	return h.v4.Handlers().Id["archive"](curl, w, req)
+	return h.v4.Router.Handlers().Id["archive"](curl, w, req)
 }
 
 // charmStatsKey returns a stats key for the given charm reference and kind.

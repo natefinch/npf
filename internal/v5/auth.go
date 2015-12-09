@@ -37,7 +37,7 @@ const (
 func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool, entityId *router.ResolvedURL) (authorization, error) {
 	logger.Infof(
 		"authorize, auth location %q, acl %q, path: %q, method: %q",
-		h.handler.config.IdentityLocation,
+		h.Handler.config.IdentityLocation,
 		acl,
 		req.URL.Path,
 		req.Method)
@@ -83,13 +83,13 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 func (h *ReqHandler) checkRequest(req *http.Request, entityId *router.ResolvedURL) (authorization, error) {
 	user, passwd, err := parseCredentials(req)
 	if err == nil {
-		if user != h.handler.config.AuthUsername || passwd != h.handler.config.AuthPassword {
+		if user != h.Handler.config.AuthUsername || passwd != h.Handler.config.AuthPassword {
 			return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "invalid user name or password")
 		}
 		return authorization{Admin: true}, nil
 	}
 	bk := h.Store.Bakery
-	if errgo.Cause(err) != errNoCreds || bk == nil || h.handler.config.IdentityLocation == "" {
+	if errgo.Cause(err) != errNoCreds || bk == nil || h.Handler.config.IdentityLocation == "" {
 		return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "authentication failed")
 	}
 	attrMap, err := httpbakery.CheckRequest(bk, req, nil, checkers.New(
@@ -157,12 +157,12 @@ type authorization struct {
 }
 
 func (h *ReqHandler) groupsForUser(username string) ([]string, error) {
-	if h.handler.config.IdentityAPIURL == "" {
+	if h.Handler.config.IdentityAPIURL == "" {
 		logger.Debugf("IdentityAPIURL not configured, not retrieving groups for %s", username)
 		return nil, nil
 	}
 	// TODO cache groups for a user
-	return h.handler.identityClient.GroupsForUser(username)
+	return h.Handler.identityClient.GroupsForUser(username)
 }
 
 func (h *ReqHandler) checkACLMembership(auth authorization, acl []string) error {
@@ -198,7 +198,7 @@ func (h *ReqHandler) newMacaroon() (*macaroon.Macaroon, error) {
 	// and whether there's a charm id or not.
 	// Mint an appropriate macaroon and send it back to the client.
 	return h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{checkers.NeedDeclaredCaveat(checkers.Caveat{
-		Location:  h.handler.config.IdentityLocation,
+		Location:  h.Handler.config.IdentityLocation,
 		Condition: "is-authenticated-user",
 	}, UsernameAttr)})
 }
