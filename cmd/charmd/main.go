@@ -99,9 +99,11 @@ func serve(confPath string) error {
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	err = addPublicKey(cache, conf.TermsLocation, conf.TermsPublicKey)
-	if err != nil {
-		return errgo.Mask(err)
+	if conf.TermsLocation != "" {
+		err = addPublicKey(cache, conf.TermsLocation, conf.TermsPublicKey)
+		if err != nil {
+			return errgo.Mask(err)
+		}
 	}
 
 	cfg.PublicKeyLocator = httpbakery.NewPublicKeyRing(http.DefaultClient, cache)
