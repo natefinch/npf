@@ -74,12 +74,11 @@ func serve(confPath string) error {
 
 	logger.Infof("setting up the API server")
 	cfg := charmstore.ServerParams{
-		AuthUsername:     conf.AuthUsername,
-		AuthPassword:     conf.AuthPassword,
-		IdentityLocation: conf.IdentityLocation,
-		IdentityAPIURL:   conf.IdentityAPIURL,
-		TermsLocation:    conf.TermsLocation,
-
+		AuthUsername:            conf.AuthUsername,
+		AuthPassword:            conf.AuthPassword,
+		IdentityLocation:        conf.IdentityLocation,
+		IdentityAPIURL:          conf.IdentityAPIURL,
+		TermsLocation:           conf.TermsLocation,
 		AgentUsername:           conf.AgentUsername,
 		AgentKey:                conf.AgentKey,
 		StatsCacheMaxAge:        conf.StatsCacheMaxAge.Duration,
@@ -95,40 +94,17 @@ func serve(confPath string) error {
 			MaxAge:   conf.AuditLogMaxAge,
 		}
 	}
-
-	ring := bakery.NewPublicKeyRing()
-	if conf.IdentityPublicKey != nil {
-		err = ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, conf.IdentityPublicKey)
-		if err != nil {
-			return errgo.Mask(err)
-		}
-	} else {
-		pubKey, err := httpbakery.PublicKeyForLocation(http.DefaultClient, cfg.IdentityLocation)
-		if err != nil {
-			return errgo.Mask(err)
-		}
-		err = ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, pubKey)
-		if err != nil {
-			return errgo.Mask(err)
-		}
+	cache := bakery.NewPublicKeyRing()
+	err = addPublicKey(cache, conf.IdentityLocation, conf.IdentityPublicKey)
+	if err != nil {
+		return errgo.Mask(err)
 	}
-	if conf.TermsPublicKey != nil {
-		err = ring.AddPublicKeyForLocation(cfg.TermsLocation, false, conf.TermsPublicKey)
-		if err != nil {
-			return errgo.Mask(err)
-		}
-	} else if cfg.TermsLocation != "" {
-		pubKey, err := httpbakery.PublicKeyForLocation(http.DefaultClient, cfg.TermsLocation)
-		if err != nil {
-			return errgo.Mask(err)
-		}
-		err = ring.AddPublicKeyForLocation(cfg.TermsLocation, false, pubKey)
-		if err != nil {
-			return errgo.Mask(err)
-		}
+	err = addPublicKey(cache, conf.TermsLocation, conf.TermsPublicKey)
+	if err != nil {
+		return errgo.Mask(err)
 	}
 
-	cfg.PublicKeyLocator = ring
+	cfg.PublicKeyLocator = httpbakery.NewPublicKeyRing(http.DefaultClient, cache)
 	server, err := charmstore.NewServer(db, es, "cs", cfg, charmstore.Legacy, charmstore.V4, charmstore.V5)
 	if err != nil {
 		return errgo.Notef(err, "cannot create new server at %q", conf.APIAddr)
@@ -136,6 +112,17 @@ func serve(confPath string) error {
 
 	logger.Infof("starting the API server")
 	return http.ListenAndServe(conf.APIAddr, debug.Handler("", server))
+}
+
+func addPublicKey(ring *bakery.PublicKeyRing, loc string, key *bakery.PublicKey) error {
+	if key != nil {
+		return ring.AddPublicKeyForLocation(loc, false, key)
+	}
+	pubKey, err := httpbakery.PublicKeyForLocation(http.DefaultClient, loc)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	return ring.AddPublicKeyForLocation(loc, false, pubKey)
 }
 
 var mgoLogger = loggo.GetLogger("mgo")

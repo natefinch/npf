@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
@@ -21,10 +20,13 @@ import (
 )
 
 const (
-	PromulgatorsGroup      = "charmers"
-	opAccessCharmWithTerms = "access-operation"
-	opOther                = "other-operation"
-	defaultMacaroonExpiry  = 24 * time.Hour
+	PromulgatorsGroup = "charmers"
+	// opAccessCharmWitTerms indicates an operation of accessing the archive of
+	// a charm that requires agreement to certain terms and conditions.
+	opAccessCharmWithTerms = "op-get-with-terms"
+	// opOther indicated all other operations.
+	opOther               = "op-other"
+	defaultMacaroonExpiry = 24 * time.Hour
 )
 
 // authorize checks that the current user is authorized based on the provided
@@ -124,7 +126,7 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 			return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
 		if baseEntity == nil {
-			return authorization{}, errgo.WithCausef(nil, params.ErrNotFound, "cound not find the base entity %v", entityId.URL.String())
+			return authorization{}, errgo.WithCausef(nil, params.ErrNotFound, "could not find the base entity %v", entityId.URL.String())
 		}
 
 		ACLs[i] = baseEntity.ACLs.Read
@@ -158,7 +160,12 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 		return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "charmstore not configured to serve charms with terms and conditions")
 	}
 
-	auth, verr := h.checkRequest(req, entityIds, opAccessCharmWithTerms)
+	operation := opOther
+	if len(requiredTerms) > 0 {
+		operation = opAccessCharmWithTerms
+	}
+
+	auth, verr := h.checkRequest(req, entityIds, operation)
 	if verr == nil {
 		for _, acl := range ACLs {
 			if err := h.checkACLMembership(auth, acl); err != nil {
@@ -172,9 +179,7 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 		return authorization{}, errgo.Mask(verr, errgo.Is(params.ErrUnauthorized))
 	}
 
-	caveats := []checkers.Caveat{
-		checkers.AllowCaveat(opAccessCharmWithTerms, opOther),
-	}
+	caveats := []checkers.Caveat{}
 	if len(requiredTerms) > 0 {
 		terms := []string{}
 		for term, _ := range requiredTerms {
@@ -222,68 +227,10 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.Resolve
 		checkers.CheckerFunc{
 			Condition_: "is-entity",
 			Check_: func(_, args string) error {
-				allowedEntities := make(map[string]struct{})
-				for _, curl := range strings.Fields(args) {
-					charmRef, err := charm.ParseURL(strings.TrimSpace(curl))
-					if err != nil {
-						return errgo.Mask(err)
-					}
-					resolvedCURL, err := h.resolveURL(charmRef)
-					if err != nil {
-						return errgo.Mask(err)
-					}
-					allowedEntities[resolvedCURL.URL.String()] = struct{}{}
-				}
-				if len(entityIds) == 0 {
-					return errgo.Newf("API operation does not involve expected entity %v", args)
-				}
-
-				for _, entityId := range entityIds {
-					var ok, okPromulgated bool
-					_, ok = allowedEntities[entityId.URL.String()]
-					purl := entityId.PromulgatedURL()
-					if purl != nil {
-						_, okPromulgated = allowedEntities[purl.String()]
-					}
-					if !ok && !okPromulgated {
-						return errgo.Newf("API operation on entity %v not allowed", entityId.String())
-					}
-				}
-				return nil
+				return areAllowedEntities(entityIds, args)
 			},
 		},
-		checkers.CheckerFunc{
-			Condition_: "",
-			Check_: func(cond, args string) error {
-				if operation != opAccessCharmWithTerms {
-					return nil
-				}
-				allowAccessCharmWithTerms := false
-				switch cond {
-				case checkers.CondAllow:
-					for _, op := range strings.Fields(args) {
-						if op == opAccessCharmWithTerms {
-							allowAccessCharmWithTerms = true
-						}
-					}
-				case checkers.CondDeny:
-				default:
-					return checkers.ErrCaveatNotRecognized
-				}
-				if !allowAccessCharmWithTerms {
-					for _, entityId := range entityIds {
-						entity, err := h.Store.FindEntity(entityId)
-						if err != nil {
-							return errgo.Mask(err, errgo.Is(params.ErrNotFound))
-						}
-						if entity.CharmMeta != nil && len(entity.CharmMeta.Terms) > 0 {
-							return errgo.New("access denied")
-						}
-					}
-				}
-				return nil
-			},
-		},
+		checkers.OperationChecker(operation),
 	))
 	if err != nil {
 		return authorization{}, errgo.Mask(err, errgo.Any)
@@ -292,6 +239,32 @@ func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.Resolve
 		Admin:    false,
 		Username: attrMap[UsernameAttr],
 	}, nil
+}
+
+// areAllowedEntities checks if all entityIds are in the allowedEntities list (space
+// separated).
+func areAllowedEntities(entityIds []*router.ResolvedURL, allowedEntities string) error {
+	allowedEntitiesMap := make(map[string]bool)
+	for _, curl := range strings.Fields(allowedEntities) {
+		allowedEntitiesMap[curl] = true
+	}
+	if len(entityIds) == 0 {
+		return errgo.Newf("API operation does not involve expected entity %v", allowedEntities)
+	}
+
+	for _, entityId := range entityIds {
+		if allowedEntitiesMap[entityId.URL.String()] {
+			continue
+		}
+		purl := entityId.PromulgatedURL()
+		if purl != nil {
+			if allowedEntitiesMap[purl.String()] {
+				continue
+			}
+		}
+		return errgo.Newf("API operation on entity %v not allowed", entityId.String())
+	}
+	return nil
 }
 
 // AuthorizeEntity checks that the given HTTP request

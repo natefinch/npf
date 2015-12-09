@@ -1131,8 +1131,8 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 		}
 		return m, nil
 	}
-	var resolvedURLs []*router.ResolvedURL
-	for _, id := range entityIds {
+	resolvedURLs := make([]*router.ResolvedURL, len(entityIds))
+	for i, id := range entityIds {
 		charmRef, err := charm.ParseURL(id)
 		if err != nil {
 			return nil, errgo.WithCausef(err, params.ErrBadRequest, `bad "id" parameter`)
@@ -1141,7 +1141,7 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}
-		resolvedURLs = append(resolvedURLs, resolvedURL)
+		resolvedURLs[i] = resolvedURL
 	}
 
 	// Note that we require authorization even though we allow
@@ -1165,7 +1165,6 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 	m, err := h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
 		checkers.DeclaredCaveat(UsernameAttr, auth.Username),
 		checkers.TimeBeforeCaveat(time.Now().Add(DelegatableMacaroonExpiry)),
-		checkers.AllowCaveat(opAccessCharmWithTerms, opOther),
 		checkers.Caveat{Condition: "is-entity " + strings.Join(resolvedURLstrings, " ")},
 	})
 	if err != nil {
