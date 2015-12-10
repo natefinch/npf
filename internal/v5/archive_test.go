@@ -51,9 +51,6 @@ type ArchiveSuite struct {
 var _ = gc.Suite(&ArchiveSuite{})
 
 func (s *ArchiveSuite) TestGetCharmWithTerms(c *gc.C) {
-	s.dischargeTerms = func(s1, s2 string) ([]checkers.Caveat, error) {
-		return nil, nil
-	}
 	client := httpbakery.NewHTTPClient()
 
 	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
@@ -128,14 +125,7 @@ func (s *ArchiveSuite) TestGetDevelopment(c *gc.C) {
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
 	c.Assert(err, gc.IsNil)
 
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL("~charmers/development/trusty/wordpress-0/archive"),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/development/trusty/wordpress-0")
+	s.assertArchiveDownload(c, "~charmers/development/trusty/wordpress-0/archive", "cs:~charmers/development/trusty/wordpress-0", archiveBytes)
 
 	// It is not possible to use the published URL to retrieve the archive,
 	err = s.store.SetPerms(url.WithChannel(""), "read", params.Everyone, id.URL.User)
@@ -151,6 +141,21 @@ func (s *ArchiveSuite) TestGetDevelopment(c *gc.C) {
 	})
 }
 
+func (s *commonSuite) assertArchiveDownload(c *gc.C, url, id string, archiveBytes []byte) {
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL(url),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	if id != "" {
+		c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, id)
+	}
+	if archiveBytes != nil {
+		c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
+		c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
+	}
+}
+
 func (s *ArchiveSuite) TestGetWithPartialId(c *gc.C) {
 	id := newResolvedURL("cs:~charmers/utopic/wordpress-42", -1)
 	err := s.store.AddCharmWithArchive(
@@ -159,13 +164,8 @@ func (s *ArchiveSuite) TestGetWithPartialId(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
 	c.Assert(err, gc.IsNil)
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL("~charmers/wordpress/archive"),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	// The complete entity id can be retrieved from the response header.
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, id.URL.String())
+
+	s.assertArchiveDownload(c, "~charmers/wordpress/archive", id.URL.String(), nil)
 }
 
 func (s *ArchiveSuite) TestGetPromulgatedWithPartialId(c *gc.C) {
@@ -176,13 +176,7 @@ func (s *ArchiveSuite) TestGetPromulgatedWithPartialId(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
 	c.Assert(err, gc.IsNil)
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL("wordpress/archive"),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	// The complete entity id can be retrieved from the response header.
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, id.PromulgatedURL().String())
+	s.assertArchiveDownload(c, "wordpress/archive", id.PromulgatedURL().String(), nil)
 }
 
 func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
@@ -202,11 +196,7 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 
 		// Download the charm archive using the API.
-		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-			Handler: s.srv,
-			URL:     storeURL(id.URL.Path() + "/archive"),
-		})
-		c.Assert(rec.Code, gc.Equals, http.StatusOK)
+		s.assertArchiveDownload(c, id.URL.Path()+"/archive", "", nil)
 
 		// Check that the downloads count for the entity has been updated.
 		key := []string{params.StatsArchiveDownload, "utopic", "mysql", id.URL.User, "42"}
@@ -1775,30 +1765,33 @@ func (s *ArchiveSuiteWithTerms) SetUpTest(c *gc.C) {
 }
 
 func (s *ArchiveSuiteWithTerms) TestGetUserHasAgreedToTermsAndConditions(c *gc.C) {
-	s.dischargeTerms = func(s1, s2 string) ([]checkers.Caveat, error) {
+	termsDischargeAccessed := false
+	s.dischargeTerms = func(cond, args string) ([]checkers.Caveat, error) {
+		termsDischargeAccessed = true
+		if cond != "has-agreed" || args != "terms-1/1 terms-2/5" {
+			c.Logf("terms %#v", args)
+			return nil, errgo.New("discharge error")
+		}
 		return nil, nil
 	}
 
 	client := httpbakery.NewHTTPClient()
 
 	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
-	terms := s.assertUploadCharm(c, "POST", id, "terms")
+	s.assertUploadCharm(c, "POST", id, "terms")
 	err := s.store.SetPerms(&id.URL, "read", "bob")
 	c.Assert(err, gc.IsNil)
 
-	archiveBytes, err := ioutil.ReadFile(terms.Path)
-	c.Assert(err, gc.IsNil)
-
 	archiveUrl := storeURL("~charmers/precise/terms-0/archive")
+	//s.assertArchiveDownload(c, "~charmers/precise/terms-0/archive", id.URL.String(), nil)
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     archiveUrl,
 		Do:      bakeryDo(client),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/terms-0")
+
+	c.Assert(termsDischargeAccessed, gc.Equals, true)
 
 	// Check that the HTTP range logic is plugged in OK. If this
 	// is working, we assume that the whole thing is working OK,
@@ -1811,9 +1804,6 @@ func (s *ArchiveSuiteWithTerms) TestGetUserHasAgreedToTermsAndConditions(c *gc.C
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
 	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/terms-0")
 }
 
 func (s *ArchiveSuiteWithTerms) TestGetUserHasNotAgreedToTerms(c *gc.C) {

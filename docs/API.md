@@ -2065,10 +2065,9 @@ authorization is required.
 
 This endpoint returns a macaroon in JSON format that can be passed to
 third parties to allow them to access the charm store on the user's
-behalf. The entity id must be added as a url encoded parameter and is added as
-a first party "is-entity" caveat to restrict the usability of the returned 
-macaroon, so that third parties can only access a given charmstore entity 
-with a the specified id.
+behalf. If the "id" parameter is specified (url encoded), the returned
+macaroon will be restricted for use only with the entity with the 
+given id.
 
 A delegatable macaroon will only be returned to an authorized user (not 
 including admin). It will carry the same privileges as the macaroon used 
