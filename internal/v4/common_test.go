@@ -77,10 +77,6 @@ type commonSuite struct {
 	idM        *idM
 	idMServer  *httptest.Server
 
-	dischargeTerms  func(cav, arg string) ([]checkers.Caveat, error)
-	termsDischarger *bakerytest.Discharger
-	enableTerms     bool
-
 	// The following fields may be set before
 	// SetUpSuite is invoked on commonSuite
 	// and influences how the suite sets itself up.
@@ -160,19 +156,6 @@ func (s *commonSuite) startServer(c *gc.C) {
 		pk, err := httpbakery.PublicKeyForLocation(http.DefaultClient, discharger.Location())
 		c.Assert(err, gc.IsNil)
 		err = keyring.AddPublicKeyForLocation(discharger.Location(), true, pk)
-		c.Assert(err, gc.IsNil)
-	}
-	if s.enableTerms {
-		s.dischargeTerms = func(_, _ string) ([]checkers.Caveat, error) {
-			return nil, errgo.New("no discharge")
-		}
-		termsDischarger := bakerytest.NewDischarger(nil, func(_ *http.Request, cond string, arg string) ([]checkers.Caveat, error) {
-			return s.dischargeTerms(cond, arg)
-		})
-		config.TermsLocation = termsDischarger.Location()
-		pk, err := httpbakery.PublicKeyForLocation(http.DefaultClient, termsDischarger.Location())
-		c.Assert(err, gc.IsNil)
-		err = keyring.AddPublicKeyForLocation(termsDischarger.Location(), true, pk)
 		c.Assert(err, gc.IsNil)
 	}
 	config.PublicKeyLocator = keyring
