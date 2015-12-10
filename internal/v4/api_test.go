@@ -1562,39 +1562,67 @@ var serveExpandIdTests = []struct {
 	about: "fully qualified URL",
 	url:   "~charmers/trusty/wordpress-47",
 	expect: []params.ExpandedId{
+		// V4 SPECIFIC
 		{Id: "cs:~charmers/utopic/wordpress-42"},
 		{Id: "cs:~charmers/trusty/wordpress-47"},
-		{Id: "cs:~charmers/wordpress-5"},
+		{Id: "cs:~charmers/trusty/wordpress-5"},
+		{Id: "cs:~charmers/utopic/wordpress-5"},
+		{Id: "cs:~charmers/vivid/wordpress-5"},
+		{Id: "cs:~charmers/wily/wordpress-5"},
 	},
 }, {
 	about: "fully qualified development URL",
 	url:   "~charmers/development/trusty/wordpress-47",
 	expect: []params.ExpandedId{
+		// V4 SPECIFIC
 		{Id: "cs:~charmers/utopic/wordpress-42"},
 		{Id: "cs:~charmers/development/trusty/wordpress-48"},
 		{Id: "cs:~charmers/trusty/wordpress-47"},
-		{Id: "cs:~charmers/development/wordpress-7"},
-		{Id: "cs:~charmers/development/wordpress-6"},
-		{Id: "cs:~charmers/wordpress-5"},
+		{Id: "cs:~charmers/development/trusty/wordpress-7"},
+		{Id: "cs:~charmers/development/utopic/wordpress-7"},
+		{Id: "cs:~charmers/development/vivid/wordpress-7"},
+		{Id: "cs:~charmers/development/wily/wordpress-7"},
+		{Id: "cs:~charmers/development/trusty/wordpress-6"},
+		{Id: "cs:~charmers/development/utopic/wordpress-6"},
+		{Id: "cs:~charmers/development/vivid/wordpress-6"},
+		{Id: "cs:~charmers/development/wily/wordpress-6"},
+		{Id: "cs:~charmers/trusty/wordpress-5"},
+		{Id: "cs:~charmers/utopic/wordpress-5"},
+		{Id: "cs:~charmers/vivid/wordpress-5"},
+		{Id: "cs:~charmers/wily/wordpress-5"},
 	},
 }, {
 	about: "promulgated URL",
 	url:   "trusty/wordpress-47",
 	expect: []params.ExpandedId{
+		// V4 SPECIFIC
 		{Id: "cs:utopic/wordpress-42"},
 		{Id: "cs:trusty/wordpress-47"},
-		{Id: "cs:wordpress-49"},
+		{Id: "cs:trusty/wordpress-49"},
+		{Id: "cs:utopic/wordpress-49"},
+		{Id: "cs:vivid/wordpress-49"},
+		{Id: "cs:wily/wordpress-49"},
 	},
 }, {
 	about: "development promulgated URL",
 	url:   "development/trusty/wordpress-48",
 	expect: []params.ExpandedId{
+		// V4 SPECIFIC
 		{Id: "cs:utopic/wordpress-42"},
 		{Id: "cs:development/trusty/wordpress-48"},
 		{Id: "cs:trusty/wordpress-47"},
-		{Id: "cs:development/wordpress-51"},
-		{Id: "cs:development/wordpress-50"},
-		{Id: "cs:wordpress-49"},
+		{Id: "cs:development/trusty/wordpress-51"},
+		{Id: "cs:development/utopic/wordpress-51"},
+		{Id: "cs:development/vivid/wordpress-51"},
+		{Id: "cs:development/wily/wordpress-51"},
+		{Id: "cs:development/trusty/wordpress-50"},
+		{Id: "cs:development/utopic/wordpress-50"},
+		{Id: "cs:development/vivid/wordpress-50"},
+		{Id: "cs:development/wily/wordpress-50"},
+		{Id: "cs:trusty/wordpress-49"},
+		{Id: "cs:utopic/wordpress-49"},
+		{Id: "cs:vivid/wordpress-49"},
+		{Id: "cs:wily/wordpress-49"},
 	},
 }, {
 	about: "non-promulgated charm",
@@ -1696,7 +1724,8 @@ var serveMetaRevisionInfoTests = []struct {
 			charm.MustParseURL("cs:trusty/wordpress-42"),
 			charm.MustParseURL("cs:trusty/wordpress-41"),
 			charm.MustParseURL("cs:trusty/wordpress-9"),
-		}},
+		},
+	},
 }, {
 	about: "partial url uses a default series",
 	url:   "wordpress",
@@ -1706,7 +1735,8 @@ var serveMetaRevisionInfoTests = []struct {
 			charm.MustParseURL("cs:trusty/wordpress-42"),
 			charm.MustParseURL("cs:trusty/wordpress-41"),
 			charm.MustParseURL("cs:trusty/wordpress-9"),
-		}},
+		},
+	},
 }, {
 	about: "non-promulgated URL gives non-promulgated revisions (~charmers)",
 	url:   "~charmers/trusty/cinder",
@@ -1719,7 +1749,8 @@ var serveMetaRevisionInfoTests = []struct {
 			charm.MustParseURL("cs:~charmers/trusty/cinder-2"),
 			charm.MustParseURL("cs:~charmers/trusty/cinder-1"),
 			charm.MustParseURL("cs:~charmers/trusty/cinder-0"),
-		}},
+		},
+	},
 }, {
 	about: "non-promulgated URL gives non-promulgated revisions (~openstack-charmers)",
 	url:   "~openstack-charmers/trusty/cinder",
@@ -1727,7 +1758,8 @@ var serveMetaRevisionInfoTests = []struct {
 		[]*charm.URL{
 			charm.MustParseURL("cs:~openstack-charmers/trusty/cinder-1"),
 			charm.MustParseURL("cs:~openstack-charmers/trusty/cinder-0"),
-		}},
+		},
+	},
 }, {
 	about: "promulgated URL gives promulgated revisions",
 	url:   "trusty/cinder",
@@ -1739,7 +1771,72 @@ var serveMetaRevisionInfoTests = []struct {
 			charm.MustParseURL("cs:trusty/cinder-2"),
 			charm.MustParseURL("cs:trusty/cinder-1"),
 			charm.MustParseURL("cs:trusty/cinder-0"),
-		}},
+		},
+	},
+}, {
+	about: "multi-series charm expands to all revisions of that charm",
+	url:   "multi-series",
+	expect: params.RevisionInfoResponse{
+		// V4 SPECIFIC
+		[]*charm.URL{
+			charm.MustParseURL("cs:trusty/multi-series-41"),
+			charm.MustParseURL("cs:trusty/multi-series-40"),
+		},
+	},
+}, {
+	about: "multi-series charm with series specified",
+	url:   "trusty/multi-series",
+	expect: params.RevisionInfoResponse{
+		// V4 SPECIFIC
+		[]*charm.URL{
+			charm.MustParseURL("cs:trusty/multi-series-41"),
+			charm.MustParseURL("cs:trusty/multi-series-40"),
+		},
+	},
+}, {
+	about: "multi-series charm with non-promulgated URL",
+	url:   "~charmers/multi-series",
+	expect: params.RevisionInfoResponse{
+		// V4 SPECIFIC
+		[]*charm.URL{
+			charm.MustParseURL("cs:~charmers/trusty/multi-series-2"),
+			charm.MustParseURL("cs:~charmers/trusty/multi-series-1"),
+		},
+	},
+}, {
+	about: "multi-series charm with non-promulgated URL and series specified",
+	url:   "~charmers/utopic/multi-series",
+	expect: params.RevisionInfoResponse{
+		// V4 SPECIFIC
+		[]*charm.URL{
+			charm.MustParseURL("cs:~charmers/utopic/multi-series-2"),
+			charm.MustParseURL("cs:~charmers/utopic/multi-series-1"),
+		},
+	},
+}, {
+	about: "mixed multi/single series charm, latest rev",
+	url:   "mixed",
+	expect: params.RevisionInfoResponse{
+		// V4 SPECIFIC
+		[]*charm.URL{
+			charm.MustParseURL("cs:trusty/mixed-43"),
+			charm.MustParseURL("cs:trusty/mixed-42"),
+			charm.MustParseURL("cs:trusty/mixed-41"),
+			charm.MustParseURL("cs:trusty/mixed-40"),
+		},
+	},
+}, {
+	about: "mixed multi/single series charm with series",
+	url:   "trusty/mixed-40",
+	expect: params.RevisionInfoResponse{
+		// V4 SPECIFIC
+		[]*charm.URL{
+			charm.MustParseURL("cs:trusty/mixed-43"),
+			charm.MustParseURL("cs:trusty/mixed-42"),
+			charm.MustParseURL("cs:trusty/mixed-41"),
+			charm.MustParseURL("cs:trusty/mixed-40"),
+		},
+	},
 }, {
 	about: "no entities found",
 	url:   "precise/no-such-33",
@@ -1764,6 +1861,14 @@ func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-4", -1))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-5", 4))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-6", 5))
+
+	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-1", 40))
+	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-2", 41))
+
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mixed-1", 40))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mixed-2", 41))
+	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/mixed-3", 42))
+	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/mixed-4", 43))
 
 	for i, test := range serveMetaRevisionInfoTests {
 		c.Logf("test %d: %s", i, test.about)

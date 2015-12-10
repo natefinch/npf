@@ -5,16 +5,24 @@ package v4 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 import (
 	"net/http"
+	"net/url"
 
+	"github.com/juju/httprequest"
+	"github.com/juju/loggo"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mempool"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 )
+
+var logger = loggo.GetLogger("charmstore.internal.v4")
 
 const (
 	PromulgatorsGroup         = v5.PromulgatorsGroup
@@ -88,8 +96,11 @@ func newReqHandler() ReqHandler {
 	h := ReqHandler{
 		ReqHandler: new(v5.ReqHandler),
 	}
+	resolveId := h.ResolvedIdHandler
+	authId := h.AuthIdHandler
 	handlers := v5.RouterHandlers(h.ReqHandler)
-	// TODO mutate handlers appropriately.
+	handlers.Meta["revision-info"] = router.SingleIncludeHandler(h.metaRevisionInfo)
+	handlers.Id["expand-id"] = resolveId(authId(h.serveExpandId))
 
 	h.Router = router.New(handlers, h)
 	return h
@@ -151,4 +162,105 @@ func StatsEnabled(req *http.Request) bool {
 
 func noMatchingURLError(url *charm.URL) error {
 	return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
+}
+
+// GET id/meta/revision-info
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetarevision-info
+func (h *ReqHandler) metaRevisionInfo(id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	searchURL := id.PreferredURL()
+	searchURL.Revision = -1
+
+	q := h.Store.EntitiesQuery(searchURL)
+	if id.PromulgatedRevision != -1 {
+		q = q.Sort("-promulgated-revision")
+	} else {
+		q = q.Sort("-revision")
+	}
+	var docs []*mongodoc.Entity
+	if err := q.Select(bson.D{{"_id", 1}, {"promulgated-url", 1}, {"supportedseries", 1}, {"development", 1}}).All(&docs); err != nil {
+		return "", errgo.Notef(err, "cannot get ids")
+	}
+
+	if len(docs) == 0 {
+		return "", errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
+	}
+	specifiedSeries := id.URL.Series
+	if specifiedSeries == "" {
+		specifiedSeries = id.PreferredSeries
+	}
+	var response params.RevisionInfoResponse
+	expandMultiSeries(docs, func(series string, doc *mongodoc.Entity) {
+		if specifiedSeries != series {
+			return
+		}
+		url := doc.PreferredURL(id.PromulgatedRevision != -1)
+		url.Series = series
+		response.Revisions = append(response.Revisions, url)
+	})
+	return &response, nil
+}
+
+// GET id/expand-id
+// https://docs.google.com/a/canonical.com/document/d/1TgRA7jW_mmXoKH3JiwBbtPvQu7WiM6XMrz1wSrhTMXw/edit#bookmark=id.4xdnvxphb2si
+func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
+	baseURL := id.PreferredURL()
+	baseURL.Revision = -1
+	baseURL.Series = ""
+
+	// baseURL now represents the base URL of the given id;
+	// it will be a promulgated URL iff the original URL was
+	// specified without a user, which will cause EntitiesQuery
+	// to return entities that match appropriately.
+
+	// Retrieve all the entities with the same base URL.
+	// Note that we don't do any permission checking of the returned URLs.
+	// This is because we know that the user is allowed to read at
+	// least the resolved URL passed into serveExpandId.
+	// If this does not specify "development", then no development
+	// revisions will be chosen, so the single ACL already checked
+	// is sufficient. If it *does* specify "development", then we assume
+	// that the development ACLs are more restrictive than the
+	// non-development ACLs, and given that, we can allow all
+	// the URLs.
+	q := h.Store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}, {"development", 1}, {"supportedseries", 1}})
+	if id.PromulgatedRevision != -1 {
+		q = q.Sort("-series", "-promulgated-revision")
+	} else {
+		q = q.Sort("-series", "-revision")
+	}
+	var docs []*mongodoc.Entity
+	err := q.All(&docs)
+	if err != nil && errgo.Cause(err) != mgo.ErrNotFound {
+		return errgo.Mask(err)
+	}
+
+	// Collect all the expanded identifiers for each entity.
+	response := make([]params.ExpandedId, 0, len(docs))
+	expandMultiSeries(docs, func(series string, doc *mongodoc.Entity) {
+		url := doc.PreferredURL(id.PromulgatedRevision != -1)
+		url.Series = series
+		response = append(response, params.ExpandedId{Id: url.String()})
+	})
+
+	// Write the response in JSON format.
+	return httprequest.WriteJSON(w, http.StatusOK, response)
+}
+
+// expandMultiSeries calls the provided append function once for every
+// supported series of each entry in the given entities slice. The
+// series argument will be passed as that series and the doc argument
+// will point to the entity.
+//
+// Note that the SupportedSeries field of the entities must have
+// been populated for this to work.
+func expandMultiSeries(entities []*mongodoc.Entity, append func(series string, doc *mongodoc.Entity)) {
+	for _, entity := range entities {
+		if entity.URL.Series != "" {
+			append(entity.URL.Series, entity)
+			continue
+		}
+		for _, series := range entity.SupportedSeries {
+			append(series, entity)
+		}
+	}
 }

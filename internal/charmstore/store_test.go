@@ -290,7 +290,7 @@ var urlFindingTests = []struct {
 	expand:  "development/precise/wordpress",
 	expect:  []string{"25 cs:~charmers/development/precise/wordpress-25", "23 cs:~charmers/precise/wordpress-23"},
 }, {
-	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "434 cs:~charmers/foo/bar-434"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "434 cs:~charmers/foo/varnish-434"},
 	expand:  "wordpress",
 	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24"},
 }, {
@@ -306,13 +306,41 @@ var urlFindingTests = []struct {
 	expand:  "~user/wordpress",
 	expect:  []string{"cs:~user/precise/wordpress-23", "cs:~user/trusty/wordpress-23"},
 }, {
-	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "434 cs:~charmers/foo/bar-434"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "434 cs:~charmers/foo/varnish-434"},
 	expand:  "precise/wordpress-23",
 	expect:  []string{"23 cs:~charmers/precise/wordpress-23"},
 }, {
-	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "434 cs:~charmers/foo/bar-434"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "434 cs:~charmers/foo/varnish-434"},
 	expand:  "arble",
 	expect:  []string{},
+}, {
+	inStore: []string{"23 cs:~charmers/multi-series-23", "24 cs:~charmers/multi-series-24"},
+	expand:  "multi-series",
+	expect:  []string{"23 cs:~charmers/multi-series-23", "24 cs:~charmers/multi-series-24"},
+}, {
+	inStore: []string{"23 cs:~charmers/multi-series-23", "24 cs:~charmers/multi-series-24"},
+	expand:  "trusty/multi-series",
+	expect:  []string{"23 cs:~charmers/multi-series-23", "24 cs:~charmers/multi-series-24"},
+}, {
+	inStore: []string{"23 cs:~charmers/multi-series-23", "24 cs:~charmers/multi-series-24"},
+	expand:  "multi-series-24",
+	expect:  []string{"24 cs:~charmers/multi-series-24"},
+}, {
+	inStore: []string{"23 cs:~charmers/multi-series-23", "24 cs:~charmers/multi-series-24"},
+	expand:  "trusty/multi-series-24",
+	expect:  []string{"24 cs:~charmers/multi-series-24"},
+}, {
+	inStore: []string{"1 cs:~charmers/multi-series-23", "2 cs:~charmers/multi-series-24"},
+	expand:  "trusty/multi-series-1",
+	expect:  []string{"1 cs:~charmers/multi-series-23"},
+}, {
+	inStore: []string{"1 cs:~charmers/multi-series-23", "2 cs:~charmers/multi-series-24"},
+	expand:  "multi-series-23",
+	expect:  []string{},
+}, {
+	inStore: []string{"1 cs:~charmers/multi-series-23", "2 cs:~charmers/multi-series-24"},
+	expand:  "cs:~charmers/utopic/multi-series-23",
+	expect:  []string{"1 cs:~charmers/multi-series-23"},
 }, {
 	inStore: []string{},
 	expand:  "precise/wordpress-23",
@@ -324,7 +352,7 @@ var urlFindingTests = []struct {
 }}
 
 func (s *StoreSuite) testURLFinding(c *gc.C, check func(store *Store, expand *charm.URL, expect []*router.ResolvedURL)) {
-	wordpress := storetesting.Charms.CharmDir("wordpress")
+	charms := make(map[string]*charm.CharmDir)
 	store := s.newStore(c, false)
 	defer store.Close()
 	for i, test := range urlFindingTests {
@@ -333,7 +361,11 @@ func (s *StoreSuite) testURLFinding(c *gc.C, check func(store *Store, expand *ch
 		c.Assert(err, gc.IsNil)
 		urls := MustParseResolvedURLs(test.inStore)
 		for _, url := range urls {
-			err := store.AddCharmWithArchive(url, wordpress)
+			name := url.URL.Name
+			if charms[name] == nil {
+				charms[name] = storetesting.Charms.CharmDir(name)
+			}
+			err := store.AddCharmWithArchive(url, charms[name])
 			c.Assert(err, gc.IsNil)
 		}
 		check(store, charm.MustParseURL(test.expand), MustParseResolvedURLs(test.expect))
