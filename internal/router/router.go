@@ -558,7 +558,6 @@ func (r *Router) serveBulkMeta(w http.ResponseWriter, req *http.Request) error {
 // GET meta/$endpoint?id=$id0[&id=$id1...][$otherflags]
 // See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-metaendpoint
 func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
-	// TODO get the metadata concurrently for each id.
 	ids := req.Form["id"]
 	if len(ids) == 0 {
 		return nil, errgo.WithCausef(nil, params.ErrBadRequest, "no ids specified in meta request")

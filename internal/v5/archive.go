@@ -338,7 +338,6 @@ func (h *ReqHandler) addEntity(id *router.ResolvedURL, r io.ReadSeeker, blobName
 		BlobHash:    hash,
 		BlobHash256: hash256,
 		BlobSize:    contentLength,
-		Development: id.Development,
 	}
 	if id.URL.Series == "bundle" {
 		b, err := charm.ReadBundleArchiveFromReader(readerAt, contentLength)
