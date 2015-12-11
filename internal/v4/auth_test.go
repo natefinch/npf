@@ -810,19 +810,19 @@ var isEntityCaveatTests = []struct {
 	url: "utopic/wordpress-10/meta/hash",
 }, {
 	url:         "~charmers/utopic/wordpress-41/archive",
-	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:~charmers/utopic/wordpress-41 not allowed`,
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: operation on entity cs:~charmers/utopic/wordpress-41 not allowed`,
 }, {
 	url:         "~charmers/utopic/wordpress-41/meta/hash",
-	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:~charmers/utopic/wordpress-41 not allowed`,
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: operation on entity cs:~charmers/utopic/wordpress-41 not allowed`,
 }, {
 	url:         "utopic/wordpress-9/archive",
-	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:utopic/wordpress-9 not allowed`,
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: operation on entity cs:utopic/wordpress-9 not allowed`,
 }, {
 	url:         "utopic/wordpress-9/meta/hash",
-	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation on entity cs:utopic/wordpress-9 not allowed`,
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: operation on entity cs:utopic/wordpress-9 not allowed`,
 }, {
 	url:         "log",
-	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: API operation does not involve expected entity cs:~charmers/utopic/wordpress-42`,
+	expectError: `verification failed: caveat "is-entity cs:~charmers/utopic/wordpress-42" not satisfied: operation does not involve any of the allowed entities cs:~charmers/utopic/wordpress-42`,
 }}
 
 func (s *authSuite) TestIsEntityCaveat(c *gc.C) {

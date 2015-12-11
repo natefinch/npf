@@ -1125,6 +1125,8 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 		return nil, errgo.Mask(err)
 	}
 	entityIds := values["id"]
+	// No entity ids, so we provide a macaroon that's good for any entity that the
+	// user can access, as long as that entity doesn't have terms and conditions.
 	if len(entityIds) == 0 {
 		auth, err := h.authorize(req, []string{params.Everyone}, true, nil)
 		if err != nil {

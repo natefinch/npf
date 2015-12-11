@@ -24,7 +24,8 @@ const (
 	// opAccessCharmWitTerms indicates an operation of accessing the archive of
 	// a charm that requires agreement to certain terms and conditions.
 	opAccessCharmWithTerms = "op-get-with-terms"
-	// opOther indicated all other operations.
+	// opOther indicates all other operations.
+	// This operation should not be added as part of a macaroon caveat.
 	opOther               = "op-other"
 	defaultMacaroonExpiry = 24 * time.Hour
 )
@@ -117,16 +118,9 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 		if err != nil {
 			return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
-		if entity == nil {
-			return authorization{}, errgo.WithCausef(nil, params.ErrNotFound, "could not find entity %q", entityId.String())
-		}
-
 		baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, "acls", "developmentacls")
 		if err != nil {
 			return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
-		}
-		if baseEntity == nil {
-			return authorization{}, errgo.WithCausef(nil, params.ErrNotFound, "could not find the base entity %v", entityId.URL.String())
 		}
 
 		ACLs[i] = baseEntity.ACLs.Read
@@ -134,7 +128,7 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 			ACLs[i] = baseEntity.DevelopmentACLs.Read
 		}
 
-		if (entity.CharmMeta == nil) || len(entity.CharmMeta.Terms) == 0 {
+		if entity.CharmMeta == nil || len(entity.CharmMeta.Terms) == 0 {
 			// No need to authenticate if the ACL is open to everyone.
 			open := false
 			for _, name := range ACLs[i] {
@@ -249,7 +243,7 @@ func areAllowedEntities(entityIds []*router.ResolvedURL, allowedEntities string)
 		allowedEntitiesMap[curl] = true
 	}
 	if len(entityIds) == 0 {
-		return errgo.Newf("API operation does not involve expected entity %v", allowedEntities)
+		return errgo.Newf("operation does not involve any of the allowed entities %v", allowedEntities)
 	}
 
 	for _, entityId := range entityIds {
@@ -262,7 +256,7 @@ func areAllowedEntities(entityIds []*router.ResolvedURL, allowedEntities string)
 				continue
 			}
 		}
-		return errgo.Newf("API operation on entity %v not allowed", entityId.String())
+		return errgo.Newf("operation on entity %v not allowed", entityId)
 	}
 	return nil
 }
