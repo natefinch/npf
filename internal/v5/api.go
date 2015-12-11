@@ -35,7 +35,7 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
 
-var logger = loggo.GetLogger("charmstore.internal.v4")
+var logger = loggo.GetLogger("charmstore.internal.v5")
 
 // reqHandlerPool holds a cache of ReqHandlers to save
 // on allocation time. When a handler is done with,
@@ -131,6 +131,8 @@ func (h *Handler) NewReqHandler() (*ReqHandler, error) {
 // can override selected parts of the handlers to serve their own API
 // while still using ReqHandler to serve the majority of the API.
 func RouterHandlers(h *ReqHandler) *router.Handlers {
+	resolveId := h.ResolvedIdHandler
+	authId := h.AuthIdHandler
 	return &router.Handlers{
 		Global: map[string]http.Handler{
 			"changes/published":    router.HandleJSON(h.serveChangesPublished),
@@ -151,14 +153,14 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 		},
 		Id: map[string]router.IdHandler{
 			"archive":     h.serveArchive,
-			"archive/":    h.resolveId(h.authId(h.serveArchiveFile)),
-			"diagram.svg": h.resolveId(h.authId(h.serveDiagram)),
-			"expand-id":   h.resolveId(h.authId(h.serveExpandId)),
-			"icon.svg":    h.resolveId(h.authId(h.serveIcon)),
-			"promulgate":  h.resolveId(h.serveAdminPromulgate),
+			"archive/":    resolveId(authId(h.serveArchiveFile)),
+			"diagram.svg": resolveId(authId(h.serveDiagram)),
+			"expand-id":   resolveId(authId(h.serveExpandId)),
+			"icon.svg":    resolveId(authId(h.serveIcon)),
+			"promulgate":  resolveId(h.serveAdminPromulgate),
 			"publish":     h.servePublish,
-			"readme":      h.resolveId(h.authId(h.serveReadMe)),
-			"resources":   h.resolveId(h.authId(h.serveResources)),
+			"readme":      resolveId(authId(h.serveReadMe)),
+			"resources":   resolveId(authId(h.serveResources)),
 		},
 		Meta: map[string]router.BulkIncludeHandler{
 			"archive-size":         h.entityHandler(h.metaArchiveSize, "size"),
@@ -508,13 +510,6 @@ func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter
 	err := q.All(&docs)
 	if err != nil && errgo.Cause(err) != mgo.ErrNotFound {
 		return errgo.Mask(err)
-	}
-
-	// A not found error should have been already returned by the router in the
-	// case a partial id is provided. Here we do the same for the case when
-	// a fully qualified URL is provided, but no matching entities are found.
-	if len(docs) == 0 {
-		return noMatchingURLError(id.PreferredURL())
 	}
 
 	// Collect all the expanded identifiers for each entity.
@@ -1331,14 +1326,19 @@ func (h *ReqHandler) serveSetAuthCookie(w http.ResponseWriter, req *http.Request
 	return nil
 }
 
-type resolvedIdHandler func(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error
+// ResolvedIdHandler represents a HTTP handler that is invoked
+// on a resolved entity id.
+type ResolvedIdHandler func(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error
 
-// authId returns a resolvedIdHandler that checks that the client
-// is authorized to perform the HTTP request method before
+// AuthIdHandler returns a ResolvedIdHandler that uses h.Router.Context.AuthorizeEntity to
+// check that the client is authorized to perform the HTTP request method before
 // invoking f.
-func (h *ReqHandler) authId(f resolvedIdHandler) resolvedIdHandler {
+//
+// Note that it only accesses h.Router.Context when the returned
+// handler is called.
+func (h *ReqHandler) AuthIdHandler(f ResolvedIdHandler) ResolvedIdHandler {
 	return func(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-		if err := h.AuthorizeEntity(id, req); err != nil {
+		if err := h.Router.Context.AuthorizeEntity(id, req); err != nil {
 			return errgo.Mask(err, errgo.Any)
 		}
 		if err := f(id, w, req); err != nil {
@@ -1348,9 +1348,12 @@ func (h *ReqHandler) authId(f resolvedIdHandler) resolvedIdHandler {
 	}
 }
 
-// resolveId returns an id handler that resolves any non-fully-specified
-// entity ids using h.resolveURL before calling f with the resolved id.
-func (h *ReqHandler) resolveId(f resolvedIdHandler) router.IdHandler {
+// ResolvedIdHandler returns an id handler that uses h.Router.Context.ResolveURL
+// to resolves any entity ids before calling f with the resolved id.
+//
+// Note that it only accesses h.Router.Context when the returned
+// handler is called.
+func (h *ReqHandler) ResolvedIdHandler(f ResolvedIdHandler) router.IdHandler {
 	return func(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
 		rid, err := h.Router.Context.ResolveURL(id)
 		if err != nil {

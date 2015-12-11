@@ -47,11 +47,13 @@ import (
 // ingestion methods, and will be removed in the future, it has no entry
 // in the specification.
 func (h *ReqHandler) serveArchive(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
+	resolveId := h.ResolvedIdHandler
+	authId := h.AuthIdHandler
 	switch req.Method {
 	case "DELETE":
-		return h.resolveId(h.authId(h.serveDeleteArchive))(id, w, req)
+		return resolveId(authId(h.serveDeleteArchive))(id, w, req)
 	case "GET":
-		return h.resolveId(h.serveGetArchive)(id, w, req)
+		return resolveId(h.serveGetArchive)(id, w, req)
 	case "POST", "PUT":
 		// Make sure we consume the full request body, before responding.
 		//
@@ -340,7 +342,6 @@ func (h *ReqHandler) addEntity(id *router.ResolvedURL, r io.ReadSeeker, blobName
 		BlobHash:    hash,
 		BlobHash256: hash256,
 		BlobSize:    contentLength,
-		Development: id.Development,
 	}
 	if id.URL.Series == "bundle" {
 		b, err := charm.ReadBundleArchiveFromReader(readerAt, contentLength)

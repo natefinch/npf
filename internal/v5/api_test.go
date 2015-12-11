@@ -1741,7 +1741,8 @@ var serveMetaRevisionInfoTests = []struct {
 			charm.MustParseURL("cs:trusty/wordpress-42"),
 			charm.MustParseURL("cs:trusty/wordpress-41"),
 			charm.MustParseURL("cs:trusty/wordpress-9"),
-		}},
+		},
+	},
 }, {
 	about: "partial url uses a default series",
 	url:   "wordpress",
@@ -1751,7 +1752,8 @@ var serveMetaRevisionInfoTests = []struct {
 			charm.MustParseURL("cs:trusty/wordpress-42"),
 			charm.MustParseURL("cs:trusty/wordpress-41"),
 			charm.MustParseURL("cs:trusty/wordpress-9"),
-		}},
+		},
+	},
 }, {
 	about: "non-promulgated URL gives non-promulgated revisions (~charmers)",
 	url:   "~charmers/trusty/cinder",
@@ -1764,7 +1766,8 @@ var serveMetaRevisionInfoTests = []struct {
 			charm.MustParseURL("cs:~charmers/trusty/cinder-2"),
 			charm.MustParseURL("cs:~charmers/trusty/cinder-1"),
 			charm.MustParseURL("cs:~charmers/trusty/cinder-0"),
-		}},
+		},
+	},
 }, {
 	about: "non-promulgated URL gives non-promulgated revisions (~openstack-charmers)",
 	url:   "~openstack-charmers/trusty/cinder",
@@ -1772,7 +1775,8 @@ var serveMetaRevisionInfoTests = []struct {
 		[]*charm.URL{
 			charm.MustParseURL("cs:~openstack-charmers/trusty/cinder-1"),
 			charm.MustParseURL("cs:~openstack-charmers/trusty/cinder-0"),
-		}},
+		},
+	},
 }, {
 	about: "promulgated URL gives promulgated revisions",
 	url:   "trusty/cinder",
@@ -1784,7 +1788,66 @@ var serveMetaRevisionInfoTests = []struct {
 			charm.MustParseURL("cs:trusty/cinder-2"),
 			charm.MustParseURL("cs:trusty/cinder-1"),
 			charm.MustParseURL("cs:trusty/cinder-0"),
-		}},
+		},
+	},
+}, {
+	about: "multi-series charm expands to all revisions of that charm",
+	url:   "multi-series",
+	expect: params.RevisionInfoResponse{
+		[]*charm.URL{
+			charm.MustParseURL("cs:multi-series-41"),
+			charm.MustParseURL("cs:multi-series-40"),
+		},
+	},
+}, {
+	about: "multi-series charm with series specified",
+	url:   "trusty/multi-series",
+	expect: params.RevisionInfoResponse{
+		[]*charm.URL{
+			charm.MustParseURL("cs:multi-series-41"),
+			charm.MustParseURL("cs:multi-series-40"),
+		},
+	},
+}, {
+	about: "multi-series charm with non-promulgated URL",
+	url:   "~charmers/multi-series",
+	expect: params.RevisionInfoResponse{
+		[]*charm.URL{
+			charm.MustParseURL("cs:~charmers/multi-series-2"),
+			charm.MustParseURL("cs:~charmers/multi-series-1"),
+		},
+	},
+}, {
+	about: "multi-series charm with non-promulgated URL and series specified",
+	url:   "~charmers/utopic/multi-series",
+	expect: params.RevisionInfoResponse{
+		[]*charm.URL{
+			charm.MustParseURL("cs:~charmers/multi-series-2"),
+			charm.MustParseURL("cs:~charmers/multi-series-1"),
+		},
+	},
+}, {
+	about: "mixed multi/single series charm, latest rev",
+	url:   "mixed",
+	expect: params.RevisionInfoResponse{
+		[]*charm.URL{
+			charm.MustParseURL("cs:mixed-43"),
+			charm.MustParseURL("cs:mixed-42"),
+			charm.MustParseURL("cs:trusty/mixed-41"),
+			charm.MustParseURL("cs:trusty/mixed-40"),
+		},
+	},
+}, {
+	about: "mixed multi/single series charm with series",
+	url:   "trusty/mixed-40",
+	expect: params.RevisionInfoResponse{
+		[]*charm.URL{
+			charm.MustParseURL("cs:mixed-43"),
+			charm.MustParseURL("cs:mixed-42"),
+			charm.MustParseURL("cs:trusty/mixed-41"),
+			charm.MustParseURL("cs:trusty/mixed-40"),
+		},
+	},
 }, {
 	about: "no entities found",
 	url:   "precise/no-such-33",
@@ -1809,6 +1872,14 @@ func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-4", -1))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-5", 4))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-6", 5))
+
+	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-1", 40))
+	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-2", 41))
+
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mixed-1", 40))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mixed-2", 41))
+	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/mixed-3", 42))
+	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/mixed-4", 43))
 
 	for i, test := range serveMetaRevisionInfoTests {
 		c.Logf("test %d: %s", i, test.about)
