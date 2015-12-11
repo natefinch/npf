@@ -52,7 +52,7 @@ type Handler struct {
 	Pool *charmstore.Pool
 
 	config         charmstore.ServerParams
-	locator        *bakery.PublicKeyRing
+	locator        bakery.PublicKeyLocator
 	identityClient *identity.Client
 
 	// searchCache is a cache of search results keyed on the query
@@ -93,7 +93,7 @@ func New(pool *charmstore.Pool, config charmstore.ServerParams) *Handler {
 		Pool:        pool,
 		config:      config,
 		searchCache: cache.New(config.SearchCacheMaxAge),
-		locator:     bakery.NewPublicKeyRing(),
+		locator:     config.PublicKeyLocator,
 		identityClient: identity.NewClient(&identity.Params{
 			URL:    config.IdentityAPIURL,
 			Client: agent.NewClient(config.AgentUsername, config.AgentKey),
