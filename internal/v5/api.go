@@ -163,16 +163,16 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"resources":   resolveId(authId(h.serveResources)),
 		},
 		Meta: map[string]router.BulkIncludeHandler{
-			"archive-size":         h.entityHandler(h.metaArchiveSize, "size"),
-			"archive-upload-time":  h.entityHandler(h.metaArchiveUploadTime, "uploadtime"),
-			"bundle-machine-count": h.entityHandler(h.metaBundleMachineCount, "bundlemachinecount"),
-			"bundle-metadata":      h.entityHandler(h.metaBundleMetadata, "bundledata"),
-			"bundles-containing":   h.entityHandler(h.metaBundlesContaining),
-			"bundle-unit-count":    h.entityHandler(h.metaBundleUnitCount, "bundleunitcount"),
-			"charm-actions":        h.entityHandler(h.metaCharmActions, "charmactions"),
-			"charm-config":         h.entityHandler(h.metaCharmConfig, "charmconfig"),
-			"charm-metadata":       h.entityHandler(h.metaCharmMetadata, "charmmeta"),
-			"charm-related":        h.entityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces"),
+			"archive-size":         h.EntityHandler(h.metaArchiveSize, "size"),
+			"archive-upload-time":  h.EntityHandler(h.metaArchiveUploadTime, "uploadtime"),
+			"bundle-machine-count": h.EntityHandler(h.metaBundleMachineCount, "bundlemachinecount"),
+			"bundle-metadata":      h.EntityHandler(h.metaBundleMetadata, "bundledata"),
+			"bundles-containing":   h.EntityHandler(h.metaBundlesContaining),
+			"bundle-unit-count":    h.EntityHandler(h.metaBundleUnitCount, "bundleunitcount"),
+			"charm-actions":        h.EntityHandler(h.metaCharmActions, "charmactions"),
+			"charm-config":         h.EntityHandler(h.metaCharmConfig, "charmconfig"),
+			"charm-metadata":       h.EntityHandler(h.metaCharmMetadata, "charmmeta"),
+			"charm-related":        h.EntityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces"),
 			"extra-info": h.puttableEntityHandler(
 				h.metaExtraInfo,
 				h.putMetaExtraInfo,
@@ -193,21 +193,21 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 				h.putMetaCommonInfoWithKey,
 				"commoninfo",
 			),
-			"hash":             h.entityHandler(h.metaHash, "blobhash"),
-			"hash256":          h.entityHandler(h.metaHash256, "blobhash256"),
-			"id":               h.entityHandler(h.metaId, "_id"),
-			"id-name":          h.entityHandler(h.metaIdName, "_id"),
-			"id-user":          h.entityHandler(h.metaIdUser, "_id"),
-			"id-revision":      h.entityHandler(h.metaIdRevision, "_id"),
-			"id-series":        h.entityHandler(h.metaIdSeries, "_id"),
-			"manifest":         h.entityHandler(h.metaManifest, "blobname"),
+			"hash":             h.EntityHandler(h.metaHash, "blobhash"),
+			"hash256":          h.EntityHandler(h.metaHash256, "blobhash256"),
+			"id":               h.EntityHandler(h.metaId, "_id"),
+			"id-name":          h.EntityHandler(h.metaIdName, "_id"),
+			"id-user":          h.EntityHandler(h.metaIdUser, "_id"),
+			"id-revision":      h.EntityHandler(h.metaIdRevision, "_id"),
+			"id-series":        h.EntityHandler(h.metaIdSeries, "_id"),
+			"manifest":         h.EntityHandler(h.metaManifest, "blobname"),
 			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "acls", "developmentacls"),
 			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "acls", "developmentacls"),
 			"promulgated":      h.baseEntityHandler(h.metaPromulgated, "promulgated"),
 			"revision-info":    router.SingleIncludeHandler(h.metaRevisionInfo),
-			"stats":            h.entityHandler(h.metaStats),
-			"supported-series": h.entityHandler(h.metaSupportedSeries, "supportedseries"),
-			"tags":             h.entityHandler(h.metaTags, "charmmeta", "bundledata"),
+			"stats":            h.EntityHandler(h.metaStats),
+			"supported-series": h.EntityHandler(h.metaSupportedSeries, "supportedseries"),
+			"tags":             h.EntityHandler(h.metaTags, "charmmeta", "bundledata"),
 
 			// endpoints not yet implemented:
 			// "color": router.SingleIncludeHandler(h.metaColor),
@@ -301,17 +301,17 @@ func noMatchingURLError(url *charm.URL) error {
 	return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
 }
 
-type entityHandlerFunc func(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error)
+type EntityHandlerFunc func(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error)
 
 type baseEntityHandlerFunc func(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error)
 
-// entityHandler returns a Handler that calls f with a *mongodoc.Entity that
+// EntityHandler returns a Handler that calls f with a *mongodoc.Entity that
 // contains at least the given fields. It allows only GET requests.
-func (h *ReqHandler) entityHandler(f entityHandlerFunc, fields ...string) router.BulkIncludeHandler {
+func (h *ReqHandler) EntityHandler(f EntityHandlerFunc, fields ...string) router.BulkIncludeHandler {
 	return h.puttableEntityHandler(f, nil, fields...)
 }
 
-func (h *ReqHandler) puttableEntityHandler(get entityHandlerFunc, handlePut router.FieldPutFunc, fields ...string) router.BulkIncludeHandler {
+func (h *ReqHandler) puttableEntityHandler(get EntityHandlerFunc, handlePut router.FieldPutFunc, fields ...string) router.BulkIncludeHandler {
 	handleGet := func(doc interface{}, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 		edoc := doc.(*mongodoc.Entity)
 		val, err := get(edoc, id, path, flags, req)

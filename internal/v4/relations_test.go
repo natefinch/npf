@@ -97,6 +97,26 @@ var metaCharmRelatedCharms = map[string]charm.Charm{
 			},
 		},
 	},
+	// development charms should not be included in any results.
+	"49 ~charmers/development/precise/haproxy-49": &relationTestingCharm{
+		provides: map[string]charm.Relation{
+			"reverseproxy": {
+				Name:      "reverseproxy",
+				Role:      "requirer",
+				Interface: "http",
+			},
+		},
+	},
+	"1 ~charmers/multi-series-20": &relationTestingCharm{
+		supportedSeries: []string{"precise", "trusty", "utopic"},
+		requires: map[string]charm.Relation{
+			"reverseproxy": {
+				Name:      "reverseproxy",
+				Role:      "requirer",
+				Interface: "http",
+			},
+		},
+	},
 }
 
 var metaCharmRelatedTests = []struct {
@@ -114,6 +134,7 @@ var metaCharmRelatedTests = []struct {
 	about:  "provides and requires",
 	charms: metaCharmRelatedCharms,
 	id:     "utopic/wordpress-0",
+	// V4 SPECIFIC
 	expectBody: params.RelatedResponse{
 		Provides: map[string][]params.MetaAnyResponse{
 			"memcache": {{
@@ -125,6 +146,12 @@ var metaCharmRelatedTests = []struct {
 		},
 		Requires: map[string][]params.MetaAnyResponse{
 			"http": {{
+				Id: charm.MustParseURL("precise/multi-series-1"),
+			}, {
+				Id: charm.MustParseURL("trusty/multi-series-1"),
+			}, {
+				Id: charm.MustParseURL("utopic/multi-series-1"),
+			}, {
 				Id: charm.MustParseURL("precise/haproxy-48"),
 			}, {
 				Id: charm.MustParseURL("trusty/haproxy-47"),
@@ -417,13 +444,15 @@ func (s *RelationsSuite) TestMetaCharmRelatedIncludeError(c *gc.C) {
 // relationTestingCharm implements charm.Charm, and it is used for testing
 // charm relations.
 type relationTestingCharm struct {
-	provides map[string]charm.Relation
-	requires map[string]charm.Relation
+	supportedSeries []string
+	provides        map[string]charm.Relation
+	requires        map[string]charm.Relation
 }
 
 func (ch *relationTestingCharm) Meta() *charm.Meta {
 	// The only metadata we are interested in is the relation data.
 	return &charm.Meta{
+		Series:   ch.supportedSeries,
 		Provides: ch.provides,
 		Requires: ch.requires,
 	}
@@ -897,8 +926,10 @@ func mustParseResolvedURL(urlStr string) *router.ResolvedURL {
 		}
 	case 1:
 	}
+	url := charm.MustParseURL(s[len(s)-1])
 	return &router.ResolvedURL{
-		URL:                 *charm.MustParseURL(s[len(s)-1]),
+		URL:                 *url.WithChannel(""),
 		PromulgatedRevision: promRev,
+		Development:         url.Channel == charm.DevelopmentChannel,
 	}
 }

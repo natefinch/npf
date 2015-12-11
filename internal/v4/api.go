@@ -99,6 +99,7 @@ func newReqHandler() ReqHandler {
 	resolveId := h.ResolvedIdHandler
 	authId := h.AuthIdHandler
 	handlers := v5.RouterHandlers(h.ReqHandler)
+	handlers.Meta["charm-related"] = h.EntityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces")
 	handlers.Meta["revision-info"] = router.SingleIncludeHandler(h.metaRevisionInfo)
 	handlers.Id["expand-id"] = resolveId(authId(h.serveExpandId))
 
@@ -189,13 +190,14 @@ func (h *ReqHandler) metaRevisionInfo(id *router.ResolvedURL, path string, flags
 		specifiedSeries = id.PreferredSeries
 	}
 	var response params.RevisionInfoResponse
-	expandMultiSeries(docs, func(series string, doc *mongodoc.Entity) {
+	expandMultiSeries(docs, func(series string, doc *mongodoc.Entity) error {
 		if specifiedSeries != series {
-			return
+			return nil
 		}
 		url := doc.PreferredURL(id.PromulgatedRevision != -1)
 		url.Series = series
 		response.Revisions = append(response.Revisions, url)
+		return nil
 	})
 	return &response, nil
 }
@@ -236,10 +238,11 @@ func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter
 
 	// Collect all the expanded identifiers for each entity.
 	response := make([]params.ExpandedId, 0, len(docs))
-	expandMultiSeries(docs, func(series string, doc *mongodoc.Entity) {
+	expandMultiSeries(docs, func(series string, doc *mongodoc.Entity) error {
 		url := doc.PreferredURL(id.PromulgatedRevision != -1)
 		url.Series = series
 		response = append(response, params.ExpandedId{Id: url.String()})
+		return nil
 	})
 
 	// Write the response in JSON format.
@@ -247,20 +250,26 @@ func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter
 }
 
 // expandMultiSeries calls the provided append function once for every
-// supported series of each entry in the given entities slice. The
-// series argument will be passed as that series and the doc argument
-// will point to the entity.
+// supported series of each entry in the given entities slice. The series
+// argument will be passed as that series and the doc argument will point
+// to the entity. This function will only return an error if the append
+// function returns an error; such an error will be returned without
+// masking the cause.
 //
 // Note that the SupportedSeries field of the entities must have
 // been populated for this to work.
-func expandMultiSeries(entities []*mongodoc.Entity, append func(series string, doc *mongodoc.Entity)) {
+func expandMultiSeries(entities []*mongodoc.Entity, append func(series string, doc *mongodoc.Entity) error) error {
+	// TODO(rog) make this concurrent.
 	for _, entity := range entities {
 		if entity.URL.Series != "" {
 			append(entity.URL.Series, entity)
 			continue
 		}
 		for _, series := range entity.SupportedSeries {
-			append(series, entity)
+			if err := append(series, entity); err != nil {
+				return errgo.Mask(err, errgo.Any)
+			}
 		}
 	}
+	return nil
 }
