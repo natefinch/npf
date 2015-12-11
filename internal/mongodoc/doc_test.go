@@ -101,5 +101,8 @@ func (s *DocSuite) TestPreferredURL(c *gc.C) {
 		c.Logf("test %d: %#v", i, test.entity)
 		c.Assert(test.entity.PreferredURL(false).String(), gc.Equals, test.expectURLFalse)
 		c.Assert(test.entity.PreferredURL(true).String(), gc.Equals, test.expectURLTrue)
+		// Ensure no aliasing
+		test.entity.PreferredURL(false).Series = "foo"
+		c.Assert(test.entity.PreferredURL(false).Series, gc.Not(gc.Equals), "foo")
 	}
 }
