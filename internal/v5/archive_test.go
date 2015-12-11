@@ -76,14 +76,12 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
 	c.Assert(err, gc.IsNil)
 
-	archiveUrl := storeURL("~charmers/precise/wordpress-0/archive")
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     archiveUrl,
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
+	rec := s.assertArchiveDownload(
+		c,
+		"~charmers/precise/wordpress-0",
+		nil,
+		archiveBytes,
+	)
 	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/wordpress-0")
 	assertCacheControl(c, rec.Header(), true)
 
@@ -92,7 +90,7 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	// as net/http is well-tested.
 	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
-		URL:     archiveUrl,
+		URL:     storeURL("~charmers/precise/wordpress-0/archive"),
 		Header:  http.Header{"Range": {"bytes=10-100"}},
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
@@ -125,7 +123,13 @@ func (s *ArchiveSuite) TestGetDevelopment(c *gc.C) {
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
 	c.Assert(err, gc.IsNil)
 
-	s.assertArchiveDownload(c, "~charmers/development/trusty/wordpress-0/archive", "cs:~charmers/development/trusty/wordpress-0", archiveBytes)
+	rec := s.assertArchiveDownload(
+		c,
+		"~charmers/development/trusty/wordpress-0",
+		nil,
+		archiveBytes,
+	)
+	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/development/trusty/wordpress-0")
 
 	// It is not possible to use the published URL to retrieve the archive,
 	err = s.store.SetPerms(url.WithChannel(""), "read", params.Everyone, id.URL.User)
@@ -141,21 +145,6 @@ func (s *ArchiveSuite) TestGetDevelopment(c *gc.C) {
 	})
 }
 
-func (s *commonSuite) assertArchiveDownload(c *gc.C, url, id string, archiveBytes []byte) {
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL(url),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	if id != "" {
-		c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, id)
-	}
-	if archiveBytes != nil {
-		c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
-		c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
-	}
-}
-
 func (s *ArchiveSuite) TestGetWithPartialId(c *gc.C) {
 	id := newResolvedURL("cs:~charmers/utopic/wordpress-42", -1)
 	err := s.store.AddCharmWithArchive(
@@ -165,7 +154,14 @@ func (s *ArchiveSuite) TestGetWithPartialId(c *gc.C) {
 	err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
 	c.Assert(err, gc.IsNil)
 
-	s.assertArchiveDownload(c, "~charmers/wordpress/archive", id.URL.String(), nil)
+	rec := s.assertArchiveDownload(
+		c,
+		"~charmers/wordpress",
+		nil,
+		nil,
+	)
+	// The complete entity id can be retrieved from the response header.
+	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, id.URL.String())
 }
 
 func (s *ArchiveSuite) TestGetPromulgatedWithPartialId(c *gc.C) {
@@ -176,7 +172,13 @@ func (s *ArchiveSuite) TestGetPromulgatedWithPartialId(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
 	c.Assert(err, gc.IsNil)
-	s.assertArchiveDownload(c, "wordpress/archive", id.PromulgatedURL().String(), nil)
+	rec := s.assertArchiveDownload(
+		c,
+		"wordpress",
+		nil,
+		nil,
+	)
+	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, id.PromulgatedURL().String())
 }
 
 func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
@@ -196,7 +198,12 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 
 		// Download the charm archive using the API.
-		s.assertArchiveDownload(c, id.URL.Path()+"/archive", "", nil)
+		s.assertArchiveDownload(
+			c,
+			id.URL.Path(),
+			nil,
+			nil,
+		)
 
 		// Check that the downloads count for the entity has been updated.
 		key := []string{params.StatsArchiveDownload, "utopic", "mysql", id.URL.User, "42"}
@@ -216,11 +223,12 @@ func (s *ArchiveSuite) TestGetCountersDisabled(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Download the charm archive using the API, passing stats=0.
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL(url.URL.Path() + "/archive?stats=0"),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	s.assertArchiveDownload(
+		c,
+		"",
+		&httptesting.DoRequestParams{URL: storeURL(url.URL.Path() + "/archive?stats=0")},
+		nil,
+	)
 
 	// Check that the downloads count for the entity has not been updated.
 	key := []string{params.StatsArchiveDownload, "utopic", "mysql", "", "42"}
@@ -1782,28 +1790,16 @@ func (s *ArchiveSuiteWithTerms) TestGetUserHasAgreedToTermsAndConditions(c *gc.C
 	err := s.store.SetPerms(&id.URL, "read", "bob")
 	c.Assert(err, gc.IsNil)
 
-	archiveUrl := storeURL("~charmers/precise/terms-0/archive")
-	//s.assertArchiveDownload(c, "~charmers/precise/terms-0/archive", id.URL.String(), nil)
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     archiveUrl,
-		Do:      bakeryDo(client),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	s.assertArchiveDownload(
+		c,
+		"~charmers/precise/terms-0",
+		&httptesting.DoRequestParams{
+			Do: bakeryDo(client),
+		},
+		nil,
+	)
 
 	c.Assert(termsDischargeAccessed, gc.Equals, true)
-
-	// Check that the HTTP range logic is plugged in OK. If this
-	// is working, we assume that the whole thing is working OK,
-	// as net/http is well-tested.
-	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     archiveUrl,
-		Header:  http.Header{"Range": {"bytes=10-100"}},
-		Do:      bakeryDo(client),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
-	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
 }
 
 func (s *ArchiveSuiteWithTerms) TestGetUserHasNotAgreedToTerms(c *gc.C) {
@@ -1839,32 +1835,33 @@ func (s *ArchiveSuiteWithTerms) TestGetIgnorningTermsWithBasicAuth(c *gc.C) {
 	archiveBytes, err := ioutil.ReadFile(terms.Path)
 	c.Assert(err, gc.IsNil)
 
-	archiveUrl := storeURL("~charmers/precise/terms-0/archive")
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     archiveUrl,
-		Header:  basicAuthHeader(testUsername, testPassword),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/terms-0")
-	assertCacheControl(c, rec.Header(), true)
+	s.assertArchiveDownload(
+		c,
+		"~charmers/precise/terms-0",
+		&httptesting.DoRequestParams{
+			Header: basicAuthHeader(testUsername, testPassword),
+		},
+		archiveBytes,
+	)
+}
 
-	// Check that the HTTP range logic is plugged in OK. If this
-	// is working, we assume that the whole thing is working OK,
-	// as net/http is well-tested.
-	header := basicAuthHeader(testUsername, testPassword)
-	header.Set("Range", "bytes=10-100")
-	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     archiveUrl,
-		Header:  header,
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
-	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/terms-0")
-	assertCacheControl(c, rec.Header(), true)
+func (s *commonSuite) assertArchiveDownload(c *gc.C, id string, extraParams *httptesting.DoRequestParams, archiveBytes []byte) *httptest.ResponseRecorder {
+	//resolvedId := newResolvedURL(id, -1)
+
+	doParams := httptesting.DoRequestParams{}
+	if extraParams != nil {
+		doParams = *extraParams
+	}
+	doParams.Handler = s.srv
+	if doParams.URL == "" {
+		doParams.URL = storeURL(id + "/archive")
+	}
+	rec := httptesting.DoRequest(c, doParams)
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+
+	if archiveBytes != nil {
+		c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
+		c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
+	}
+	return rec
 }

@@ -110,43 +110,13 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 		return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "entity id not specified")
 	}
 
-	ACLs := make([][]string, len(entityIds))
-	requiredTerms := make(map[string]struct{})
-	allowAuth := true
-	for i, entityId := range entityIds {
-		entity, err := h.Store.FindEntity(entityId)
-		if err != nil {
-			return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
-		}
-		baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, "acls", "developmentacls")
-		if err != nil {
-			return authorization{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
-		}
-
-		ACLs[i] = baseEntity.ACLs.Read
-		if entityId.Development {
-			ACLs[i] = baseEntity.DevelopmentACLs.Read
-		}
-
-		if entity.CharmMeta == nil || len(entity.CharmMeta.Terms) == 0 {
-			// No need to authenticate if the ACL is open to everyone.
-			open := false
-			for _, name := range ACLs[i] {
-				if name == params.Everyone {
-					open = true
-					break
-				}
-			}
-			allowAuth = allowAuth && open
-		} else {
-			allowAuth = false
-			for _, term := range entity.CharmMeta.Terms {
-				requiredTerms[term] = struct{}{}
-			}
-		}
+	public, acls, requiredTerms, err := h.entityAuthInfo(entityIds)
+	if err != nil {
+		return authorization{}, errgo.Mask(err)
 	}
+
 	// if all entities are open to everyone and non of the entities defines any Terms, then we return nil
-	if allowAuth {
+	if public {
 		return authorization{}, nil
 	}
 
@@ -161,7 +131,7 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 
 	auth, verr := h.checkRequest(req, entityIds, operation)
 	if verr == nil {
-		for _, acl := range ACLs {
+		for _, acl := range acls {
 			if err := h.checkACLMembership(auth, acl); err != nil {
 				return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "")
 			}
@@ -195,6 +165,50 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 	// TODO use a relative URL here: router.RelativeURLPath(req.RequestURI, "/")
 	cookiePath := "/"
 	return authorization{}, httpbakery.NewDischargeRequiredErrorForRequest(m, cookiePath, verr, req)
+}
+
+// entityAuthInfo returns authorization on the entities with the given ids.
+// If public is true, no authorization is required, otherwise acls holds
+// an entry for each id with the corresponding ACL for each entity,
+// and requiredTerms holds entries for all required terms.
+func (h *ReqHandler) entityAuthInfo(entityIds []*router.ResolvedURL) (public bool, acls [][]string, requiredTerms map[string]bool, err error) {
+	acls = make([][]string, len(entityIds))
+	requiredTerms = make(map[string]bool)
+	public = true
+	for i, entityId := range entityIds {
+		entity, err := h.Store.FindEntity(entityId)
+		if err != nil {
+			return false, nil, nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+		}
+		baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, "acls", "developmentacls")
+		if err != nil {
+			return false, nil, nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+		}
+
+		acls[i] = baseEntity.ACLs.Read
+		if entityId.Development {
+			acls[i] = baseEntity.DevelopmentACLs.Read
+		}
+
+		if entity.CharmMeta == nil || len(entity.CharmMeta.Terms) == 0 {
+			// No need to authenticate if the ACL is open to everyone.
+			publicCharm := false
+			for _, name := range acls[i] {
+				if name == params.Everyone {
+					publicCharm = true
+					break
+				}
+			}
+			public = public && publicCharm
+		} else {
+			public = false
+			for _, term := range entity.CharmMeta.Terms {
+				requiredTerms[term] = true
+			}
+		}
+	}
+
+	return public, acls, requiredTerms, nil
 }
 
 // checkRequest checks for any authorization tokens in the request and returns any
