@@ -23,39 +23,25 @@ func (h *ReqHandler) metaCharmRelated(entity *mongodoc.Entity, id *router.Resolv
 	if id.URL.Series == "bundle" {
 		return nil, nil
 	}
-
 	// If the charm does not define any relation we can just return without
 	// hitting the db.
 	if len(entity.CharmProvidedInterfaces)+len(entity.CharmRequiredInterfaces) == 0 {
 		return &params.RelatedResponse{}, nil
 	}
+	q := h.Store.MatchingInterfacesQuery(entity.CharmProvidedInterfaces, entity.CharmRequiredInterfaces)
 
-	// Build the query to retrieve the related entities.
-	query := bson.M{
-		"$or": []bson.M{
-			{"charmrequiredinterfaces": bson.M{
-				"$elemMatch": bson.M{
-					"$in": entity.CharmProvidedInterfaces,
-				},
-			}},
-			{"charmprovidedinterfaces": bson.M{
-				"$elemMatch": bson.M{
-					"$in": entity.CharmRequiredInterfaces,
-				},
-			}},
-		},
-	}
 	fields := bson.D{
 		{"_id", 1},
+		{"supportedseries", 1},
+		{"development", 1},
 		{"charmrequiredinterfaces", 1},
 		{"charmprovidedinterfaces", 1},
 		{"promulgated-url", 1},
 		{"promulgated-revision", 1},
 	}
 
-	// Retrieve the entities from the database.
-	var entities []mongodoc.Entity
-	if err := h.Store.DB.Entities().Find(query).Select(fields).Sort("_id").All(&entities); err != nil {
+	var entities []*mongodoc.Entity
+	if err := q.Select(fields).Sort("_id").All(&entities); err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related charms")
 	}
 
@@ -68,13 +54,13 @@ func (h *ReqHandler) metaCharmRelated(entity *mongodoc.Entity, id *router.Resolv
 	// Build the results, by grouping entities based on their relations' roles
 	// and interfaces.
 	includes := flags["include"]
-	requires, err := h.getRelatedCharmsResponse(entity.CharmProvidedInterfaces, entities, func(e mongodoc.Entity) []string {
+	requires, err := h.getRelatedCharmsResponse(entity.CharmProvidedInterfaces, entities, func(e *mongodoc.Entity) []string {
 		return e.CharmRequiredInterfaces
 	}, includes, req)
 	if err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the charm requires")
 	}
-	provides, err := h.getRelatedCharmsResponse(entity.CharmRequiredInterfaces, entities, func(e mongodoc.Entity) []string {
+	provides, err := h.getRelatedCharmsResponse(entity.CharmRequiredInterfaces, entities, func(e *mongodoc.Entity) []string {
 		return e.CharmProvidedInterfaces
 	}, includes, req)
 	if err != nil {
@@ -88,7 +74,7 @@ func (h *ReqHandler) metaCharmRelated(entity *mongodoc.Entity, id *router.Resolv
 	}, nil
 }
 
-type entityRelatedInterfacesGetter func(mongodoc.Entity) []string
+type entityRelatedInterfacesGetter func(*mongodoc.Entity) []string
 
 // getRelatedCharmsResponse returns a response mapping interfaces to related
 // charms. For instance:
@@ -103,7 +89,7 @@ type entityRelatedInterfacesGetter func(mongodoc.Entity) []string
 //   }
 func (h *ReqHandler) getRelatedCharmsResponse(
 	ifaces []string,
-	entities []mongodoc.Entity,
+	entities []*mongodoc.Entity,
 	getInterfaces entityRelatedInterfacesGetter,
 	includes []string,
 	req *http.Request,
@@ -123,31 +109,26 @@ func (h *ReqHandler) getRelatedCharmsResponse(
 
 func (h *ReqHandler) getRelatedIfaceResponses(
 	iface string,
-	entities []mongodoc.Entity,
+	entities []*mongodoc.Entity,
 	getInterfaces entityRelatedInterfacesGetter,
 	includes []string,
 	req *http.Request,
 ) ([]params.MetaAnyResponse, error) {
-	// Build a list of responses including entities which are related
+	// Build a list of responses including only entities which are related
 	// to the given interface.
-	responses := make([]params.MetaAnyResponse, 0, len(entities))
-	for _, entity := range entities {
-		for _, entityIface := range getInterfaces(entity) {
+	usesInterface := func(e *mongodoc.Entity) bool {
+		for _, entityIface := range getInterfaces(e) {
 			if entityIface == iface {
-				// Retrieve the requested metadata for the entity.
-				meta, err := h.getMetadataForEntity(&entity, includes, req)
-				if err != nil {
-					return nil, err
-				}
-				// Build the response.
-				responses = append(responses, params.MetaAnyResponse{
-					Id:   entity.PreferredURL(true),
-					Meta: meta,
-				})
+				return true
 			}
 		}
+		return false
 	}
-	return responses, nil
+	resp, err := h.getMetadataForEntities(entities, includes, req, usesInterface)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	return resp, nil
 }
 
 // GET id/meta/bundles-containing[?include=meta[&include=meta…]][&any-series=1][&any-revision=1][&all-results=1]
@@ -258,21 +239,28 @@ func (h *ReqHandler) metaBundlesContaining(entity *mongodoc.Entity, id *router.R
 			return latest[u] == e.URL.Revision
 		})
 	}
+	resp, err := h.getMetadataForEntities(entities, flags["include"], req, nil)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	return resp, nil
+}
 
-	// Prepare and return the response.
-	response := make([]*params.MetaAnyResponse, 0, len(entities))
-	includes := flags["include"]
+func (h *ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, includes []string, req *http.Request, includeEntity func(*mongodoc.Entity) bool) ([]params.MetaAnyResponse, error) {
 	// TODO(rog) make this concurrent.
+	response := make([]params.MetaAnyResponse, 0, len(entities))
 	for _, e := range entities {
-		// Ignore entities that aren't readable by the current user.
-		if err := h.AuthorizeEntity(charmstore.EntityResolvedURL(e), req); err != nil {
+		if includeEntity != nil && !includeEntity(e) {
 			continue
 		}
 		meta, err := h.getMetadataForEntity(e, includes, req)
-		if err != nil {
-			return nil, errgo.Notef(err, "cannot retrieve bundle metadata")
+		if err == errMetadataUnauthorized {
+			continue
 		}
-		response = append(response, &params.MetaAnyResponse{
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+		response = append(response, params.MetaAnyResponse{
 			Id:   e.PreferredURL(true),
 			Meta: meta,
 		})
@@ -280,8 +268,15 @@ func (h *ReqHandler) metaBundlesContaining(entity *mongodoc.Entity, id *router.R
 	return response, nil
 }
 
+var errMetadataUnauthorized = errgo.Newf("metadata unauthorized")
+
 func (h *ReqHandler) getMetadataForEntity(e *mongodoc.Entity, includes []string, req *http.Request) (map[string]interface{}, error) {
-	return h.Router.GetMetadata(charmstore.EntityResolvedURL(e), includes, req)
+	rurl := charmstore.EntityResolvedURL(e)
+	// Ignore entities that aren't readable by the current user.
+	if err := h.AuthorizeEntity(rurl, req); err != nil {
+		return nil, errMetadataUnauthorized
+	}
+	return h.Router.GetMetadata(rurl, includes, req)
 }
 
 // filterEntities deletes all entities from *entities for which

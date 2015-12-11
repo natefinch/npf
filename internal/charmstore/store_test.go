@@ -1888,6 +1888,78 @@ func (s *StoreSuite) TestFindBestEntity(c *gc.C) {
 	}
 }
 
+var matchingInterfacesQueryTests = []struct {
+	required []string
+	provided []string
+	expect   []string
+}{{
+	provided: []string{"a"},
+	expect: []string{
+		"cs:~charmers/trusty/wordpress-1",
+		"cs:~charmers/trusty/wordpress-2",
+	},
+}, {
+	provided: []string{"a", "b", "d"},
+	required: []string{"b", "c", "e"},
+	expect: []string{
+		"cs:~charmers/trusty/mysql-1",
+		"cs:~charmers/trusty/wordpress-1",
+		"cs:~charmers/trusty/wordpress-2",
+	},
+}, {
+	required: []string{"x"},
+	expect: []string{
+		"cs:~charmers/trusty/mysql-1",
+		"cs:~charmers/trusty/wordpress-2",
+	},
+}, {
+	expect: []string{},
+}}
+
+func (s *StoreSuite) TestMatchingInterfacesQuery(c *gc.C) {
+	store := s.newStore(c, false)
+	defer store.Close()
+	entities := []*mongodoc.Entity{{
+		URL:                     charm.MustParseURL("~charmers/trusty/wordpress-1"),
+		PromulgatedURL:          charm.MustParseURL("trusty/wordpress-1"),
+		CharmProvidedInterfaces: []string{"a", "b"},
+		CharmRequiredInterfaces: []string{"b", "c"},
+	}, {
+		URL:                     charm.MustParseURL("~charmers/trusty/wordpress-2"),
+		PromulgatedURL:          charm.MustParseURL("trusty/wordpress-2"),
+		CharmProvidedInterfaces: []string{"a", "b"},
+		CharmRequiredInterfaces: []string{"b", "c", "x"},
+	}, {
+		// Note: development charm should never be found.
+		URL:                     charm.MustParseURL("~charmers/trusty/wordpress-3"),
+		PromulgatedURL:          charm.MustParseURL("trusty/wordpress-3"),
+		Development:             true,
+		CharmProvidedInterfaces: []string{"a", "b"},
+		CharmRequiredInterfaces: []string{"b", "c", "x"},
+	}, {
+		URL:                     charm.MustParseURL("~charmers/trusty/mysql-1"),
+		PromulgatedURL:          charm.MustParseURL("trusty/mysql-1"),
+		CharmProvidedInterfaces: []string{"d", "b"},
+		CharmRequiredInterfaces: []string{"e", "x"},
+	}}
+	for _, e := range entities {
+		err := store.DB.Entities().Insert(denormalizedEntity(e))
+		c.Assert(err, gc.IsNil)
+	}
+	for i, test := range matchingInterfacesQueryTests {
+		c.Logf("test %d: req %v; prov %v", i, test.required, test.provided)
+		var entities []*mongodoc.Entity
+		err := store.MatchingInterfacesQuery(test.required, test.provided).All(&entities)
+		c.Assert(err, gc.IsNil)
+		var got []string
+		for _, e := range entities {
+			got = append(got, e.URL.String())
+		}
+		sort.Strings(got)
+		c.Assert(got, jc.DeepEquals, test.expect)
+	}
+}
+
 var findBestEntityWithMultiSeriesCharmsTests = []struct {
 	about     string
 	entities  []*mongodoc.Entity
@@ -2680,7 +2752,7 @@ func (s *StoreSuite) TestAddAuditWithNoLumberjack(c *gc.C) {
 	})
 }
 
-func (s *StoreSuite) TestdenormalizeEntity(c *gc.C) {
+func (s *StoreSuite) TestDenormalizeEntity(c *gc.C) {
 	e := &mongodoc.Entity{
 		URL: charm.MustParseURL("~someone/utopic/acharm-45"),
 	}
