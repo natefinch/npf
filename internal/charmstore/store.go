@@ -439,7 +439,6 @@ func (s *Store) AddCharmWithArchive(url *router.ResolvedURL, ch charm.Charm) err
 		BlobHash:    blobHash,
 		BlobHash256: blobHash256,
 		BlobSize:    blobSize,
-		Development: url.Development,
 	})
 }
 
@@ -461,7 +460,6 @@ func (s *Store) AddBundleWithArchive(url *router.ResolvedURL, b charm.Bundle) er
 		BlobHash:    blobHash,
 		BlobHash256: blobHash256,
 		BlobSize:    size,
-		Development: url.Development,
 	})
 }
 
@@ -513,9 +511,6 @@ type AddParams struct {
 	// Contents holds references to files inside the
 	// entity's archive blob.
 	Contents map[mongodoc.FileId]mongodoc.ZipFile
-
-	// Development holds whether the entity revision is in development.
-	Development bool
 }
 
 // AddCharm adds a charm entities collection with the given parameters.
@@ -532,7 +527,7 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	if id.Series == "bundle" || id.User == "" || id.Revision == -1 {
 		return errgo.Newf("charm added with invalid id %v", &id)
 	}
-	logger.Infof("add charm url %s; prev %d", &id, p.URL.PromulgatedRevision)
+	logger.Infof("add charm url %s; prev %d; dev %v", &id, p.URL.PromulgatedRevision, p.URL.Development)
 	entity := &mongodoc.Entity{
 		URL:                     &id,
 		PromulgatedURL:          p.URL.PromulgatedURL(),
@@ -548,7 +543,7 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
 		Contents:                p.Contents,
 		SupportedSeries:         c.Meta().Series,
-		Development:             p.Development,
+		Development:             p.URL.Development,
 	}
 	denormalizeEntity(entity)
 
@@ -1060,7 +1055,7 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 		BundleCharms:       urls,
 		Contents:           p.Contents,
 		PromulgatedURL:     p.URL.PromulgatedURL(),
-		Development:        p.Development,
+		Development:        p.URL.Development,
 	}
 	denormalizeEntity(entity)
 
@@ -1278,6 +1273,33 @@ func bundleCharms(data *charm.BundleData) ([]*charm.URL, error) {
 		urls = append(urls, url)
 	}
 	return urls, nil
+}
+
+// MatchingInterfacesQuery returns a mongo query
+// that will find any charms that require any interfaces
+// in the required slice or provide any interfaces in the
+// provided slice.
+//
+// Development charms are never matched.
+// TODO do we actually want to match dev charms here?
+func (s *Store) MatchingInterfacesQuery(required, provided []string) *mgo.Query {
+	return s.DB.Entities().Find(bson.D{{
+		"development", false,
+	}, {
+		"$or", []bson.D{{{
+			"charmrequiredinterfaces", bson.D{{
+				"$elemMatch", bson.D{{
+					"$in", required,
+				}},
+			}},
+		}}, {{
+			"charmprovidedinterfaces", bson.D{{
+				"$elemMatch", bson.D{{
+					"$in", provided,
+				}},
+			}},
+		}}},
+	}})
 }
 
 // AddLog adds a log message to the database.

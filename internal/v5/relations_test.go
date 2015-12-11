@@ -97,17 +97,45 @@ var metaCharmRelatedCharms = map[string]charm.Charm{
 			},
 		},
 	},
+	// development charms should not be included in any results.
+	"49 ~charmers/development/precise/haproxy-49": &relationTestingCharm{
+		provides: map[string]charm.Relation{
+			"reverseproxy": {
+				Name:      "reverseproxy",
+				Role:      "requirer",
+				Interface: "http",
+			},
+		},
+	},
+	"1 ~charmers/multi-series-20": &relationTestingCharm{
+		supportedSeries: []string{"precise", "trusty", "utopic"},
+		requires: map[string]charm.Relation{
+			"reverseproxy": {
+				Name:      "reverseproxy",
+				Role:      "requirer",
+				Interface: "http",
+			},
+		},
+	},
 }
 
 var metaCharmRelatedTests = []struct {
 	// Description of the test.
 	about string
+
 	// Charms to be stored in the store before the test is run.
 	charms map[string]charm.Charm
+
+	// readACLs holds ACLs for charms that should be given
+	// non-public permissions, indexed by URL string
+	readACLs map[string][]string
+
 	// The id of the charm for which related charms are returned.
 	id string
+
 	// The querystring to append to the resulting charmstore URL.
 	querystring string
+
 	// The expected response body.
 	expectBody params.RelatedResponse
 }{{
@@ -125,6 +153,8 @@ var metaCharmRelatedTests = []struct {
 		},
 		Requires: map[string][]params.MetaAnyResponse{
 			"http": {{
+				Id: charm.MustParseURL("multi-series-1"),
+			}, {
 				Id: charm.MustParseURL("precise/haproxy-48"),
 			}, {
 				Id: charm.MustParseURL("trusty/haproxy-47"),
@@ -364,6 +394,29 @@ var metaCharmRelatedTests = []struct {
 			}},
 		},
 	},
+}, {
+	about:  "don't show charms if you don't have perms for 'em",
+	charms: metaCharmRelatedCharms,
+	readACLs: map[string][]string{
+		"~charmers/memcached": []string{"noone"},
+	},
+	id: "utopic/wordpress-0",
+	expectBody: params.RelatedResponse{
+		Provides: map[string][]params.MetaAnyResponse{
+			"mount": {{
+				Id: charm.MustParseURL("precise/nfs-1"),
+			}},
+		},
+		Requires: map[string][]params.MetaAnyResponse{
+			"http": {{
+				Id: charm.MustParseURL("multi-series-1"),
+			}, {
+				Id: charm.MustParseURL("precise/haproxy-48"),
+			}, {
+				Id: charm.MustParseURL("trusty/haproxy-47"),
+			}},
+		},
+	},
 }}
 
 func (s *RelationsSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
@@ -381,6 +434,16 @@ func (s *RelationsSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
 		c.Assert(err, gc.IsNil, gc.Commentf("id %q", id))
 		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
+		if url.Development {
+			err = s.store.SetPerms(url.UserOwnedURL(), "read", params.Everyone, url.URL.User)
+		}
+	}
+}
+
+func (s *RelationsSuite) setPerms(c *gc.C, readACLs map[string][]string) {
+	for url, acl := range readACLs {
+		err := s.store.SetPerms(charm.MustParseURL(url), "read", acl...)
+		c.Assert(err, gc.IsNil)
 	}
 }
 
@@ -388,6 +451,7 @@ func (s *RelationsSuite) TestMetaCharmRelated(c *gc.C) {
 	for i, test := range metaCharmRelatedTests {
 		c.Logf("test %d: %s", i, test.about)
 		s.addCharms(c, test.charms)
+		s.setPerms(c, test.readACLs)
 		storeURL := storeURL(test.id + "/meta/charm-related" + test.querystring)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
@@ -397,6 +461,8 @@ func (s *RelationsSuite) TestMetaCharmRelated(c *gc.C) {
 		})
 		// Clean up the entities in the store.
 		_, err := s.store.DB.Entities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+		_, err = s.store.DB.BaseEntities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -417,13 +483,15 @@ func (s *RelationsSuite) TestMetaCharmRelatedIncludeError(c *gc.C) {
 // relationTestingCharm implements charm.Charm, and it is used for testing
 // charm relations.
 type relationTestingCharm struct {
-	provides map[string]charm.Relation
-	requires map[string]charm.Relation
+	supportedSeries []string
+	provides        map[string]charm.Relation
+	requires        map[string]charm.Relation
 }
 
 func (ch *relationTestingCharm) Meta() *charm.Meta {
 	// The only metadata we are interested in is the relation data.
 	return &charm.Meta{
+		Series:   ch.supportedSeries,
 		Provides: ch.provides,
 		Requires: ch.requires,
 	}
@@ -701,7 +769,7 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?include=no-such",
 	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
-		Message: `cannot retrieve bundle metadata: unrecognized metadata name "no-such"`,
+		Message: `unrecognized metadata name "no-such"`,
 	},
 }}
 
@@ -897,8 +965,10 @@ func mustParseResolvedURL(urlStr string) *router.ResolvedURL {
 		}
 	case 1:
 	}
+	url := charm.MustParseURL(s[len(s)-1])
 	return &router.ResolvedURL{
-		URL:                 *charm.MustParseURL(s[len(s)-1]),
+		URL:                 *url.WithChannel(""),
 		PromulgatedRevision: promRev,
+		Development:         url.Channel == charm.DevelopmentChannel,
 	}
 }

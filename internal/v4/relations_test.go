@@ -701,7 +701,7 @@ var metaBundlesContainingTests = []struct {
 	querystring:  "?include=no-such",
 	expectStatus: http.StatusInternalServerError,
 	expectBody: params.Error{
-		Message: `cannot retrieve bundle metadata: unrecognized metadata name "no-such"`,
+		Message: `unrecognized metadata name "no-such"`,
 	},
 }}
 
