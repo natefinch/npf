@@ -1,0 +1,6 @@
+name: terms
+summary: "Sample charm with terms and conditions"
+description: |
+        That's a boring charm that requires certain terms.
+tags: ["openstack", "storage"]
+terms: ["terms-1/1", "terms-2/5"]

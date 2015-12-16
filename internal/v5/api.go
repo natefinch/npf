@@ -52,7 +52,7 @@ type Handler struct {
 	Pool *charmstore.Pool
 
 	config         charmstore.ServerParams
-	locator        *bakery.PublicKeyRing
+	locator        bakery.PublicKeyLocator
 	identityClient *identity.Client
 
 	// searchCache is a cache of search results keyed on the query
@@ -93,7 +93,7 @@ func New(pool *charmstore.Pool, config charmstore.ServerParams) *Handler {
 		Pool:        pool,
 		config:      config,
 		searchCache: cache.New(config.SearchCacheMaxAge),
-		locator:     bakery.NewPublicKeyRing(),
+		locator:     config.PublicKeyLocator,
 		identityClient: identity.NewClient(&identity.Params{
 			URL:    config.IdentityAPIURL,
 			Client: agent.NewClient(config.AgentUsername, config.AgentKey),
@@ -1115,21 +1115,67 @@ func (h *ReqHandler) serveMacaroon(_ http.Header, _ *http.Request) (interface{},
 // GET /delegatable-macaroon
 // See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-delegatable-macaroon
 func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) (interface{}, error) {
+	values, err := url.ParseQuery(req.URL.RawQuery)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	entityIds := values["id"]
+	// No entity ids, so we provide a macaroon that's good for any entity that the
+	// user can access, as long as that entity doesn't have terms and conditions.
+	if len(entityIds) == 0 {
+		auth, err := h.authorize(req, []string{params.Everyone}, true, nil)
+		if err != nil {
+			return nil, errgo.Mask(err, errgo.Any)
+		}
+		if auth.Username == "" {
+			return nil, errgo.WithCausef(nil, params.ErrForbidden, "delegatable macaroon is not obtainable using admin credentials")
+		}
+		// TODO propagate expiry time from macaroons in request.
+		m, err := h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
+			checkers.DeclaredCaveat(UsernameAttr, auth.Username),
+			checkers.TimeBeforeCaveat(time.Now().Add(DelegatableMacaroonExpiry)),
+			checkers.DenyCaveat(opAccessCharmWithTerms),
+		})
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+		return m, nil
+	}
+	resolvedURLs := make([]*router.ResolvedURL, len(entityIds))
+	for i, id := range entityIds {
+		charmRef, err := charm.ParseURL(id)
+		if err != nil {
+			return nil, errgo.WithCausef(err, params.ErrBadRequest, `bad "id" parameter`)
+		}
+		resolvedURL, err := h.ResolveURL(charmRef)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+		resolvedURLs[i] = resolvedURL
+	}
+
 	// Note that we require authorization even though we allow
 	// anyone to obtain a delegatable macaroon. This means
 	// that we will be able to add the declared caveats to
 	// the returned macaroon.
-	auth, err := h.authorize(req, []string{params.Everyone}, true, nil)
+	auth, err := h.authorizeEntityAndTerms(req, resolvedURLs)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Any)
 	}
 	if auth.Username == "" {
 		return nil, errgo.WithCausef(nil, params.ErrForbidden, "delegatable macaroon is not obtainable using admin credentials")
 	}
+
+	resolvedURLstrings := make([]string, len(resolvedURLs))
+	for i, resolvedURL := range resolvedURLs {
+		resolvedURLstrings[i] = resolvedURL.URL.String()
+	}
+
 	// TODO propagate expiry time from macaroons in request.
 	m, err := h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
 		checkers.DeclaredCaveat(UsernameAttr, auth.Username),
 		checkers.TimeBeforeCaveat(time.Now().Add(DelegatableMacaroonExpiry)),
+		checkers.Caveat{Condition: "is-entity " + strings.Join(resolvedURLstrings, " ")},
 	})
 	if err != nil {
 		return nil, errgo.Mask(err)

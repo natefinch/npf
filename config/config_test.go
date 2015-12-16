@@ -40,6 +40,8 @@ auth-password: mypasswd
 identity-location: localhost:18082
 identity-public-key: +qNbDWly3kRTDVv2UN03hrv/CBt4W6nxY5dHdw+KJFA=
 identity-api-url: "http://example.com/identity"
+terms-public-key: +qNbDWly3kRTDVv2UN03hrv/CBt4W6nxY5dHdw+KJFB=
+terms-location: localhost:8092
 agent-username: agentuser
 agent-key:
   private: lsvcDkapKoFxIyjX9/eQgb3s41KVwPMISFwAJdVCZ70=
@@ -76,7 +78,11 @@ func (s *ConfigSuite) TestRead(c *gc.C) {
 			Key: mustParseKey("+qNbDWly3kRTDVv2UN03hrv/CBt4W6nxY5dHdw+KJFA="),
 		},
 		IdentityAPIURL: "http://example.com/identity",
-		AgentUsername:  "agentuser",
+		TermsLocation:  "localhost:8092",
+		TermsPublicKey: &bakery.PublicKey{
+			Key: mustParseKey("+qNbDWly3kRTDVv2UN03hrv/CBt4W6nxY5dHdw+KJFB="),
+		},
+		AgentUsername: "agentuser",
 		AgentKey: &bakery.KeyPair{
 			Public: bakery.PublicKey{
 				Key: mustParseKey("+qNbDWly3kRTDVv2UN03hrv/CBt4W6nxY5dHdw+KJFA="),

@@ -53,7 +53,7 @@ func (h *ReqHandler) serveArchive(id *charm.URL, w http.ResponseWriter, req *htt
 	case "DELETE":
 		return resolveId(authId(h.serveDeleteArchive))(id, w, req)
 	case "GET":
-		return resolveId(authId(h.serveGetArchive))(id, w, req)
+		return resolveId(h.serveGetArchive)(id, w, req)
 	case "POST", "PUT":
 		// Make sure we consume the full request body, before responding.
 		//
@@ -110,6 +110,10 @@ func (h *ReqHandler) authorizeUpload(id *charm.URL, req *http.Request) error {
 }
 
 func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
+	_, err := h.authorizeEntityAndTerms(req, []*router.ResolvedURL{id})
+	if err != nil {
+		return errgo.Mask(err, errgo.Any)
+	}
 	r, size, hash, err := h.Store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))

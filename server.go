@@ -63,6 +63,11 @@ type ServerParams struct {
 	// If it is empty, IdentityURL+"/v1/discharger" will be used.
 	IdentityLocation string
 
+	// TermsLocations holds the location of the
+	// terms service, which knows about user agreements to
+	// Terms and Conditions required by the charm.
+	TermsLocation string
+
 	// PublicKeyLocator holds a public key store.
 	// It may be nil.
 	PublicKeyLocator bakery.PublicKeyLocator

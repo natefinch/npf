@@ -12,6 +12,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
+	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/bakerytest"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
@@ -142,6 +143,7 @@ func (s *commonSuite) startServer(c *gc.C) {
 		StatsCacheMaxAge: time.Nanosecond,
 		MaxMgoSessions:   s.maxMgoSessions,
 	}
+	keyring := bakery.NewPublicKeyRing()
 	if s.enableIdentity {
 		s.discharge = func(_, _ string) ([]checkers.Caveat, error) {
 			return nil, errgo.New("no discharge")
@@ -150,9 +152,13 @@ func (s *commonSuite) startServer(c *gc.C) {
 			return s.discharge(cond, arg)
 		})
 		config.IdentityLocation = discharger.Location()
-		config.PublicKeyLocator = discharger
 		config.IdentityAPIURL = s.idMServer.URL
+		pk, err := httpbakery.PublicKeyForLocation(http.DefaultClient, discharger.Location())
+		c.Assert(err, gc.IsNil)
+		err = keyring.AddPublicKeyForLocation(discharger.Location(), true, pk)
+		c.Assert(err, gc.IsNil)
 	}
+	config.PublicKeyLocator = keyring
 	var si *charmstore.SearchIndex
 	if s.enableES {
 		si = &charmstore.SearchIndex{

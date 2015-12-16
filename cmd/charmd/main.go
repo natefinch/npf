@@ -13,6 +13,7 @@ import (
 	"github.com/juju/loggo"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/macaroon-bakery.v1/bakery"
+	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/natefinch/lumberjack.v2"
 
@@ -67,7 +68,19 @@ func serve(confPath string) error {
 	var es *elasticsearch.Database
 	if conf.ESAddr != "" {
 		es = &elasticsearch.Database{
-			conf.ESAddr,
+			Addr: conf.ESAddr,
+		}
+	}
+
+	keyring := bakery.NewPublicKeyRing()
+	err = addPublicKey(keyring, conf.IdentityLocation, conf.IdentityPublicKey)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	if conf.TermsLocation != "" {
+		err = addPublicKey(keyring, conf.TermsLocation, conf.TermsPublicKey)
+		if err != nil {
+			return errgo.Mask(err)
 		}
 	}
 
@@ -77,12 +90,14 @@ func serve(confPath string) error {
 		AuthPassword:            conf.AuthPassword,
 		IdentityLocation:        conf.IdentityLocation,
 		IdentityAPIURL:          conf.IdentityAPIURL,
+		TermsLocation:           conf.TermsLocation,
 		AgentUsername:           conf.AgentUsername,
 		AgentKey:                conf.AgentKey,
 		StatsCacheMaxAge:        conf.StatsCacheMaxAge.Duration,
 		MaxMgoSessions:          conf.MaxMgoSessions,
 		HTTPRequestWaitDuration: conf.RequestTimeout.Duration,
 		SearchCacheMaxAge:       conf.SearchCacheMaxAge.Duration,
+		PublicKeyLocator:        keyring,
 	}
 
 	if conf.AuditLogFile != "" {
@@ -93,9 +108,6 @@ func serve(confPath string) error {
 		}
 	}
 
-	ring := bakery.NewPublicKeyRing()
-	ring.AddPublicKeyForLocation(cfg.IdentityLocation, false, conf.IdentityPublicKey)
-	cfg.PublicKeyLocator = ring
 	server, err := charmstore.NewServer(db, es, "cs", cfg, charmstore.Legacy, charmstore.V4, charmstore.V5)
 	if err != nil {
 		return errgo.Notef(err, "cannot create new server at %q", conf.APIAddr)
@@ -103,6 +115,17 @@ func serve(confPath string) error {
 
 	logger.Infof("starting the API server")
 	return http.ListenAndServe(conf.APIAddr, debug.Handler("", server))
+}
+
+func addPublicKey(ring *bakery.PublicKeyRing, loc string, key *bakery.PublicKey) error {
+	if key != nil {
+		return ring.AddPublicKeyForLocation(loc, false, key)
+	}
+	pubKey, err := httpbakery.PublicKeyForLocation(http.DefaultClient, loc)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	return ring.AddPublicKeyForLocation(loc, false, pubKey)
 }
 
 var mgoLogger = loggo.GetLogger("mgo")

@@ -2057,26 +2057,26 @@ Request body:
 
 #### GET /macaroon
 
-This endpoint returns a macaroon in JSON format that, when its third
-party caveats are discharged, will allow access to the charm store. No
-prior authorization is required.
+This endpoint returns a macaroon in JSON format that, when its third party 
+caveats are discharged, will allow access to the charm store. No prior 
+authorization is required.
 
 #### GET /delegatable-macaroon
 
 This endpoint returns a macaroon in JSON format that can be passed to
 third parties to allow them to access the charm store on the user's
-behalf.  A first party "is-entity" caveat may be added to restrict those
-parties so that they can only access a given charmstore entity with a
-specified id.
+behalf. If the "id" parameter is specified (url encoded), the returned
+macaroon will be restricted for use only with the entity with the 
+given id.
 
-A delegatable macaroon will only be returned to an authorized user (not
-including admin). It will carry the same privileges as the macaroon used
-to authorize the request.
+A delegatable macaroon will only be returned to an authorized user (not 
+including admin). It will carry the same privileges as the macaroon used 
+to authorize the request, but is suitable for use by third parties.
 
 #### GET /whoami
 
-This endpoint returns the user name of the client and the list of groups the user
-is a member of. This endpoint requires authorization.
+This endpoint returns the user name of the client and the list of groups the 
+user is a member of. This endpoint requires authorization.
 
 Example: `GET whoami`
 
