@@ -475,6 +475,25 @@ var metaEndpoints = []metaEndpoint{{
 			SupportedSeries: []string{"utopic"},
 		})
 	},
+}, {
+	name: "terms",
+	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
+		doc, err := store.FindEntity(url)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+		if doc.URL.Series == "bundle" {
+			return nil, nil
+		}
+		if doc.CharmMeta == nil || len(doc.CharmMeta.Terms) == 0 {
+			return []string{}, nil
+		}
+		return doc.CharmMeta.Terms, nil
+	},
+	checkURL: newResolvedURL("cs:~charmers/precise/terms-42", 42),
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.DeepEquals, []string{"terms-1/1", "terms-2/5"})
+	},
 }}
 
 // TestEndpointGet tries to ensure that the endpoint
@@ -529,6 +548,8 @@ var testEntities = []*router.ResolvedURL{
 	newResolvedURL("cs:~charmers/utopic/category-2", 2),
 	// A charm with a different user.
 	newResolvedURL("cs:~bob/utopic/wordpress-2", -1),
+	// A charms, which requires agreement to terms
+	newResolvedURL("cs:~charmers/precise/terms-42", 42),
 }
 
 func (s *APISuite) addTestEntities(c *gc.C) []*router.ResolvedURL {
@@ -812,6 +833,41 @@ func (s *APISuite) TestMetaPermPutUnauthorized(c *gc.C) {
 		ExpectBody: params.Error{
 			Code:    params.ErrUnauthorized,
 			Message: "authentication failed: missing HTTP auth header",
+		},
+	})
+}
+
+func (s *APISuite) TestMetaTerms(c *gc.C) {
+	id1 := "precise/terms-17"
+	s.addPublicCharm(c, "terms", newResolvedURL("~charmers/"+id1, 17))
+	s.assertGet(c, id1+"/meta/terms", []string{"terms-1/1", "terms-2/5"})
+
+	id2 := "precise/mysql-1"
+	s.addPublicCharm(c, "mysql", newResolvedURL("~charmers/"+id2, 1))
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL(id2 + "meta/terms"),
+		Method:       "GET",
+		ExpectStatus: http.StatusNotFound,
+		ExpectBody: params.Error{
+			Code:    params.ErrNotFound,
+			Message: "not found",
+		},
+	})
+}
+
+func (s *APISuite) TestMetaTermsBundle(c *gc.C) {
+	id := newResolvedURL("~charmers/bundle/wordpress-simple-10", 10)
+	s.addPublicBundle(c, "wordpress-simple", id)
+
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL(id.URL.Path() + "/meta/terms"),
+		Method:       "GET",
+		ExpectStatus: http.StatusNotFound,
+		ExpectBody: params.Error{
+			Code:    params.ErrMetadataNotFound,
+			Message: "metadata not found",
 		},
 	})
 }

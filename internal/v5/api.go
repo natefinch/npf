@@ -208,6 +208,7 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"stats":            h.EntityHandler(h.metaStats),
 			"supported-series": h.EntityHandler(h.metaSupportedSeries, "supportedseries"),
 			"tags":             h.EntityHandler(h.metaTags, "charmmeta", "bundledata"),
+			"terms":            h.EntityHandler(h.metaTerms, "charmmeta"),
 
 			// endpoints not yet implemented:
 			// "color": router.SingleIncludeHandler(h.metaColor),
@@ -599,6 +600,18 @@ func (h *ReqHandler) metaCharmActions(entity *mongodoc.Entity, id *router.Resolv
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacharm-config
 func (h *ReqHandler) metaCharmConfig(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return entity.CharmConfig, nil
+}
+
+// GET id/meta/terms
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaterms
+func (h *ReqHandler) metaTerms(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	if entity.URL.Series == "bundle" {
+		return nil, nil
+	}
+	if entity.CharmMeta == nil || len(entity.CharmMeta.Terms) == 0 {
+		return []string{}, nil
+	}
+	return entity.CharmMeta.Terms, nil
 }
 
 // GET id/meta/color

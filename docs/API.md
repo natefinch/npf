@@ -1073,6 +1073,21 @@ Example: `GET trusty/juju-gui-3/meta/charm-config`
 }
 ```
 
+#### GET *id*/meta/terms
+
+The `meta/terms` path returns a list of terms and conditions (as recorded in
+the terms field of the charm metadata) the user must agree to in order to 
+obtain the archive of the given charm id.
+
+Example: `GET some-charm/meta/terms`
+
+```json
+[
+    "enterprise-terms/1",
+    "special-terms/17"
+]
+```
+
 #### GET *id*/meta/archive-size
 
 The `meta/archive-size` path returns the archive size, in bytes, of the archive
