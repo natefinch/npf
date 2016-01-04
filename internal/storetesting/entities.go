@@ -29,7 +29,7 @@ func NewEntity(url string) EntityBuilder {
 			Series:              URL.Series,
 			Revision:            URL.Revision,
 			User:                URL.User,
-			BaseURL:             baseURL(URL),
+			BaseURL:             mongodoc.BaseURL(URL),
 			PromulgatedRevision: -1,
 		},
 	}
@@ -128,12 +128,4 @@ func AssertBaseEntity(c *gc.C, db *mgo.Collection, expect *mongodoc.BaseEntity) 
 	err := db.FindId(expect.URL).One(&baseEntity)
 	c.Assert(err, gc.IsNil)
 	c.Assert(&baseEntity, jc.DeepEquals, expect)
-}
-
-func baseURL(url *charm.URL) *charm.URL {
-	baseURL := *url
-	baseURL.Series = ""
-	baseURL.Revision = -1
-	baseURL.Channel = ""
-	return &baseURL
 }

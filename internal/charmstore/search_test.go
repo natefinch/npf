@@ -255,7 +255,7 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C) {
 		}
 		err = s.store.SetPerms(&url.URL, "read", url.URL.User, params.Everyone)
 		c.Assert(err, gc.IsNil)
-		err = s.store.UpdateSearchBaseURL(baseURL(&url.URL))
+		err = s.store.UpdateSearchBaseURL(mongodoc.BaseURL(&url.URL))
 		c.Assert(err, gc.IsNil)
 	}
 	for name, url := range exportTestBundles {
@@ -269,7 +269,7 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C) {
 		}
 		err = s.store.SetPerms(&url.URL, "read", url.URL.User, params.Everyone)
 		c.Assert(err, gc.IsNil)
-		err = s.store.UpdateSearchBaseURL(baseURL(&url.URL))
+		err = s.store.UpdateSearchBaseURL(mongodoc.BaseURL(&url.URL))
 		c.Assert(err, gc.IsNil)
 	}
 	s.store.pool.statsCache.EvictAll()
@@ -625,7 +625,7 @@ func (s *StoreSearchSuite) TestPromulgatedRank(c *gc.C) {
 	s.store.AddCharmWithArchive(url, charmArchive)
 	err := s.store.SetPerms(&url.URL, "read", url.URL.User, params.Everyone)
 	c.Assert(err, gc.IsNil)
-	err = s.store.UpdateSearchBaseURL(baseURL(&url.URL))
+	err = s.store.UpdateSearchBaseURL(mongodoc.BaseURL(&url.URL))
 	c.Assert(err, gc.IsNil)
 	s.store.ES.Database.RefreshIndex(s.TestIndex)
 	sp := SearchParams{
