@@ -580,7 +580,7 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 // This is exported for the purposes of tests that
 // need to create directly into the database.
 func denormalizeEntity(e *mongodoc.Entity) {
-	e.BaseURL = baseURL(e.URL)
+	e.BaseURL = mongodoc.BaseURL(e.URL)
 	e.Name = e.URL.Name
 	e.User = e.URL.User
 	e.Revision = e.URL.Revision
@@ -788,7 +788,7 @@ func (s *Store) FindBaseEntity(url *charm.URL, fields ...string) (*mongodoc.Base
 	if url.User == "" {
 		query = s.DB.BaseEntities().Find(bson.D{{"name", url.Name}, {"promulgated", 1}})
 	} else {
-		query = s.DB.BaseEntities().FindId(baseURL(url))
+		query = s.DB.BaseEntities().FindId(mongodoc.BaseURL(url))
 	}
 	query = selectFields(query, fields)
 	var baseEntity mongodoc.BaseEntity
@@ -825,7 +825,7 @@ func (s *Store) UpdateEntity(url *router.ResolvedURL, update interface{}) error 
 
 // UpdateBaseEntity applies the provided update to the base entity of url.
 func (s *Store) UpdateBaseEntity(url *router.ResolvedURL, update interface{}) error {
-	if err := s.DB.BaseEntities().Update(bson.D{{"_id", baseURL(&url.URL)}}, update); err != nil {
+	if err := s.DB.BaseEntities().Update(bson.D{{"_id", mongodoc.BaseURL(&url.URL)}}, update); err != nil {
 		if err == mgo.ErrNotFound {
 			return errgo.WithCausef(err, params.ErrNotFound, "cannot update base entity for %q", url)
 		}
@@ -873,7 +873,7 @@ func (s *Store) SetDevelopment(url *router.ResolvedURL, development bool) error 
 // chances this will happen are slim.
 func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 	baseEntities := s.DB.BaseEntities()
-	base := baseURL(&url.URL)
+	base := mongodoc.BaseURL(&url.URL)
 	if !promulgate {
 		err := baseEntities.UpdateId(
 			base,
@@ -1011,14 +1011,6 @@ func interfacesForRelations(rels map[string]charm.Relation) []string {
 		result = append(result, iface)
 	}
 	return result
-}
-
-func baseURL(url *charm.URL) *charm.URL {
-	newURL := *url
-	newURL.Revision = -1
-	newURL.Series = ""
-	newURL.Channel = ""
-	return &newURL
 }
 
 var errNotImplemented = errgo.Newf("not implemented")
@@ -1200,7 +1192,7 @@ func (s *Store) SetPerms(id *charm.URL, which string, acl ...string) error {
 	if id.Channel == charm.DevelopmentChannel {
 		field = "developmentacls"
 	}
-	return s.DB.BaseEntities().UpdateId(baseURL(id), bson.D{{"$set",
+	return s.DB.BaseEntities().UpdateId(mongodoc.BaseURL(id), bson.D{{"$set",
 		bson.D{{field + "." + which, acl}},
 	}})
 }
@@ -1265,7 +1257,7 @@ func bundleCharms(data *charm.BundleData) ([]*charm.URL, error) {
 		}
 		urlMap[url.String()] = url
 		// Also add the corresponding base URL.
-		base := baseURL(url)
+		base := mongodoc.BaseURL(url)
 		urlMap[base.String()] = base
 	}
 	urls := make([]*charm.URL, 0, len(urlMap))
@@ -1320,7 +1312,7 @@ func (s *Store) AddLog(data *json.RawMessage, logLevel mongodoc.LogLevel, logTyp
 			urlMap[urlStr] = true
 			allUrls = append(allUrls, url)
 		}
-		base := baseURL(url)
+		base := mongodoc.BaseURL(url)
 		urlStr = base.String()
 		if ok, _ := urlMap[urlStr]; !ok {
 			urlMap[urlStr] = true

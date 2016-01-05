@@ -120,7 +120,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, url *r
 	c.Assert(charmArchive.Revision(), jc.DeepEquals, ch.Revision())
 
 	// Check that the base entity has been properly created.
-	assertBaseEntity(c, store, baseURL(&url.URL), url.PromulgatedRevision != -1)
+	assertBaseEntity(c, store, mongodoc.BaseURL(&url.URL), url.PromulgatedRevision != -1)
 
 	// Try inserting the charm again - it should fail because the charm is
 	// already there.
@@ -205,7 +205,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool, 
 	c.Assert(bundleArchive.ReadMe(), jc.DeepEquals, bundle.ReadMe())
 
 	// Check that the base entity has been properly created.
-	assertBaseEntity(c, store, baseURL(&url.URL), url.PromulgatedRevision != -1)
+	assertBaseEntity(c, store, mongodoc.BaseURL(&url.URL), url.PromulgatedRevision != -1)
 
 	// Try inserting the bundle again - it should fail because the bundle is
 	// already there.
@@ -1629,7 +1629,7 @@ func (s *StoreSuite) TestAddCharmWithUser(c *gc.C) {
 	url := newResolvedURL("cs:~who/precise/wordpress-23", -1)
 	err := store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
-	assertBaseEntity(c, store, baseURL(&url.URL), false)
+	assertBaseEntity(c, store, mongodoc.BaseURL(&url.URL), false)
 }
 
 func (s *StoreSuite) TestOpenCachedBlobFileWithNotFoundContent(c *gc.C) {

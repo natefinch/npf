@@ -121,6 +121,10 @@ type Entity struct {
 	Development bool
 }
 
+func (e *Entity) CanonicalURL() *charm.URL {
+	return e.URL
+}
+
 // PreferredURL returns the preferred way to refer to this entity. If
 // the entity has a promulgated URL and usePromulgated is true then the
 // promulgated URL will be used, otherwise the standard URL is used.
@@ -175,6 +179,10 @@ type BaseEntity struct {
 	// the base entity. Thhose data apply to all revisions.
 	// The byte slices hold JSON-encoded data.
 	CommonInfo map[string][]byte `bson:",omitempty" json:",omitempty"`
+}
+
+func (e *BaseEntity) CanonicalURL() *charm.URL {
+	return e.URL
 }
 
 // ACL holds lists of users and groups that are
@@ -297,4 +305,15 @@ func (b *IntBool) SetBSON(raw bson.Raw) error {
 		return errgo.Newf("invalid value %d", x)
 	}
 	return nil
+}
+
+// BaseURL returns the "base" version of url. If
+// url represents an entity, then the returned URL
+// will represent its base entity.
+func BaseURL(url *charm.URL) *charm.URL {
+	newURL := *url
+	newURL.Revision = -1
+	newURL.Series = ""
+	newURL.Channel = ""
+	return &newURL
 }
