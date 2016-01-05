@@ -475,9 +475,9 @@ func (s *APISuite) TestServeCharmEvent(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	// Retrieve the entities.
-	mysql, err := s.store.FindEntity(mysqlUrl)
+	mysql, err := s.store.FindEntity(mysqlUrl, nil)
 	c.Assert(err, gc.IsNil)
-	riak, err := s.store.FindEntity(riakUrl)
+	riak, err := s.store.FindEntity(riakUrl, nil)
 	c.Assert(err, gc.IsNil)
 
 	tests := []struct {
@@ -600,7 +600,7 @@ func (s *APISuite) TestServeCharmEventLastRevision(c *gc.C) {
 	s.addExtraInfoDigest(c, url2, "digest-2")
 
 	// Retrieve the most recent revision of the entity.
-	entity, err := s.store.FindEntity(url2)
+	entity, err := s.store.FindEntity(url2, nil)
 	c.Assert(err, gc.IsNil)
 
 	// Ensure the last revision is correctly returned.

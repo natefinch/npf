@@ -1121,12 +1121,31 @@ func (s *RouterSuite) TestRouterGet(c *gc.C) {
 }
 
 type funcContext struct {
-	resolveURL   func(id *charm.URL) (*ResolvedURL, error)
-	authorizeURL func(id *ResolvedURL, req *http.Request) error
+	resolveURL          func(id *charm.URL) (*ResolvedURL, error)
+	authorizeURL        func(id *ResolvedURL, req *http.Request) error
+	willIncludeMetadata func([]string)
 }
 
 func (ctxt funcContext) ResolveURL(id *charm.URL) (*ResolvedURL, error) {
 	return ctxt.resolveURL(id)
+}
+
+func (ctxt funcContext) ResolveURLs(ids []*charm.URL) ([]*ResolvedURL, error) {
+	rurls := make([]*ResolvedURL, len(ids))
+	for i, id := range ids {
+		rurl, err := ctxt.resolveURL(id)
+		if err != nil && errgo.Cause(err) != params.ErrNotFound {
+			return nil, err
+		}
+		rurls[i] = rurl
+	}
+	return rurls, nil
+}
+
+func (ctxt funcContext) WillIncludeMetadata(includes []string) {
+	if ctxt.willIncludeMetadata != nil {
+		ctxt.willIncludeMetadata(includes)
+	}
 }
 
 func (ctxt funcContext) AuthorizeEntity(id *ResolvedURL, req *http.Request) error {
@@ -1217,7 +1236,7 @@ func (s *RouterSuite) TestHTTPRequestPassedThroughToMeta(c *gc.C) {
 	}
 	h := New(&Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": FieldIncludeHandler(FieldIncludeHandlerParams{
+			"foo": NewFieldIncludeHandler(FieldIncludeHandlerParams{
 				Key:       0,
 				Query:     query,
 				Fields:    []string{"foo"},
@@ -1532,7 +1551,7 @@ var routerPutTests = []struct {
 	about: "field include handler with no HandlePut",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": FieldIncludeHandler(FieldIncludeHandlerParams{
+			"foo": NewFieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
 			}),
 		},
@@ -1547,7 +1566,7 @@ var routerPutTests = []struct {
 	about: "field include handler when HandlePut returns an error",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": FieldIncludeHandler(FieldIncludeHandlerParams{
+			"foo": NewFieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
 				HandlePut: func(id *ResolvedURL, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return errgo.WithCausef(nil, params.ErrNotFound, "message")
@@ -1566,21 +1585,21 @@ var routerPutTests = []struct {
 	about: "meta put to field include handler with several errors",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": FieldIncludeHandler(FieldIncludeHandlerParams{
+			"foo": NewFieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
 				HandlePut: func(id *ResolvedURL, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return errgo.WithCausef(nil, params.ErrNotFound, "foo error")
 				},
 				Update: nopUpdate,
 			}),
-			"bar": FieldIncludeHandler(FieldIncludeHandlerParams{
+			"bar": NewFieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
 				HandlePut: func(id *ResolvedURL, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return errgo.New("bar error")
 				},
 				Update: nopUpdate,
 			}),
-			"baz": FieldIncludeHandler(FieldIncludeHandlerParams{
+			"baz": NewFieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
 				HandlePut: func(id *ResolvedURL, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return nil
@@ -1615,7 +1634,7 @@ var routerPutTests = []struct {
 	about: "meta/any put with update error",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo/": FieldIncludeHandler(FieldIncludeHandlerParams{
+			"foo/": NewFieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
 				HandlePut: func(id *ResolvedURL, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					if path == "/bad" {
@@ -1627,7 +1646,7 @@ var routerPutTests = []struct {
 					return params.ErrBadRequest
 				},
 			}),
-			"bar": FieldIncludeHandler(FieldIncludeHandlerParams{
+			"bar": NewFieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 1,
 				HandlePut: func(id *ResolvedURL, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return fmt.Errorf("bar error")
@@ -1673,14 +1692,14 @@ var routerPutTests = []struct {
 	about: "bulk meta/any put with several errors",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
-			"foo": FieldIncludeHandler(FieldIncludeHandlerParams{
+			"foo": NewFieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
 				HandlePut: func(id *ResolvedURL, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return nil
 				},
 				Update: nopUpdate,
 			}),
-			"bar": FieldIncludeHandler(FieldIncludeHandlerParams{
+			"bar": NewFieldIncludeHandler(FieldIncludeHandlerParams{
 				Key: 0,
 				HandlePut: func(id *ResolvedURL, path string, val *json.RawMessage, updater *FieldUpdater, req *http.Request) error {
 					return errgo.WithCausef(nil, params.ErrNotFound, "bar error")
@@ -2599,7 +2618,7 @@ func fieldSelectHandler(handlerId string, key interface{}, fields ...string) Bul
 		return nil
 	}
 
-	return FieldIncludeHandler(FieldIncludeHandlerParams{
+	return NewFieldIncludeHandler(FieldIncludeHandlerParams{
 		Key:       key,
 		Query:     query,
 		Fields:    fields,

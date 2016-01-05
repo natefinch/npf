@@ -81,7 +81,7 @@ var charmDownloadCounts = map[string]int{
 func (s *StoreSearchSuite) TestSuccessfulExport(c *gc.C) {
 	s.store.pool.statsCache.EvictAll()
 	for name, ref := range exportTestCharms {
-		entity, err := s.store.FindEntity(ref)
+		entity, err := s.store.FindEntity(ref, nil)
 		c.Assert(err, gc.IsNil)
 		var actual json.RawMessage
 		err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL), &actual)

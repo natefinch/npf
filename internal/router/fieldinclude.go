@@ -90,24 +90,28 @@ type FieldIncludeHandlerParams struct {
 	UpdateSearch FieldUpdateSearchFunc
 }
 
-type fieldIncludeHandler struct {
-	p FieldIncludeHandlerParams
+// FieldIncludeHandler implements BulkIncludeHandler by
+// making a single request with a number of aggregated fields.
+type FieldIncludeHandler struct {
+	P FieldIncludeHandlerParams
 }
 
-// FieldIncludeHandler returns a BulkIncludeHandler that will perform
+// NewFieldIncludeHandler returns a BulkIncludeHandler that will perform
 // only a single database query for several requests. See FieldIncludeHandlerParams
 // for more detail.
 //
 // See in ../v4/api.go for an example of its use.
-func FieldIncludeHandler(p FieldIncludeHandlerParams) BulkIncludeHandler {
-	return &fieldIncludeHandler{p}
+func NewFieldIncludeHandler(p FieldIncludeHandlerParams) *FieldIncludeHandler {
+	return &FieldIncludeHandler{p}
 }
 
-func (h *fieldIncludeHandler) Key() interface{} {
-	return h.p.Key
+// Key implements BulkIncludeHandler.Key.
+func (h *FieldIncludeHandler) Key() interface{} {
+	return h.P.Key
 }
 
-func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *ResolvedURL, paths []string, values []*json.RawMessage, req *http.Request) []error {
+// HandlePut implements BulkIncludeHandler.HandlePut.
+func (h *FieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *ResolvedURL, paths []string, values []*json.RawMessage, req *http.Request) []error {
 	updater := &FieldUpdater{
 		fields:  make(map[string]interface{}),
 		entries: make([]audit.Entry, 0),
@@ -124,12 +128,12 @@ func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *ResolvedURL
 		}
 	}
 	for i, h := range hs {
-		h := h.(*fieldIncludeHandler)
-		if h.p.HandlePut == nil {
+		h := h.(*FieldIncludeHandler)
+		if h.P.HandlePut == nil {
 			setError(i, errgo.New("PUT not supported"))
 			continue
 		}
-		if err := h.p.HandlePut(id, paths[i], values[i], updater, req); err != nil {
+		if err := h.P.HandlePut(id, paths[i], values[i], updater, req); err != nil {
 			setError(i, errgo.Mask(err, errgo.Any))
 		}
 	}
@@ -138,13 +142,13 @@ func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *ResolvedURL
 		// no need to call Update.
 		return errs
 	}
-	if err := h.p.Update(id, updater.fields, updater.entries); err != nil {
+	if err := h.P.Update(id, updater.fields, updater.entries); err != nil {
 		for i := range hs {
 			setError(i, err)
 		}
 	}
 	if updater.search {
-		if err := h.p.UpdateSearch(id, updater.fields); err != nil {
+		if err := h.P.UpdateSearch(id, updater.fields); err != nil {
 			for i := range hs {
 				setError(i, err)
 			}
@@ -153,19 +157,20 @@ func (h *fieldIncludeHandler) HandlePut(hs []BulkIncludeHandler, id *ResolvedURL
 	return errs
 }
 
-func (h *fieldIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *ResolvedURL, paths []string, flags url.Values, req *http.Request) ([]interface{}, error) {
+// HandleGet implements BulkIncludeHandler.HandleGet.
+func (h *FieldIncludeHandler) HandleGet(hs []BulkIncludeHandler, id *ResolvedURL, paths []string, flags url.Values, req *http.Request) ([]interface{}, error) {
 	funcs := make([]FieldGetFunc, len(hs))
 	selector := make(map[string]int)
 	// Extract the handler functions and union all the fields.
 	for i, h := range hs {
-		h := h.(*fieldIncludeHandler)
-		funcs[i] = h.p.HandleGet
-		for _, field := range h.p.Fields {
+		h := h.(*FieldIncludeHandler)
+		funcs[i] = h.P.HandleGet
+		for _, field := range h.P.Fields {
 			selector[field] = 1
 		}
 	}
 	// Make the single query.
-	doc, err := h.p.Query(id, selector, req)
+	doc, err := h.P.Query(id, selector, req)
 	if err != nil {
 		// Note: preserve error cause from handlers.
 		return nil, errgo.Mask(err, errgo.Any)

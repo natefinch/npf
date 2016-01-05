@@ -548,7 +548,7 @@ func (s *Store) statsCacheFetch(id *charm.URL) (interface{}, error) {
 // TODO (frankban): remove this method when removing the legacy counts logic.
 func (s *Store) legacyDownloadCounts(id *charm.URL) (AggregatedCounts, error) {
 	counts := AggregatedCounts{}
-	entities, err := s.FindEntities(id, "extrainfo")
+	entities, err := s.FindEntities(id, FieldSelector("extrainfo"))
 	if err != nil {
 		return counts, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
@@ -631,7 +631,7 @@ func (s *Store) IncrementDownloadCountsAtTime(id *router.ResolvedURL, t time.Tim
 		// This unfortunately adds an extra round trip to the database,
 		// but as incrementing statistics is performed asynchronously
 		// it will not be in the critical path.
-		entity, err := s.FindEntity(id, "promulgated-revision")
+		entity, err := s.FindEntity(id, FieldSelector("promulgated-revision"))
 		if err != nil {
 			return errgo.Notef(err, "cannot find entity %v", &id.URL)
 		}

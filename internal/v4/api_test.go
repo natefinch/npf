@@ -33,6 +33,7 @@ import (
 
 	"gopkg.in/juju/charmstore.v5-unstable/elasticsearch"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/entitycache"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
@@ -345,7 +346,7 @@ var metaEndpoints = []metaEndpoint{{
 }, {
 	name: "perm",
 	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
-		e, err := store.FindBaseEntity(&url.URL)
+		e, err := store.FindBaseEntity(&url.URL, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -364,7 +365,7 @@ var metaEndpoints = []metaEndpoint{{
 }, {
 	name: "perm/read",
 	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
-		e, err := store.FindBaseEntity(&url.URL)
+		e, err := store.FindBaseEntity(&url.URL, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -452,7 +453,7 @@ var metaEndpoints = []metaEndpoint{{
 }, {
 	name: "promulgated",
 	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
-		e, err := store.FindBaseEntity(&url.URL)
+		e, err := store.FindBaseEntity(&url.URL, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -601,7 +602,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		Read:  []string{params.Everyone, "charmers"},
 		Write: []string{"charmers"},
 	})
-	e, err := s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
+	e, err := s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.ACLs.Read, gc.DeepEquals, []string{params.Everyone, "charmers"})
 
@@ -628,7 +629,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 			Write: []string{"charmers"},
 		})
 	}
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsFalse)
 	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{
@@ -654,7 +655,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	})
 	s.assertGet(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
 	s.assertGet(c, "development/wordpress/meta/perm/read", []string{params.Everyone, "charmers"})
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsTrue)
 	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{
@@ -679,10 +680,10 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 			Message: `unauthorized: access denied for user "bob"`,
 		},
 	})
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.DevelopmentACLs, jc.DeepEquals, mongodoc.ACL{})
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsTrue)
 	c.Assert(e.DevelopmentACLs, jc.DeepEquals, mongodoc.ACL{})
@@ -704,7 +705,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 			Message: `unauthorized: access denied for user "bob"`,
 		},
 	})
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsFalse)
 	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{})
@@ -715,7 +716,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		Read:  []string{"bob"},
 		Write: []string{"admin"},
 	})
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsFalse)
 	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{
@@ -728,7 +729,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		Read:  []string{"who", params.Everyone},
 		Write: []string{"who"},
 	})
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsFalse)
 	c.Assert(e.DevelopmentACLs, jc.DeepEquals, mongodoc.ACL{
@@ -741,7 +742,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		Read []string
 	}{Read: []string{"joe"}}
 	s.assertPut(c, "wordpress/meta/perm", readRequest)
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"))
+	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.Public, jc.IsFalse)
 	c.Assert(e.ACLs, jc.DeepEquals, mongodoc.ACL{
@@ -1041,7 +1042,7 @@ func (s *APISuite) TestCommonInfo(c *gc.C) {
 		s.assertGet(c, u+"/meta/common-info", map[string]string{
 			"key": "something",
 		})
-		e, err := s.store.FindBaseEntity(charm.MustParseURL(u))
+		e, err := s.store.FindBaseEntity(charm.MustParseURL(u), nil)
 		c.Assert(err, gc.IsNil)
 		c.Assert(e.CommonInfo, gc.DeepEquals, map[string][]byte{
 			"key": []byte("\"something\""),
@@ -1541,7 +1542,7 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 	for i, test := range resolveURLTests {
 		c.Logf("test %d: %s", i, test.url)
 		url := charm.MustParseURL(test.url)
-		rurl, err := v4.ResolveURL(s.store, url)
+		rurl, err := v4.ResolveURL(entitycache.New(s.store), url)
 		if test.notFound {
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 			c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for ".*"`)
@@ -2461,7 +2462,7 @@ func (s *APISuite) TestHash256Laziness(c *gc.C) {
 	id, _ := s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~who/precise/wordpress-0", -1))
 
 	// Retrieve the SHA256 hash.
-	entity, err := s.store.FindEntity(id, "blobhash256")
+	entity, err := s.store.FindEntity(id, charmstore.FieldSelector("blobhash256"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(entity.BlobHash256, gc.Not(gc.Equals), "")
 
@@ -2498,7 +2499,7 @@ func entityFieldGetter(fieldName string) metaEndpointExpectedValueGetter {
 
 func entityGetter(get func(*mongodoc.Entity) interface{}) metaEndpointExpectedValueGetter {
 	return func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
-		doc, err := store.FindEntity(url)
+		doc, err := store.FindEntity(url, nil)
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}
@@ -2508,7 +2509,7 @@ func entityGetter(get func(*mongodoc.Entity) interface{}) metaEndpointExpectedVa
 
 func zipGetter(get func(*zip.Reader) interface{}) metaEndpointExpectedValueGetter {
 	return func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
-		doc, err := store.FindEntity(url, "blobname")
+		doc, err := store.FindEntity(url, charmstore.FieldSelector("blobname"))
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}
@@ -3351,7 +3352,7 @@ func (s *APISuite) TestPublish(c *gc.C) {
 
 		// Check that the database now includes the expected entities.
 		for _, rurl := range test.expectDB {
-			e, err := s.store.FindEntity(rurl)
+			e, err := s.store.FindEntity(rurl, nil)
 			c.Assert(err, gc.IsNil)
 			c.Assert(charmstore.EntityResolvedURL(e), jc.DeepEquals, rurl)
 		}

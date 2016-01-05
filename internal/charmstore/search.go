@@ -88,7 +88,7 @@ func (s *Store) UpdateSearch(r *router.ResolvedURL) error {
 		}
 		return errgo.Notef(err, "cannot get %s", r)
 	}
-	baseEntity, err := s.FindBaseEntity(entity.BaseURL)
+	baseEntity, err := s.FindBaseEntity(entity.BaseURL, nil)
 	if err != nil {
 		return errgo.Notef(err, "cannot get %s", entity.BaseURL)
 	}

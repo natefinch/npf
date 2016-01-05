@@ -237,10 +237,23 @@ type Context interface {
 	// cause.
 	ResolveURL(id *charm.URL) (*ResolvedURL, error)
 
+	// ResolveURLs is like ResolveURL but resolves multiple URLs
+	// at the same time. The length of the returned slice should
+	// be len(ids); any entities that are not found should be represented
+	// by nil elements.
+	ResolveURLs(ids []*charm.URL) ([]*ResolvedURL, error)
+
 	// The AuthorizeEntity function will be called to authorize requests
 	// to any BulkIncludeHandlers. All other handlers are expected
 	// to handle their own authorization.
 	AuthorizeEntity(id *ResolvedURL, req *http.Request) error
+
+	// WillIncludeMetadata informs the context that the given metadata
+	// includes will be required in the request. This allows the context
+	// to prime any cache fetches to fetch this data when early
+	// fetches which may not require the metadata are made.
+	// This method should ignore any unrecognized names.
+	WillIncludeMetadata(includes []string)
 }
 
 // New returns a charm store router that will route requests to
@@ -388,6 +401,10 @@ func (r *Router) serveMeta(id *ResolvedURL, w http.ResponseWriter, req *http.Req
 }
 
 func (r *Router) serveMetaGet(id *ResolvedURL, req *http.Request) (interface{}, error) {
+	// We assume that any "include" attribute is an included metadata
+	// specifier. This is perhaps arguable, but it's currently true,
+	// including more fields can't do any harm and it's a simple rule.
+	r.Context.WillIncludeMetadata(append(req.Form["include"], req.URL.Path))
 	// TODO: consider whether we might want the capability to
 	// have different permissions for different meta endpoints.
 	if err := r.Context.AuthorizeEntity(id, req); err != nil {
@@ -400,24 +417,7 @@ func (r *Router) serveMetaGet(id *ResolvedURL, req *http.Request) (interface{}, 
 		return r.metaNames(), nil
 	}
 	if key == "any" {
-		// GET id/meta/any?[include=meta[&include=meta...]]
-		// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaany
-		includes := req.Form["include"]
-		// If there are no includes, we have no handlers to generate
-		// a "not found" error when the id doesn't exist, so we need
-		// to check explicitly.
-		if len(includes) == 0 {
-			return params.MetaAnyResponse{Id: id.PreferredURL()}, nil
-		}
-		meta, err := r.GetMetadata(id, includes, req)
-		if err != nil {
-			// Note: preserve error cause from handlers.
-			return nil, errgo.Mask(err, errgo.Any)
-		}
-		return params.MetaAnyResponse{
-			Id:   id.PreferredURL(),
-			Meta: meta,
-		}, nil
+		return r.serveMetaGetAny(id, req)
 	}
 	if handler := r.handlers.Meta[key]; handler != nil {
 		results, err := handler.HandleGet([]BulkIncludeHandler{handler}, id, []string{path}, req.Form, req)
@@ -432,6 +432,24 @@ func (r *Router) serveMetaGet(id *ResolvedURL, req *http.Request) (interface{}, 
 		return results[0], nil
 	}
 	return nil, errgo.WithCausef(nil, params.ErrNotFound, "unknown metadata %q", strings.TrimPrefix(req.URL.Path, "/"))
+}
+
+// GET id/meta/any?[include=meta[&include=meta...]]
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaany
+func (r *Router) serveMetaGetAny(id *ResolvedURL, req *http.Request) (interface{}, error) {
+	includes := req.Form["include"]
+	if len(includes) == 0 {
+		return params.MetaAnyResponse{Id: id.PreferredURL()}, nil
+	}
+	meta, err := r.GetMetadata(id, includes, req)
+	if err != nil {
+		// Note: preserve error cause from handlers.
+		return nil, errgo.Mask(err, errgo.Any)
+	}
+	return params.MetaAnyResponse{
+		Id:   id.PreferredURL(),
+		Meta: meta,
+	}, nil
 }
 
 const jsonContentType = "application/json"
@@ -568,21 +586,30 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 		return nil, errgo.WithCausef(err, params.ErrBadRequest, "")
 	}
 	delete(req.Form, "ignore-auth")
-	result := make(map[string]interface{})
-	for _, id := range ids {
+	// Notify the context about the metadata we're going to be
+	// asking for, so that any database fetches can retrieve data
+	// for that in advance.
+	r.Context.WillIncludeMetadata(append(req.Form["includes"], req.URL.Path))
+	urls := make([]*charm.URL, len(ids))
+	for i, id := range ids {
 		url, err := charm.ParseURL(id)
 		if err != nil {
 			return nil, errgo.WithCausef(err, params.ErrBadRequest, "")
 		}
-		rurl, err := r.Context.ResolveURL(url)
-		if err != nil {
-			if errgo.Cause(err) == params.ErrNotFound {
-				// URLs not found will be omitted from the result.
-				// https://github.com/juju/charmstore/blob/v4/docs/API.md#bulk-requests-and-missing-metadata
-				continue
-			}
-			// Note: preserve error cause from resolveURL.
-			return nil, errgo.Mask(err, errgo.Any)
+		urls[i] = url
+	}
+
+	rurls, err := r.Context.ResolveURLs(urls)
+	if err != nil {
+		// Note: preserve error cause from resolveURL.
+		return nil, errgo.Mask(err, errgo.Any)
+	}
+	result := make(map[string]interface{})
+	for i, rurl := range rurls {
+		if rurl == nil {
+			// URLs not found will be omitted from the result.
+			// https://github.com/juju/charmstore/blob/v4/docs/API.md#bulk-requests-and-missing-metadata
+			continue
 		}
 		meta, err := r.serveMetaGet(rurl, req)
 		if cause := errgo.Cause(err); cause == params.ErrNotFound || cause == params.ErrMetadataNotFound || (ignoreAuth && isAuthorizationError(cause)) {
@@ -594,7 +621,7 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}
-		result[id] = meta
+		result[ids[i]] = meta
 	}
 	return result, nil
 }
