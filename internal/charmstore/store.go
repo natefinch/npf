@@ -1586,15 +1586,8 @@ func (store *Store) List(sp SearchParams) (ListResult, error) {
 	}
 
 	pipe := store.DB.Entities().Pipe(q)
-	r := ListResult{
-		Results: make([]*router.ResolvedURL, 0),
-	}
-	var entity mongodoc.Entity
-	iter := pipe.Iter()
-	for iter.Next(&entity) {
-		r.Results = append(r.Results, EntityResolvedURL(&entity))
-	}
-	if err := iter.Close(); err != nil {
+	var r ListResult
+	if err := pipe.All(&r.Results); err != nil {
 		return ListResult{}, errgo.Mask(err)
 	}
 	return r, nil

@@ -13,6 +13,7 @@ import (
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
 
@@ -21,30 +22,30 @@ const maxConcurrency = 20
 // GET search[?text=text][&autocomplete=1][&filter=value…][&limit=limit][&include=meta][&skip=count][&sort=field[+dir]]
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-search
 func (h *ReqHandler) serveSearch(_ http.Header, req *http.Request) (interface{}, error) {
-	sp, err := parseSearchParams(req)
+	sp, err := ParseSearchParams(req)
 	if err != nil {
 		return "", err
 	}
-	auth, err := h.checkRequest(req, nil, opOther)
+	auth, err := h.CheckRequest(req, nil, OpOther)
 	if err != nil {
 		logger.Infof("authorization failed on search request, granting no privileges: %v", err)
 	}
 	sp.Admin = auth.Admin
 	if auth.Username != "" {
 		sp.Groups = append(sp.Groups, auth.Username)
-		groups, err := h.groupsForUser(auth.Username)
+		groups, err := h.GroupsForUser(auth.Username)
 		if err != nil {
 			logger.Infof("cannot get groups for user %q, assuming no groups: %v", auth.Username, err)
 		}
 		sp.Groups = append(sp.Groups, groups...)
 	}
-	return h.doSearch(sp, req)
+	return h.Search(sp, req)
 }
 
-// doSearch performs the search specified by SearchParams. If sp
+// Search performs the search specified by SearchParams. If sp
 // specifies that additional metadata needs to be added to the results,
 // then it is added.
-func (h *ReqHandler) doSearch(sp charmstore.SearchParams, req *http.Request) (interface{}, error) {
+func (h *ReqHandler) Search(sp charmstore.SearchParams, req *http.Request) (interface{}, error) {
 	// perform query
 	results, err := h.Store.Search(sp)
 	if err != nil {
@@ -58,24 +59,24 @@ func (h *ReqHandler) doSearch(sp charmstore.SearchParams, req *http.Request) (in
 }
 
 //addMetada adds the requested meta data with the include list.
-func (h *ReqHandler) addMetaData(results []*router.ResolvedURL, include []string, req *http.Request) []params.EntityResult {
+func (h *ReqHandler) addMetaData(results []*mongodoc.Entity, include []string, req *http.Request) []params.EntityResult {
 	entities := make([]params.EntityResult, len(results))
 	run := parallel.NewRun(maxConcurrency)
 	var missing int32
-	for i, ref := range results {
-		i, ref := i, ref
+	for i, ent := range results {
+		i, ent := i, ent
 		run.Do(func() error {
-			meta, err := h.Router.GetMetadata(ref, include, req)
+			meta, err := h.Router.GetMetadata(charmstore.EntityResolvedURL(ent), include, req)
 			if err != nil {
 				// Unfortunately it is possible to get errors here due to
 				// internal inconsistency, so rather than throwing away
 				// all the search results, we just log the error and move on.
-				logger.Errorf("cannot retrieve metadata for %v: %v", ref, err)
+				logger.Errorf("cannot retrieve metadata for %v: %v", ent.PreferredURL(true), err)
 				atomic.AddInt32(&missing, 1)
 				return nil
 			}
 			entities[i] = params.EntityResult{
-				Id:   ref.PreferredURL(),
+				Id:   ent.PreferredURL(true),
 				Meta: meta,
 			}
 			return nil
@@ -106,8 +107,8 @@ func (h *ReqHandler) serveSearchInteresting(w http.ResponseWriter, req *http.Req
 	router.WriteError(w, errNotImplemented)
 }
 
-// parseSearchParms extracts the search paramaters from the request
-func parseSearchParams(req *http.Request) (charmstore.SearchParams, error) {
+// ParseSearchParms extracts the search paramaters from the request
+func ParseSearchParams(req *http.Request) (charmstore.SearchParams, error) {
 	sp := charmstore.SearchParams{}
 	var err error
 	for k, v := range req.Form {

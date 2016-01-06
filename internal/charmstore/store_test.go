@@ -666,7 +666,7 @@ func (s *StoreSuite) TestAddCharmWithFailedESInsert(c *gc.C) {
 	defer store.Close()
 	store.ES = &SearchIndex{esdb, "no-index"}
 
-	url := newResolvedURL("~charmers/precise/wordpress-12", -1)
+	url := router.MustNewResolvedURL("~charmers/precise/wordpress-12", -1)
 	err := store.AddCharmWithArchive(url, storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.ErrorMatches, "cannot index cs:~charmers/precise/wordpress-12 to ElasticSearch: .*")
 
@@ -681,12 +681,12 @@ func (s *StoreSuite) TestAddCharmsWithTheSameBaseEntity(c *gc.C) {
 
 	// Add a charm to the database.
 	ch := storetesting.Charms.CharmDir("wordpress")
-	url := newResolvedURL("~charmers/trusty/wordpress-12", 12)
+	url := router.MustNewResolvedURL("~charmers/trusty/wordpress-12", 12)
 	err := store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
 
 	// Add a second charm to the database, sharing the same base URL.
-	err = store.AddCharmWithArchive(newResolvedURL("~charmers/utopic/wordpress-13", -1), ch)
+	err = store.AddCharmWithArchive(router.MustNewResolvedURL("~charmers/utopic/wordpress-13", -1), ch)
 	c.Assert(err, gc.IsNil)
 
 	// Ensure a single base entity has been created.
@@ -774,7 +774,7 @@ func (s *StoreSuite) TestBundleUnitCount(c *gc.C) {
 	entities := store.DB.Entities()
 	for i, test := range bundleUnitCountTests {
 		c.Logf("test %d: %s", i, test.about)
-		url := newResolvedURL("cs:~charmers/bundle/django-0", -1)
+		url := router.MustNewResolvedURL("cs:~charmers/bundle/django-0", -1)
 		url.URL.Revision = i
 		url.PromulgatedRevision = i
 
@@ -1099,7 +1099,7 @@ func (s *StoreSuite) TestBundleMachineCount(c *gc.C) {
 	entities := store.DB.Entities()
 	for i, test := range bundleMachineCountTests {
 		c.Logf("test %d: %s", i, test.about)
-		url := newResolvedURL("cs:~charmers/bundle/django-0", -1)
+		url := router.MustNewResolvedURL("cs:~charmers/bundle/django-0", -1)
 		url.URL.Revision = i
 		url.PromulgatedRevision = i
 		err := test.data.Verify(nil, nil)
@@ -1167,33 +1167,33 @@ func MustParseResolvedURLs(urlStrs []string) []*router.ResolvedURL {
 
 func (s *StoreSuite) TestAddPromulgatedCharmDir(c *gc.C) {
 	charmDir := storetesting.Charms.CharmDir("wordpress")
-	s.checkAddCharm(c, charmDir, false, newResolvedURL("~charmers/precise/wordpress-1", 1))
+	s.checkAddCharm(c, charmDir, false, router.MustNewResolvedURL("~charmers/precise/wordpress-1", 1))
 }
 
 func (s *StoreSuite) TestAddPromulgatedCharmArchive(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	s.checkAddCharm(c, charmArchive, false, newResolvedURL("~charmers/precise/wordpress-1", 1))
+	s.checkAddCharm(c, charmArchive, false, router.MustNewResolvedURL("~charmers/precise/wordpress-1", 1))
 }
 
 func (s *StoreSuite) TestAddUserOwnedCharmDir(c *gc.C) {
 	charmDir := storetesting.Charms.CharmDir("wordpress")
-	s.checkAddCharm(c, charmDir, false, newResolvedURL("~charmers/precise/wordpress-1", -1))
+	s.checkAddCharm(c, charmDir, false, router.MustNewResolvedURL("~charmers/precise/wordpress-1", -1))
 }
 
 func (s *StoreSuite) TestAddUserOwnedCharmArchive(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	s.checkAddCharm(c, charmArchive, false, newResolvedURL("~charmers/precise/wordpress-1", -1))
+	s.checkAddCharm(c, charmArchive, false, router.MustNewResolvedURL("~charmers/precise/wordpress-1", -1))
 }
 
 func (s *StoreSuite) TestAddDevelopmentCharmArchive(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	url := newResolvedURL("~charmers/development/precise/wordpress-1", 1)
+	url := router.MustNewResolvedURL("~charmers/development/precise/wordpress-1", 1)
 	s.checkAddCharm(c, charmArchive, false, url)
 }
 
 func (s *StoreSuite) TestAddBundleDir(c *gc.C) {
 	bundleDir := storetesting.Charms.BundleDir("wordpress-simple")
-	s.checkAddBundle(c, bundleDir, false, newResolvedURL("~charmers/bundle/wordpress-simple-2", 3))
+	s.checkAddBundle(c, bundleDir, false, router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-2", 3))
 }
 
 func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
@@ -1201,12 +1201,12 @@ func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
 		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
-	s.checkAddBundle(c, bundleArchive, false, newResolvedURL("~charmers/bundle/wordpress-simple-2", 3))
+	s.checkAddBundle(c, bundleArchive, false, router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-2", 3))
 }
 
 func (s *StoreSuite) TestAddUserOwnedBundleDir(c *gc.C) {
 	bundleDir := storetesting.Charms.BundleDir("wordpress-simple")
-	s.checkAddBundle(c, bundleDir, false, newResolvedURL("~charmers/bundle/wordpress-simple-1", -1))
+	s.checkAddBundle(c, bundleDir, false, router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-1", -1))
 }
 
 func (s *StoreSuite) TestAddUserOwnedBundleArchive(c *gc.C) {
@@ -1214,7 +1214,7 @@ func (s *StoreSuite) TestAddUserOwnedBundleArchive(c *gc.C) {
 		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
-	s.checkAddBundle(c, bundleArchive, false, newResolvedURL("~charmers/bundle/wordpress-simple-1", -1))
+	s.checkAddBundle(c, bundleArchive, false, router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-1", -1))
 }
 
 func (s *StoreSuite) TestAddDevelopmentBundleArchive(c *gc.C) {
@@ -1222,7 +1222,7 @@ func (s *StoreSuite) TestAddDevelopmentBundleArchive(c *gc.C) {
 		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
-	url := newResolvedURL("~charmers/development/bundle/wordpress-simple-2", 3)
+	url := router.MustNewResolvedURL("~charmers/development/bundle/wordpress-simple-2", 3)
 	s.checkAddBundle(c, bundleArchive, false, url)
 }
 
@@ -1243,7 +1243,7 @@ func (s *StoreSuite) TestAddCharmWithBundleSeries(c *gc.C) {
 	defer store.Close()
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	err := store.AddCharm(ch, AddParams{
-		URL: newResolvedURL("~charmers/bundle/wordpress-2", -1),
+		URL: router.MustNewResolvedURL("~charmers/bundle/wordpress-2", -1),
 	})
 	c.Assert(err, gc.ErrorMatches, `charm added with invalid id cs:~charmers/bundle/wordpress-2`)
 }
@@ -1252,18 +1252,18 @@ func (s *StoreSuite) TestAddCharmWithMultiSeries(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
-	s.checkAddCharm(c, ch, false, newResolvedURL("~charmers/multi-series-1", 1))
+	s.checkAddCharm(c, ch, false, router.MustNewResolvedURL("~charmers/multi-series-1", 1))
 	// Make sure it can be accessed with a number of names
-	e, err := store.FindEntity(newResolvedURL("~charmers/multi-series-1", 1), nil)
+	e, err := store.FindEntity(router.MustNewResolvedURL("~charmers/multi-series-1", 1), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	e, err = store.FindEntity(newResolvedURL("~charmers/trusty/multi-series-1", 1), nil)
+	e, err = store.FindEntity(router.MustNewResolvedURL("~charmers/trusty/multi-series-1", 1), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	e, err = store.FindEntity(newResolvedURL("~charmers/wily/multi-series-1", 1), nil)
+	e, err = store.FindEntity(router.MustNewResolvedURL("~charmers/wily/multi-series-1", 1), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	_, err = store.FindEntity(newResolvedURL("~charmers/precise/multi-series-1", 1), nil)
+	_, err = store.FindEntity(router.MustNewResolvedURL("~charmers/precise/multi-series-1", 1), nil)
 	c.Assert(err, gc.ErrorMatches, "entity not found")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
@@ -1273,12 +1273,12 @@ func (s *StoreSuite) TestAddCharmWithSeriesWhenThereIsAnExistingMultiSeriesVersi
 	defer store.Close()
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
 	err := store.AddCharm(ch, AddParams{
-		URL: newResolvedURL("~charmers/multi-series-1", -1),
+		URL: router.MustNewResolvedURL("~charmers/multi-series-1", -1),
 	})
 	c.Assert(err, gc.IsNil)
 	ch = storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	err = store.AddCharm(ch, AddParams{
-		URL: newResolvedURL("~charmers/trusty/multi-series-2", -1),
+		URL: router.MustNewResolvedURL("~charmers/trusty/multi-series-2", -1),
 	})
 	c.Assert(err, gc.ErrorMatches, `charm name duplicates multi-series charm name cs:~charmers/multi-series-1`)
 }
@@ -1287,7 +1287,7 @@ func (s *StoreSuite) TestAddCharmWithMultiSeriesToES(c *gc.C) {
 	store := s.newStore(c, true)
 	defer store.Close()
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
-	s.checkAddCharm(c, ch, true, newResolvedURL("~charmers/juju-gui-1", 1))
+	s.checkAddCharm(c, ch, true, router.MustNewResolvedURL("~charmers/juju-gui-1", 1))
 }
 
 var addInvalidCharmURLTests = []string{
@@ -1339,11 +1339,11 @@ func (s *StoreSuite) TestAddBundleDuplicatingCharm(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
 	ch := storetesting.Charms.CharmDir("wordpress")
-	err := store.AddCharmWithArchive(newResolvedURL("~charmers/precise/wordpress-2", -1), ch)
+	err := store.AddCharmWithArchive(router.MustNewResolvedURL("~charmers/precise/wordpress-2", -1), ch)
 	c.Assert(err, gc.IsNil)
 
 	b := storetesting.Charms.BundleDir("wordpress-simple")
-	err = store.AddBundleWithArchive(newResolvedURL("~charmers/bundle/wordpress-5", -1), b)
+	err = store.AddBundleWithArchive(router.MustNewResolvedURL("~charmers/bundle/wordpress-5", -1), b)
 	c.Assert(err, gc.ErrorMatches, "bundle name duplicates charm name cs:~charmers/precise/wordpress-2")
 }
 
@@ -1352,11 +1352,11 @@ func (s *StoreSuite) TestAddCharmDuplicatingBundle(c *gc.C) {
 	defer store.Close()
 
 	b := storetesting.Charms.BundleDir("wordpress-simple")
-	err := store.AddBundleWithArchive(newResolvedURL("~charmers/bundle/wordpress-2", -1), b)
+	err := store.AddBundleWithArchive(router.MustNewResolvedURL("~charmers/bundle/wordpress-2", -1), b)
 	c.Assert(err, gc.IsNil)
 
 	ch := storetesting.Charms.CharmDir("wordpress")
-	err = store.AddCharmWithArchive(newResolvedURL("~charmers/precise/wordpress-5", -1), ch)
+	err = store.AddCharmWithArchive(router.MustNewResolvedURL("~charmers/precise/wordpress-5", -1), ch)
 	c.Assert(err, gc.ErrorMatches, "charm name duplicates bundle name cs:~charmers/bundle/wordpress-2")
 }
 
@@ -1364,7 +1364,7 @@ func (s *StoreSuite) TestOpenBlob(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	store := s.newStore(c, false)
 	defer store.Close()
-	url := newResolvedURL("cs:~charmers/precise/wordpress-23", 23)
+	url := router.MustNewResolvedURL("cs:~charmers/precise/wordpress-23", 23)
 	err := store.AddCharmWithArchive(url, charmArchive)
 	c.Assert(err, gc.IsNil)
 
@@ -1390,7 +1390,7 @@ func (s *StoreSuite) TestBlobNameAndHash(c *gc.C) {
 
 	store := s.newStore(c, false)
 	defer store.Close()
-	url := newResolvedURL("cs:~charmers/precise/wordpress-23", 23)
+	url := router.MustNewResolvedURL("cs:~charmers/precise/wordpress-23", 23)
 	err := store.AddCharmWithArchive(url, charmArchive)
 	c.Assert(err, gc.IsNil)
 
@@ -1562,7 +1562,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithInvalidEntity(c *gc.C) {
 	defer store.Close()
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
-	url := newResolvedURL("cs:~charmers/precise/wordpress-23", 23)
+	url := router.MustNewResolvedURL("cs:~charmers/precise/wordpress-23", 23)
 	err := store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 
@@ -1578,7 +1578,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithFoundContent(c *gc.C) {
 	defer store.Close()
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
-	url := newResolvedURL("cs:~charmers/precise/wordpress-23", 23)
+	url := router.MustNewResolvedURL("cs:~charmers/precise/wordpress-23", 23)
 	err := store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 
@@ -1626,7 +1626,7 @@ func (s *StoreSuite) TestAddCharmWithUser(c *gc.C) {
 	defer store.Close()
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
-	url := newResolvedURL("cs:~who/precise/wordpress-23", -1)
+	url := router.MustNewResolvedURL("cs:~who/precise/wordpress-23", -1)
 	err := store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 	assertBaseEntity(c, store, mongodoc.BaseURL(&url.URL), false)
@@ -1637,7 +1637,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithNotFoundContent(c *gc.C) {
 	defer store.Close()
 
 	wordpress := storetesting.Charms.CharmDir("wordpress")
-	url := newResolvedURL("cs:~charmers/precise/wordpress-23", 23)
+	url := router.MustNewResolvedURL("cs:~charmers/precise/wordpress-23", 23)
 	err := store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 
@@ -1738,17 +1738,17 @@ func (s *StoreSuite) TestSESPutDoesNotErrorWithNoESConfigured(c *gc.C) {
 
 func (s *StoreSuite) TestAddCharmDirIndexed(c *gc.C) {
 	charmDir := storetesting.Charms.CharmDir("wordpress")
-	s.checkAddCharm(c, charmDir, true, newResolvedURL("cs:~charmers/precise/wordpress-2", -1))
+	s.checkAddCharm(c, charmDir, true, router.MustNewResolvedURL("cs:~charmers/precise/wordpress-2", -1))
 }
 
 func (s *StoreSuite) TestAddCharmArchiveIndexed(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	s.checkAddCharm(c, charmArchive, true, newResolvedURL("cs:~charmers/precise/wordpress-2", -1))
+	s.checkAddCharm(c, charmArchive, true, router.MustNewResolvedURL("cs:~charmers/precise/wordpress-2", -1))
 }
 
 func (s *StoreSuite) TestAddBundleDirIndexed(c *gc.C) {
 	bundleDir := storetesting.Charms.BundleDir("wordpress-simple")
-	s.checkAddBundle(c, bundleDir, true, newResolvedURL("cs:~charmers/bundle/baboom-2", -1))
+	s.checkAddBundle(c, bundleDir, true, router.MustNewResolvedURL("cs:~charmers/bundle/baboom-2", -1))
 }
 
 func (s *StoreSuite) TestAddBundleArchiveIndexed(c *gc.C) {
@@ -1756,22 +1756,22 @@ func (s *StoreSuite) TestAddBundleArchiveIndexed(c *gc.C) {
 		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
-	s.checkAddBundle(c, bundleArchive, true, newResolvedURL("cs:~charmers/bundle/baboom-2", -1))
+	s.checkAddBundle(c, bundleArchive, true, router.MustNewResolvedURL("cs:~charmers/bundle/baboom-2", -1))
 }
 
 func (s *StoreSuite) TestAddCharmDirIndexedAndPromulgated(c *gc.C) {
 	charmDir := storetesting.Charms.CharmDir("wordpress")
-	s.checkAddCharm(c, charmDir, true, newResolvedURL("cs:~charmers/precise/wordpress-2", -1))
+	s.checkAddCharm(c, charmDir, true, router.MustNewResolvedURL("cs:~charmers/precise/wordpress-2", -1))
 }
 
 func (s *StoreSuite) TestAddCharmArchiveIndexedAndPromulgated(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	s.checkAddCharm(c, charmArchive, true, newResolvedURL("cs:~charmers/precise/wordpress-2", 2))
+	s.checkAddCharm(c, charmArchive, true, router.MustNewResolvedURL("cs:~charmers/precise/wordpress-2", 2))
 }
 
 func (s *StoreSuite) TestAddBundleDirIndexedAndPromulgated(c *gc.C) {
 	bundleDir := storetesting.Charms.BundleDir("wordpress-simple")
-	s.checkAddBundle(c, bundleDir, true, newResolvedURL("cs:~charmers/bundle/baboom-2", 2))
+	s.checkAddBundle(c, bundleDir, true, router.MustNewResolvedURL("cs:~charmers/bundle/baboom-2", 2))
 }
 
 func (s *StoreSuite) TestAddBundleArchiveIndexedAndPromulgated(c *gc.C) {
@@ -1779,7 +1779,7 @@ func (s *StoreSuite) TestAddBundleArchiveIndexedAndPromulgated(c *gc.C) {
 		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
-	s.checkAddBundle(c, bundleArchive, true, newResolvedURL("cs:~charmers/bundle/baboom-2", 2))
+	s.checkAddBundle(c, bundleArchive, true, router.MustNewResolvedURL("cs:~charmers/bundle/baboom-2", 2))
 }
 
 var findBestEntityTests = []struct {
@@ -2158,7 +2158,7 @@ func (s *StoreSuite) TestUpdateEntity(c *gc.C) {
 	defer store.Close()
 	for i, test := range updateEntityTests {
 		c.Logf("test %d. %s", i, test.url)
-		url := newResolvedURL(test.url, 10)
+		url := router.MustNewResolvedURL(test.url, 10)
 		_, err := store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 		err = store.DB.Entities().Insert(denormalizedEntity(&mongodoc.Entity{
@@ -2193,7 +2193,7 @@ func (s *StoreSuite) TestUpdateBaseEntity(c *gc.C) {
 	defer store.Close()
 	for i, test := range updateBaseEntityTests {
 		c.Logf("test %d. %s", i, test.url)
-		url := newResolvedURL(test.url, 10)
+		url := router.MustNewResolvedURL(test.url, 10)
 		_, err := store.DB.BaseEntities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 		err = store.DB.BaseEntities().Insert(&mongodoc.BaseEntity{
@@ -2429,7 +2429,7 @@ func (s *StoreSuite) TestSetPromulgated(c *gc.C) {
 	defer store.Close()
 	for i, test := range promulgateTests {
 		c.Logf("test %d. %s", i, test.about)
-		url := newResolvedURL(test.url, -1)
+		url := router.MustNewResolvedURL(test.url, -1)
 		_, err := store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
 		_, err = store.DB.BaseEntities().RemoveAll(nil)
@@ -2484,7 +2484,7 @@ func (s *StoreSuite) TestSetPromulgatedUpdateSearch(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	err = store.DB.BaseEntities().Insert(baseEntity("~openstack-charmers/wordpress", false))
 	c.Assert(err, gc.IsNil)
-	url := newResolvedURL("~openstack-charmers/trusty/wordpress-0", -1)
+	url := router.MustNewResolvedURL("~openstack-charmers/trusty/wordpress-0", -1)
 
 	// Change the promulgated mysql version to openstack-charmers.
 	err = store.SetPromulgated(url, true)
@@ -2574,7 +2574,7 @@ func (s *StoreSuite) TestSetDevelopment(c *gc.C) {
 		if test.existingDevelopment {
 			url.Channel = charm.DevelopmentChannel
 		}
-		rurl := newResolvedURL(url.Path(), -1)
+		rurl := router.MustNewResolvedURL(url.Path(), -1)
 		err := store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
 
@@ -2601,7 +2601,7 @@ func (s *StoreSuite) TestSetDevelopmentErrorNotFound(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
 
-	err := store.SetDevelopment(newResolvedURL("~who/wily/no-such-42", -1), true)
+	err := store.SetDevelopment(router.MustNewResolvedURL("~who/wily/no-such-42", -1), true)
 	c.Assert(err, gc.ErrorMatches, `cannot update "cs:~who/wily/no-such-42": not found`)
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
