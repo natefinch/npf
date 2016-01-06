@@ -39,6 +39,7 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting/hashtesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 )
 
 var testPublicKey = bakery.PublicKey{
@@ -1539,10 +1540,13 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/development/trusty/haproxy-0", -1))
 	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~bob/multi-series-0", -1))
 
+	cache := entitycache.New(s.store)
+	cache.AddEntityFields(map[string]int{"supportedseries": 1})
+	cache.AddEntityFields(v5.RequiredEntityFields)
 	for i, test := range resolveURLTests {
 		c.Logf("test %d: %s", i, test.url)
 		url := charm.MustParseURL(test.url)
-		rurl, err := v4.ResolveURL(entitycache.New(s.store), url)
+		rurl, err := v4.ResolveURL(cache, url)
 		if test.notFound {
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 			c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for ".*"`)

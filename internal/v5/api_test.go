@@ -2546,28 +2546,6 @@ func entitySizeChecker(c *gc.C, data interface{}) {
 	c.Assert(response.Size, gc.Not(gc.Equals), int64(0))
 }
 
-func (s *APISuite) addPublicCharm(c *gc.C, charmName string, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Charm) {
-	ch := storetesting.Charms.CharmDir(charmName)
-	err := s.store.AddCharmWithArchive(rurl, ch)
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", params.Everyone, rurl.URL.User)
-	c.Assert(err, gc.IsNil)
-	return rurl, ch
-}
-
-func (s *APISuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Bundle) {
-	bundle := storetesting.Charms.BundleDir(bundleName)
-	err := s.store.AddBundleWithArchive(rurl, bundle)
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", params.Everyone, rurl.URL.User)
-	c.Assert(err, gc.IsNil)
-	return rurl, bundle
-}
-
 func (s *APISuite) assertPutNonAdmin(c *gc.C, url string, val interface{}) {
 	s.assertPut0(c, url, val, false)
 }
@@ -3513,7 +3491,7 @@ func (s *APISuite) TestTooManyConcurrentRequests(c *gc.C) {
 		MaxMgoSessions: 1,
 	}
 	db := s.Session.DB("charmstore")
-	srv, err := charmstore.NewServer(db, nil, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v5.NewAPIHandler})
+	srv, err := charmstore.NewServer(db, nil, config, map[string]charmstore.NewAPIHandlerFunc{"v5": v5.NewAPIHandler})
 	c.Assert(err, gc.IsNil)
 	defer srv.Close()
 

@@ -111,7 +111,7 @@ func (h *Handler) Close() {
 }
 
 var (
-	RequiredEntityFields = []string{
+	RequiredEntityFields = charmstore.FieldSelector(
 		"baseurl",
 		"user",
 		"name",
@@ -120,13 +120,15 @@ var (
 		"promulgated-revision",
 		"development",
 		"promulgated-url",
-	}
-	RequiredBaseEntityFields = []string{
+	)
+	RequiredBaseEntityFields = charmstore.FieldSelector(
+		"user",
+		"name",
 		"acls",
 		"public",
 		"developmentacls",
 		"promulgated",
-	}
+	)
 )
 
 // NewReqHandler returns an instance of a *ReqHandler
@@ -147,8 +149,8 @@ func (h *Handler) NewReqHandler() (*ReqHandler, error) {
 	rh.Handler = h
 	rh.Store = store
 	rh.Cache = entitycache.New(store)
-	rh.Cache.AddEntityFields(RequiredEntityFields...)
-	rh.Cache.AddBaseEntityFields(RequiredBaseEntityFields...)
+	rh.Cache.AddEntityFields(RequiredEntityFields)
+	rh.Cache.AddBaseEntityFields(RequiredBaseEntityFields)
 	return rh, nil
 }
 
@@ -319,6 +321,25 @@ func (h *ReqHandler) ResolveURLs(urls []*charm.URL) ([]*router.ResolvedURL, erro
 
 // WillIncludeMetadata implements router.Context.WillIncludeMetadata.
 func (h *ReqHandler) WillIncludeMetadata(includes []string) {
+	for _, inc := range includes {
+		// Find what handler will be used for the include
+		// and prime the cache so that it will preemptively fetch
+		// any fields involved.
+		fi, ok := h.Router.MetaHandler(inc).(*router.FieldIncludeHandler)
+		if !ok || len(fi.P.Fields) == 0 {
+			continue
+		}
+		fields := make(map[string]int)
+		for _, f := range fi.P.Fields {
+			fields[f] = 1
+		}
+		switch fi.P.Key {
+		case entityHandlerKey{}:
+			h.Cache.AddEntityFields(fields)
+		case baseEntityHandlerKey{}:
+			h.Cache.AddBaseEntityFields(fields)
+		}
+	}
 }
 
 // resolveURL implements URL resolving for the ReqHandler.
@@ -327,7 +348,7 @@ func (h *ReqHandler) WillIncludeMetadata(includes []string) {
 func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, error) {
 	// We've added promulgated-url as a required field, so
 	// we'll always get it from the Entity result.
-	entity, err := cache.Entity(url)
+	entity, err := cache.Entity(url, nil)
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return nil, errgo.Mask(err)
 	}
@@ -342,6 +363,13 @@ func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, 
 	if url.User == "" {
 		rurl.PromulgatedRevision = entity.PromulgatedRevision
 	}
+	// Ensure the base URL is in the cache too, so that
+	// its canonical URL is in the cache, so that when
+	// we come to look up the base URL from the resolved
+	// URL, it will hit the cached base entity.
+	// We don't actually care if it succeeds or fails, so we ignore
+	// the result.
+	cache.BaseEntity(url, nil)
 	return rurl, nil
 }
 
@@ -359,13 +387,14 @@ func (h *ReqHandler) EntityHandler(f EntityHandlerFunc, fields ...string) router
 	return h.puttableEntityHandler(f, nil, fields...)
 }
 
+type entityHandlerKey struct{}
+
 func (h *ReqHandler) puttableEntityHandler(get EntityHandlerFunc, handlePut router.FieldPutFunc, fields ...string) router.BulkIncludeHandler {
 	handleGet := func(doc interface{}, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 		edoc := doc.(*mongodoc.Entity)
 		val, err := get(edoc, id, path, flags, req)
 		return val, errgo.Mask(err, errgo.Any)
 	}
-	type entityHandlerKey struct{}
 	return router.NewFieldIncludeHandler(router.FieldIncludeHandlerParams{
 		Key:          entityHandlerKey{},
 		Query:        h.entityQuery,
@@ -383,13 +412,14 @@ func (h *ReqHandler) baseEntityHandler(f baseEntityHandlerFunc, fields ...string
 	return h.puttableBaseEntityHandler(f, nil, fields...)
 }
 
+type baseEntityHandlerKey struct{}
+
 func (h *ReqHandler) puttableBaseEntityHandler(get baseEntityHandlerFunc, handlePut router.FieldPutFunc, fields ...string) router.BulkIncludeHandler {
 	handleGet := func(doc interface{}, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 		edoc := doc.(*mongodoc.BaseEntity)
 		val, err := get(edoc, id, path, flags, req)
 		return val, errgo.Mask(err, errgo.Any)
 	}
-	type baseEntityHandlerKey struct{}
 	return router.NewFieldIncludeHandler(router.FieldIncludeHandlerParams{
 		Key:          baseEntityHandlerKey{},
 		Query:        h.baseEntityQuery,
@@ -466,15 +496,8 @@ func (h *ReqHandler) updateSearchBase(id *router.ResolvedURL, fields map[string]
 	return nil
 }
 
-func (h *ReqHandler) baseEntityQuery(id *router.ResolvedURL, selector map[string]int, req *http.Request) (interface{}, error) {
-	fields := make([]string, 0, len(selector))
-	for k, v := range selector {
-		if v == 0 {
-			continue
-		}
-		fields = append(fields, k)
-	}
-	val, err := h.Cache.BaseEntity(&id.URL, fields...)
+func (h *ReqHandler) baseEntityQuery(id *router.ResolvedURL, fields map[string]int, req *http.Request) (interface{}, error) {
+	val, err := h.Cache.BaseEntity(&id.URL, fields)
 	if errgo.Cause(err) == params.ErrNotFound {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
@@ -485,8 +508,9 @@ func (h *ReqHandler) baseEntityQuery(id *router.ResolvedURL, selector map[string
 }
 
 func (h *ReqHandler) entityQuery(id *router.ResolvedURL, selector map[string]int, req *http.Request) (interface{}, error) {
-	val, err := h.Store.FindEntity(id, selector)
+	val, err := h.Cache.Entity(id.UserOwnedURL(), selector)
 	if errgo.Cause(err) == params.ErrNotFound {
+		logger.Infof("entity %#v not found: %#v", id, err)
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
 	if err != nil {

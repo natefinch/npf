@@ -121,8 +121,23 @@ type Entity struct {
 	Development bool
 }
 
-func (e *Entity) CanonicalURL() *charm.URL {
-	return e.URL
+// CanonicalURLs returns the canonical URLs that can be used
+// to look up the entity. For non-promulgated entities,
+// there will only be one element in the result.
+func (e *Entity) CanonicalURLs() []*charm.URL {
+	// Larger capacity than strictly necessary to allow
+	// a caller to append to the returned slice without allocating.
+	urls := make([]*charm.URL, 1, 3)
+	urls[0] = copyURL(e.URL)
+	if e.PromulgatedURL != nil {
+		urls = append(urls, copyURL(e.PromulgatedURL))
+	}
+	if e.Development {
+		for _, u := range urls {
+			u.Channel = charm.DevelopmentChannel
+		}
+	}
+	return urls
 }
 
 // PreferredURL returns the preferred way to refer to this entity. If
@@ -181,8 +196,20 @@ type BaseEntity struct {
 	CommonInfo map[string][]byte `bson:",omitempty" json:",omitempty"`
 }
 
-func (e *BaseEntity) CanonicalURL() *charm.URL {
-	return e.URL
+// CanonicalURLs returns the canonical URLs that can be used
+// to look up the entity. For non-promulgated entities,
+// there will only be one element in the result.
+func (e *BaseEntity) CanonicalURLs() []*charm.URL {
+	// Larger capacity than strictly necessary to allow
+	// a caller to append to the returned slice without allocating.
+	urls := make([]*charm.URL, 1, 3)
+	urls[0] = copyURL(e.URL)
+	if e.Promulgated {
+		u := copyURL(e.URL)
+		u.User = ""
+		urls = append(urls, u)
+	}
+	return urls
 }
 
 // ACL holds lists of users and groups that are
@@ -316,4 +343,9 @@ func BaseURL(url *charm.URL) *charm.URL {
 	newURL.Series = ""
 	newURL.Channel = ""
 	return &newURL
+}
+
+func copyURL(u *charm.URL) *charm.URL {
+	u1 := *u
+	return &u1
 }

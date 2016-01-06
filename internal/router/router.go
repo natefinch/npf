@@ -350,14 +350,8 @@ func (r *Router) serveIds(w http.ResponseWriter, req *http.Request) error {
 	if key != "meta/" && key != "meta" {
 		return errgo.WithCausef(nil, params.ErrNotFound, params.ErrNotFound.Error())
 	}
-	// Always resolve the entity id for meta requests.
-	rurl, err := r.Context.ResolveURL(url)
-	if err != nil {
-		// Note: preserve error cause from resolveURL.
-		return errgo.Mask(err, errgo.Any)
-	}
 	req.URL.Path = path
-	return r.serveMeta(rurl, w, req)
+	return r.serveMeta(url, w, req)
 }
 
 func idHandlerNeedsResolveURL(req *http.Request) bool {
@@ -382,10 +376,16 @@ func handlerKey(path string) (key, rest string) {
 	return key, ""
 }
 
-func (r *Router) serveMeta(id *ResolvedURL, w http.ResponseWriter, req *http.Request) error {
+func (r *Router) serveMeta(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
 	switch req.Method {
 	case "GET", "HEAD":
-		resp, err := r.serveMetaGet(id, req)
+		r.willIncludeMetadata(req)
+		rurl, err := r.Context.ResolveURL(id)
+		if err != nil {
+			// Note: preserve error cause from ResolveURL.
+			return errgo.Mask(err, errgo.Any)
+		}
+		resp, err := r.serveMetaGet(rurl, req)
 		if err != nil {
 			// Note: preserve error causes from meta handlers.
 			return errgo.Mask(err, errgo.Any)
@@ -393,21 +393,39 @@ func (r *Router) serveMeta(id *ResolvedURL, w http.ResponseWriter, req *http.Req
 		httprequest.WriteJSON(w, http.StatusOK, resp)
 		return nil
 	case "PUT":
+		rurl, err := r.Context.ResolveURL(id)
+		if err != nil {
+			// Note: preserve error cause from ResolveURL.
+			return errgo.Mask(err, errgo.Any)
+		}
 		// Put requests don't return any data unless there's
 		// an error.
-		return r.serveMetaPut(id, req)
+		return r.serveMetaPut(rurl, req)
 	}
 	return params.ErrMethodNotAllowed
 }
 
-func (r *Router) serveMetaGet(id *ResolvedURL, req *http.Request) (interface{}, error) {
+// willIncludeMetadata notifies the context about any metadata
+// that will probably be required by the request, so that initial
+// fetches (for example by ResolveURL) can fetch additional
+// data too. The request is assumed to be for a /meta request,
+// with the actual meta path in req.Path (e.g. /any, /metaname).
+func (r *Router) willIncludeMetadata(req *http.Request) {
 	// We assume that any "include" attribute is an included metadata
 	// specifier. This is perhaps arguable, but it's currently true,
 	// including more fields can't do any harm and it's a simple rule.
-	r.Context.WillIncludeMetadata(append(req.Form["include"], req.URL.Path))
+	// Note that we must call this method before resolving the URL.
+	includes := req.Form["include"]
+	if path := strings.TrimPrefix(req.URL.Path, "/"); path != "" && path != "any" {
+		includes = append(includes, path)
+	}
+	r.Context.WillIncludeMetadata(includes)
+}
+
+func (r *Router) serveMetaGet(rurl *ResolvedURL, req *http.Request) (interface{}, error) {
 	// TODO: consider whether we might want the capability to
 	// have different permissions for different meta endpoints.
-	if err := r.Context.AuthorizeEntity(id, req); err != nil {
+	if err := r.Context.AuthorizeEntity(rurl, req); err != nil {
 		return nil, errgo.Mask(err, errgo.Any)
 	}
 	key, path := handlerKey(req.URL.Path)
@@ -417,10 +435,10 @@ func (r *Router) serveMetaGet(id *ResolvedURL, req *http.Request) (interface{}, 
 		return r.metaNames(), nil
 	}
 	if key == "any" {
-		return r.serveMetaGetAny(id, req)
+		return r.serveMetaGetAny(rurl, req)
 	}
 	if handler := r.handlers.Meta[key]; handler != nil {
-		results, err := handler.HandleGet([]BulkIncludeHandler{handler}, id, []string{path}, req.Form, req)
+		results, err := handler.HandleGet([]BulkIncludeHandler{handler}, rurl, []string{path}, req.Form, req)
 		if err != nil {
 			// Note: preserve error cause from handlers.
 			return nil, errgo.Mask(err, errgo.Any)
@@ -586,10 +604,7 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 		return nil, errgo.WithCausef(err, params.ErrBadRequest, "")
 	}
 	delete(req.Form, "ignore-auth")
-	// Notify the context about the metadata we're going to be
-	// asking for, so that any database fetches can retrieve data
-	// for that in advance.
-	r.Context.WillIncludeMetadata(append(req.Form["includes"], req.URL.Path))
+	r.willIncludeMetadata(req)
 	urls := make([]*charm.URL, len(ids))
 	for i, id := range ids {
 		url, err := charm.ParseURL(id)
@@ -695,6 +710,13 @@ func (r *Router) serveBulkMetaPutOne(req *http.Request, id string, val *json.Raw
 	return nil
 }
 
+// MetaHandler returns the meta handler for the given meta
+// path by looking it up in the Meta map.
+func (r *Router) MetaHandler(metaPath string) BulkIncludeHandler {
+	key, _ := handlerKey(metaPath)
+	return r.handlers.Meta[key]
+}
+
 // maxMetadataConcurrency specifies the maximum number
 // of goroutines started to service a given GetMetadata request.
 // 5 is enough to more that cover the number of metadata
@@ -707,9 +729,7 @@ func (r *Router) GetMetadata(id *ResolvedURL, includes []string, req *http.Reque
 	groups := make(map[interface{}][]BulkIncludeHandler)
 	includesByGroup := make(map[interface{}][]string)
 	for _, include := range includes {
-		// Get the key that lets us choose the include handler.
-		includeKey, _ := handlerKey(include)
-		handler := r.handlers.Meta[includeKey]
+		handler := r.MetaHandler(include)
 		if handler == nil {
 			return nil, errgo.Newf("unrecognized metadata name %q", include)
 		}
@@ -780,9 +800,7 @@ func (r *Router) PutMetadata(id *ResolvedURL, data map[string]*json.RawMessage, 
 	valuesByGroup := make(map[interface{}][]*json.RawMessage)
 	pathsByGroup := make(map[interface{}][]string)
 	for path, body := range data {
-		// Get the key that lets us choose the meta handler.
-		metaKey, _ := handlerKey(path)
-		handler := r.handlers.Meta[metaKey]
+		handler := r.MetaHandler(path)
 		if handler == nil {
 			return errgo.Newf("unrecognized metadata name %q", path)
 		}

@@ -82,7 +82,7 @@ func (c *Cache) Close() {
 //
 // If all the required fields are added before retrieving any entities,
 // fewer database round trips will be required.
-func (c *Cache) AddEntityFields(fields ...string) {
+func (c *Cache) AddEntityFields(fields map[string]int) {
 	c.entities.mu.Lock()
 	defer c.entities.mu.Unlock()
 	c.entities.addFields(fields)
@@ -93,7 +93,7 @@ func (c *Cache) AddEntityFields(fields ...string) {
 //
 // If all the required fields are added before retrieving any base entities,
 // less database round trips will be required.
-func (c *Cache) AddBaseEntityFields(fields ...string) {
+func (c *Cache) AddBaseEntityFields(fields map[string]int) {
 	c.baseEntities.mu.Lock()
 	defer c.baseEntities.mu.Unlock()
 	c.baseEntities.addFields(fields)
@@ -115,14 +115,13 @@ func (c *Cache) StartFetch(ids []*charm.URL) {
 // Entity returns the entity with the given id. If the entity is not
 // found, it returns an error with a params.ErrNotFound cause.
 // The returned entity will have at least the given fields filled out.
-func (c *Cache) Entity(id *charm.URL, fields ...string) (*mongodoc.Entity, error) {
-	// Start the base entity fetch asynchronously.
-	// Note that it's valid to do this because we can always tell
-	// the base entity from any URL that we can look up.
+func (c *Cache) Entity(id *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
+	// Start the base entity fetch asynchronously if we have
+	// an id we can infer the base entity URL from.
 	c.baseEntities.mu.Lock()
 	c.baseEntities.startFetch(mongodoc.BaseURL(id))
 	c.baseEntities.mu.Unlock()
-	e, err := c.entities.entity(id, fields...)
+	e, err := c.entities.entity(id, fields)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
@@ -132,8 +131,8 @@ func (c *Cache) Entity(id *charm.URL, fields ...string) (*mongodoc.Entity, error
 // BaseEntity returns the base entity with the given id. If the entity is not
 // found, it returns an error with a params.ErrNotFound cause.
 // The returned entity will have at least the given fields filled out.
-func (c *Cache) BaseEntity(id *charm.URL, fields ...string) (*mongodoc.BaseEntity, error) {
-	e, err := c.baseEntities.entity(mongodoc.BaseURL(id), fields...)
+func (c *Cache) BaseEntity(id *charm.URL, fields map[string]int) (*mongodoc.BaseEntity, error) {
+	e, err := c.baseEntities.entity(mongodoc.BaseURL(id), fields)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
@@ -210,20 +209,27 @@ type stash struct {
 // stashEntity represents an entity stored in a stash.
 // It is implemented by both Entity and BaseEntity.
 type stashEntity interface {
-	CanonicalURL() *charm.URL
+	CanonicalURLs() []*charm.URL
 }
+
+// noFields holds no fields (it is never changed).
+// It is used instead of nil so that we avoid passing
+// nil to FindBestEntity, because it has special
+// significance in that context.
+var noFields = make(map[string]int)
 
 // init initializes the stash with the given entity get function.
 func (s *stash) init(get func(id *charm.URL, fields map[string]int) (stashEntity, error), wg *sync.WaitGroup) {
 	s.changed.L = &s.mu
 	s.get = get
 	s.wg = wg
+	s.fields = noFields
 	s.entities = make(map[charm.URL]stashEntity)
 }
 
 // entity returns the entity with the given id. If the entity is not
 // found, it returns an error with a params.ErrNotFound cause.
-func (s *stash) entity(id *charm.URL, fields ...string) (stashEntity, error) {
+func (s *stash) entity(id *charm.URL, fields map[string]int) (stashEntity, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.addFields(fields)
@@ -264,9 +270,9 @@ func (s *stash) entity(id *charm.URL, fields ...string) (stashEntity, error) {
 // when an entity is fetched.
 //
 // Called with s.mu locked.
-func (s *stash) addFields(fields []string) {
+func (s *stash) addFields(fields map[string]int) {
 	changed := false
-	for _, field := range fields {
+	for field := range fields {
 		if _, ok := s.fields[field]; !ok {
 			changed = true
 			break
@@ -289,7 +295,7 @@ func (s *stash) addFields(fields []string) {
 	for field := range s.fields {
 		newFields[field] = 1
 	}
-	for _, field := range fields {
+	for field := range fields {
 		newFields[field] = 1
 	}
 	s.fields = newFields
@@ -377,35 +383,37 @@ func (s *stash) fetch(url *charm.URL, fields map[string]int, version int) stashE
 //
 // Called with s.mu locked.
 func (s *stash) addEntity(e stashEntity, lookupId *charm.URL) stashEntity {
-	var key *charm.URL
+	var keys []*charm.URL
 	if e == notFoundEntity {
-		key = lookupId
-		lookupId = nil
+		keys = []*charm.URL{lookupId}
 	} else {
-		key = e.CanonicalURL()
-	}
-	if e := s.entities[*key]; e != nil {
-		// The entity has already been fetched.
-		if lookupId != nil && s.entities[*lookupId] == nil {
-			// The lookupId is not present, so add it.
-			s.entities[*lookupId] = e
-			s.changed.Broadcast()
+		keys = e.CanonicalURLs()
+		if lookupId != nil {
+			keys = append(keys, lookupId)
 		}
-		return e
 	}
-	s.entities[*key] = e
-	if lookupId != nil {
-		// This assumes that the lookupId can only
-		// result in the same entity being added.
-		s.entities[*lookupId] = e
+	//log.Printf("addEntity %s %T %v", s.name, e, keys)
+	added := false
+	for _, key := range keys {
+		if old := s.entities[*key]; old == nil {
+			s.entities[*key] = e
+			added = true
+		} else {
+			//log.Printf("%v already present", key)
+			// We've found an old entry - use that instead
+			// of the new one if necessary.
+			e = old
+		}
 	}
-	s.changed.Broadcast()
+	if added {
+		s.changed.Broadcast()
+	}
 	return e
 }
 
 type notFoundEntityT struct{}
 
-func (notFoundEntityT) CanonicalURL() *charm.URL {
+func (notFoundEntityT) CanonicalURLs() []*charm.URL {
 	panic("CanonicalURL called on not-found sentinel value")
 }
 
@@ -419,7 +427,7 @@ var notFoundEntity = notFoundEntityT{}
 // be a query on the entities collection.
 // The entities produced by the returned iterator
 // will have at least the given fields populated.
-func (c *Cache) Iter(q *mgo.Query, fields ...string) *Iter {
+func (c *Cache) Iter(q *mgo.Query, fields map[string]int) *Iter {
 	// Implementation note: as we iterate through the
 	// entries, we also arrange for their corresponding
 	// base entities to be fetched because we'll almost
@@ -592,7 +600,7 @@ func (iter *Iter) addEntity(e *mongodoc.Entity) bool {
 	entities := &iter.cache.entities
 	entities.mu.Lock()
 	defer entities.mu.Unlock()
-	if _, ok := entities.entities[*e.CanonicalURL()]; ok {
+	if _, ok := entities.entities[*e.CanonicalURLs()[0]]; ok {
 		// The entity has already been fetched, or is being fetched.
 		// This also implies that its base entity has already been added (or
 		// is in the process of being added) to the cache.
