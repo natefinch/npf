@@ -551,7 +551,7 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	// the name of a bundle. This is racy, but it's the best we can
 	// do. Also check that there isn't an existing multi-series charm
 	// that would be replaced by this one.
-	entities, err := s.FindEntities(entity.BaseURL)
+	entities, err := s.FindEntities(entity.BaseURL, nil)
 	if err != nil {
 		return errgo.Notef(err, "cannot check for existing entities")
 	}
@@ -647,13 +647,12 @@ func (s *Store) insertEntity(entity *mongodoc.Entity) (err error) {
 	return nil
 }
 
-// FindEntity finds the entity in the store with the given URL,
-// which must be fully qualified. If any fields are specified,
-// only those fields will be populated in the returned entities.
-// If the given URL has no user then it is assumed to be a
-// promulgated entity.
-func (s *Store) FindEntity(url *router.ResolvedURL, fields ...string) (*mongodoc.Entity, error) {
-	entities, err := s.FindEntities(url.UserOwnedURL(), fields...)
+// FindEntity finds the entity in the store with the given URL, which
+// must be fully qualified. If the given URL has no user then it is
+// assumed to be a promulgated entity. If fields is not nil, only its
+// fields will be populated in the returned entities.
+func (s *Store) FindEntity(url *router.ResolvedURL, fields map[string]int) (*mongodoc.Entity, error) {
+	entities, err := s.FindEntities(url.UserOwnedURL(), fields)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
@@ -666,13 +665,16 @@ func (s *Store) FindEntity(url *router.ResolvedURL, fields ...string) (*mongodoc
 }
 
 // FindEntities finds all entities in the store matching the given URL.
-// If any fields are specified, only those fields will be
-// populated in the returned entities. If the given URL has no user then
-// only promulgated entities will be queried. If the given URL channel does
-// not represent an entity under development then only published entities
-// will be queried.
-func (s *Store) FindEntities(url *charm.URL, fields ...string) ([]*mongodoc.Entity, error) {
-	query := selectFields(s.EntitiesQuery(url), fields)
+// If the given URL has no user then only promulgated entities will be
+// queried. If the given URL channel does not represent an entity under
+// development then only published entities will be queried. If fields
+// is not nil, only its fields will be populated in the returned
+// entities.
+func (s *Store) FindEntities(url *charm.URL, fields map[string]int) ([]*mongodoc.Entity, error) {
+	query := s.EntitiesQuery(url)
+	if fields != nil {
+		query = query.Select(fields)
+	}
 	var docs []*mongodoc.Entity
 	err := query.All(&docs)
 	if err != nil {
@@ -682,15 +684,27 @@ func (s *Store) FindEntities(url *charm.URL, fields ...string) ([]*mongodoc.Enti
 }
 
 // FindBestEntity finds the entity that provides the preferred match to
-// the given URL. If any fields are specified, only those fields will be
-// populated in the returned entities. If the given URL has no user then
-// only promulgated entities will be queried.
-func (s *Store) FindBestEntity(url *charm.URL, fields ...string) (*mongodoc.Entity, error) {
-	if len(fields) > 0 {
+// the given URL. If the given URL has no user then only promulgated
+// entities will be queried. If fields is not nil, only its fields will
+// be populated in the returned entities.
+func (s *Store) FindBestEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
+	if fields != nil {
 		// Make sure we have all the fields we need to make a decision.
-		fields = append(fields, "_id", "promulgated-url", "promulgated-revision", "series", "revision")
+		// TODO this would be more efficient if we used bitmasks for field selection.
+		nfields := map[string]int{
+			"_id":                  1,
+			"promulgated-url":      1,
+			"promulgated-revision": 1,
+			"series":               1,
+			"revision":             1,
+		}
+		for f := range fields {
+			nfields[f] = 1
+		}
+		fields = nfields
 	}
-	entities, err := s.FindEntities(url, fields...)
+
+	entities, err := s.FindEntities(url, fields)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
@@ -781,16 +795,18 @@ func (s *Store) EntitiesQuery(url *charm.URL) *mgo.Query {
 
 // FindBaseEntity finds the base entity in the store using the given URL,
 // which can either represent a fully qualified entity or a base id.
-// If any fields are specified, only those fields will be populated in the
+// If fields is not nil, only those fields will be populated in the
 // returned base entity.
-func (s *Store) FindBaseEntity(url *charm.URL, fields ...string) (*mongodoc.BaseEntity, error) {
+func (s *Store) FindBaseEntity(url *charm.URL, fields map[string]int) (*mongodoc.BaseEntity, error) {
 	var query *mgo.Query
 	if url.User == "" {
 		query = s.DB.BaseEntities().Find(bson.D{{"name", url.Name}, {"promulgated", 1}})
 	} else {
 		query = s.DB.BaseEntities().FindId(mongodoc.BaseURL(url))
 	}
-	query = selectFields(query, fields)
+	if fields != nil {
+		query = query.Select(fields)
+	}
 	var baseEntity mongodoc.BaseEntity
 	if err := query.One(&baseEntity); err != nil {
 		if err == mgo.ErrNotFound {
@@ -801,15 +817,17 @@ func (s *Store) FindBaseEntity(url *charm.URL, fields ...string) (*mongodoc.Base
 	return &baseEntity, nil
 }
 
-func selectFields(query *mgo.Query, fields []string) *mgo.Query {
-	if len(fields) > 0 {
-		sel := make(bson.D, len(fields))
-		for i, field := range fields {
-			sel[i] = bson.DocElem{field, 1}
-		}
-		query = query.Select(sel)
+// FieldSelector returns a field selector that will select
+// the given fields, or all fields if none are specified.
+func FieldSelector(fields ...string) map[string]int {
+	if len(fields) == 0 {
+		return nil
 	}
-	return query
+	sel := make(map[string]int, len(fields))
+	for _, field := range fields {
+		sel[field] = 1
+	}
+	return sel
 }
 
 // UpdateEntity applies the provided update to the entity described by url.
@@ -1053,7 +1071,7 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 
 	// Check that we're not going to create a bundle that duplicates
 	// the name of a charm. This is racy, but it's the best we can do.
-	entities, err := s.FindEntities(entity.BaseURL)
+	entities, err := s.FindEntities(entity.BaseURL, nil)
 	if err != nil {
 		return errgo.Notef(err, "cannot check for existing entities")
 	}
@@ -1087,7 +1105,7 @@ func (s *Store) OpenBlob(id *router.ResolvedURL) (r blobstore.ReadSeekCloser, si
 // for the entity with the given id and its hash. It returns a params.ErrNotFound
 // error if the entity does not exist.
 func (s *Store) BlobNameAndHash(id *router.ResolvedURL) (name, hash string, err error) {
-	entity, err := s.FindEntity(id, "blobname", "blobhash")
+	entity, err := s.FindEntity(id, FieldSelector("blobname", "blobhash"))
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
 			return "", "", errgo.WithCausef(nil, params.ErrNotFound, "entity not found")

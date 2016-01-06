@@ -16,6 +16,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/entitycache"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mempool"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
@@ -75,6 +76,9 @@ func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams) charms
 	return New(pool, config)
 }
 
+// The v4 resolvedURL function also requires SupporedSeries.
+var requiredEntityFields = append(v5.RequiredEntityFields, "supportedseries")
+
 // NewReqHandler fetchs a new instance of ReqHandler
 // from h.Pool and returns it. The ReqHandler must
 // be closed when finished with.
@@ -89,6 +93,9 @@ func (h *Handler) NewReqHandler() (ReqHandler, error) {
 	rh := reqHandlerPool.Get().(ReqHandler)
 	rh.Handler = h.Handler
 	rh.Store = store
+	rh.Cache = entitycache.New(store)
+	rh.Cache.AddEntityFields(requiredEntityFields...)
+	rh.Cache.AddBaseEntityFields(v5.RequiredBaseEntityFields...)
 	return rh, nil
 }
 
@@ -111,14 +118,27 @@ func newReqHandler() ReqHandler {
 // ensuring that any resulting ResolvedURL always
 // has a non-empty PreferredSeries field.
 func (h ReqHandler) ResolveURL(url *charm.URL) (*router.ResolvedURL, error) {
-	return resolveURL(h.Store, url)
+	return resolveURL(h.Cache, url)
+}
+
+func (h ReqHandler) ResolveURLs(urls []*charm.URL) ([]*router.ResolvedURL, error) {
+	h.Cache.StartFetch(urls)
+	rurls := make([]*router.ResolvedURL, len(urls))
+	for i, url := range urls {
+		var err error
+		rurls[i], err = resolveURL(h.Cache, url)
+		if err != nil && errgo.Cause(err) != params.ErrNotFound {
+			return nil, err
+		}
+	}
+	return rurls, nil
 }
 
 // resolveURL implements URL resolving for the ReqHandler.
 // It's defined as a separate function so it can be more
 // easily unit-tested.
-func resolveURL(store *charmstore.Store, url *charm.URL) (*router.ResolvedURL, error) {
-	entity, err := store.FindBestEntity(url, "_id", "promulgated-revision", "supportedseries")
+func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, error) {
+	entity, err := cache.Entity(url)
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return nil, errgo.Mask(err)
 	}
@@ -151,6 +171,7 @@ func resolveURL(store *charmstore.Store, url *charm.URL) (*router.ResolvedURL, e
 // ReqHandler is done with.
 func (h ReqHandler) Close() {
 	h.Store.Close()
+	h.Cache.Close()
 	h.Reset()
 	reqHandlerPool.Put(h)
 }

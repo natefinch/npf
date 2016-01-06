@@ -16,6 +16,7 @@ import (
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/macaroon.v1"
 
+	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
 
@@ -176,11 +177,11 @@ func (h *ReqHandler) entityAuthInfo(entityIds []*router.ResolvedURL) (public boo
 	requiredTerms = make(map[string]bool)
 	public = true
 	for i, entityId := range entityIds {
-		entity, err := h.Store.FindEntity(entityId)
+		entity, err := h.Store.FindEntity(entityId, nil)
 		if err != nil {
 			return false, nil, nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
-		baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, "acls", "developmentacls")
+		baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, charmstore.FieldSelector("acls", "developmentacls"))
 		if err != nil {
 			return false, nil, nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
@@ -278,7 +279,7 @@ func areAllowedEntities(entityIds []*router.ResolvedURL, allowedEntities string)
 // AuthorizeEntity checks that the given HTTP request
 // can access the entity with the given id.
 func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) error {
-	baseEntity, err := h.Store.FindBaseEntity(&id.URL, "acls", "developmentacls")
+	baseEntity, err := h.Store.FindBaseEntity(&id.URL, charmstore.FieldSelector("acls", "developmentacls"))
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
 			return errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)

@@ -523,7 +523,7 @@ func (s *ArchiveSuite) TestUploadAndPublish(c *gc.C) {
 		})
 
 		// Check the development flag of the entity.
-		entity, err := s.store.FindEntity(rurl, "development")
+		entity, err := s.store.FindEntity(rurl, charmstore.FieldSelector("development"))
 		c.Assert(err, gc.IsNil)
 		c.Assert(entity.Development, gc.Equals, test.expectDevelopment)
 

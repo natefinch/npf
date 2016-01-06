@@ -214,7 +214,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool, 
 }
 
 func assertBaseEntity(c *gc.C, store *Store, url *charm.URL, promulgated bool) {
-	baseEntity, err := store.FindBaseEntity(url)
+	baseEntity, err := store.FindBaseEntity(url, nil)
 	c.Assert(err, gc.IsNil)
 	expectACLs := mongodoc.ACL{
 		Read:  []string{url.User},
@@ -503,7 +503,7 @@ func (s *StoreSuite) TestPoolDoubleClose(c *gc.C) {
 func (s *StoreSuite) TestFindEntities(c *gc.C) {
 	s.testURLFinding(c, func(store *Store, expand *charm.URL, expect []*router.ResolvedURL) {
 		// Check FindEntities works when just retrieving the id and promulgated id.
-		gotEntities, err := store.FindEntities(expand, "_id", "promulgated-url")
+		gotEntities, err := store.FindEntities(expand, FieldSelector("_id", "promulgated-url"))
 		c.Assert(err, gc.IsNil)
 		if expand.User == "" {
 			sort.Sort(entitiesByPromulgatedURL(gotEntities))
@@ -519,7 +519,7 @@ func (s *StoreSuite) TestFindEntities(c *gc.C) {
 		}
 
 		// check FindEntities works when retrieving all fields.
-		gotEntities, err = store.FindEntities(expand)
+		gotEntities, err = store.FindEntities(expand, nil)
 		c.Assert(err, gc.IsNil)
 		if expand.User == "" {
 			sort.Sort(entitiesByPromulgatedURL(gotEntities))
@@ -546,7 +546,7 @@ func (s *StoreSuite) TestFindEntity(c *gc.C) {
 			PromulgatedRevision: -1,
 			Development:         expand.Channel == charm.DevelopmentChannel,
 		}
-		entity, err := store.FindEntity(rurl, "_id", "promulgated-url", "development")
+		entity, err := store.FindEntity(rurl, FieldSelector("_id", "promulgated-url", "development"))
 		if len(expect) == 0 {
 			c.Assert(err, gc.ErrorMatches, "entity not found")
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
@@ -558,7 +558,7 @@ func (s *StoreSuite) TestFindEntity(c *gc.C) {
 		c.Assert(EntityResolvedURL(entity), jc.DeepEquals, expect[0])
 
 		// Check that it works when returning other fields too.
-		entity, err = store.FindEntity(rurl, "blobname")
+		entity, err = store.FindEntity(rurl, FieldSelector("blobname"))
 		c.Assert(err, gc.IsNil)
 		c.Assert(entity.BlobName, gc.Not(gc.Equals), "")
 	})
@@ -637,7 +637,7 @@ func (s *StoreSuite) TestFindBaseEntity(c *gc.C) {
 
 		// Find the entity.
 		id := charm.MustParseURL(test.url)
-		baseEntity, err := store.FindBaseEntity(id, test.fields...)
+		baseEntity, err := store.FindBaseEntity(id, FieldSelector(test.fields...))
 		if test.expect == nil {
 			// We don't expect the entity to be found.
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
@@ -671,7 +671,7 @@ func (s *StoreSuite) TestAddCharmWithFailedESInsert(c *gc.C) {
 	c.Assert(err, gc.ErrorMatches, "cannot index cs:~charmers/precise/wordpress-12 to ElasticSearch: .*")
 
 	// Check that the entity has been correctly removed.
-	_, err = store.FindEntity(url)
+	_, err = store.FindEntity(url, nil)
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
 
@@ -1254,16 +1254,16 @@ func (s *StoreSuite) TestAddCharmWithMultiSeries(c *gc.C) {
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
 	s.checkAddCharm(c, ch, false, newResolvedURL("~charmers/multi-series-1", 1))
 	// Make sure it can be accessed with a number of names
-	e, err := store.FindEntity(newResolvedURL("~charmers/multi-series-1", 1))
+	e, err := store.FindEntity(newResolvedURL("~charmers/multi-series-1", 1), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	e, err = store.FindEntity(newResolvedURL("~charmers/trusty/multi-series-1", 1))
+	e, err = store.FindEntity(newResolvedURL("~charmers/trusty/multi-series-1", 1), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	e, err = store.FindEntity(newResolvedURL("~charmers/wily/multi-series-1", 1))
+	e, err = store.FindEntity(newResolvedURL("~charmers/wily/multi-series-1", 1), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	_, err = store.FindEntity(newResolvedURL("~charmers/precise/multi-series-1", 1))
+	_, err = store.FindEntity(newResolvedURL("~charmers/precise/multi-series-1", 1), nil)
 	c.Assert(err, gc.ErrorMatches, "entity not found")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
@@ -1566,7 +1566,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithInvalidEntity(c *gc.C) {
 	err := store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 
-	entity, err := store.FindEntity(url, "charmmeta")
+	entity, err := store.FindEntity(url, FieldSelector("charmmeta"))
 	c.Assert(err, gc.IsNil)
 	r, err := store.OpenCachedBlobFile(entity, "", nil)
 	c.Assert(err, gc.ErrorMatches, "provided entity does not have required fields")
@@ -1587,7 +1587,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithFoundContent(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	expectContent := string(data)
 
-	entity, err := store.FindEntity(url, "blobname", "contents")
+	entity, err := store.FindEntity(url, FieldSelector("blobname", "contents"))
 	c.Assert(err, gc.IsNil)
 
 	// Check that, when we open the file for the first time,
@@ -1603,7 +1603,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithFoundContent(c *gc.C) {
 
 	// When retrieving the entity again, check that the Contents
 	// map has been set appropriately...
-	entity, err = store.FindEntity(url, "blobname", "contents")
+	entity, err = store.FindEntity(url, FieldSelector("blobname", "contents"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(entity.Contents, gc.HasLen, 1)
 	c.Assert(entity.Contents[mongodoc.FileIcon].IsValid(), gc.Equals, true)
@@ -1641,7 +1641,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithNotFoundContent(c *gc.C) {
 	err := store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 
-	entity, err := store.FindEntity(url, "blobname", "contents")
+	entity, err := store.FindEntity(url, FieldSelector("blobname", "contents"))
 	c.Assert(err, gc.IsNil)
 
 	// Check that, when we open the file for the first time,
@@ -1655,7 +1655,7 @@ func (s *StoreSuite) TestOpenCachedBlobFileWithNotFoundContent(c *gc.C) {
 
 	// When retrieving the entity again, check that the Contents
 	// map has been set appropriately...
-	entity, err = store.FindEntity(url, "blobname", "contents")
+	entity, err = store.FindEntity(url, FieldSelector("blobname", "contents"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(entity.Contents, gc.DeepEquals, map[mongodoc.FileId]mongodoc.ZipFile{
 		mongodoc.FileIcon: {},
@@ -1878,7 +1878,7 @@ func (s *StoreSuite) TestFindBestEntity(c *gc.C) {
 
 	for i, test := range findBestEntityTests {
 		c.Logf("test %d: %s", i, test.url)
-		entity, err := store.FindBestEntity(charm.MustParseURL(test.url))
+		entity, err := store.FindBestEntity(charm.MustParseURL(test.url), nil)
 		if test.expectErr != "" {
 			c.Assert(err, gc.ErrorMatches, test.expectErr)
 		} else {
@@ -2133,7 +2133,7 @@ func (s *StoreSuite) TestFindBestEntityWithMultiSeriesCharms(c *gc.C) {
 			err := store.DB.Entities().Insert(denormalizedEntity(e))
 			c.Assert(err, gc.IsNil)
 		}
-		entity, err := store.FindBestEntity(charm.MustParseURL(test.url))
+		entity, err := store.FindBestEntity(charm.MustParseURL(test.url), nil)
 		if test.expectURL == "" {
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 		} else {
@@ -2171,7 +2171,7 @@ func (s *StoreSuite) TestUpdateEntity(c *gc.C) {
 			c.Assert(err, gc.ErrorMatches, test.expectErr)
 		} else {
 			c.Assert(err, gc.IsNil)
-			entity, err := store.FindEntity(url)
+			entity, err := store.FindEntity(url, nil)
 			c.Assert(err, gc.IsNil)
 			c.Assert(string(entity.ExtraInfo["test"]), gc.Equals, "PASS")
 		}
@@ -2210,7 +2210,7 @@ func (s *StoreSuite) TestUpdateBaseEntity(c *gc.C) {
 			c.Assert(err, gc.ErrorMatches, test.expectErr)
 		} else {
 			c.Assert(err, gc.IsNil)
-			baseEntity, err := store.FindBaseEntity(&url.URL)
+			baseEntity, err := store.FindBaseEntity(&url.URL, nil)
 			c.Assert(err, gc.IsNil)
 			c.Assert(baseEntity.ACLs.Read, jc.DeepEquals, []string{"test"})
 		}
@@ -2455,12 +2455,12 @@ func (s *StoreSuite) TestSetPromulgated(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		c.Assert(n, gc.Equals, len(test.expectBaseEntities))
 		for _, expectEntity := range test.expectEntities {
-			entity, err := store.FindEntity(EntityResolvedURL(expectEntity))
+			entity, err := store.FindEntity(EntityResolvedURL(expectEntity), nil)
 			c.Assert(err, gc.IsNil)
 			c.Assert(entity, jc.DeepEquals, expectEntity)
 		}
 		for _, expectBaseEntity := range test.expectBaseEntities {
-			baseEntity, err := store.FindBaseEntity(expectBaseEntity.URL)
+			baseEntity, err := store.FindBaseEntity(expectBaseEntity.URL, nil)
 			c.Assert(err, gc.IsNil)
 			c.Assert(baseEntity, jc.DeepEquals, expectBaseEntity)
 		}
@@ -2584,7 +2584,7 @@ func (s *StoreSuite) TestSetDevelopment(c *gc.C) {
 
 		// Ensure the entity development flag has been correctly set.
 		rurl.Development = test.development
-		e, err := store.FindEntity(rurl, "development")
+		e, err := store.FindEntity(rurl, FieldSelector("development"))
 		c.Assert(err, gc.IsNil)
 		c.Assert(e.Development, gc.Equals, test.development)
 
@@ -2675,7 +2675,7 @@ func (s *StoreSuite) TestCopyCopiesSessions(c *gc.C) {
 	// Close the store we copied from. The copy should be unaffected.
 	store.Close()
 
-	entity, err := store1.FindEntity(url)
+	entity, err := store1.FindEntity(url, nil)
 	c.Assert(err, gc.IsNil)
 
 	// Also check the blob store, as it has its own session reference.

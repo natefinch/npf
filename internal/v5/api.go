@@ -29,6 +29,7 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/agent"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/cache"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/entitycache"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/identity"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mempool"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
@@ -81,6 +82,9 @@ type ReqHandler struct {
 	// auth holds the results of any authorization that
 	// has been done on this request.
 	auth authorization
+
+	// cache holds the per-request entity cache.
+	Cache *entitycache.Cache
 }
 
 const (
@@ -106,6 +110,25 @@ func New(pool *charmstore.Pool, config charmstore.ServerParams) *Handler {
 func (h *Handler) Close() {
 }
 
+var (
+	RequiredEntityFields = []string{
+		"baseurl",
+		"user",
+		"name",
+		"revision",
+		"series",
+		"promulgated-revision",
+		"development",
+		"promulgated-url",
+	}
+	RequiredBaseEntityFields = []string{
+		"acls",
+		"public",
+		"developmentacls",
+		"promulgated",
+	}
+)
+
 // NewReqHandler returns an instance of a *ReqHandler
 // suitable for handling an HTTP request. After use, the ReqHandler.Close
 // method should be called to close it.
@@ -123,6 +146,9 @@ func (h *Handler) NewReqHandler() (*ReqHandler, error) {
 	rh := reqHandlerPool.Get().(*ReqHandler)
 	rh.Handler = h
 	rh.Store = store
+	rh.Cache = entitycache.New(store)
+	rh.Cache.AddEntityFields(RequiredEntityFields...)
+	rh.Cache.AddBaseEntityFields(RequiredBaseEntityFields...)
 	return rh, nil
 }
 
@@ -258,6 +284,7 @@ func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams) charms
 // ReqHandler is done with.
 func (h *ReqHandler) Close() {
 	h.Store.Close()
+	h.Cache.Close()
 	h.Reset()
 	reqHandlerPool.Put(h)
 }
@@ -267,19 +294,40 @@ func (h *ReqHandler) Close() {
 func (h *ReqHandler) Reset() {
 	h.Store = nil
 	h.Handler = nil
+	h.Cache = nil
 	h.auth = authorization{}
 }
 
 // ResolveURL implements router.Context.ResolveURL.
-func (h ReqHandler) ResolveURL(url *charm.URL) (*router.ResolvedURL, error) {
-	return resolveURL(h.Store, url)
+func (h *ReqHandler) ResolveURL(url *charm.URL) (*router.ResolvedURL, error) {
+	return resolveURL(h.Cache, url)
+}
+
+// ResolveURL implements router.Context.ResolveURLs.
+func (h *ReqHandler) ResolveURLs(urls []*charm.URL) ([]*router.ResolvedURL, error) {
+	h.Cache.StartFetch(urls)
+	rurls := make([]*router.ResolvedURL, len(urls))
+	for i, url := range urls {
+		var err error
+		rurls[i], err = resolveURL(h.Cache, url)
+		if err != nil && errgo.Cause(err) != params.ErrNotFound {
+			return nil, err
+		}
+	}
+	return rurls, nil
+}
+
+// WillIncludeMetadata implements router.Context.WillIncludeMetadata.
+func (h *ReqHandler) WillIncludeMetadata(includes []string) {
 }
 
 // resolveURL implements URL resolving for the ReqHandler.
 // It's defined as a separate function so it can be more
 // easily unit-tested.
-func resolveURL(store *charmstore.Store, url *charm.URL) (*router.ResolvedURL, error) {
-	entity, err := store.FindBestEntity(url, "_id", "promulgated-revision")
+func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, error) {
+	// We've added promulgated-url as a required field, so
+	// we'll always get it from the Entity result.
+	entity, err := cache.Entity(url)
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return nil, errgo.Mask(err)
 	}
@@ -318,7 +366,7 @@ func (h *ReqHandler) puttableEntityHandler(get EntityHandlerFunc, handlePut rout
 		return val, errgo.Mask(err, errgo.Any)
 	}
 	type entityHandlerKey struct{}
-	return router.FieldIncludeHandler(router.FieldIncludeHandlerParams{
+	return router.NewFieldIncludeHandler(router.FieldIncludeHandlerParams{
 		Key:          entityHandlerKey{},
 		Query:        h.entityQuery,
 		Fields:       fields,
@@ -342,7 +390,7 @@ func (h *ReqHandler) puttableBaseEntityHandler(get baseEntityHandlerFunc, handle
 		return val, errgo.Mask(err, errgo.Any)
 	}
 	type baseEntityHandlerKey struct{}
-	return router.FieldIncludeHandler(router.FieldIncludeHandlerParams{
+	return router.NewFieldIncludeHandler(router.FieldIncludeHandlerParams{
 		Key:          baseEntityHandlerKey{},
 		Query:        h.baseEntityQuery,
 		Fields:       fields,
@@ -426,7 +474,7 @@ func (h *ReqHandler) baseEntityQuery(id *router.ResolvedURL, selector map[string
 		}
 		fields = append(fields, k)
 	}
-	val, err := h.Store.FindBaseEntity(&id.URL, fields...)
+	val, err := h.Cache.BaseEntity(&id.URL, fields...)
 	if errgo.Cause(err) == params.ErrNotFound {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
@@ -437,7 +485,7 @@ func (h *ReqHandler) baseEntityQuery(id *router.ResolvedURL, selector map[string
 }
 
 func (h *ReqHandler) entityQuery(id *router.ResolvedURL, selector map[string]int, req *http.Request) (interface{}, error) {
-	val, err := h.Store.FindEntity(id, fieldsFromSelector(selector)...)
+	val, err := h.Store.FindEntity(id, selector)
 	if errgo.Cause(err) == params.ErrNotFound {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
 	}
@@ -445,17 +493,6 @@ func (h *ReqHandler) entityQuery(id *router.ResolvedURL, selector map[string]int
 		return nil, errgo.Mask(err)
 	}
 	return val, nil
-}
-
-func fieldsFromSelector(selector map[string]int) []string {
-	fields := make([]string, 0, len(selector))
-	for k, v := range selector {
-		if v == 0 {
-			continue
-		}
-		fields = append(fields, k)
-	}
-	return fields
 }
 
 var errNotImplemented = errgo.Newf("method not implemented")

@@ -79,7 +79,7 @@ func (h *ReqHandler) authorizeUpload(id *charm.URL, req *http.Request) error {
 	if id.User == "" {
 		return badRequestf(nil, "user not specified in entity upload URL %q", id)
 	}
-	baseEntity, err := h.Store.FindBaseEntity(id, "acls", "developmentacls")
+	baseEntity, err := h.Store.FindBaseEntity(id, charmstore.FieldSelector("acls", "developmentacls"))
 	// Note that we pass a nil entity URL to authorizeWithPerms, because
 	// we haven't got a resolved URL at this point. At some
 	// point in the future, we may want to be able to allow
@@ -442,7 +442,7 @@ func checkIdAllowed(id *router.ResolvedURL, ch charm.Charm) error {
 }
 
 func (h *ReqHandler) latestRevisionInfo(id *charm.URL) (*router.ResolvedURL, string, error) {
-	entities, err := h.Store.FindEntities(id.WithChannel(charm.DevelopmentChannel), "_id", "blobhash", "promulgated-url", "development")
+	entities, err := h.Store.FindEntities(id.WithChannel(charm.DevelopmentChannel), charmstore.FieldSelector("_id", "blobhash", "promulgated-url", "development"))
 	if err != nil {
 		return nil, "", errgo.Mask(err)
 	}
@@ -512,7 +512,7 @@ func (h *ReqHandler) serveArchiveFile(id *router.ResolvedURL, w http.ResponseWri
 }
 
 func (h *ReqHandler) isPublic(id charm.URL) bool {
-	baseEntity, err := h.Store.FindBaseEntity(&id, "acls")
+	baseEntity, err := h.Store.FindBaseEntity(&id, charmstore.FieldSelector("acls"))
 	if err == nil {
 		for _, p := range baseEntity.ACLs.Read {
 			if p == params.Everyone {
@@ -537,7 +537,7 @@ func (h *ReqHandler) bundleCharms(ids []string) (map[string]charm.Charm, error) 
 			// be returned to the user along with other bundle errors.
 			continue
 		}
-		e, err := h.Store.FindBestEntity(url)
+		e, err := h.Store.FindBestEntity(url, nil)
 		if err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				// Ignore this error too, for the same reasons
@@ -636,7 +636,7 @@ func setArchiveCacheControl(h http.Header, isPublic bool) {
 // to give to a newly uploaded charm with the given id.
 // It returns -1 if the charm is not promulgated.
 func (h *ReqHandler) getNewPromulgatedRevision(id *charm.URL) (int, error) {
-	baseEntity, err := h.Store.FindBaseEntity(id, "promulgated")
+	baseEntity, err := h.Store.FindBaseEntity(id, charmstore.FieldSelector("promulgated"))
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return 0, errgo.Mask(err)
 	}
