@@ -287,8 +287,9 @@ func (s *ListSuite) TestListIncludeError(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	var resp params.ListResponse
 	err := json.Unmarshal(rec.Body.Bytes(), &resp)
-	// cs:riak will not be found because it is not visible to "everyone".
-	c.Assert(resp.Results, gc.HasLen, len(exportTestCharms)-1)
+	// cs:riak will not be found because it is not visible to
+	// "everyone".
+	c.Assert(resp.Results, gc.HasLen, len(exportListTestCharms)-1)
 
 	// Now remove one of the blobs. The list should still
 	// work, but only return a single result.
@@ -316,7 +317,7 @@ func (s *ListSuite) TestListIncludeError(c *gc.C) {
 	err = json.Unmarshal(rec.Body.Bytes(), &resp)
 	// cs:riak will not be found because it is not visible to "everyone".
 	// cs:wordpress will not be found because it has no manifest.
-	c.Assert(resp.Results, gc.HasLen, len(exportTestCharms)-2)
+	c.Assert(resp.Results, gc.HasLen, len(exportListTestCharms)-2)
 
 	c.Assert(tw.Log(), jc.LogMatches, []string{"cannot retrieve metadata for cs:precise/wordpress-23: cannot open archive data for cs:precise/wordpress-23: .*"})
 }

@@ -52,6 +52,18 @@ type SearchDoc struct {
 	TotalDownloads int64
 	ReadACLs       []string
 	Series         []string
+
+	// SingleSeries is true if the document referes to an entity that
+	// describes a single series. This will either be a bundle, a
+	// single-series charm or an expanded record for a multi-series
+	// charm.
+	SingleSeries bool
+
+	// AllSeries is true if the document referes to an entity that
+	// describes all series supported by the entity. This will either
+	// be a bundle, a single-series charm or the canonical record for
+	// a multi-series charm.
+	AllSeries bool
 }
 
 // UpdateSearchAsync will update the search record for the entity
@@ -201,6 +213,8 @@ func (s *Store) searchDocFromEntity(e *mongodoc.Entity, be *mongodoc.BaseEntity)
 	} else {
 		doc.Series = doc.Entity.SupportedSeries
 	}
+	doc.AllSeries = true
+	doc.SingleSeries = doc.Entity.Series != ""
 	return &doc, nil
 }
 
@@ -224,16 +238,22 @@ func (si *SearchIndex) update(doc *SearchDoc) error {
 	if doc.Entity.URL.Series != "" {
 		return nil
 	}
-	// This document represents a multi-series charm. It might be
-	// replacing existing documents for previous single-series
-	// charms. Remove any documents that this replaces.
+	// This document represents a multi-series charm. Expand the
+	// document for each of the supported series.
 	for _, series := range doc.Entity.SupportedSeries {
 		u := *doc.Entity.URL
 		u.Series = series
-		err := si.DeleteDocument(si.Index, typeName, si.getID(&u))
-		if err != nil && errgo.Cause(err) != elasticsearch.ErrNotFound {
-			u.Revision = -1
-			logger.Errorf("cannot remove old search document for %q: %s", u, err)
+		doc.Entity.URL = &u
+		if doc.PromulgatedURL != nil {
+			u := *doc.Entity.PromulgatedURL
+			u.Series = series
+			doc.Entity.PromulgatedURL = &u
+		}
+		doc.Series = []string{series}
+		doc.AllSeries = false
+		doc.SingleSeries = true
+		if err := si.update(doc); err != nil {
+			return errgo.Mask(err)
 		}
 	}
 	return nil
@@ -259,7 +279,7 @@ func (si *SearchIndex) search(sp SearchParams) (SearchResult, error) {
 		return SearchResult{}, nil
 	}
 	q := createSearchDSL(sp)
-	q.Fields = append(q.Fields, "URL", "PromulgatedURL")
+	q.Fields = append(q.Fields, "URL", "PromulgatedURL", "Series")
 	esr, err := si.Search(si.Index, typeName, q)
 	if err != nil {
 		return SearchResult{}, errgo.Mask(err)
@@ -267,7 +287,7 @@ func (si *SearchIndex) search(sp SearchParams) (SearchResult, error) {
 	r := SearchResult{
 		SearchTime: time.Duration(esr.Took) * time.Millisecond,
 		Total:      esr.Hits.Total,
-		Results:    make([]*router.ResolvedURL, 0, len(esr.Hits.Hits)),
+		Results:    make([]*mongodoc.Entity, 0, len(esr.Hits.Hits)),
 	}
 	for _, h := range esr.Hits.Hits {
 		urlStr := h.Fields.GetString("URL")
@@ -275,20 +295,30 @@ func (si *SearchIndex) search(sp SearchParams) (SearchResult, error) {
 		if err != nil {
 			return SearchResult{}, errgo.Notef(err, "invalid URL in result %q", urlStr)
 		}
-		id := &router.ResolvedURL{
-			URL: *url,
+		e := &mongodoc.Entity{
+			URL: url,
 		}
-
+		if url.Series == "" {
+			series := make([]string, len(h.Fields["Series"]))
+			for i, s := range h.Fields["Series"] {
+				series[i] = s.(string)
+			}
+			e.SupportedSeries = series
+		} else if url.Series != "bundle" {
+			e.SupportedSeries = []string{url.Series}
+		}
 		if purlStr := h.Fields.GetString("PromulgatedURL"); purlStr != "" {
 			purl, err := charm.ParseURL(purlStr)
 			if err != nil {
 				return SearchResult{}, errgo.Notef(err, "invalid promulgated URL in result %q", purlStr)
 			}
-			id.PromulgatedRevision = purl.Revision
+			e.PromulgatedURL = purl
+			e.PromulgatedRevision = purl.Revision
 		} else {
-			id.PromulgatedRevision = -1
+			e.PromulgatedURL = nil
+			e.PromulgatedRevision = -1
 		}
-		r.Results = append(r.Results, id)
+		r.Results = append(r.Results, e)
 	}
 	return r, nil
 }
@@ -462,6 +492,9 @@ type SearchParams struct {
 	Admin bool
 	// Sort the returned items.
 	sort []sortParam
+	// ExpandedMultiSeries returns a number of entries for
+	// multi-series charms, one for each entity.
+	ExpandedMultiSeries bool
 }
 
 var allowedSortFields = map[string]bool{
@@ -504,16 +537,21 @@ type sortParam struct {
 	Order sortOrder
 }
 
-// SearchResult represents the result of performing a search.
+// SearchResult represents the result of performing a search. The entites
+// in Results will have the following fields completed:
+// 	- URL
+// 	- SupportedSeries
+// 	- PromulgatedURL
+// 	- PromulgatedRevision
 type SearchResult struct {
 	SearchTime time.Duration
 	Total      int
-	Results    []*router.ResolvedURL
+	Results    []*mongodoc.Entity
 }
 
 // ListResult represents the result of performing a list.
 type ListResult struct {
-	Results []*router.ResolvedURL
+	Results []*mongodoc.Entity
 }
 
 // queryFields provides a map of fields to weighting to use with the
@@ -595,7 +633,7 @@ func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 	// Filters
 	qdsl.Query = elasticsearch.FilteredQuery{
 		Query:  q,
-		Filter: createFilters(sp.Filters, sp.Admin, sp.Groups),
+		Filter: createFilters(sp),
 	}
 
 	// Sorting
@@ -613,10 +651,21 @@ func createSearchDSL(sp SearchParams) elasticsearch.QueryDSL {
 // filter is created that matches any one of the set of values specified for
 // that key. The created filter will only match when at least one of the
 // requested values matches for all of the requested keys. Any filter names
-// that are not defined in the filters map will be silently skipped.
-func createFilters(f map[string][]string, admin bool, groups []string) elasticsearch.Filter {
-	af := make(elasticsearch.AndFilter, 0, len(f)+1)
-	for k, vals := range f {
+// that are not defined in the filters map will be silently skipped
+func createFilters(sp SearchParams) elasticsearch.Filter {
+	af := make(elasticsearch.AndFilter, 1, len(sp.Filters)+2)
+	if sp.ExpandedMultiSeries {
+		af[0] = elasticsearch.TermFilter{
+			Field: "SingleSeries",
+			Value: "true",
+		}
+	} else {
+		af[0] = elasticsearch.TermFilter{
+			Field: "AllSeries",
+			Value: "true",
+		}
+	}
+	for k, vals := range sp.Filters {
 		filter, ok := filters[k]
 		if !ok {
 			continue
@@ -627,15 +676,15 @@ func createFilters(f map[string][]string, admin bool, groups []string) elasticse
 		}
 		af = append(af, of)
 	}
-	if admin {
+	if sp.Admin {
 		return af
 	}
-	gf := make(elasticsearch.OrFilter, 0, len(groups)+1)
+	gf := make(elasticsearch.OrFilter, 0, len(sp.Groups)+1)
 	gf = append(gf, elasticsearch.TermFilter{
 		Field: "ReadACLs",
 		Value: params.Everyone,
 	})
-	for _, g := range groups {
+	for _, g := range sp.Groups {
 		gf = append(gf, elasticsearch.TermFilter{
 			Field: "ReadACLs",
 			Value: g,

@@ -34,10 +34,11 @@ type SearchSuite struct {
 var _ = gc.Suite(&SearchSuite{})
 
 var exportTestCharms = map[string]*router.ResolvedURL{
-	"wordpress": newResolvedURL("cs:~charmers/precise/wordpress-23", 23),
-	"mysql":     newResolvedURL("cs:~openstack-charmers/trusty/mysql-7", 7),
-	"varnish":   newResolvedURL("cs:~foo/trusty/varnish-1", -1),
-	"riak":      newResolvedURL("cs:~charmers/trusty/riak-67", 67),
+	"multi-series": newResolvedURL("cs:~charmers/multi-series-0", 0),
+	"wordpress":    newResolvedURL("cs:~charmers/precise/wordpress-23", 23),
+	"mysql":        newResolvedURL("cs:~openstack-charmers/trusty/mysql-7", 7),
+	"varnish":      newResolvedURL("cs:~foo/trusty/varnish-1", -1),
+	"riak":         newResolvedURL("cs:~charmers/trusty/riak-67", 67),
 }
 
 var exportTestBundles = map[string]*router.ResolvedURL{
@@ -109,6 +110,11 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 		about: "bare search",
 		query: "",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
@@ -132,6 +138,11 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 		about: "blank text search",
 		query: "text=",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
@@ -166,12 +177,19 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 		about: "requires filter search",
 		query: "requires=mysql",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 			exportTestCharms["wordpress"],
 		},
 	}, {
 		about: "series filter search",
 		query: "series=trusty",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 		},
@@ -199,6 +217,11 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 		about: "multiple type filter search",
 		query: "type=bundle&type=charm",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
@@ -208,12 +231,22 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 		about: "provides multiple interfaces filter search",
 		query: "provides=monitoring+http",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 			exportTestCharms["wordpress"],
 		},
 	}, {
 		about: "requires multiple interfaces filter search",
 		query: "requires=mysql+varnish",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 			exportTestCharms["wordpress"],
 		},
 	}, {
@@ -226,6 +259,11 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 		about: "blank owner",
 		query: "owner=",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestBundles["wordpress-simple"],
@@ -237,6 +275,11 @@ func (s *SearchSuite) TestSuccessfulSearches(c *gc.C) {
 		about: "promulgated",
 		query: "promulgated=1",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 			exportTestCharms["wordpress"],
 			exportTestCharms["mysql"],
 			exportTestBundles["wordpress-simple"],
@@ -407,8 +450,10 @@ func (s *SearchSuite) TestSearchIncludeError(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	var resp params.SearchResponse
 	err := json.Unmarshal(rec.Body.Bytes(), &resp)
+	// V4 SPECIFIC
 	// cs:riak will not be found because it is not visible to "everyone".
-	c.Assert(resp.Results, gc.HasLen, len(exportTestCharms)-1)
+	// cs:multi-series will be expanded to 4 different results.
+	c.Assert(resp.Results, gc.HasLen, len(exportTestCharms)+3-1)
 
 	// Now remove one of the blobs. The search should still
 	// work, but only return a single result.
@@ -434,9 +479,11 @@ func (s *SearchSuite) TestSearchIncludeError(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	resp = params.SearchResponse{}
 	err = json.Unmarshal(rec.Body.Bytes(), &resp)
+	// V4 SPECIFIC
 	// cs:riak will not be found because it is not visible to "everyone".
+	// cs:multi-series will be expanded to 4 different results.
 	// cs:wordpress will not be found because it has no manifest.
-	c.Assert(resp.Results, gc.HasLen, len(exportTestCharms)-2)
+	c.Assert(resp.Results, gc.HasLen, len(exportTestCharms)+3-2)
 
 	c.Assert(tw.Log(), jc.LogMatches, []string{"cannot retrieve metadata for cs:precise/wordpress-23: cannot open archive data for cs:precise/wordpress-23: .*"})
 }
@@ -450,6 +497,11 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 		about: "name ascending",
 		query: "sort=name",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 			exportTestCharms["wordpress"],
@@ -459,24 +511,39 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 		about: "name descending",
 		query: "sort=-name",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
 			exportTestBundles["wordpress-simple"],
 			exportTestCharms["wordpress"],
 			exportTestCharms["varnish"],
 			exportTestCharms["mysql"],
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 		},
 	}, {
 		about: "series ascending",
 		query: "sort=series,name",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
 			exportTestBundles["wordpress-simple"],
 			exportTestCharms["wordpress"],
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 		},
 	}, {
 		about: "series descending",
 		query: "sort=-series&sort=name",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
 			exportTestCharms["wordpress"],
@@ -486,6 +553,11 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 		about: "owner ascending",
 		query: "sort=owner,name",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
 			exportTestCharms["varnish"],
@@ -495,8 +567,13 @@ func (s *SearchSuite) TestSorting(c *gc.C) {
 		about: "owner descending",
 		query: "sort=-owner&sort=name",
 		results: []*router.ResolvedURL{
+			// V4 SPECIFIC
 			exportTestCharms["mysql"],
 			exportTestCharms["varnish"],
+			router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+			router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 			exportTestCharms["wordpress"],
 			exportTestBundles["wordpress-simple"],
 		},
@@ -607,6 +684,11 @@ func (s *SearchSuite) TestSearchWithAdminCredentials(c *gc.C) {
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	expected := []*router.ResolvedURL{
+		// V4 SPECIFIC
+		router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+		router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+		router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+		router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 		exportTestCharms["mysql"],
 		exportTestCharms["wordpress"],
 		exportTestCharms["riak"],
@@ -633,6 +715,11 @@ func (s *SearchSuite) TestSearchWithUserMacaroon(c *gc.C) {
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	expected := []*router.ResolvedURL{
+		// V4 SPECIFIC
+		router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+		router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+		router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+		router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 		exportTestCharms["mysql"],
 		exportTestCharms["wordpress"],
 		exportTestCharms["riak"],
@@ -662,6 +749,11 @@ func (s *SearchSuite) TestSearchWithUserInGroups(c *gc.C) {
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	expected := []*router.ResolvedURL{
+		// V4 SPECIFIC
+		router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+		router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+		router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+		router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 		exportTestCharms["mysql"],
 		exportTestCharms["wordpress"],
 		exportTestCharms["riak"],
@@ -690,6 +782,11 @@ func (s *SearchSuite) TestSearchWithBadAdminCredentialsAndACookie(c *gc.C) {
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	expected := []*router.ResolvedURL{
+		// V4 SPECIFIC
+		router.MustNewResolvedURL("cs:~charmers/trusty/multi-series-0", 0),
+		router.MustNewResolvedURL("cs:~charmers/utopic/multi-series-0", 0),
+		router.MustNewResolvedURL("cs:~charmers/vivid/multi-series-0", 0),
+		router.MustNewResolvedURL("cs:~charmers/wily/multi-series-0", 0),
 		exportTestCharms["mysql"],
 		exportTestCharms["wordpress"],
 		exportTestCharms["varnish"],

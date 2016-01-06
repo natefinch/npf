@@ -1171,7 +1171,7 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 		m, err := h.Store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
 			checkers.DeclaredCaveat(UsernameAttr, auth.Username),
 			checkers.TimeBeforeCaveat(time.Now().Add(DelegatableMacaroonExpiry)),
-			checkers.DenyCaveat(opAccessCharmWithTerms),
+			checkers.DenyCaveat(OpAccessCharmWithTerms),
 		})
 		if err != nil {
 			return nil, errgo.Mask(err)
@@ -1230,7 +1230,7 @@ func (h *ReqHandler) serveWhoAmI(_ http.Header, req *http.Request) (interface{},
 	if auth.Admin {
 		return nil, errgo.WithCausef(nil, params.ErrForbidden, "admin credentials used")
 	}
-	groups, err := h.groupsForUser(auth.Username)
+	groups, err := h.GroupsForUser(auth.Username)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Any)
 	}

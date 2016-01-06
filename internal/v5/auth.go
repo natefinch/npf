@@ -22,12 +22,15 @@ import (
 
 const (
 	PromulgatorsGroup = "charmers"
-	// opAccessCharmWitTerms indicates an operation of accessing the archive of
+
+	// OpAccessCharmWithTerms indicates an operation of accessing the archive of
 	// a charm that requires agreement to certain terms and conditions.
-	opAccessCharmWithTerms = "op-get-with-terms"
-	// opOther indicates all other operations.
+	OpAccessCharmWithTerms = "op-get-with-terms"
+
+	// OpOther indicates all other operations.
 	// This operation should not be added as part of a macaroon caveat.
-	opOther               = "op-other"
+	OpOther = "op-other"
+
 	defaultMacaroonExpiry = 24 * time.Hour
 )
 
@@ -63,8 +66,7 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 	if entityId != nil {
 		entities = append(entities, entityId)
 	}
-
-	auth, verr := h.checkRequest(req, entities, opOther)
+	auth, verr := h.CheckRequest(req, entities, OpOther)
 	if verr == nil {
 		if err := h.checkACLMembership(auth, acl); err != nil {
 			return authorization{}, errgo.WithCausef(err, params.ErrUnauthorized, "")
@@ -80,7 +82,7 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 	// We need to deny access for opAccessCharmWithTerms operations because they
 	// may require more specific checks that terms and conditions have been
 	// satisfied.
-	m, err := h.newMacaroon(checkers.DenyCaveat(opAccessCharmWithTerms))
+	m, err := h.newMacaroon(checkers.DenyCaveat(OpAccessCharmWithTerms))
 	if err != nil {
 		return authorization{}, errgo.Notef(err, "cannot mint macaroon")
 	}
@@ -125,12 +127,12 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 		return authorization{}, errgo.WithCausef(nil, params.ErrUnauthorized, "charmstore not configured to serve charms with terms and conditions")
 	}
 
-	operation := opOther
+	operation := OpOther
 	if len(requiredTerms) > 0 {
-		operation = opAccessCharmWithTerms
+		operation = OpAccessCharmWithTerms
 	}
 
-	auth, verr := h.checkRequest(req, entityIds, operation)
+	auth, verr := h.CheckRequest(req, entityIds, operation)
 	if verr == nil {
 		for _, acl := range acls {
 			if err := h.checkACLMembership(auth, acl); err != nil {
@@ -212,14 +214,14 @@ func (h *ReqHandler) entityAuthInfo(entityIds []*router.ResolvedURL) (public boo
 	return public, acls, requiredTerms, nil
 }
 
-// checkRequest checks for any authorization tokens in the request and returns any
-// found as an authorization. If no suitable credentials are found, or an error occurs,
-// then a zero valued authorization is returned.
-// It also checks any first party caveats. If the entityId is provided, it will
-// be used to check any "is-entity" first party caveat.
-// In addition it adds a checker that checks if operation specified
-// by the operation parameters is allowed.
-func (h *ReqHandler) checkRequest(req *http.Request, entityIds []*router.ResolvedURL, operation string) (authorization, error) {
+// CheckRequest checks for any authorization tokens in the request and
+// returns any found as an authorization. If no suitable credentials are
+// found, or an error occurs, then a zero valued authorization is
+// returned. It also checks any first party caveats. If the entityId is
+// provided, it will be used to check any "is-entity" first party caveat.
+// In addition it adds a checker that checks if operation specified by
+// the operation parameters is allowed.
+func (h *ReqHandler) CheckRequest(req *http.Request, entityIds []*router.ResolvedURL, operation string) (authorization, error) {
 	user, passwd, err := parseCredentials(req)
 	if err == nil {
 		if user != h.Handler.config.AuthUsername || passwd != h.Handler.config.AuthPassword {
@@ -314,7 +316,8 @@ type authorization struct {
 	Username string
 }
 
-func (h *ReqHandler) groupsForUser(username string) ([]string, error) {
+// Groups for user fetches the list of groups to which the user belongs.
+func (h *ReqHandler) GroupsForUser(username string) ([]string, error) {
 	if h.Handler.config.IdentityAPIURL == "" {
 		logger.Debugf("IdentityAPIURL not configured, not retrieving groups for %s", username)
 		return nil, nil
@@ -336,7 +339,7 @@ func (h *ReqHandler) checkACLMembership(auth authorization, acl []string) error 
 			return nil
 		}
 	}
-	groups, err := h.groupsForUser(auth.Username)
+	groups, err := h.GroupsForUser(auth.Username)
 	if err != nil {
 		logger.Errorf("cannot get groups for %q: %v", auth.Username, err)
 		return errgo.Newf("access denied for user %q", auth.Username)

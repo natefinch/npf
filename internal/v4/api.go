@@ -106,6 +106,7 @@ func newReqHandler() ReqHandler {
 	resolveId := h.ResolvedIdHandler
 	authId := h.AuthIdHandler
 	handlers := v5.RouterHandlers(h.ReqHandler)
+	handlers.Global["search"] = router.HandleJSON(h.serveSearch)
 	handlers.Meta["charm-related"] = h.EntityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces")
 	handlers.Meta["revision-info"] = router.SingleIncludeHandler(h.metaRevisionInfo)
 	handlers.Id["expand-id"] = resolveId(authId(h.serveExpandId))
