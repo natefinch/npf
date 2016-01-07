@@ -47,7 +47,7 @@ func (*suite) TestEntityIssuesBaseEntityQueryConcurrently(c *gc.C) {
 	store := newChanStore()
 	cache := entitycache.New(store)
 	defer cache.Close()
-	cache.AddBaseEntityFields(map[string]int{"url": 1, "name": 1})
+	cache.AddBaseEntityFields(map[string]int{"name": 1})
 
 	entity := &mongodoc.Entity{
 		URL:      charm.MustParseURL("~bob/wordpress-1"),
@@ -62,26 +62,19 @@ func (*suite) TestEntityIssuesBaseEntityQueryConcurrently(c *gc.C) {
 	queryDone := make(chan struct{})
 	go func() {
 		defer close(queryDone)
-		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1, "blobname": 1})
+		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"blobname": 1})
 		c.Check(err, gc.IsNil)
-		c.Check(e, gc.Equals, entity)
+		c.Check(e, jc.DeepEquals, selectEntityFields(entity, entityFields("blobname")))
 	}()
 
 	// Acquire both the queries before replying so that we know they've been
 	// issued concurrently.
 	query1 := <-store.entityqc
 	c.Assert(query1.url, jc.DeepEquals, charm.MustParseURL("~bob/wordpress-1"))
-	c.Assert(query1.fields, jc.DeepEquals, map[string]int{
-		"url":      1,
-		"baseurl":  1,
-		"blobname": 1,
-	})
+	c.Assert(query1.fields, jc.DeepEquals, entityFields("blobname"))
 	query2 := <-store.baseEntityqc
 	c.Assert(query2.url, jc.DeepEquals, charm.MustParseURL("~bob/wordpress"))
-	c.Assert(query2.fields, jc.DeepEquals, map[string]int{
-		"url":  1,
-		"name": 1,
-	})
+	c.Assert(query2.fields, jc.DeepEquals, baseEntityFields("name"))
 	query1.reply <- entityReply{
 		entity: entity,
 	}
@@ -91,24 +84,82 @@ func (*suite) TestEntityIssuesBaseEntityQueryConcurrently(c *gc.C) {
 	<-queryDone
 
 	// Accessing the same entity again and the base entity should
-	// not call any method on the store, so close the query channels
-	// to ensure it doesn't.
-	close(store.entityqc)
-	close(store.baseEntityqc)
-	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1, "blobname": 1})
+	// not call any method on the store - if it does, then it'll send
+	// on the query channels and we won't receive it, so the test
+	// will deadlock.
+	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"baseurl": 1, "blobname": 1})
 	c.Check(err, gc.IsNil)
-	c.Check(e, gc.Equals, entity)
+	c.Check(e, jc.DeepEquals, selectEntityFields(entity, entityFields("blobname")))
 
-	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), map[string]int{"url": 1, "name": 1})
+	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), map[string]int{"name": 1})
 	c.Check(err, gc.IsNil)
-	c.Check(be, gc.Equals, baseEntity)
+	c.Check(be, jc.DeepEquals, selectBaseEntityFields(baseEntity, baseEntityFields("name")))
+}
+
+func (*suite) TestEntityIssuesBaseEntityQuerySequentiallyForPromulgatedURL(c *gc.C) {
+	store := newChanStore()
+	cache := entitycache.New(store)
+	defer cache.Close()
+	cache.AddBaseEntityFields(map[string]int{"name": 1})
+
+	entity := &mongodoc.Entity{
+		URL:            charm.MustParseURL("~bob/wordpress-1"),
+		PromulgatedURL: charm.MustParseURL("wordpress-5"),
+		BaseURL:        charm.MustParseURL("~bob/wordpress"),
+		BlobName:       "w1",
+		Size:           1,
+	}
+	baseEntity := &mongodoc.BaseEntity{
+		URL:  charm.MustParseURL("~bob/wordpress"),
+		Name: "wordpress",
+	}
+	queryDone := make(chan struct{})
+	go func() {
+		defer close(queryDone)
+		e, err := cache.Entity(charm.MustParseURL("wordpress-1"), map[string]int{"blobname": 1})
+		c.Check(err, gc.IsNil)
+		c.Check(e, jc.DeepEquals, selectEntityFields(entity, entityFields("blobname")))
+	}()
+
+	// Acquire both the queries before replying so that we know they've been
+	// issued concurrently.
+	query1 := <-store.entityqc
+	c.Assert(query1.url, jc.DeepEquals, charm.MustParseURL("wordpress-1"))
+	c.Assert(query1.fields, jc.DeepEquals, entityFields("blobname"))
+	query1.reply <- entityReply{
+		entity: entity,
+	}
+	<-queryDone
+
+	// The base entity query is only issued when the original entity
+	// is received. We can tell this because the URL in the query
+	// contains the ~bob user which can't be inferred from the
+	// original URL.
+	query2 := <-store.baseEntityqc
+	c.Assert(query2.url, jc.DeepEquals, charm.MustParseURL("~bob/wordpress"))
+	c.Assert(query2.fields, jc.DeepEquals, baseEntityFields("name"))
+	query2.reply <- baseEntityReply{
+		entity: baseEntity,
+	}
+
+	// Accessing the same entity again and the base entity should
+	// not call any method on the store - if it does, then it'll send
+	// on the query channels and we won't receive it, so the test
+	// will deadlock.
+	e, err := cache.Entity(charm.MustParseURL("wordpress-1"), map[string]int{"baseurl": 1, "blobname": 1})
+	c.Check(err, gc.IsNil)
+	c.Check(e, jc.DeepEquals, selectEntityFields(entity, entityFields("blobname")))
+
+	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), map[string]int{"name": 1})
+	c.Check(err, gc.IsNil)
+	c.Check(be, jc.DeepEquals, selectBaseEntityFields(baseEntity, baseEntityFields("name")))
 }
 
 func (*suite) TestFetchWhenFieldsChangeBeforeQueryResult(c *gc.C) {
 	store := newChanStore()
 	cache := entitycache.New(store)
 	defer cache.Close()
-	cache.AddBaseEntityFields(map[string]int{"url": 1, "name": 1})
+	cache.AddBaseEntityFields(map[string]int{"name": 1})
 
 	entity := &mongodoc.Entity{
 		URL:      charm.MustParseURL("~bob/wordpress-1"),
@@ -121,27 +172,21 @@ func (*suite) TestFetchWhenFieldsChangeBeforeQueryResult(c *gc.C) {
 	}
 	store.findBaseEntity = func(url *charm.URL, fields map[string]int) (*mongodoc.BaseEntity, error) {
 		c.Check(url, jc.DeepEquals, baseEntity.URL)
-		c.Check(fields, jc.DeepEquals, map[string]int{
-			"url":  1,
-			"name": 1,
-		})
+		c.Check(fields, jc.DeepEquals, baseEntityFields("name"))
 		return baseEntity, nil
 	}
 
 	queryDone := make(chan struct{})
 	go func() {
 		defer close(queryDone)
-		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1})
+		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 		c.Check(err, gc.IsNil)
-		c.Check(e, gc.Equals, entity)
+		c.Check(e, jc.DeepEquals, selectEntityFields(entity, entityFields()))
 	}()
 
 	query1 := <-store.entityqc
 	c.Assert(query1.url, jc.DeepEquals, charm.MustParseURL("~bob/wordpress-1"))
-	c.Assert(query1.fields, jc.DeepEquals, map[string]int{
-		"url":     1,
-		"baseurl": 1,
-	})
+	c.Assert(query1.fields, jc.DeepEquals, entityFields())
 	// Before we send the reply, make another query with different fields,
 	// so the version changes.
 	entity2 := &mongodoc.Entity{
@@ -154,19 +199,15 @@ func (*suite) TestFetchWhenFieldsChangeBeforeQueryResult(c *gc.C) {
 	go func() {
 		defer close(query2Done)
 		// Note the extra "size" field.
-		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1, "size": 1})
+		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"size": 1})
 		c.Check(err, gc.IsNil)
-		c.Check(e, gc.Equals, entity2)
+		c.Check(e, jc.DeepEquals, selectEntityFields(entity2, entityFields("size")))
 	}()
 	// The second query should be sent immediately without waiting
 	// for the first because it invalidates the cache..
 	query2 := <-store.entityqc
 	c.Assert(query2.url, jc.DeepEquals, charm.MustParseURL("~bob/wordpress-1"))
-	c.Assert(query2.fields, jc.DeepEquals, map[string]int{
-		"url":     1,
-		"baseurl": 1,
-		"size":    1,
-	})
+	c.Assert(query2.fields, jc.DeepEquals, entityFields("size"))
 	query2.reply <- entityReply{
 		entity: entity2,
 	}
@@ -182,16 +223,16 @@ func (*suite) TestFetchWhenFieldsChangeBeforeQueryResult(c *gc.C) {
 	// to ensure it doesn't.
 	close(store.entityqc)
 	close(store.baseEntityqc)
-	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1})
+	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 	c.Check(err, gc.IsNil)
-	c.Check(e, gc.Equals, entity2)
+	c.Check(e, jc.DeepEquals, selectEntityFields(entity2, entityFields("size")))
 }
 
 func (*suite) TestSecondFetchesWaitForFirst(c *gc.C) {
 	store := newChanStore()
 	cache := entitycache.New(store)
 	defer cache.Close()
-	cache.AddBaseEntityFields(map[string]int{"url": 1, "name": 1})
+	cache.AddBaseEntityFields(map[string]int{"name": 1})
 
 	entity := &mongodoc.Entity{
 		URL:      charm.MustParseURL("~bob/wordpress-1"),
@@ -204,10 +245,7 @@ func (*suite) TestSecondFetchesWaitForFirst(c *gc.C) {
 	}
 	store.findBaseEntity = func(url *charm.URL, fields map[string]int) (*mongodoc.BaseEntity, error) {
 		c.Check(url, jc.DeepEquals, baseEntity.URL)
-		c.Check(fields, jc.DeepEquals, map[string]int{
-			"url":  1,
-			"name": 1,
-		})
+		c.Check(fields, jc.DeepEquals, baseEntityFields("name"))
 		return baseEntity, nil
 	}
 
@@ -215,17 +253,14 @@ func (*suite) TestSecondFetchesWaitForFirst(c *gc.C) {
 	initialRequestGroup.Add(1)
 	go func() {
 		defer initialRequestGroup.Done()
-		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1})
+		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 		c.Check(err, gc.IsNil)
-		c.Check(e, gc.Equals, entity)
+		c.Check(e, jc.DeepEquals, selectEntityFields(entity, entityFields()))
 	}()
 
 	query1 := <-store.entityqc
 	c.Assert(query1.url, jc.DeepEquals, charm.MustParseURL("~bob/wordpress-1"))
-	c.Assert(query1.fields, jc.DeepEquals, map[string]int{
-		"url":     1,
-		"baseurl": 1,
-	})
+	c.Assert(query1.fields, jc.DeepEquals, entityFields())
 
 	// Send some more queries for the same charm. These should not send a
 	// store request but instead wait for the first one.
@@ -233,9 +268,9 @@ func (*suite) TestSecondFetchesWaitForFirst(c *gc.C) {
 		initialRequestGroup.Add(1)
 		go func() {
 			defer initialRequestGroup.Done()
-			e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1})
+			e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 			c.Check(err, gc.IsNil)
-			c.Check(e, gc.Equals, entity)
+			c.Check(e, jc.DeepEquals, selectEntityFields(entity, entityFields()))
 		}()
 	}
 	select {
@@ -255,16 +290,13 @@ func (*suite) TestSecondFetchesWaitForFirst(c *gc.C) {
 	otherRequestDone := make(chan struct{})
 	go func() {
 		defer close(otherRequestDone)
-		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-2"), map[string]int{"url": 1, "baseurl": 1})
+		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-2"), nil)
 		c.Check(err, gc.IsNil)
-		c.Check(e, gc.Equals, entity2)
+		c.Check(e, jc.DeepEquals, selectEntityFields(entity2, entityFields()))
 	}()
 	query2 := <-store.entityqc
 	c.Assert(query2.url, jc.DeepEquals, charm.MustParseURL("~bob/wordpress-2"))
-	c.Assert(query2.fields, jc.DeepEquals, map[string]int{
-		"url":     1,
-		"baseurl": 1,
-	})
+	c.Assert(query2.fields, jc.DeepEquals, entityFields())
 	query2.reply <- entityReply{
 		entity: entity2,
 	}
@@ -387,7 +419,7 @@ func (*suite) TestStartFetch(c *gc.C) {
 		defer close(entityQueryDone)
 		e, err := cache.Entity(url, nil)
 		c.Check(err, gc.IsNil)
-		c.Check(e, jc.DeepEquals, entity)
+		c.Check(e, jc.DeepEquals, selectEntityFields(entity, entityFields()))
 	}()
 	baseEntityQueryDone := make(chan struct{})
 	go func() {
@@ -440,18 +472,14 @@ func (*suite) TestAddEntityFields(c *gc.C) {
 		defer close(queryDone)
 		e, err := cache.Entity(charm.MustParseURL("cs:~bob/wordpress-1"), map[string]int{"blobname": 1})
 		c.Check(err, gc.IsNil)
-		expect := *entity
-		selectFields(&expect, "url", "blobname", "size")
-		c.Check(e, jc.DeepEquals, &expect)
+		c.Check(e, jc.DeepEquals, selectEntityFields(entity, entityFields("blobname", "size")))
 
 		// Adding existing entity fields should have no effect.
 		cache.AddEntityFields(map[string]int{"blobname": 1, "size": 1})
 
 		e, err = cache.Entity(charm.MustParseURL("cs:~bob/wordpress-1"), map[string]int{"size": 1})
 		c.Check(err, gc.IsNil)
-		expect = *entity
-		selectFields(&expect, "url", "blobname", "size")
-		c.Check(e, jc.DeepEquals, &expect)
+		c.Check(e, jc.DeepEquals, selectEntityFields(entity, entityFields("blobname", "size")))
 
 		// Adding a new field should will cause the cache to be invalidated
 		// and a new fetch to take place.
@@ -459,36 +487,23 @@ func (*suite) TestAddEntityFields(c *gc.C) {
 		cache.AddEntityFields(map[string]int{"blobhash": 1})
 		e, err = cache.Entity(charm.MustParseURL("cs:~bob/wordpress-1"), nil)
 		c.Check(err, gc.IsNil)
-		expect = *entity
-		selectFields(&expect, "url", "blobname", "size", "blobhash")
-		c.Check(e, jc.DeepEquals, &expect)
+		c.Check(e, jc.DeepEquals, selectEntityFields(entity, entityFields("blobname", "size", "blobhash")))
 	}()
 
 	query1 := <-store.entityqc
 	c.Assert(query1.url, jc.DeepEquals, charm.MustParseURL("~bob/wordpress-1"))
-	c.Assert(query1.fields, jc.DeepEquals, map[string]int{
-		"blobname": 1,
-		"size":     1,
-	})
-	e := *entity
-	selectFields(&e, "url", "blobname", "size")
+	c.Assert(query1.fields, jc.DeepEquals, entityFields("blobname", "size"))
 	query1.reply <- entityReply{
-		entity: &e,
+		entity: entity,
 	}
 
 	// When the entity fields are added, we expect another query
 	// because that invalidates the cache.
 	query2 := <-store.entityqc
 	c.Assert(query2.url, jc.DeepEquals, charm.MustParseURL("~bob/wordpress-1"))
-	c.Assert(query2.fields, jc.DeepEquals, map[string]int{
-		"blobhash": 1,
-		"blobname": 1,
-		"size":     1,
-	})
-	e = *entity
-	selectFields(&e, "url", "blobhash", "blobname", "size")
+	c.Assert(query2.fields, jc.DeepEquals, entityFields("blobhash", "blobname", "size"))
 	query2.reply <- entityReply{
-		entity: &e,
+		entity: entity,
 	}
 	<-queryDone
 }
@@ -520,9 +535,9 @@ func (*suite) TestLookupByDifferentKey(c *gc.C) {
 	defer cache.Close()
 	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 	c.Assert(err, gc.IsNil)
-	c.Assert(e, gc.Equals, entity)
+	c.Check(e, jc.DeepEquals, selectEntityFields(entity, entityFields()))
 
-	oldEntity := entity
+	oldEntity := e
 
 	// The second fetch will trigger another query because
 	// we can't tell whether it's the same entity or not,
@@ -555,15 +570,15 @@ func (s *suite) TestIterSingle(c *gc.C) {
 		ok := iter.Next()
 		c.Assert(ok, gc.Equals, true)
 	}()
-	iterq := <-fakeIter.req
+	replyc := <-fakeIter.req
 	entity := &mongodoc.Entity{
 		URL:      charm.MustParseURL("~bob/wordpress-1"),
 		BaseURL:  charm.MustParseURL("~bob/wordpress"),
 		BlobName: "w1",
 	}
-	*iterq.entity = *entity
-	expectCached := iterq.entity
-	iterq.reply <- nil
+	replyc <- iterReply{
+		entity: entity,
+	}
 
 	// The iterator should batch up entities so make sure that
 	// it does not return the entry immediately.
@@ -575,8 +590,10 @@ func (s *suite) TestIterSingle(c *gc.C) {
 
 	// Get the next iterator query and reply to signal that
 	// the iterator has completed.
-	iterq = <-fakeIter.req
-	iterq.reply <- errIterFinished
+	replyc = <-fakeIter.req
+	replyc <- iterReply{
+		err: errIterFinished,
+	}
 
 	// The base entity should be requested asynchronously now.
 	baseQuery := <-store.baseEntityqc
@@ -584,15 +601,14 @@ func (s *suite) TestIterSingle(c *gc.C) {
 	// ... but the initial reply shouldn't be held up by that.
 	<-nextDone
 
-	// Check that the entity is the one we expect and that it hasn't
-	// changed from the original.
-	c.Assert(iter.Entity(), gc.Equals, expectCached)
-	c.Assert(iter.Entity(), jc.DeepEquals, entity)
+	// Check that the entity is the one we expect.
+	cachedEntity := iter.Entity()
+	c.Assert(cachedEntity, jc.DeepEquals, selectEntityFields(entity, entityFields("size", "blobsize")))
 
 	// Check that the entity can now be fetched from the cache.
 	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 	c.Assert(err, gc.IsNil)
-	c.Assert(e, gc.Equals, expectCached)
+	c.Assert(e, gc.Equals, cachedEntity)
 
 	// A request for the base entity should now block
 	// until the initial base entity request has been satisfied.
@@ -605,7 +621,7 @@ func (s *suite) TestIterSingle(c *gc.C) {
 		defer close(queryDone)
 		e, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), nil)
 		c.Check(err, gc.IsNil)
-		c.Check(e, gc.Equals, baseEntity)
+		c.Check(e, jc.DeepEquals, selectBaseEntityFields(baseEntity, baseEntityFields()))
 	}()
 
 	// Check that no additional base entity query is made.
@@ -649,11 +665,13 @@ func (*suite) TestIterWithEntryAlreadyInCache(c *gc.C) {
 	defer cache.Close()
 	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"size": 1, "blobsize": 1})
 	c.Assert(err, gc.IsNil)
-	c.Assert(e, gc.Equals, store.entities[0])
+	c.Check(e, jc.DeepEquals, selectEntityFields(store.entities[0], entityFields("size", "blobsize")))
+	cachedEntity := e
 
-	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), map[string]int{"size": 1, "blobsize": 1})
+	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), nil)
 	c.Assert(err, gc.IsNil)
-	c.Assert(be, gc.Equals, store.baseEntities[0])
+	c.Check(be, jc.DeepEquals, selectBaseEntityFields(store.baseEntities[0], baseEntityFields()))
+	cachedBaseEntity := be
 
 	iterEntity := &mongodoc.Entity{
 		URL:      charm.MustParseURL("~bob/wordpress-1"),
@@ -670,9 +688,8 @@ func (*suite) TestIterWithEntryAlreadyInCache(c *gc.C) {
 		c.Check(ok, gc.Equals, true)
 		// Even though the entity is in the cache, we still
 		// receive the entity returned from the iterator.
-		// Strictly speaking this is implementation-dependent,
-		// so we just check with DeepEquals rather than equality.
-		c.Check(iter.Entity(), jc.DeepEquals, iterEntity)
+		// We can't actually tell this though.
+		c.Check(iter.Entity(), jc.DeepEquals, selectEntityFields(iterEntity, entityFields("size", "blobsize")))
 
 		ok = iter.Next()
 		c.Check(ok, gc.Equals, false)
@@ -680,25 +697,25 @@ func (*suite) TestIterWithEntryAlreadyInCache(c *gc.C) {
 
 	// Provide the iterator request with an entity that's already
 	// in the cache.
-	iterq := <-fakeIter.req
-	*iterq.entity = *iterEntity
-	iterq.reply <- nil
+	replyc := <-fakeIter.req
+	replyc <- iterReply{
+		entity: iterEntity,
+	}
 
-	iterq = <-fakeIter.req
-	iterq.reply <- errIterFinished
-
+	replyc = <-fakeIter.req
+	replyc <- iterReply{
+		err: errIterFinished,
+	}
 	<-iterDone
 
 	// The original cached entities should still be there.
-	cache = entitycache.New(store)
-	defer cache.Close()
 	e, err = cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 	c.Assert(err, gc.IsNil)
-	c.Assert(e, gc.Equals, store.entities[0])
+	c.Assert(e, gc.Equals, cachedEntity)
 
 	be, err = cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), nil)
 	c.Assert(err, gc.IsNil)
-	c.Assert(be, gc.Equals, store.baseEntities[0])
+	c.Assert(be, gc.Equals, cachedBaseEntity)
 }
 
 func (*suite) TestIterCloseEarlyWhenBatchLimitExceeded(c *gc.C) {
@@ -787,9 +804,10 @@ func (*suite) TestIterCloseEarlyBeforeBatchLimitExceeded(c *gc.C) {
 
 	// Wait for the first Next request and reply to it,
 	// so that we have added a pending base entity
-	iterq := <-fakeIter.req
-	*iterq.entity = *entities[0]
-	iterq.reply <- nil
+	replyc := <-fakeIter.req
+	replyc <- iterReply{
+		entity: entities[0],
+	}
 
 	// Wait for another Next request and reply with the entry that
 	// we caused to be cached earlier. This will cause the entity to
@@ -798,9 +816,10 @@ func (*suite) TestIterCloseEarlyBeforeBatchLimitExceeded(c *gc.C) {
 	// called iter.Close. This in turn should cause the pending
 	// base entity fetches to be cleared out and Iter.run to terminate
 	// and thus the Close to finish.
-	iterq = <-fakeIter.req
-	*iterq.entity = *entities[1]
-	iterq.reply <- nil
+	replyc = <-fakeIter.req
+	replyc <- iterReply{
+		entity: entities[1],
+	}
 
 	// Wait for the Close to complete.
 	select {
@@ -892,8 +911,10 @@ func (*suite) TestIterError(c *gc.C) {
 	err := iter.Err()
 	c.Assert(err, gc.IsNil)
 
-	iterq := <-fakeIter.req
-	iterq.reply <- errgo.New("iterator error")
+	replyc := <-fakeIter.req
+	replyc <- iterReply{
+		err: errgo.New("iterator error"),
+	}
 
 	ok := iter.Next()
 	c.Assert(ok, gc.Equals, false)
@@ -901,13 +922,18 @@ func (*suite) TestIterError(c *gc.C) {
 	c.Assert(err, gc.ErrorMatches, "iterator error")
 }
 
-type iterQuery struct {
-	// entity holds the entity to be filled by the Next request.
+// iterReply holds a reply from a request from a fakeIter
+// for the next item.
+type iterReply struct {
+	// entity holds the entity to be replied with.
+	// Any fields not specified when creating the
+	// iterator will be omitted from the result
+	// sent to the entitycache code.
 	entity *mongodoc.Entity
-	// reply should be send on when the Next request has
-	// completed. When the iteration is complete,
+
+	// err holds any iteration error. When the iteration is complete,
 	// errIterFinished should be sent.
-	reply chan error
+	err error
 }
 
 // fakeIter provides a mock iterator implementation
@@ -915,17 +941,22 @@ type iterQuery struct {
 // another goroutine for a result.
 type fakeIter struct {
 	closed bool
+	fields map[string]int
 	err    error
 
 	// req holds a channel that is sent a value
 	// whenever the Next method is called.
-	req chan iterQuery
+	req chan chan iterReply
 }
 
 func newFakeIter() *fakeIter {
 	return &fakeIter{
-		req: make(chan iterQuery, 1),
+		req: make(chan chan iterReply, 1),
 	}
+}
+
+func (i *fakeIter) SetFields(fields map[string]int) {
+	i.fields = fields
 }
 
 // Next implements mgoIter.Next. The
@@ -937,12 +968,16 @@ func (i *fakeIter) Next(x interface{}) bool {
 	if i.err != nil {
 		return false
 	}
-	reply := make(chan error)
-	i.req <- iterQuery{
-		entity: x.(*mongodoc.Entity),
-		reply:  reply,
+	replyc := make(chan iterReply)
+	i.req <- replyc
+	reply := <-replyc
+	i.err = reply.err
+	if i.err == nil {
+		*(x.(*mongodoc.Entity)) = *selectEntityFields(reply.entity, i.fields)
+	} else if reply.entity != nil {
+		panic("entity with non-nil error")
 	}
-	i.err = <-reply
+
 	return i.err == nil
 }
 
@@ -968,8 +1003,13 @@ func (i *fakeIter) Err() error {
 // sliceIter implements mgoIter over a slice of entities,
 // returning each one in turn.
 type sliceIter struct {
+	fields   map[string]int
 	entities []*mongodoc.Entity
 	closed   bool
+}
+
+func (iter *sliceIter) SetFields(fields map[string]int) {
+	iter.fields = fields
 }
 
 func (iter *sliceIter) Next(x interface{}) bool {
@@ -980,7 +1020,7 @@ func (iter *sliceIter) Next(x interface{}) bool {
 		return false
 	}
 	e := x.(*mongodoc.Entity)
-	*e = *iter.entities[0]
+	*e = *selectEntityFields(iter.entities[0], iter.fields)
 	iter.entities = iter.entities[1:]
 	return true
 }
@@ -1037,11 +1077,19 @@ type callbackStore struct {
 }
 
 func (s *callbackStore) FindBestEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
-	return s.findBestEntity(url, fields)
+	e, err := s.findBestEntity(url, fields)
+	if err != nil {
+		return nil, err
+	}
+	return selectEntityFields(e, fields), nil
 }
 
 func (s *callbackStore) FindBaseEntity(url *charm.URL, fields map[string]int) (*mongodoc.BaseEntity, error) {
-	return s.findBaseEntity(url, fields)
+	e, err := s.findBaseEntity(url, fields)
+	if err != nil {
+		return nil, err
+	}
+	return selectBaseEntityFields(e, fields), nil
 }
 
 type staticStore struct {
@@ -1052,7 +1100,7 @@ type staticStore struct {
 func (s *staticStore) FindBestEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
 	for _, e := range s.entities {
 		if *url == *e.URL {
-			return e, nil
+			return selectEntityFields(e, fields), nil
 		}
 	}
 	return nil, params.ErrNotFound
@@ -1067,80 +1115,65 @@ func (s *staticStore) FindBaseEntity(url *charm.URL, fields map[string]int) (*mo
 	return nil, params.ErrNotFound
 }
 
-// selectFields zeros out all fields in x (which must be a pointer to
-// struct) that are not mentioned in sel.
-func selectFields(x interface{}, fields ...string) {
-	sel := make(map[string]int)
-	for _, f := range fields {
-		sel[f] = 1
+func selectEntityFields(x *mongodoc.Entity, fields map[string]int) *mongodoc.Entity {
+	e := selectFields(x, fields).(*mongodoc.Entity)
+	if e.URL == nil {
+		panic("url empty after selectfields")
 	}
+	return e
+}
+
+func selectBaseEntityFields(x *mongodoc.BaseEntity, fields map[string]int) *mongodoc.BaseEntity {
+	return selectFields(x, fields).(*mongodoc.BaseEntity)
+}
+
+// selectFields returns a copy of x (which must
+// be a pointer to struct) with all fields zeroed
+// except those mentioned in fields.
+func selectFields(x interface{}, fields map[string]int) interface{} {
 	xv := reflect.ValueOf(x).Elem()
 	xt := xv.Type()
+	dv := reflect.New(xt).Elem()
+	dv.Set(xv)
 	for i := 0; i < xt.NumField(); i++ {
-		if _, ok := sel[strings.ToLower(xt.Field(i).Name)]; ok {
+		f := xt.Field(i)
+		if _, ok := fields[bsonFieldName(f)]; ok {
 			continue
 		}
-		xv.Field(i).Set(reflect.Zero(xt.Field(i).Type))
+		dv.Field(i).Set(reflect.Zero(f.Type))
 	}
+	return dv.Addr().Interface()
 }
 
-func denormalizeAll(es []*mongodoc.Entity, bs []*mongodoc.BaseEntity) {
-	for _, e := range es {
-		denormalizeEntity(e)
+func bsonFieldName(f reflect.StructField) string {
+	t := f.Tag.Get("bson")
+	if t == "" {
+		return strings.ToLower(f.Name)
 	}
-	for _, e := range bs {
-		denormalizeBaseEntity(e)
+	if i := strings.Index(t, ","); i >= 0 {
+		t = t[0:i]
 	}
+	if t != "" {
+		return t
+	}
+	return strings.ToLower(f.Name)
 }
 
-// denormalizedEntity is a convenience function that returns
-// a copy of e with its denormalized fields filled out.
-func denormalizedEntity(e *mongodoc.Entity) *mongodoc.Entity {
-	e1 := *e
-	denormalizeEntity(&e1)
-	return &e1
+func entityFields(fields ...string) map[string]int {
+	return addFields(entitycache.RequiredEntityFields, fields...)
 }
 
-// denormalizeEntity sets all denormalized fields in e
-// from their associated canonical fields.
-//
-// It is the responsibility of the caller to set e.SupportedSeries
-// if the entity URL does not contain a series. If the entity
-// URL *does* contain a series, e.SupportedSeries will
-// be overwritten.
-//
-// This is exported for the purposes of tests that
-// need to create directly into the database.
-func denormalizeEntity(e *mongodoc.Entity) {
-	if e.URL.User == "" {
-		panic("entity with no user")
-	}
-	e.BaseURL = mongodoc.BaseURL(e.URL)
-	e.Name = e.URL.Name
-	e.User = e.URL.User
-	e.Revision = e.URL.Revision
-	e.Series = e.URL.Series
-	if e.URL.Series != "" {
-		if e.URL.Series == "bundle" {
-			e.SupportedSeries = nil
-		} else {
-			e.SupportedSeries = []string{e.URL.Series}
-		}
-	}
-	if e.PromulgatedURL == nil {
-		e.PromulgatedRevision = -1
-	} else {
-		e.PromulgatedRevision = e.PromulgatedURL.Revision
-	}
+func baseEntityFields(fields ...string) map[string]int {
+	return addFields(entitycache.RequiredBaseEntityFields, fields...)
 }
 
-func denormalizeBaseEntity(e *mongodoc.BaseEntity) {
-	if e.URL.Revision != -1 {
-		panic("base entity with revision")
+func addFields(fields map[string]int, extra ...string) map[string]int {
+	fields1 := make(map[string]int)
+	for f := range fields {
+		fields1[f] = 1
 	}
-	if e.URL.User == "" {
-		panic("base entity with no user")
+	for _, f := range extra {
+		fields1[f] = 1
 	}
-	e.Name = e.URL.Name
-	e.User = e.URL.User
+	return fields1
 }
