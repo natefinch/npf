@@ -105,10 +105,18 @@ func (c *Cache) AddBaseEntityFields(fields map[string]int) {
 // This method does not wait for the entities to actually be fetched.
 func (c *Cache) StartFetch(ids []*charm.URL) {
 	c.entities.mu.Lock()
-	defer c.entities.mu.Unlock()
 	for _, id := range ids {
-		c.baseEntities.startFetch(mongodoc.BaseURL(id))
 		c.entities.startFetch(id)
+	}
+	c.entities.mu.Unlock()
+
+	// Start any base entity fetches that we can.
+	c.baseEntities.mu.Lock()
+	defer c.baseEntities.mu.Unlock()
+	for _, id := range ids {
+		if id.User != "" {
+			c.baseEntities.startFetch(mongodoc.BaseURL(id))
+		}
 	}
 }
 
@@ -118,14 +126,16 @@ func (c *Cache) StartFetch(ids []*charm.URL) {
 func (c *Cache) Entity(id *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
 	// Start the base entity fetch asynchronously if we have
 	// an id we can infer the base entity URL from.
-	c.baseEntities.mu.Lock()
-	c.baseEntities.startFetch(mongodoc.BaseURL(id))
-	c.baseEntities.mu.Unlock()
+	if id.User != "" {
+		c.baseEntities.mu.Lock()
+		c.baseEntities.startFetch(mongodoc.BaseURL(id))
+		c.baseEntities.mu.Unlock()
+	}
 	e, err := c.entities.entity(id, fields)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
-	return e.(*mongodoc.Entity), nil
+	return e.(entity).Entity, nil
 }
 
 // BaseEntity returns the base entity with the given id. If the entity is not
@@ -136,25 +146,36 @@ func (c *Cache) BaseEntity(id *charm.URL, fields map[string]int) (*mongodoc.Base
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
-	return e.(*mongodoc.BaseEntity), nil
+	return e.(baseEntity).BaseEntity, nil
 }
 
 // getEntity is used by c.entities to fetch entities.
+// Called with no locks held.
 func (c *Cache) getEntity(id *charm.URL, fields map[string]int) (stashEntity, error) {
 	e, err := c.store.FindBestEntity(id, fields)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Any)
 	}
-	return e, nil
+	if id.User == "" {
+		// The id we used to look up the entity had no user
+		// so we were not able to start the base entity fetching
+		// concurrently, so start fetching it now, at the soonest
+		// possible moment.
+		c.baseEntities.mu.Lock()
+		c.baseEntities.startFetch(mongodoc.BaseURL(e.URL))
+		c.baseEntities.mu.Unlock()
+	}
+	return entity{e}, nil
 }
 
 // getBaseEntity is used by c.baseEntities to fetch entities.
+// Called with no locks held.
 func (c *Cache) getBaseEntity(id *charm.URL, fields map[string]int) (stashEntity, error) {
 	e, err := c.store.FindBaseEntity(id, fields)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Any)
 	}
-	return e, nil
+	return baseEntity{e}, nil
 }
 
 // stash holds a set of one kind of entity (either entities or base entities).
@@ -204,12 +225,6 @@ type stash struct {
 	// err holds any database fetch error (other than "not found")
 	// that has occurred while fetching entities.
 	err error
-}
-
-// stashEntity represents an entity stored in a stash.
-// It is implemented by both Entity and BaseEntity.
-type stashEntity interface {
-	CanonicalURLs() []*charm.URL
 }
 
 // noFields holds no fields (it is never changed).
@@ -383,23 +398,24 @@ func (s *stash) fetch(url *charm.URL, fields map[string]int, version int) stashE
 //
 // Called with s.mu locked.
 func (s *stash) addEntity(e stashEntity, lookupId *charm.URL) stashEntity {
-	var keys []*charm.URL
+	keys := make([]*charm.URL, 0, 3)
 	if e == notFoundEntity {
-		keys = []*charm.URL{lookupId}
+		keys = append(keys, lookupId)
 	} else {
-		keys = e.CanonicalURLs()
+		keys = append(keys, e.url())
+		if u := e.promulgatedURL(); u != nil {
+			keys = append(keys, u)
+		}
 		if lookupId != nil {
 			keys = append(keys, lookupId)
 		}
 	}
-	//log.Printf("addEntity %s %T %v", s.name, e, keys)
 	added := false
 	for _, key := range keys {
 		if old := s.entities[*key]; old == nil {
 			s.entities[*key] = e
 			added = true
 		} else {
-			//log.Printf("%v already present", key)
 			// We've found an old entry - use that instead
 			// of the new one if necessary.
 			e = old
@@ -413,8 +429,12 @@ func (s *stash) addEntity(e stashEntity, lookupId *charm.URL) stashEntity {
 
 type notFoundEntityT struct{}
 
-func (notFoundEntityT) CanonicalURLs() []*charm.URL {
-	panic("CanonicalURL called on not-found sentinel value")
+func (notFoundEntityT) url() *charm.URL {
+	panic("url called on not-found sentinel value")
+}
+
+func (notFoundEntityT) promulgatedURL() *charm.URL {
+	panic("promulgatedURL called on not-found sentinel value")
 }
 
 // notFoundEntity is a sentinel value that is stored
@@ -555,7 +575,7 @@ func (iter *Iter) run() {
 		if !iter.iter.Next(&e) {
 			break
 		}
-		if iter.addEntity(&e) {
+		if iter.addEntity(entity{&e}) {
 			if len(iter.baseEntityBatch) >= baseEntityThreshold || len(iter.entityBatch) >= entityThreshold {
 				// We've reached one of the thresholds - send the batch.
 				if !iter.sendBatch() {
@@ -596,11 +616,11 @@ func (iter *Iter) clearPendingFetches() {
 // entity has been added to iter.entityBatch.
 //
 // Called from iter.run without any locks held.
-func (iter *Iter) addEntity(e *mongodoc.Entity) bool {
+func (iter *Iter) addEntity(e entity) bool {
 	entities := &iter.cache.entities
 	entities.mu.Lock()
 	defer entities.mu.Unlock()
-	if _, ok := entities.entities[*e.CanonicalURLs()[0]]; ok {
+	if _, ok := entities.entities[*e.url()]; ok {
 		// The entity has already been fetched, or is being fetched.
 		// This also implies that its base entity has already been added (or
 		// is in the process of being added) to the cache.
@@ -612,7 +632,7 @@ func (iter *Iter) addEntity(e *mongodoc.Entity) bool {
 		// already present in the cache.
 		entities.addEntity(e, nil)
 	}
-	iter.entityBatch = append(iter.entityBatch, e)
+	iter.entityBatch = append(iter.entityBatch, e.Entity)
 
 	baseEntities := &iter.cache.baseEntities
 	baseEntities.mu.Lock()
@@ -669,4 +689,46 @@ func (iter *Iter) send(e *mongodoc.Entity) bool {
 	case <-iter.closed:
 		return false
 	}
+}
+
+// stashEntity represents an entity stored in a stash.
+// It is implemented by both Entity and BaseEntity.
+type stashEntity interface {
+	url() *charm.URL
+	promulgatedURL() *charm.URL
+}
+
+type entity struct {
+	*mongodoc.Entity
+}
+
+func (e entity) url() *charm.URL {
+	u := *e.URL
+	if e.Development {
+		u.Channel = charm.DevelopmentChannel
+	}
+	return &u
+}
+
+func (e entity) promulgatedURL() *charm.URL {
+	if e.PromulgatedURL == nil {
+		return nil
+	}
+	u := *e.PromulgatedURL
+	if e.Development {
+		u.Channel = charm.DevelopmentChannel
+	}
+	return &u
+}
+
+type baseEntity struct {
+	*mongodoc.BaseEntity
+}
+
+func (e baseEntity) url() *charm.URL {
+	return e.URL
+}
+
+func (e baseEntity) promulgatedURL() *charm.URL {
+	return nil
 }
