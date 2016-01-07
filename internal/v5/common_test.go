@@ -12,6 +12,8 @@ import (
 	"github.com/julienschmidt/httprouter"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
+	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/bakerytest"
@@ -19,6 +21,7 @@ import (
 	"gopkg.in/mgo.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 )
@@ -188,7 +191,7 @@ func (s *commonSuite) startServer(c *gc.C) {
 	}
 	db := s.Session.DB("charmstore")
 	var err error
-	s.srv, err = charmstore.NewServer(db, si, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v5.NewAPIHandler})
+	s.srv, err = charmstore.NewServer(db, si, config, map[string]charmstore.NewAPIHandlerFunc{"v5": v5.NewAPIHandler})
 	c.Assert(err, gc.IsNil)
 	s.srvParams = config
 
@@ -196,13 +199,35 @@ func (s *commonSuite) startServer(c *gc.C) {
 		config.IdentityLocation = ""
 		config.PublicKeyLocator = nil
 		config.IdentityAPIURL = ""
-		s.noMacaroonSrv, err = charmstore.NewServer(db, si, config, map[string]charmstore.NewAPIHandlerFunc{"v4": v5.NewAPIHandler})
+		s.noMacaroonSrv, err = charmstore.NewServer(db, si, config, map[string]charmstore.NewAPIHandlerFunc{"v5": v5.NewAPIHandler})
 		c.Assert(err, gc.IsNil)
 	} else {
 		s.noMacaroonSrv = s.srv
 	}
 	s.noMacaroonSrvParams = config
 	s.store = s.srv.Pool().Store()
+}
+
+func (s *commonSuite) addPublicCharm(c *gc.C, charmName string, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Charm) {
+	ch := storetesting.Charms.CharmDir(charmName)
+	err := s.store.AddCharmWithArchive(rurl, ch)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", params.Everyone, rurl.URL.User)
+	c.Assert(err, gc.IsNil)
+	return rurl, ch
+}
+
+func (s *commonSuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Bundle) {
+	bundle := storetesting.Charms.BundleDir(bundleName)
+	err := s.store.AddBundleWithArchive(rurl, bundle)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", params.Everyone, rurl.URL.User)
+	c.Assert(err, gc.IsNil)
+	return rurl, bundle
 }
 
 // handler returns a request handler that can be
@@ -221,7 +246,7 @@ func (s *commonSuite) handler(c *gc.C) *v5.ReqHandler {
 }
 
 func storeURL(path string) string {
-	return "/v4/" + path
+	return "/v5/" + path
 }
 
 func bakeryDo(client *http.Client) func(*http.Request) (*http.Response, error) {

@@ -76,8 +76,15 @@ func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams) charms
 	return New(pool, config)
 }
 
-// The v4 resolvedURL function also requires SupporedSeries.
-var requiredEntityFields = append(v5.RequiredEntityFields, "supportedseries")
+// The v4 resolvedURL function also requires SupportedSeries.
+var requiredEntityFields = func() map[string]int {
+	fields := make(map[string]int)
+	for f := range v5.RequiredEntityFields {
+		fields[f] = 1
+	}
+	fields["supportedseries"] = 1
+	return fields
+}()
 
 // NewReqHandler fetchs a new instance of ReqHandler
 // from h.Pool and returns it. The ReqHandler must
@@ -94,8 +101,8 @@ func (h *Handler) NewReqHandler() (ReqHandler, error) {
 	rh.Handler = h.Handler
 	rh.Store = store
 	rh.Cache = entitycache.New(store)
-	rh.Cache.AddEntityFields(requiredEntityFields...)
-	rh.Cache.AddBaseEntityFields(v5.RequiredBaseEntityFields...)
+	rh.Cache.AddEntityFields(requiredEntityFields)
+	rh.Cache.AddBaseEntityFields(v5.RequiredBaseEntityFields)
 	return rh, nil
 }
 
@@ -139,7 +146,7 @@ func (h ReqHandler) ResolveURLs(urls []*charm.URL) ([]*router.ResolvedURL, error
 // It's defined as a separate function so it can be more
 // easily unit-tested.
 func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, error) {
-	entity, err := cache.Entity(url)
+	entity, err := cache.Entity(url, nil)
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return nil, errgo.Mask(err)
 	}

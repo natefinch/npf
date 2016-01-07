@@ -1,6 +1,6 @@
 package entitycache
 
-func CacheIter(c *Cache, mgoIter mgoIter, fields ...string) *Iter {
+func CacheIter(c *Cache, mgoIter mgoIter, fields map[string]int) *Iter {
 	c.entities.mu.Lock()
 	defer c.entities.mu.Unlock()
 	// Note: this is exactly the same as Cache.Iter except that

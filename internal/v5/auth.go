@@ -281,7 +281,7 @@ func areAllowedEntities(entityIds []*router.ResolvedURL, allowedEntities string)
 // AuthorizeEntity checks that the given HTTP request
 // can access the entity with the given id.
 func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) error {
-	baseEntity, err := h.Store.FindBaseEntity(&id.URL, charmstore.FieldSelector("acls", "developmentacls"))
+	baseEntity, err := h.Cache.BaseEntity(id.UserOwnedURL(), charmstore.FieldSelector("acls", "developmentacls"))
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
 			return errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)

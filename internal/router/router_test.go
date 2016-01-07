@@ -37,15 +37,16 @@ var _ = gc.Suite(&RouterSuite{})
 var newResolvedURL = MustNewResolvedURL
 
 var routerGetTests = []struct {
-	about            string
-	handlers         Handlers
-	urlStr           string
-	expectStatus     int
-	expectBody       interface{}
-	expectQueryCount int32
-	resolveURL       func(*charm.URL) (*ResolvedURL, error)
-	authorize        func(*ResolvedURL, *http.Request) error
-	exists           func(*ResolvedURL, *http.Request) (bool, error)
+	about                     string
+	handlers                  Handlers
+	urlStr                    string
+	expectStatus              int
+	expectBody                interface{}
+	expectQueryCount          int32
+	expectWillIncludeMetadata []string
+	resolveURL                func(*charm.URL) (*ResolvedURL, error)
+	authorize                 func(*ResolvedURL, *http.Request) error
+	exists                    func(*ResolvedURL, *http.Request) (bool, error)
 }{{
 	about: "global handler",
 	handlers: Handlers{
@@ -451,8 +452,9 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	urlStr:       "/precise/wordpress-42/meta/foo",
-	expectStatus: http.StatusOK,
+	urlStr: "/precise/wordpress-42/meta/foo",
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusOK,
 	expectBody: &metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
 	},
@@ -463,8 +465,9 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	urlStr:       "/development/precise/wordpress/meta/foo",
-	expectStatus: http.StatusOK,
+	urlStr: "/development/precise/wordpress/meta/foo",
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusOK,
 	expectBody: &metaHandlerTestResp{
 		CharmURL: "cs:development/precise/wordpress-0",
 	},
@@ -475,8 +478,9 @@ var routerGetTests = []struct {
 			"foo/": testMetaHandler(0),
 		},
 	},
-	urlStr:       "/precise/wordpress-42/meta/foo/bar/baz",
-	expectStatus: http.StatusOK,
+	urlStr: "/precise/wordpress-42/meta/foo/bar/baz",
+	expectWillIncludeMetadata: []string{"foo/bar/baz"},
+	expectStatus:              http.StatusOK,
 	expectBody: metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
 		Path:     "/bar/baz",
@@ -488,8 +492,9 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	urlStr:       "/precise/wordpress-42/meta/foo?one=a&two=b&one=c",
-	expectStatus: http.StatusOK,
+	urlStr: "/precise/wordpress-42/meta/foo?one=a&two=b&one=c",
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusOK,
 	expectBody: metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
 		Flags: url.Values{
@@ -498,17 +503,19 @@ var routerGetTests = []struct {
 		},
 	},
 }, {
-	about:        "meta handler that's not found",
-	urlStr:       "/precise/wordpress-42/meta/foo",
-	expectStatus: http.StatusNotFound,
+	about:  "meta handler that's not found",
+	urlStr: "/precise/wordpress-42/meta/foo",
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
 		Message: `unknown metadata "foo"`,
 	},
 }, {
-	about:        "meta sub-handler that's not found",
-	urlStr:       "/precise/wordpress-42/meta/foo/bar",
-	expectStatus: http.StatusNotFound,
+	about:  "meta sub-handler that's not found",
+	urlStr: "/precise/wordpress-42/meta/foo/bar",
+	expectWillIncludeMetadata: []string{"foo/bar"},
+	expectStatus:              http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
 		Message: `unknown metadata "foo/bar"`,
@@ -520,8 +527,9 @@ var routerGetTests = []struct {
 			"foo": constMetaHandler(nil),
 		},
 	},
-	urlStr:       "/precise/wordpress-42/meta/foo",
-	expectStatus: http.StatusNotFound,
+	urlStr: "/precise/wordpress-42/meta/foo",
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrMetadataNotFound,
 		Message: "metadata not found",
@@ -533,8 +541,9 @@ var routerGetTests = []struct {
 			"foo": constMetaHandler((*struct{})(nil)),
 		},
 	},
-	urlStr:       "/precise/wordpress-42/meta/foo",
-	expectStatus: http.StatusNotFound,
+	urlStr: "/precise/wordpress-42/meta/foo",
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrMetadataNotFound,
 		Message: "metadata not found",
@@ -547,8 +556,9 @@ var routerGetTests = []struct {
 			"foo": fieldSelectHandler("handler1", 0, "field1", "field2"),
 		},
 	},
-	expectStatus:     http.StatusOK,
-	expectQueryCount: 1,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusOK,
+	expectQueryCount:          1,
 	expectBody: fieldSelectHandleGetInfo{
 		HandlerId: "handler1",
 		Doc: fieldSelectQueryInfo{
@@ -565,7 +575,8 @@ var routerGetTests = []struct {
 			"foo": errorMetaHandler(errgo.WithCausef(nil, params.ErrorCode("arble"), "a message")),
 		},
 	},
-	expectStatus: http.StatusInternalServerError,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusInternalServerError,
 	expectBody: params.Error{
 		Code:    "arble",
 		Message: "a message",
@@ -578,8 +589,9 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	authorize:    neverAuthorize,
-	expectStatus: http.StatusUnauthorized,
+	authorize:                 neverAuthorize,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: "bad wolf",
@@ -610,8 +622,9 @@ var routerGetTests = []struct {
 			"field1-2": fieldSelectHandler("handler3", 0, "field1"),
 		},
 	},
-	expectQueryCount: 1,
-	expectStatus:     http.StatusOK,
+	expectWillIncludeMetadata: []string{"field1-1", "field2", "field1-2"},
+	expectQueryCount:          1,
+	expectStatus:              http.StatusOK,
 	expectBody: params.MetaAnyResponse{
 		Id: charm.MustParseURL("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
@@ -651,8 +664,9 @@ var routerGetTests = []struct {
 			"item1":  fieldSelectHandler("handler3", 0, "field3"),
 		},
 	},
-	expectQueryCount: 1,
-	expectStatus:     http.StatusOK,
+	expectWillIncludeMetadata: []string{"item1/foo", "item2/bar", "item1"},
+	expectQueryCount:          1,
+	expectStatus:              http.StatusOK,
 	expectBody: params.MetaAnyResponse{
 		Id: charm.MustParseURL("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
@@ -694,7 +708,8 @@ var routerGetTests = []struct {
 			"typednil": constMetaHandler((*struct{})(nil)),
 		},
 	},
-	expectStatus: http.StatusOK,
+	expectWillIncludeMetadata: []string{"ok", "nil"},
+	expectStatus:              http.StatusOK,
 	expectBody: params.MetaAnyResponse{
 		Id: charm.MustParseURL("cs:precise/wordpress-42"),
 		Meta: map[string]interface{}{
@@ -711,7 +726,8 @@ var routerGetTests = []struct {
 			"error": errorMetaHandler(errgo.WithCausef(nil, params.ErrorCode("foo"), "a message")),
 		},
 	},
-	expectStatus: http.StatusInternalServerError,
+	expectWillIncludeMetadata: []string{"error"},
+	expectStatus:              http.StatusInternalServerError,
 	expectBody: params.Error{
 		Code:    "foo",
 		Message: "a message",
@@ -724,7 +740,8 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	expectStatus: http.StatusOK,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"precise/wordpress-42": {
 			CharmURL: "cs:precise/wordpress-42",
@@ -738,7 +755,8 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	expectStatus: http.StatusOK,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"~user/development/wily/wordpress-42": {
 			CharmURL: "cs:~user/development/wily/wordpress-42",
@@ -752,7 +770,8 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	expectStatus: http.StatusBadRequest,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
 		Message: `bad request: charm or bundle URL has invalid form: "~user/bad-wolf/wily/wordpress-42"`,
@@ -765,7 +784,8 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	expectStatus: http.StatusOK,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"precise/wordpress-42": {
 			CharmURL: "cs:precise/wordpress-42",
@@ -786,7 +806,8 @@ var routerGetTests = []struct {
 			"bar/": testMetaHandler(1),
 		},
 	},
-	expectStatus: http.StatusOK,
+	expectWillIncludeMetadata: []string{"foo", "bar/something"},
+	expectStatus:              http.StatusOK,
 	expectBody: map[string]params.MetaAnyResponse{
 		"precise/wordpress-42": {
 			Id: charm.MustParseURL("cs:precise/wordpress-42"),
@@ -834,7 +855,8 @@ var routerGetTests = []struct {
 			"bar/": testMetaHandler(1),
 		},
 	},
-	expectStatus: http.StatusBadRequest,
+	expectWillIncludeMetadata: []string{"foo", "bar/something"},
+	expectStatus:              http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
 		Message: `bad request: charm or bundle URL has invalid form: "staging/trusty/django"`,
@@ -847,8 +869,9 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	authorize:    dischargeRequiredAuthorize,
-	expectStatus: http.StatusInternalServerError,
+	authorize:                 dischargeRequiredAuthorize,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "discharge required",
 	},
@@ -860,9 +883,10 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	authorize:    dischargeRequiredAuthorize,
-	expectStatus: http.StatusOK,
-	expectBody:   map[string]params.MetaAnyResponse{},
+	authorize:                 dischargeRequiredAuthorize,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusOK,
+	expectBody:                map[string]params.MetaAnyResponse{},
 }, {
 	about:  "bulk meta/any handler, some unauthorized, ignore authorization",
 	urlStr: "/meta/any?id=precise/wordpress-42&id=utopic/foo-32&include=foo&ignore-auth=1",
@@ -871,8 +895,9 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	authorize:    dischargeRequiredAuthorize,
-	expectStatus: http.StatusOK,
+	authorize:                 dischargeRequiredAuthorize,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusOK,
 	expectBody: map[string]params.MetaAnyResponse{
 		"utopic/foo-32": {
 			Id: charm.MustParseURL("cs:utopic/foo-32"),
@@ -891,8 +916,9 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	authorize:    neverAuthorize,
-	expectStatus: http.StatusInternalServerError,
+	authorize:                 neverAuthorize,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "bad wolf",
 	},
@@ -904,9 +930,10 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	authorize:    neverAuthorize,
-	expectStatus: http.StatusOK,
-	expectBody:   map[string]params.MetaAnyResponse{},
+	authorize:                 neverAuthorize,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusOK,
+	expectBody:                map[string]params.MetaAnyResponse{},
 }, {
 	about:        "bulk meta/any handler, invalid ignore-auth flag",
 	urlStr:       "/meta/any?id=precise/wordpress-42&include=foo&ignore-auth=meh",
@@ -923,8 +950,9 @@ var routerGetTests = []struct {
 			"foo/": testMetaHandler(0),
 		},
 	},
-	resolveURL:   resolveTo("precise", 100),
-	expectStatus: http.StatusOK,
+	resolveURL:                resolveTo("precise", 100),
+	expectWillIncludeMetadata: []string{"foo/bar"},
+	expectStatus:              http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"wordpress": {
 			CharmURL: "cs:precise/wordpress-100",
@@ -939,8 +967,9 @@ var routerGetTests = []struct {
 			"foo/": testMetaHandler(0),
 		},
 	},
-	resolveURL:   resolveTo("precise", 100),
-	expectStatus: http.StatusOK,
+	resolveURL:                resolveTo("precise", 100),
+	expectWillIncludeMetadata: []string{"foo/bar"},
+	expectStatus:              http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"wordpress": {
 			CharmURL: "cs:precise/wordpress-100",
@@ -978,7 +1007,8 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	expectStatus: http.StatusOK,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusOK,
 	expectBody: map[string]metaHandlerTestResp{
 		"~foo/precise/wordpress-23": {
 			CharmURL: "cs:precise/wordpress-99",
@@ -998,7 +1028,8 @@ var routerGetTests = []struct {
 			"foo": testMetaHandler(0),
 		},
 	},
-	expectStatus: http.StatusInternalServerError,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusInternalServerError,
 	expectBody: params.Error{
 		Message: "an error",
 	},
@@ -1012,7 +1043,8 @@ var routerGetTests = []struct {
 			}),
 		},
 	},
-	expectStatus: http.StatusOK,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusOK,
 	expectBody: map[string]string{
 		"bundle/something-24": "bundlefoo",
 	},
@@ -1029,7 +1061,8 @@ var routerGetTests = []struct {
 			}),
 		},
 	},
-	expectStatus: http.StatusOK,
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusOK,
 	expectBody: map[string]string{
 		"bundle/something-24": "something",
 	},
@@ -1043,10 +1076,11 @@ var routerGetTests = []struct {
 		Message: `not found: URL has invalid charm or bundle name: "robots.txt"`,
 	},
 }, {
-	about:        "bulk meta handler, invalid id",
-	urlStr:       "/meta/foo?id=robots.txt",
-	handlers:     Handlers{},
-	expectStatus: http.StatusBadRequest,
+	about:                     "bulk meta handler, invalid id",
+	urlStr:                    "/meta/foo?id=robots.txt",
+	handlers:                  Handlers{},
+	expectWillIncludeMetadata: []string{"foo"},
+	expectStatus:              http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
 		Message: `bad request: URL has invalid charm or bundle name: "robots.txt"`,
@@ -1106,6 +1140,19 @@ func (s *RouterSuite) TestRouterGet(c *gc.C) {
 		if test.authorize != nil {
 			ctxt.authorizeURL = test.authorize
 		}
+		resolved := false
+		var includedMetadata []string
+		origResolve := ctxt.resolveURL
+		ctxt.resolveURL = func(id *charm.URL) (*ResolvedURL, error) {
+			resolved = true
+			return origResolve(id)
+		}
+		ctxt.willIncludeMetadata = func(incs []string) {
+			if resolved {
+				c.Errorf("ResolveURL called before WillIncludeMetadata")
+			}
+			includedMetadata = incs
+		}
 		router := New(&test.handlers, ctxt)
 		// Note that fieldSelectHandler increments queryCount each time
 		// a query is made.
@@ -1117,6 +1164,7 @@ func (s *RouterSuite) TestRouterGet(c *gc.C) {
 			ExpectBody:   test.expectBody,
 		})
 		c.Assert(queryCount, gc.Equals, test.expectQueryCount)
+		c.Assert(includedMetadata, jc.DeepEquals, test.expectWillIncludeMetadata)
 	}
 }
 
@@ -1143,9 +1191,7 @@ func (ctxt funcContext) ResolveURLs(ids []*charm.URL) ([]*ResolvedURL, error) {
 }
 
 func (ctxt funcContext) WillIncludeMetadata(includes []string) {
-	if ctxt.willIncludeMetadata != nil {
-		ctxt.willIncludeMetadata(includes)
-	}
+	ctxt.willIncludeMetadata(includes)
 }
 
 func (ctxt funcContext) AuthorizeEntity(id *ResolvedURL, req *http.Request) error {
@@ -1182,8 +1228,9 @@ func (s *RouterSuite) TestParseBool(c *gc.C) {
 }
 
 var alwaysContext = funcContext{
-	resolveURL:   alwaysResolveURL,
-	authorizeURL: alwaysAuthorize,
+	resolveURL:          alwaysResolveURL,
+	authorizeURL:        alwaysAuthorize,
+	willIncludeMetadata: func([]string) {},
 }
 
 func (s *RouterSuite) TestCORSHeaders(c *gc.C) {

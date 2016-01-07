@@ -47,7 +47,7 @@ func (*suite) TestEntityIssuesBaseEntityQueryConcurrently(c *gc.C) {
 	store := newChanStore()
 	cache := entitycache.New(store)
 	defer cache.Close()
-	cache.AddBaseEntityFields("url", "name")
+	cache.AddBaseEntityFields(map[string]int{"url": 1, "name": 1})
 
 	entity := &mongodoc.Entity{
 		URL:      charm.MustParseURL("~bob/wordpress-1"),
@@ -62,7 +62,7 @@ func (*suite) TestEntityIssuesBaseEntityQueryConcurrently(c *gc.C) {
 	queryDone := make(chan struct{})
 	go func() {
 		defer close(queryDone)
-		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), "url", "baseurl", "blobname")
+		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1, "blobname": 1})
 		c.Check(err, gc.IsNil)
 		c.Check(e, gc.Equals, entity)
 	}()
@@ -95,11 +95,11 @@ func (*suite) TestEntityIssuesBaseEntityQueryConcurrently(c *gc.C) {
 	// to ensure it doesn't.
 	close(store.entityqc)
 	close(store.baseEntityqc)
-	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), "url", "baseurl", "blobname")
+	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1, "blobname": 1})
 	c.Check(err, gc.IsNil)
 	c.Check(e, gc.Equals, entity)
 
-	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), "url", "name")
+	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), map[string]int{"url": 1, "name": 1})
 	c.Check(err, gc.IsNil)
 	c.Check(be, gc.Equals, baseEntity)
 }
@@ -108,7 +108,7 @@ func (*suite) TestFetchWhenFieldsChangeBeforeQueryResult(c *gc.C) {
 	store := newChanStore()
 	cache := entitycache.New(store)
 	defer cache.Close()
-	cache.AddBaseEntityFields("url", "name")
+	cache.AddBaseEntityFields(map[string]int{"url": 1, "name": 1})
 
 	entity := &mongodoc.Entity{
 		URL:      charm.MustParseURL("~bob/wordpress-1"),
@@ -131,7 +131,7 @@ func (*suite) TestFetchWhenFieldsChangeBeforeQueryResult(c *gc.C) {
 	queryDone := make(chan struct{})
 	go func() {
 		defer close(queryDone)
-		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), "url", "baseurl")
+		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1})
 		c.Check(err, gc.IsNil)
 		c.Check(e, gc.Equals, entity)
 	}()
@@ -154,7 +154,7 @@ func (*suite) TestFetchWhenFieldsChangeBeforeQueryResult(c *gc.C) {
 	go func() {
 		defer close(query2Done)
 		// Note the extra "size" field.
-		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), "url", "baseurl", "size")
+		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1, "size": 1})
 		c.Check(err, gc.IsNil)
 		c.Check(e, gc.Equals, entity2)
 	}()
@@ -182,7 +182,7 @@ func (*suite) TestFetchWhenFieldsChangeBeforeQueryResult(c *gc.C) {
 	// to ensure it doesn't.
 	close(store.entityqc)
 	close(store.baseEntityqc)
-	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), "url", "baseurl")
+	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1})
 	c.Check(err, gc.IsNil)
 	c.Check(e, gc.Equals, entity2)
 }
@@ -191,7 +191,7 @@ func (*suite) TestSecondFetchesWaitForFirst(c *gc.C) {
 	store := newChanStore()
 	cache := entitycache.New(store)
 	defer cache.Close()
-	cache.AddBaseEntityFields("url", "name")
+	cache.AddBaseEntityFields(map[string]int{"url": 1, "name": 1})
 
 	entity := &mongodoc.Entity{
 		URL:      charm.MustParseURL("~bob/wordpress-1"),
@@ -215,7 +215,7 @@ func (*suite) TestSecondFetchesWaitForFirst(c *gc.C) {
 	initialRequestGroup.Add(1)
 	go func() {
 		defer initialRequestGroup.Done()
-		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), "url", "baseurl")
+		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1})
 		c.Check(err, gc.IsNil)
 		c.Check(e, gc.Equals, entity)
 	}()
@@ -233,7 +233,7 @@ func (*suite) TestSecondFetchesWaitForFirst(c *gc.C) {
 		initialRequestGroup.Add(1)
 		go func() {
 			defer initialRequestGroup.Done()
-			e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), "url", "baseurl")
+			e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"url": 1, "baseurl": 1})
 			c.Check(err, gc.IsNil)
 			c.Check(e, gc.Equals, entity)
 		}()
@@ -255,7 +255,7 @@ func (*suite) TestSecondFetchesWaitForFirst(c *gc.C) {
 	otherRequestDone := make(chan struct{})
 	go func() {
 		defer close(otherRequestDone)
-		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-2"), "url", "baseurl")
+		e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-2"), map[string]int{"url": 1, "baseurl": 1})
 		c.Check(err, gc.IsNil)
 		c.Check(e, gc.Equals, entity2)
 	}()
@@ -292,13 +292,13 @@ func (*suite) TestGetEntityNotFound(c *gc.C) {
 	}
 	cache := entitycache.New(store)
 	defer cache.Close()
-	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"))
+	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 	c.Assert(e, gc.IsNil)
 	c.Assert(err, gc.ErrorMatches, "not found")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 
 	// Make sure that the not-found result has been cached.
-	e, err = cache.Entity(charm.MustParseURL("~bob/wordpress-1"))
+	e, err = cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 	c.Assert(e, gc.IsNil)
 	c.Assert(err, gc.ErrorMatches, "not found")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
@@ -306,16 +306,17 @@ func (*suite) TestGetEntityNotFound(c *gc.C) {
 	c.Assert(entityFetchCount, gc.Equals, 1)
 
 	// Make sure fetching the base entity works the same way.
-	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"))
+	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), nil)
+	c.Assert(be, gc.IsNil)
+	c.Assert(err, gc.ErrorMatches, "not found")
+	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
+
+	be, err = cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), nil)
 	c.Assert(be, gc.IsNil)
 	c.Assert(err, gc.ErrorMatches, "not found")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 
 	c.Assert(baseEntityFetchCount, gc.Equals, 1)
-	be, err = cache.BaseEntity(charm.MustParseURL("~bob/wordpress"))
-	c.Assert(be, gc.IsNil)
-	c.Assert(err, gc.ErrorMatches, "not found")
-	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
 
 func (*suite) TestFetchError(c *gc.C) {
@@ -335,24 +336,24 @@ func (*suite) TestFetchError(c *gc.C) {
 	defer cache.Close()
 
 	// Check that we get the entity fetch error from cache.Entity.
-	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"))
+	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 	c.Assert(e, gc.IsNil)
 	c.Assert(err, gc.ErrorMatches, `cannot fetch "cs:~bob/wordpress-1": entity error`)
 
 	// Check that the error is cached.
-	e, err = cache.Entity(charm.MustParseURL("~bob/wordpress-1"))
+	e, err = cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 	c.Assert(e, gc.IsNil)
 	c.Assert(err, gc.ErrorMatches, `cannot fetch "cs:~bob/wordpress-1": entity error`)
 
 	c.Assert(entityFetchCount, gc.Equals, 1)
 
 	// Check that we get the base-entity fetch error from cache.BaseEntity.
-	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"))
+	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), nil)
 	c.Assert(be, gc.IsNil)
 	c.Assert(err, gc.ErrorMatches, `cannot fetch "cs:~bob/wordpress": base entity error`)
 
 	// Check that the error is cached.
-	be, err = cache.BaseEntity(charm.MustParseURL("~bob/wordpress"))
+	be, err = cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), nil)
 	c.Assert(be, gc.IsNil)
 	c.Assert(err, gc.ErrorMatches, `cannot fetch "cs:~bob/wordpress": base entity error`)
 	c.Assert(baseEntityFetchCount, gc.Equals, 1)
@@ -384,14 +385,14 @@ func (*suite) TestStartFetch(c *gc.C) {
 	entityQueryDone := make(chan struct{})
 	go func() {
 		defer close(entityQueryDone)
-		e, err := cache.Entity(url)
+		e, err := cache.Entity(url, nil)
 		c.Check(err, gc.IsNil)
 		c.Check(e, jc.DeepEquals, entity)
 	}()
 	baseEntityQueryDone := make(chan struct{})
 	go func() {
 		defer close(baseEntityQueryDone)
-		e, err := cache.BaseEntity(baseURL)
+		e, err := cache.BaseEntity(baseURL, nil)
 		c.Check(err, gc.IsNil)
 		c.Check(e, jc.DeepEquals, baseEntity)
 	}()
@@ -433,20 +434,20 @@ func (*suite) TestAddEntityFields(c *gc.C) {
 		return baseEntity, nil
 	}
 	cache := entitycache.New(store)
-	cache.AddEntityFields("blobname", "size")
+	cache.AddEntityFields(map[string]int{"blobname": 1, "size": 1})
 	queryDone := make(chan struct{})
 	go func() {
 		defer close(queryDone)
-		e, err := cache.Entity(charm.MustParseURL("cs:~bob/wordpress-1"), "blobname")
+		e, err := cache.Entity(charm.MustParseURL("cs:~bob/wordpress-1"), map[string]int{"blobname": 1})
 		c.Check(err, gc.IsNil)
 		expect := *entity
 		selectFields(&expect, "url", "blobname", "size")
 		c.Check(e, jc.DeepEquals, &expect)
 
 		// Adding existing entity fields should have no effect.
-		cache.AddEntityFields("blobname", "size")
+		cache.AddEntityFields(map[string]int{"blobname": 1, "size": 1})
 
-		e, err = cache.Entity(charm.MustParseURL("cs:~bob/wordpress-1"), "size")
+		e, err = cache.Entity(charm.MustParseURL("cs:~bob/wordpress-1"), map[string]int{"size": 1})
 		c.Check(err, gc.IsNil)
 		expect = *entity
 		selectFields(&expect, "url", "blobname", "size")
@@ -455,8 +456,8 @@ func (*suite) TestAddEntityFields(c *gc.C) {
 		// Adding a new field should will cause the cache to be invalidated
 		// and a new fetch to take place.
 
-		cache.AddEntityFields("blobhash")
-		e, err = cache.Entity(charm.MustParseURL("cs:~bob/wordpress-1"))
+		cache.AddEntityFields(map[string]int{"blobhash": 1})
+		e, err = cache.Entity(charm.MustParseURL("cs:~bob/wordpress-1"), nil)
 		c.Check(err, gc.IsNil)
 		expect = *entity
 		selectFields(&expect, "url", "blobname", "size", "blobhash")
@@ -517,7 +518,7 @@ func (*suite) TestLookupByDifferentKey(c *gc.C) {
 	}
 	cache := entitycache.New(store)
 	defer cache.Close()
-	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"))
+	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e, gc.Equals, entity)
 
@@ -531,7 +532,7 @@ func (*suite) TestLookupByDifferentKey(c *gc.C) {
 		BaseURL:  charm.MustParseURL("~bob/wordpress"),
 		BlobName: "w2",
 	}
-	e, err = cache.Entity(charm.MustParseURL("~bob/wordpress"))
+	e, err = cache.Entity(charm.MustParseURL("~bob/wordpress"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Logf("got %p; old entity %p; new entity %p", e, oldEntity, entity)
 	c.Assert(e, gc.Equals, oldEntity)
@@ -547,7 +548,7 @@ func (s *suite) TestIterSingle(c *gc.C) {
 	cache := entitycache.New(store)
 	defer cache.Close()
 	fakeIter := newFakeIter()
-	iter := entitycache.CacheIter(cache, fakeIter, "size", "blobsize")
+	iter := entitycache.CacheIter(cache, fakeIter, map[string]int{"size": 1, "blobsize": 1})
 	nextDone := make(chan struct{})
 	go func() {
 		defer close(nextDone)
@@ -589,7 +590,7 @@ func (s *suite) TestIterSingle(c *gc.C) {
 	c.Assert(iter.Entity(), jc.DeepEquals, entity)
 
 	// Check that the entity can now be fetched from the cache.
-	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"))
+	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e, gc.Equals, expectCached)
 
@@ -602,7 +603,7 @@ func (s *suite) TestIterSingle(c *gc.C) {
 	queryDone := make(chan struct{})
 	go func() {
 		defer close(queryDone)
-		e, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"))
+		e, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), nil)
 		c.Check(err, gc.IsNil)
 		c.Check(e, gc.Equals, baseEntity)
 	}()
@@ -646,11 +647,11 @@ func (*suite) TestIterWithEntryAlreadyInCache(c *gc.C) {
 	}
 	cache := entitycache.New(store)
 	defer cache.Close()
-	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), "size", "blobsize")
+	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), map[string]int{"size": 1, "blobsize": 1})
 	c.Assert(err, gc.IsNil)
 	c.Assert(e, gc.Equals, store.entities[0])
 
-	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), "size", "blobsize")
+	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), map[string]int{"size": 1, "blobsize": 1})
 	c.Assert(err, gc.IsNil)
 	c.Assert(be, gc.Equals, store.baseEntities[0])
 
@@ -661,7 +662,7 @@ func (*suite) TestIterWithEntryAlreadyInCache(c *gc.C) {
 	}
 
 	fakeIter := newFakeIter()
-	iter := entitycache.CacheIter(cache, fakeIter, "size", "blobsize")
+	iter := entitycache.CacheIter(cache, fakeIter, map[string]int{"size": 1, "blobsize": 1})
 	iterDone := make(chan struct{})
 	go func() {
 		defer close(iterDone)
@@ -691,11 +692,11 @@ func (*suite) TestIterWithEntryAlreadyInCache(c *gc.C) {
 	// The original cached entities should still be there.
 	cache = entitycache.New(store)
 	defer cache.Close()
-	e, err = cache.Entity(charm.MustParseURL("~bob/wordpress-1"))
+	e, err = cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e, gc.Equals, store.entities[0])
 
-	be, err = cache.BaseEntity(charm.MustParseURL("~bob/wordpress"))
+	be, err = cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(be, gc.Equals, store.baseEntities[0])
 }
@@ -731,7 +732,7 @@ func (*suite) TestIterCloseEarlyWhenBatchLimitExceeded(c *gc.C) {
 	fakeIter := &sliceIter{
 		entities: entities,
 	}
-	iter := entitycache.CacheIter(cache, fakeIter, "blobname")
+	iter := entitycache.CacheIter(cache, fakeIter, map[string]int{"blobname": 1})
 	iter.Close()
 	c.Assert(iter.Next(), gc.Equals, false)
 }
@@ -757,11 +758,11 @@ func (*suite) TestIterCloseEarlyBeforeBatchLimitExceeded(c *gc.C) {
 		}},
 	}
 	cache := entitycache.New(store)
-	cache.AddBaseEntityFields("public")
+	cache.AddBaseEntityFields(map[string]int{"public": 1})
 	// Ask for one of the entities that will be iterated over,
 	// so that the Iter.run loop will send an entity without
 	// starting the base URL fetch.
-	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-2"), "blobname")
+	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-2"), map[string]int{"blobname": 1})
 	c.Assert(err, gc.IsNil)
 	c.Assert(e, jc.DeepEquals, store.entities[0])
 
@@ -776,7 +777,7 @@ func (*suite) TestIterCloseEarlyBeforeBatchLimitExceeded(c *gc.C) {
 	}}
 
 	fakeIter := newFakeIter()
-	iter := entitycache.CacheIter(cache, fakeIter, "blobname")
+	iter := entitycache.CacheIter(cache, fakeIter, map[string]int{"blobname": 1})
 	iterDone := make(chan struct{})
 	go func() {
 		defer close(iterDone)
@@ -810,7 +811,7 @@ func (*suite) TestIterCloseEarlyBeforeBatchLimitExceeded(c *gc.C) {
 
 	// Ensure that we can still retrieve the base entity that
 	// was added (and then removed) by the iterator.
-	be, err := cache.BaseEntity(charm.MustParseURL("~alice/mysql-1"), "public")
+	be, err := cache.BaseEntity(charm.MustParseURL("~alice/mysql-1"), map[string]int{"public": 1})
 	c.Assert(err, gc.IsNil)
 	c.Assert(be, jc.DeepEquals, store.baseEntities[1])
 }
@@ -838,7 +839,7 @@ func (*suite) TestIterEntityBatchLimitExceeded(c *gc.C) {
 	fakeIter := &sliceIter{
 		entities: entities,
 	}
-	iter := entitycache.CacheIter(cache, fakeIter, "blobname")
+	iter := entitycache.CacheIter(cache, fakeIter, map[string]int{"blobname": 1})
 
 	// The iterator should fetch up to entityThreshold entities
 	// from the underlying iterator before sending
@@ -872,10 +873,10 @@ func (*suite) TestIterEntityBatchLimitExceeded(c *gc.C) {
 
 	// Check that all the entities and base entities are in fact cached.
 	for _, want := range entities {
-		got, err := cache.Entity(want.URL)
+		got, err := cache.Entity(want.URL, nil)
 		c.Assert(err, gc.IsNil)
 		c.Assert(got, jc.DeepEquals, want)
-		gotBase, err := cache.BaseEntity(want.URL)
+		gotBase, err := cache.BaseEntity(want.URL, nil)
 		c.Assert(err, gc.IsNil)
 		c.Assert(gotBase, jc.DeepEquals, &mongodoc.BaseEntity{
 			URL: want.BaseURL,
@@ -886,7 +887,7 @@ func (*suite) TestIterEntityBatchLimitExceeded(c *gc.C) {
 func (*suite) TestIterError(c *gc.C) {
 	cache := entitycache.New(&staticStore{})
 	fakeIter := newFakeIter()
-	iter := entitycache.CacheIter(cache, fakeIter)
+	iter := entitycache.CacheIter(cache, fakeIter, nil)
 	// Err returns nil while the iteration is in progress.
 	err := iter.Err()
 	c.Assert(err, gc.IsNil)
