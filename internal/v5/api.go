@@ -369,7 +369,7 @@ func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, 
 	// URL, it will hit the cached base entity.
 	// We don't actually care if it succeeds or fails, so we ignore
 	// the result.
-	cache.BaseEntity(url, nil)
+	cache.BaseEntity(entity.BaseURL, nil)
 	return rurl, nil
 }
 

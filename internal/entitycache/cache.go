@@ -61,12 +61,23 @@ type Cache struct {
 	baseEntities stash
 }
 
+var requiredEntityFields = map[string]int{
+	"_id":             1,
+	"promulgated-url": 1,
+	"development":     1,
+	"baseurl":         1,
+}
+
+var requiredBaseEntityFields = map[string]int{
+	"_id": 1,
+}
+
 // New returns a new cache that uses the given store
 // for fetching entities.
 func New(store Store) *Cache {
 	var c Cache
-	c.entities.init(c.getEntity, &c.wg)
-	c.baseEntities.init(c.getBaseEntity, &c.wg)
+	c.entities.init(c.getEntity, &c.wg, requiredEntityFields)
+	c.baseEntities.init(c.getBaseEntity, &c.wg, requiredBaseEntityFields)
 	c.store = store
 	return &c
 }
@@ -142,6 +153,9 @@ func (c *Cache) Entity(id *charm.URL, fields map[string]int) (*mongodoc.Entity, 
 // found, it returns an error with a params.ErrNotFound cause.
 // The returned entity will have at least the given fields filled out.
 func (c *Cache) BaseEntity(id *charm.URL, fields map[string]int) (*mongodoc.BaseEntity, error) {
+	if id.User == "" {
+		return nil, errgo.Newf("cannot get base entity of URL %q with no user", id)
+	}
 	e, err := c.baseEntities.entity(mongodoc.BaseURL(id), fields)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
@@ -227,18 +241,12 @@ type stash struct {
 	err error
 }
 
-// noFields holds no fields (it is never changed).
-// It is used instead of nil so that we avoid passing
-// nil to FindBestEntity, because it has special
-// significance in that context.
-var noFields = make(map[string]int)
-
 // init initializes the stash with the given entity get function.
-func (s *stash) init(get func(id *charm.URL, fields map[string]int) (stashEntity, error), wg *sync.WaitGroup) {
+func (s *stash) init(get func(id *charm.URL, fields map[string]int) (stashEntity, error), wg *sync.WaitGroup, initialFields map[string]int) {
 	s.changed.L = &s.mu
 	s.get = get
 	s.wg = wg
-	s.fields = noFields
+	s.fields = initialFields
 	s.entities = make(map[charm.URL]stashEntity)
 }
 
@@ -334,6 +342,7 @@ func (s *stash) startFetch(id *charm.URL) {
 // fetchAsync is like fetch except that it is expected to be called
 // in a separate goroutine, with s.wg.Add called appropriately
 // beforehand.
+// Called with s.mu unlocked.
 func (s *stash) fetchAsync(url *charm.URL, fields map[string]int, version int) stashEntity {
 	defer s.wg.Done()
 	return s.fetch(url, fields, version)
@@ -692,7 +701,7 @@ func (iter *Iter) send(e *mongodoc.Entity) bool {
 }
 
 // stashEntity represents an entity stored in a stash.
-// It is implemented by both Entity and BaseEntity.
+// It is implemented by the entity and baseEntity types.
 type stashEntity interface {
 	url() *charm.URL
 	promulgatedURL() *charm.URL
