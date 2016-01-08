@@ -58,7 +58,7 @@ func (h *ReqHandler) Search(sp charmstore.SearchParams, req *http.Request) (inte
 	}, nil
 }
 
-//addMetada adds the requested meta data with the include list.
+// addMetaData adds the requested meta data with the include list.
 func (h *ReqHandler) addMetaData(results []*mongodoc.Entity, include []string, req *http.Request) []params.EntityResult {
 	entities := make([]params.EntityResult, len(results))
 	run := parallel.NewRun(maxConcurrency)

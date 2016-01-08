@@ -13,6 +13,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/entitycache"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
@@ -29,24 +30,22 @@ func (h *ReqHandler) metaCharmRelated(entity *mongodoc.Entity, id *router.Resolv
 		return &params.RelatedResponse{}, nil
 	}
 	q := h.Store.MatchingInterfacesQuery(entity.CharmProvidedInterfaces, entity.CharmRequiredInterfaces)
-
-	fields := bson.D{
-		{"_id", 1},
-		{"supportedseries", 1},
-		{"development", 1},
-		{"charmrequiredinterfaces", 1},
-		{"charmprovidedinterfaces", 1},
-		{"promulgated-url", 1},
-		{"promulgated-revision", 1},
-	}
-
-	var entities []*mongodoc.Entity
-	if err := q.Select(fields).Sort("_id").All(&entities); err != nil {
+	q = q.Sort("_id")
+	iter := h.Cache.Iter(q, map[string]int{
+		"_id":                     1,
+		"supportedseries":         1,
+		"development":             1,
+		"charmrequiredinterfaces": 1,
+		"charmprovidedinterfaces": 1,
+		"promulgated-url":         1,
+		"promulgated-revision":    1,
+	})
+	entities, err := allEntities(iter)
+	if err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related charms")
 	}
 
-	// If no entities are found there is no need for further processing the
-	// results.
+	// If no entities are found there is no need for further processing the results.
 	if len(entities) == 0 {
 		return &params.RelatedResponse{}, nil
 	}
@@ -72,6 +71,17 @@ func (h *ReqHandler) metaCharmRelated(entity *mongodoc.Entity, id *router.Resolv
 		Requires: requires,
 		Provides: provides,
 	}, nil
+}
+
+// allEntities returns all the entities from the given iterator. It may
+// return some entities and an error if some were read before the
+// iterator completed.
+func allEntities(iter *entitycache.Iter) ([]*mongodoc.Entity, error) {
+	var entities []*mongodoc.Entity
+	for iter.Next() {
+		entities = append(entities, iter.Entity())
+	}
+	return entities, iter.Err()
 }
 
 type entityRelatedInterfacesGetter func(*mongodoc.Entity) []string
@@ -161,11 +171,10 @@ func (h *ReqHandler) metaBundlesContaining(entity *mongodoc.Entity, id *router.R
 	}
 
 	// Retrieve the bundles containing the resulting charm id.
-	var entities []*mongodoc.Entity
-	if err := h.Store.DB.Entities().
-		Find(bson.D{{"bundlecharms", &searchId}}).
-		Select(bson.D{{"_id", 1}, {"bundlecharms", 1}, {"promulgated-url", 1}}).
-		All(&entities); err != nil {
+	q := h.Store.DB.Entities().Find(bson.D{{"bundlecharms", &searchId}})
+	iter := h.Cache.Iter(q, charmstore.FieldSelector("bundlecharms", "promulgated-url"))
+	entities, err := allEntities(iter)
+	if err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related bundles")
 	}
 

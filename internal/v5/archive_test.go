@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1776,9 +1777,13 @@ func (s *ArchiveSuiteWithTerms) TestGetUserHasAgreedToTermsAndConditions(c *gc.C
 	termsDischargeAccessed := false
 	s.dischargeTerms = func(cond, args string) ([]checkers.Caveat, error) {
 		termsDischargeAccessed = true
-		if cond != "has-agreed" || args != "terms-1/1 terms-2/5" {
-			c.Logf("terms %#v", args)
-			return nil, errgo.New("discharge error")
+		if cond != "has-agreed" {
+			return nil, errgo.New("unexpected condition")
+		}
+		terms := strings.Fields(args)
+		sort.Strings(terms)
+		if strings.Join(terms, " ") != "terms-1/1 terms-2/5" {
+			return nil, errgo.New("unexpected terms in condition")
 		}
 		return nil, nil
 	}
