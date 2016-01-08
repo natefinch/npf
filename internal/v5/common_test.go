@@ -230,6 +230,39 @@ func (s *commonSuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.R
 	return rurl, bundle
 }
 
+// addCharms adds all the given charms to s.store. The
+// map key is the id of the charm.
+func (s *commonSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
+	for id, ch := range charms {
+		url := mustParseResolvedURL(id)
+		// The blob related info are not used in these tests.
+		// The related charms are retrieved from the entities collection,
+		// without accessing the blob store.
+		err := s.store.AddCharm(ch, charmstore.AddParams{
+			URL:      url,
+			BlobName: "blobName",
+			BlobHash: fakeBlobHash,
+			BlobSize: fakeBlobSize,
+		})
+		c.Assert(err, gc.IsNil, gc.Commentf("id %q", id))
+		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+		c.Assert(err, gc.IsNil)
+		if url.Development {
+			err = s.store.SetPerms(url.UserOwnedURL(), "read", params.Everyone, url.URL.User)
+		}
+	}
+}
+
+// setPerms sets the read permissions of a set of entities.
+// The map key is the is the id of each entity; its
+// associated value is its read ACL.
+func (s *commonSuite) setPerms(c *gc.C, readACLs map[string][]string) {
+	for url, acl := range readACLs {
+		err := s.store.SetPerms(charm.MustParseURL(url), "read", acl...)
+		c.Assert(err, gc.IsNil)
+	}
+}
+
 // handler returns a request handler that can be
 // used to invoke private methods. The caller
 // is responsible for calling Put on the returned handler.

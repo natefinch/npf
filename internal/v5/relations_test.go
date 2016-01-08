@@ -419,34 +419,6 @@ var metaCharmRelatedTests = []struct {
 	},
 }}
 
-func (s *RelationsSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
-	for id, ch := range charms {
-		url := mustParseResolvedURL(id)
-		// The blob related info are not used in these tests.
-		// The related charms are retrieved from the entities collection,
-		// without accessing the blob store.
-		err := s.store.AddCharm(ch, charmstore.AddParams{
-			URL:      url,
-			BlobName: "blobName",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
-		})
-		c.Assert(err, gc.IsNil, gc.Commentf("id %q", id))
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
-		if url.Development {
-			err = s.store.SetPerms(url.UserOwnedURL(), "read", params.Everyone, url.URL.User)
-		}
-	}
-}
-
-func (s *RelationsSuite) setPerms(c *gc.C, readACLs map[string][]string) {
-	for url, acl := range readACLs {
-		err := s.store.SetPerms(charm.MustParseURL(url), "read", acl...)
-		c.Assert(err, gc.IsNil)
-	}
-}
-
 func (s *RelationsSuite) TestMetaCharmRelated(c *gc.C) {
 	for i, test := range metaCharmRelatedTests {
 		c.Logf("test %d: %s", i, test.about)
