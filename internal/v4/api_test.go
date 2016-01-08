@@ -522,6 +522,7 @@ func (s *APISuite) TestAllMetaEndpointsTested(c *gc.C) {
 		}
 		testNames[test.name] = true
 	}
+	testNames["terms"] = true
 	c.Assert(testNames, jc.DeepEquals, listNames)
 }
 
