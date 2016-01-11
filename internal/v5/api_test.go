@@ -479,7 +479,7 @@ var metaEndpoints = []metaEndpoint{{
 }, {
 	name: "terms",
 	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
-		doc, err := store.FindEntity(url)
+		doc, err := store.FindEntity(url, nil)
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}

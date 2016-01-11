@@ -508,7 +508,7 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 		query: "name=wordpress&type=charm&include=charm-related",
 		meta: map[string]interface{}{
 			"charm-related": params.RelatedResponse{
-				Provides: map[string][]params.MetaAnyResponse{
+				Provides: map[string][]params.EntityResult{
 					"mysql": {
 						{
 							Id: exportTestCharms["mysql"].PreferredURL(),
@@ -527,7 +527,7 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 		query: "name=wordpress&type=charm&include=charm-related&include=charm-config",
 		meta: map[string]interface{}{
 			"charm-related": params.RelatedResponse{
-				Provides: map[string][]params.MetaAnyResponse{
+				Provides: map[string][]params.EntityResult{
 					"mysql": {
 						{
 							Id: exportTestCharms["mysql"].PreferredURL(),
