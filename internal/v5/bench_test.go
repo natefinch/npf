@@ -123,7 +123,7 @@ var benchmarkCharmRelatedAddCharms = map[string]charm.Charm{
 }
 
 var benchmarkCharmRelatedExpectBody = params.RelatedResponse{
-	Provides: map[string][]params.MetaAnyResponse{
+	Provides: map[string][]params.EntityResult{
 		"memcache": {{
 			Id: charm.MustParseURL("utopic/memcached-1"),
 			Meta: map[string]interface{}{

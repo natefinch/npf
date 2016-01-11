@@ -143,7 +143,7 @@ var metaCharmRelatedTests = []struct {
 	charms: metaCharmRelatedCharms,
 	id:     "utopic/wordpress-0",
 	expectBody: params.RelatedResponse{
-		Provides: map[string][]params.MetaAnyResponse{
+		Provides: map[string][]params.EntityResult{
 			"memcache": {{
 				Id: charm.MustParseURL("utopic/memcached-42"),
 			}},
@@ -151,7 +151,7 @@ var metaCharmRelatedTests = []struct {
 				Id: charm.MustParseURL("precise/nfs-1"),
 			}},
 		},
-		Requires: map[string][]params.MetaAnyResponse{
+		Requires: map[string][]params.EntityResult{
 			"http": {{
 				Id: charm.MustParseURL("multi-series-1"),
 			}, {
@@ -166,7 +166,7 @@ var metaCharmRelatedTests = []struct {
 	charms: metaCharmRelatedCharms,
 	id:     "trusty/haproxy-47",
 	expectBody: params.RelatedResponse{
-		Provides: map[string][]params.MetaAnyResponse{
+		Provides: map[string][]params.EntityResult{
 			"http": {{
 				Id: charm.MustParseURL("utopic/wordpress-0"),
 			}},
@@ -177,7 +177,7 @@ var metaCharmRelatedTests = []struct {
 	charms: metaCharmRelatedCharms,
 	id:     "utopic/memcached-42",
 	expectBody: params.RelatedResponse{
-		Requires: map[string][]params.MetaAnyResponse{
+		Requires: map[string][]params.EntityResult{
 			"memcache": {{
 				Id: charm.MustParseURL("utopic/wordpress-0"),
 			}},
@@ -257,7 +257,7 @@ var metaCharmRelatedTests = []struct {
 	},
 	id: "trusty/wordpress-0",
 	expectBody: params.RelatedResponse{
-		Provides: map[string][]params.MetaAnyResponse{
+		Provides: map[string][]params.EntityResult{
 			"memcache": {{
 				Id: charm.MustParseURL("utopic/memcached-1"),
 			}, {
@@ -341,7 +341,7 @@ var metaCharmRelatedTests = []struct {
 	},
 	id: "trusty/wordpress-0",
 	expectBody: params.RelatedResponse{
-		Provides: map[string][]params.MetaAnyResponse{
+		Provides: map[string][]params.EntityResult{
 			"memcache": {{
 				Id: charm.MustParseURL("utopic/memcached-1"),
 			}, {
@@ -364,7 +364,7 @@ var metaCharmRelatedTests = []struct {
 	id:          "precise/nfs-1",
 	querystring: "?include=archive-size&include=charm-metadata",
 	expectBody: params.RelatedResponse{
-		Requires: map[string][]params.MetaAnyResponse{
+		Requires: map[string][]params.EntityResult{
 			"mount": {{
 				Id: charm.MustParseURL("utopic/wordpress-0"),
 				Meta: map[string]interface{}{
@@ -402,12 +402,12 @@ var metaCharmRelatedTests = []struct {
 	},
 	id: "utopic/wordpress-0",
 	expectBody: params.RelatedResponse{
-		Provides: map[string][]params.MetaAnyResponse{
+		Provides: map[string][]params.EntityResult{
 			"mount": {{
 				Id: charm.MustParseURL("precise/nfs-1"),
 			}},
 		},
-		Requires: map[string][]params.MetaAnyResponse{
+		Requires: map[string][]params.EntityResult{
 			"http": {{
 				Id: charm.MustParseURL("multi-series-1"),
 			}, {

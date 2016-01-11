@@ -103,8 +103,8 @@ func (h *ReqHandler) getRelatedCharmsResponse(
 	getInterfaces entityRelatedInterfacesGetter,
 	includes []string,
 	req *http.Request,
-) (map[string][]params.MetaAnyResponse, error) {
-	results := make(map[string][]params.MetaAnyResponse, len(ifaces))
+) (map[string][]params.EntityResult, error) {
+	results := make(map[string][]params.EntityResult, len(ifaces))
 	for _, iface := range ifaces {
 		responses, err := h.getRelatedIfaceResponses(iface, entities, getInterfaces, includes, req)
 		if err != nil {
@@ -123,7 +123,7 @@ func (h *ReqHandler) getRelatedIfaceResponses(
 	getInterfaces entityRelatedInterfacesGetter,
 	includes []string,
 	req *http.Request,
-) ([]params.MetaAnyResponse, error) {
+) ([]params.EntityResult, error) {
 	// Build a list of responses including only entities which are related
 	// to the given interface.
 	usesInterface := func(e *mongodoc.Entity) bool {
@@ -255,9 +255,9 @@ func (h *ReqHandler) metaBundlesContaining(entity *mongodoc.Entity, id *router.R
 	return resp, nil
 }
 
-func (h *ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, includes []string, req *http.Request, includeEntity func(*mongodoc.Entity) bool) ([]params.MetaAnyResponse, error) {
+func (h *ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, includes []string, req *http.Request, includeEntity func(*mongodoc.Entity) bool) ([]params.EntityResult, error) {
 	// TODO(rog) make this concurrent.
-	response := make([]params.MetaAnyResponse, 0, len(entities))
+	response := make([]params.EntityResult, 0, len(entities))
 	for _, e := range entities {
 		if includeEntity != nil && !includeEntity(e) {
 			continue
@@ -269,7 +269,7 @@ func (h *ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, include
 		if err != nil {
 			return nil, errgo.Mask(err)
 		}
-		response = append(response, params.MetaAnyResponse{
+		response = append(response, params.EntityResult{
 			Id:   e.PreferredURL(true),
 			Meta: meta,
 		})

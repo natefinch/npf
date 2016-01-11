@@ -21,10 +21,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/juju/errgo"
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	charmtesting "gopkg.in/juju/charmrepo.v2-unstable/testing"

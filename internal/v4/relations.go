@@ -92,8 +92,8 @@ func (h *ReqHandler) getRelatedCharmsResponse(
 	getInterfaces entityRelatedInterfacesGetter,
 	includes []string,
 	req *http.Request,
-) (map[string][]params.MetaAnyResponse, error) {
-	results := make(map[string][]params.MetaAnyResponse, len(ifaces))
+) (map[string][]params.EntityResult, error) {
+	results := make(map[string][]params.EntityResult, len(ifaces))
 	for _, iface := range ifaces {
 		responses, err := h.getRelatedIfaceResponses(iface, entities, getInterfaces, includes, req)
 		if err != nil {
@@ -112,7 +112,7 @@ func (h *ReqHandler) getRelatedIfaceResponses(
 	getInterfaces entityRelatedInterfacesGetter,
 	includes []string,
 	req *http.Request,
-) ([]params.MetaAnyResponse, error) {
+) ([]params.EntityResult, error) {
 	// Build a list of responses including only entities which are related
 	// to the given interface.
 	usesInterface := func(e *mongodoc.Entity) bool {
@@ -131,8 +131,8 @@ func (h *ReqHandler) getRelatedIfaceResponses(
 	return resp, nil
 }
 
-func (h *ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, includes []string, req *http.Request, includeEntity func(*mongodoc.Entity) bool) ([]params.MetaAnyResponse, error) {
-	response := make([]params.MetaAnyResponse, 0, len(entities))
+func (h *ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, includes []string, req *http.Request, includeEntity func(*mongodoc.Entity) bool) ([]params.EntityResult, error) {
+	response := make([]params.EntityResult, 0, len(entities))
 	err := expandMultiSeries(entities, func(series string, e *mongodoc.Entity) error {
 		if includeEntity != nil && !includeEntity(e) {
 			return nil
@@ -146,7 +146,7 @@ func (h *ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, include
 		}
 		id := e.PreferredURL(true)
 		id.Series = series
-		response = append(response, params.MetaAnyResponse{
+		response = append(response, params.EntityResult{
 			Id:   id,
 			Meta: meta,
 		})
