@@ -44,7 +44,6 @@ var exportListTestBundles = map[string]*router.ResolvedURL{
 }
 
 func (s *ListSuite) SetUpSuite(c *gc.C) {
-	s.enableES = true
 	s.enableIdentity = true
 	s.commonSuite.SetUpSuite(c)
 }
@@ -61,10 +60,6 @@ func (s *ListSuite) SetUpTest(c *gc.C) {
 			},
 		}}},
 	)
-	c.Assert(err, gc.IsNil)
-	err = s.store.UpdateSearch(newResolvedURL("~charmers/trusty/riak-0", 0))
-	c.Assert(err, gc.IsNil)
-	err = s.esSuite.ES.RefreshIndex(s.esSuite.TestIndex)
 	c.Assert(err, gc.IsNil)
 }
 

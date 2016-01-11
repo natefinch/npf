@@ -1153,16 +1153,15 @@ func (h *ReqHandler) serveChangesPublished(_ http.Header, r *http.Request) (inte
 	}
 	query := h.Store.DB.Entities().
 		Find(findQuery).
-		Sort("-uploadtime").
-		Select(bson.D{{"_id", 1}, {"uploadtime", 1}})
+		Sort("-uploadtime")
+	iter := h.Cache.Iter(query, charmstore.FieldSelector("uploadtime"))
 
 	results := []params.Published{}
 	var count int
-	var entity mongodoc.Entity
-	iter := query.Iter()
-	for iter.Next(&entity) {
+	for iter.Next() {
+		entity := iter.Entity()
 		// Ignore entities that aren't readable by the current user.
-		if err := h.AuthorizeEntity(charmstore.EntityResolvedURL(&entity), r); err != nil {
+		if err := h.AuthorizeEntity(charmstore.EntityResolvedURL(entity), r); err != nil {
 			continue
 		}
 		results = append(results, params.Published{
@@ -1171,10 +1170,11 @@ func (h *ReqHandler) serveChangesPublished(_ http.Header, r *http.Request) (inte
 		})
 		count++
 		if limit > 0 && limit <= count {
+			iter.Close()
 			break
 		}
 	}
-	if err := iter.Close(); err != nil {
+	if err := iter.Err(); err != nil {
 		return nil, errgo.Mask(err)
 	}
 	return results, nil

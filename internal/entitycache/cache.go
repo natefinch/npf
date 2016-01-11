@@ -457,23 +457,20 @@ var notFoundEntity = notFoundEntityT{}
 // The entities produced by the returned iterator
 // will have at least the given fields populated.
 func (c *Cache) Iter(q *mgo.Query, fields map[string]int) *Iter {
-	// Implementation note: as we iterate through the
-	// entries, we also arrange for their corresponding
-	// base entities to be fetched because we'll almost
-	// certainly need them. Strictly speaking this is an
-	// optimization, because the entitycache API would
-	// remain the same even if this were not true.
+	return c.CustomIter(mgoQuery{q}, fields)
+}
+
+// CustomIter is the same as Iter except that it allows iteration
+// through entities that aren't necessarily the direct result of
+// a MongoDB query. Care must be taken to ensure that
+// the fields returned are valid for the entities they purport
+// to represent.
+func (c *Cache) CustomIter(q StoreQuery, fields map[string]int) *Iter {
 	c.entities.mu.Lock()
 	defer c.entities.mu.Unlock()
 	c.entities.addFields(fields)
-	return c.iter(q.Select(c.entities.fields).Iter())
-}
-
-// iter is the internal version of Iter, using an interface so it can be
-// tested independently of mongo. Called with c.entities.mu locked.
-func (c *Cache) iter(mgoIter mgoIter) *Iter {
 	iter := &Iter{
-		iter:    mgoIter,
+		iter:    q.Iter(c.entities.fields),
 		cache:   c,
 		entityc: make(chan *mongodoc.Entity),
 		closed:  make(chan struct{}),
@@ -484,22 +481,12 @@ func (c *Cache) iter(mgoIter mgoIter) *Iter {
 	return iter
 }
 
-// mgoIter represents a mongoDB iterator. It is
-// represented as an interface rather than using
-// *mgo.Iter directly so that we can easily fake it
-// in tests.
-type mgoIter interface {
-	Next(interface{}) bool
-	Close() error
-	Err() error
-}
-
 // Iter holds an iterator over a set of entities.
 type Iter struct {
 	// e holds the current entity. It is nil only
 	// if the iterator has terminated.
 	e       *mongodoc.Entity
-	iter    mgoIter
+	iter    StoreIter
 	cache   *Cache
 	entityc chan *mongodoc.Entity
 	closed  chan struct{}
@@ -563,6 +550,9 @@ func (i *Iter) Close() {
 	// i.closed before trying to send on i.entityc.
 	i.runWG.Wait()
 	i.e = nil
+	if err := i.iter.Err(); err != nil {
+		i.err = errgo.Mask(err)
+	}
 }
 
 // Err returns any error encountered by the the iterator. If the
@@ -740,4 +730,29 @@ func (e baseEntity) url() *charm.URL {
 
 func (e baseEntity) promulgatedURL() *charm.URL {
 	return nil
+}
+
+// StoreQuery represents a query on entities in the charm store It is
+// represented as an interface rather than using *mgo.Query directly so
+// that we can easily fake it in tests, and so that it's possible to use
+// other different underlying representations.
+type StoreQuery interface {
+	// Iter returns an iterator over the query, selecting
+	// at least the fields mentioned in the given map.
+	Iter(fields map[string]int) StoreIter
+}
+
+// StoreIter represents an iterator over entities in the charm store.
+type StoreIter interface {
+	Next(interface{}) bool
+	Err() error
+	Close() error
+}
+
+type mgoQuery struct {
+	query *mgo.Query
+}
+
+func (q mgoQuery) Iter(fields map[string]int) StoreIter {
+	return q.query.Select(fields).Iter()
 }
