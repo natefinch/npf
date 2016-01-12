@@ -181,13 +181,13 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 		},
 		Id: map[string]router.IdHandler{
 			"archive":     h.serveArchive,
-			"archive/":    resolveId(authId(h.serveArchiveFile)),
-			"diagram.svg": resolveId(authId(h.serveDiagram)),
+			"archive/":    resolveId(authId(h.serveArchiveFile), "blobname", "blobhash"),
+			"diagram.svg": resolveId(authId(h.serveDiagram), "bundledata"),
 			"expand-id":   resolveId(authId(h.serveExpandId)),
-			"icon.svg":    resolveId(authId(h.serveIcon)),
+			"icon.svg":    resolveId(authId(h.serveIcon), "contents", "blobname"),
 			"promulgate":  resolveId(h.serveAdminPromulgate),
 			"publish":     h.servePublish,
-			"readme":      resolveId(authId(h.serveReadMe)),
+			"readme":      resolveId(authId(h.serveReadMe), "contents", "blobname"),
 			"resources":   resolveId(authId(h.serveResources)),
 		},
 		Meta: map[string]router.BulkIncludeHandler{
@@ -1425,10 +1425,15 @@ func (h *ReqHandler) AuthIdHandler(f ResolvedIdHandler) ResolvedIdHandler {
 // ResolvedIdHandler returns an id handler that uses h.Router.Context.ResolveURL
 // to resolves any entity ids before calling f with the resolved id.
 //
+// Any specified fields will be added to the fields required by the cache, so
+// they will be pre-fetched by ResolveURL.
+//
 // Note that it only accesses h.Router.Context when the returned
 // handler is called.
-func (h *ReqHandler) ResolvedIdHandler(f ResolvedIdHandler) router.IdHandler {
+func (h *ReqHandler) ResolvedIdHandler(f ResolvedIdHandler, cacheFields ...string) router.IdHandler {
+	fields := charmstore.FieldSelector(cacheFields...)
 	return func(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
+		h.Cache.AddEntityFields(fields)
 		rid, err := h.Router.Context.ResolveURL(id)
 		if err != nil {
 			return errgo.Mask(err, errgo.Is(params.ErrNotFound))

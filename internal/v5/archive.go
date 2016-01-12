@@ -471,9 +471,13 @@ func verifyStorage(s string) error {
 // GET id/archive/path
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idarchivepath
 func (h *ReqHandler) serveArchiveFile(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-	r, size, _, err := h.Store.OpenBlob(id)
+	entity, err := h.Cache.Entity(id.UserOwnedURL(), charmstore.FieldSelector("blobname", "blobhash"))
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	r, size, err := h.Store.BlobStore.Open(entity.BlobName)
+	if err != nil {
+		return errgo.Notef(err, "cannot open archive data for %v", id)
 	}
 	defer r.Close()
 	zipReader, err := zip.NewReader(charmstore.ReaderAtSeeker(r), size)

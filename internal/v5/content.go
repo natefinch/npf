@@ -29,7 +29,7 @@ func (h *ReqHandler) serveDiagram(id *router.ResolvedURL, w http.ResponseWriter,
 	if id.URL.Series != "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "diagrams not supported for charms")
 	}
-	entity, err := h.Store.FindEntity(id, charmstore.FieldSelector("bundledata"))
+	entity, err := h.Cache.Entity(id.UserOwnedURL(), charmstore.FieldSelector("bundledata"))
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
@@ -72,7 +72,7 @@ var allowedReadMe = map[string]bool{
 // GET id/readme
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idreadme
 func (h *ReqHandler) serveReadMe(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-	entity, err := h.Store.FindEntity(id, charmstore.FieldSelector("_id", "contents", "blobname"))
+	entity, err := h.Cache.Entity(id.UserOwnedURL(), charmstore.FieldSelector("contents", "blobname"))
 	if err != nil {
 		return errgo.NoteMask(err, "cannot get README", errgo.Is(params.ErrNotFound))
 	}
@@ -98,7 +98,7 @@ func (h *ReqHandler) serveIcon(id *router.ResolvedURL, w http.ResponseWriter, re
 	if id.URL.Series == "bundle" {
 		return errgo.WithCausef(nil, params.ErrNotFound, "icons not supported for bundles")
 	}
-	entity, err := h.Store.FindEntity(id, charmstore.FieldSelector("_id", "contents", "blobname"))
+	entity, err := h.Cache.Entity(id.UserOwnedURL(), charmstore.FieldSelector("contents", "blobname"))
 	if err != nil {
 		return errgo.NoteMask(err, "cannot get icon", errgo.Is(params.ErrNotFound))
 	}
