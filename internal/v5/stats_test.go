@@ -26,6 +26,11 @@ type StatsSuite struct {
 
 var _ = gc.Suite(&StatsSuite{})
 
+func (s *StatsSuite) SetUpTest(c *gc.C) {
+	s.enableIdentity = true
+	s.commonSuite.SetUpTest(c)
+}
+
 func (s *StatsSuite) TestServerStatsStatus(c *gc.C) {
 	tests := []struct {
 		path    string
@@ -275,7 +280,7 @@ func (s *StatsSuite) TestServerStatsUpdateErrors(c *gc.C) {
 	}
 }
 
-func (s *StatsSuite) TestServerStatsUpdateNonAdmin(c *gc.C) {
+func (s *StatsSuite) TestServerStatsUpdateNotPartOfStatsUpdateGroup(c *gc.C) {
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: s.srv,
 		URL:     storeURL("stats/update"),
@@ -286,11 +291,8 @@ func (s *StatsSuite) TestServerStatsUpdateNonAdmin(c *gc.C) {
 				CharmReference: charm.MustParseURL("~charmers/precise/wordpress-23"),
 			}},
 		},
-		ExpectStatus: http.StatusUnauthorized,
-		ExpectBody: &params.Error{
-			Message: "authentication failed: missing HTTP auth header",
-			Code:    params.ErrUnauthorized,
-		},
+		ExpectStatus: http.StatusProxyAuthRequired,
+		ExpectBody:   dischargeRequiredBody,
 	})
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:  s.srv,
@@ -309,6 +311,34 @@ func (s *StatsSuite) TestServerStatsUpdateNonAdmin(c *gc.C) {
 			Message: "invalid user name or password",
 			Code:    params.ErrUnauthorized,
 		},
+	})
+}
+
+func (s *StatsSuite) TestServerStatsUpdatePartOfStatsUpdateGroup(c *gc.C) {
+	ch := storetesting.Charms.CharmDir("wordpress")
+	rurl := newResolvedURL("~charmers/precise/wordpress-23", 23)
+	err := s.store.AddCharmWithArchive(rurl, ch)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	c.Assert(err, gc.IsNil)
+
+	s.discharge = dischargeForUser("statsupdate")
+	s.idM.groups = map[string][]string{
+		"statsupdate": []string {"statsupdate@cs"},
+	}
+
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:  s.srv,
+		URL:      storeURL("stats/update"),
+		Do:       bakeryDo(nil),
+		Method:   "PUT",
+		JSONBody: params.StatsUpdateRequest{
+			Entries: []params.StatsUpdateEntry{{
+				Timestamp:      time.Now(),
+				CharmReference: charm.MustParseURL("~charmers/precise/wordpress-23"),
+			}},
+		},
+		ExpectStatus: http.StatusOK,
 	})
 }
 
