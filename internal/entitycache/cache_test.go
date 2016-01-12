@@ -563,7 +563,7 @@ func (s *suite) TestIterSingle(c *gc.C) {
 	cache := entitycache.New(store)
 	defer cache.Close()
 	fakeIter := newFakeIter()
-	iter := entitycache.CacheIter(cache, fakeIter, map[string]int{"size": 1, "blobsize": 1})
+	iter := cache.CustomIter(fakeIter, map[string]int{"size": 1, "blobsize": 1})
 	nextDone := make(chan struct{})
 	go func() {
 		defer close(nextDone)
@@ -680,7 +680,7 @@ func (*suite) TestIterWithEntryAlreadyInCache(c *gc.C) {
 	}
 
 	fakeIter := newFakeIter()
-	iter := entitycache.CacheIter(cache, fakeIter, map[string]int{"size": 1, "blobsize": 1})
+	iter := cache.CustomIter(fakeIter, map[string]int{"size": 1, "blobsize": 1})
 	iterDone := make(chan struct{})
 	go func() {
 		defer close(iterDone)
@@ -749,7 +749,7 @@ func (*suite) TestIterCloseEarlyWhenBatchLimitExceeded(c *gc.C) {
 	fakeIter := &sliceIter{
 		entities: entities,
 	}
-	iter := entitycache.CacheIter(cache, fakeIter, map[string]int{"blobname": 1})
+	iter := cache.CustomIter(fakeIter, map[string]int{"blobname": 1})
 	iter.Close()
 	c.Assert(iter.Next(), gc.Equals, false)
 }
@@ -794,7 +794,7 @@ func (*suite) TestIterCloseEarlyBeforeBatchLimitExceeded(c *gc.C) {
 	}}
 
 	fakeIter := newFakeIter()
-	iter := entitycache.CacheIter(cache, fakeIter, map[string]int{"blobname": 1})
+	iter := cache.CustomIter(fakeIter, map[string]int{"blobname": 1})
 	iterDone := make(chan struct{})
 	go func() {
 		defer close(iterDone)
@@ -858,7 +858,7 @@ func (*suite) TestIterEntityBatchLimitExceeded(c *gc.C) {
 	fakeIter := &sliceIter{
 		entities: entities,
 	}
-	iter := entitycache.CacheIter(cache, fakeIter, map[string]int{"blobname": 1})
+	iter := cache.CustomIter(fakeIter, map[string]int{"blobname": 1})
 
 	// The iterator should fetch up to entityThreshold entities
 	// from the underlying iterator before sending
@@ -906,7 +906,7 @@ func (*suite) TestIterEntityBatchLimitExceeded(c *gc.C) {
 func (*suite) TestIterError(c *gc.C) {
 	cache := entitycache.New(&staticStore{})
 	fakeIter := newFakeIter()
-	iter := entitycache.CacheIter(cache, fakeIter, nil)
+	iter := cache.CustomIter(fakeIter, nil)
 	// Err returns nil while the iteration is in progress.
 	err := iter.Err()
 	c.Assert(err, gc.IsNil)
@@ -955,8 +955,9 @@ func newFakeIter() *fakeIter {
 	}
 }
 
-func (i *fakeIter) SetFields(fields map[string]int) {
+func (i *fakeIter) Iter(fields map[string]int) entitycache.StoreIter {
 	i.fields = fields
+	return i
 }
 
 // Next implements mgoIter.Next. The
@@ -1008,8 +1009,9 @@ type sliceIter struct {
 	closed   bool
 }
 
-func (iter *sliceIter) SetFields(fields map[string]int) {
-	iter.fields = fields
+func (i *sliceIter) Iter(fields map[string]int) entitycache.StoreIter {
+	i.fields = fields
+	return i
 }
 
 func (iter *sliceIter) Next(x interface{}) bool {

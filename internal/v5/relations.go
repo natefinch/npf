@@ -30,22 +30,24 @@ func (h *ReqHandler) metaCharmRelated(entity *mongodoc.Entity, id *router.Resolv
 		return &params.RelatedResponse{}, nil
 	}
 	q := h.Store.MatchingInterfacesQuery(entity.CharmProvidedInterfaces, entity.CharmRequiredInterfaces)
-	q = q.Sort("_id")
-	iter := h.Cache.Iter(q, map[string]int{
-		"_id":                     1,
-		"supportedseries":         1,
-		"development":             1,
-		"charmrequiredinterfaces": 1,
-		"charmprovidedinterfaces": 1,
-		"promulgated-url":         1,
-		"promulgated-revision":    1,
-	})
-	entities, err := allEntities(iter)
-	if err != nil {
+
+	fields := bson.D{
+		{"_id", 1},
+		{"supportedseries", 1},
+		{"development", 1},
+		{"charmrequiredinterfaces", 1},
+		{"charmprovidedinterfaces", 1},
+		{"promulgated-url", 1},
+		{"promulgated-revision", 1},
+	}
+
+	var entities []*mongodoc.Entity
+	if err := q.Select(fields).Sort("_id").All(&entities); err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related charms")
 	}
 
-	// If no entities are found there is no need for further processing the results.
+	// If no entities are found there is no need for further processing the
+	// results.
 	if len(entities) == 0 {
 		return &params.RelatedResponse{}, nil
 	}
@@ -256,7 +258,11 @@ func (h *ReqHandler) metaBundlesContaining(entity *mongodoc.Entity, id *router.R
 }
 
 func (h *ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, includes []string, req *http.Request, includeEntity func(*mongodoc.Entity) bool) ([]params.EntityResult, error) {
-	// TODO(rog) make this concurrent.
+	for _, inc := range includes {
+		if h.Router.MetaHandler(inc) == nil {
+			return nil, errgo.Newf("unrecognized metadata name %q", inc)
+		}
+	}
 	response := make([]params.EntityResult, 0, len(entities))
 	for _, e := range entities {
 		if includeEntity != nil && !includeEntity(e) {
@@ -267,7 +273,11 @@ func (h *ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, include
 			continue
 		}
 		if err != nil {
-			return nil, errgo.Mask(err)
+			// Unfortunately it is possible to get errors here due to
+			// internal inconsistency, so rather than throwing away
+			// all the search results, we just log the error and move on.
+			logger.Errorf("cannot retrieve metadata for %v: %v", e.PreferredURL(true), err)
+			continue
 		}
 		response = append(response, params.EntityResult{
 			Id:   e.PreferredURL(true),

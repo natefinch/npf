@@ -10,6 +10,7 @@ import (
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/entitycache"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 )
 
@@ -20,23 +21,33 @@ func (h *ReqHandler) serveList(_ http.Header, req *http.Request) (interface{}, e
 	if err != nil {
 		return "", err
 	}
-	// perform query
-	results, err := h.Store.List(sp)
+	h.WillIncludeMetadata(sp.Include)
+
+	lq, err := h.Store.ListQuery(sp)
 	if err != nil {
+		return nil, badRequestf(err, "")
+	}
+	var results []*mongodoc.Entity
+	iter := h.Cache.CustomIter(entityCacheListQuery{lq}, nil)
+	for iter.Next() {
+		results = append(results, iter.Entity())
+	}
+	if iter.Err() != nil {
 		return nil, errgo.Notef(err, "error listing charms and bundles")
 	}
-
-	// TODO 30th Nov 2015 Fabrice:
-	// we should follow the same pattern as search, and put the user, admin and groups
-	// into the SearchParams and leave the charmstore package to be responsible for filtering
-	// For performance, we should also look at not having n request to mongo.
-	filteredACLResults := make([]*mongodoc.Entity, 0, len(results.Results))
-	for _, result := range results.Results {
-		if err = h.AuthorizeEntity(charmstore.EntityResolvedURL(result), req); err == nil {
-			filteredACLResults = append(filteredACLResults, result)
-		}
+	r, err := h.getMetadataForEntities(results, sp.Include, req, nil)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot get metadata")
 	}
 	return params.ListResponse{
-		Results: h.addMetaData(filteredACLResults, sp.Include, req),
+		Results: r,
 	}, nil
+}
+
+type entityCacheListQuery struct {
+	q *charmstore.ListQuery
+}
+
+func (q entityCacheListQuery) Iter(fields map[string]int) entitycache.StoreIter {
+	return q.q.Iter(fields)
 }

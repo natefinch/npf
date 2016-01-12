@@ -133,6 +133,11 @@ func (h *ReqHandler) getRelatedIfaceResponses(
 
 func (h *ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, includes []string, req *http.Request, includeEntity func(*mongodoc.Entity) bool) ([]params.EntityResult, error) {
 	response := make([]params.EntityResult, 0, len(entities))
+	for _, inc := range includes {
+		if h.Router.MetaHandler(inc) == nil {
+			return nil, errgo.Newf("unrecognized metadata name %q", inc)
+		}
+	}
 	err := expandMultiSeries(entities, func(series string, e *mongodoc.Entity) error {
 		if includeEntity != nil && !includeEntity(e) {
 			return nil
@@ -142,7 +147,11 @@ func (h *ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, include
 			return nil
 		}
 		if err != nil {
-			return errgo.Mask(err)
+			// Unfortunately it is possible to get errors here due to
+			// internal inconsistency, so rather than throwing away
+			// all the search results, we just log the error and move on.
+			logger.Errorf("cannot retrieve metadata for %v: %v", e.PreferredURL(true), err)
+			return nil
 		}
 		id := e.PreferredURL(true)
 		id.Series = series
