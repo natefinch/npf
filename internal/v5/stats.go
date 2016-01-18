@@ -115,7 +115,7 @@ func (h *ReqHandler) serveStatsCounter(_ http.Header, r *http.Request) (interfac
 // PUT stats/update
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-statsupdate
 func (h *ReqHandler) serveStatsUpdate(w http.ResponseWriter, r *http.Request) error {
-	if _, err := h.authorize(r, []string {"statsupdate@cs"}, true, nil); err != nil {
+	if _, err := h.authorize(r, []string{"statsupdate@cs"}, true, nil); err != nil {
 		return err
 	}
 	if r.Method != "PUT" {

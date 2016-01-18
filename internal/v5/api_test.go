@@ -654,6 +654,29 @@ func (s *APISuite) TestMetaPermAudit(c *gc.C) {
 	}})
 }
 
+func (s *APISuite) TestMetaPermPublicWrite(c *gc.C) {
+	url := newResolvedURL("~bob/precise/wordpress-23", 23)
+	s.addPublicCharm(c, "wordpress", url)
+	s.assertPut(c, "precise/wordpress-23/meta/perm/write", []string{"everyone"})
+
+	// Even though the endpoint has write permissions open to anyone,
+	// we still require authentication so that we can make an entry in
+	// the audit log.
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL("precise/wordpress-23/meta/perm/read"),
+		Method:  "PUT",
+		Header: http.Header{
+			"Content-Type": {"application/json"},
+		},
+		Body:         strings.NewReader(`["alice"]`),
+		ExpectStatus: http.StatusProxyAuthRequired,
+		ExpectBody:   dischargeRequiredBody,
+	})
+	s.discharge = dischargeForUser("bob")
+	s.assertPutNonAdmin(c, "precise/wordpress-23/meta/perm/read", []string{"alice"})
+}
+
 func (s *APISuite) TestMetaPerm(c *gc.C) {
 	// Create a charm store server that will use the test third party for
 	// its third party caveat.
@@ -2613,7 +2636,7 @@ func (s *APISuite) assertPut(c *gc.C, url string, val interface{}) {
 func (s *APISuite) assertPut0(c *gc.C, url string, val interface{}, asAdmin bool) {
 	body, err := json.Marshal(val)
 	c.Assert(err, gc.IsNil)
-	p := httptesting.DoRequestParams{
+	p := httptesting.JSONCallParams{
 		Handler: s.srv,
 		URL:     storeURL(url),
 		Method:  "PUT",
@@ -2627,9 +2650,7 @@ func (s *APISuite) assertPut0(c *gc.C, url string, val interface{}, asAdmin bool
 		p.Username = testUsername
 		p.Password = testPassword
 	}
-	rec := httptesting.DoRequest(c, p)
-	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %s", rec.Body.String()))
-	c.Assert(rec.Body.String(), gc.HasLen, 0)
+	httptesting.AssertJSONCall(c, p)
 }
 
 func (s *APISuite) assertGet(c *gc.C, url string, expectVal interface{}) {

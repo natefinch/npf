@@ -324,14 +324,14 @@ func (s *StatsSuite) TestServerStatsUpdatePartOfStatsUpdateGroup(c *gc.C) {
 
 	s.discharge = dischargeForUser("statsupdate")
 	s.idM.groups = map[string][]string{
-		"statsupdate": []string {"statsupdate@cs"},
+		"statsupdate": []string{"statsupdate@cs"},
 	}
 
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:  s.srv,
-		URL:      storeURL("stats/update"),
-		Do:       bakeryDo(nil),
-		Method:   "PUT",
+		Handler: s.srv,
+		URL:     storeURL("stats/update"),
+		Do:      bakeryDo(nil),
+		Method:  "PUT",
 		JSONBody: params.StatsUpdateRequest{
 			Entries: []params.StatsUpdateEntry{{
 				Timestamp:      time.Now(),
