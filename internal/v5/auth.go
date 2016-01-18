@@ -246,6 +246,7 @@ func (h *ReqHandler) CheckRequest(req *http.Request, entityIds []*router.Resolve
 	if err != nil {
 		return authorization{}, errgo.Mask(err, errgo.Any)
 	}
+
 	return authorization{
 		Admin:    false,
 		Username: attrMap[UsernameAttr],
@@ -296,14 +297,19 @@ func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) 
 }
 
 func (h *ReqHandler) authorizeWithPerms(req *http.Request, read, write []string, entityId *router.ResolvedURL) error {
+	alwaysAuth := false
 	var acl []string
 	switch req.Method {
 	case "DELETE", "PATCH", "POST", "PUT":
 		acl = write
+		// We always require authentication when making changes
+		// to the charm store so that auditing will work, even if the
+		// entity is public.
+		alwaysAuth = true
 	default:
 		acl = read
 	}
-	_, err := h.authorize(req, acl, false, entityId)
+	_, err := h.authorize(req, acl, alwaysAuth, entityId)
 	return err
 }
 
