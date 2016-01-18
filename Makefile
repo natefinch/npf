@@ -7,6 +7,10 @@ endif
 PROJECT := gopkg.in/juju/charmstore.v5-unstable
 PROJECT_DIR := $(shell go list -e -f '{{.Dir}}' $(PROJECT))
 
+GIT_COMMIT := $(shell git rev-parse --verify HEAD)
+GIT_VERSION := $(shell git describe --dirty)
+
+
 ifeq ($(shell uname -p | sed -r 's/.*(x86|armel|armhf).*/golang/'), golang)
 	GO_C := golang
 	INSTALL_FLAGS :=
@@ -25,6 +29,12 @@ define DEPENDENCIES
   elasticsearch
 endef
 
+ifeq ($(VERSION),no)
+	VERSIONDEPS :=
+else
+	VERSIONDEPS := version/init.go
+endif
+
 default: build
 
 $(GOPATH)/bin/godeps:
@@ -34,13 +44,13 @@ $(GOPATH)/bin/godeps:
 # and will only work - when this tree is found on the GOPATH.
 ifeq ($(CURDIR),$(PROJECT_DIR))
 
-build:
+build: $(VERSIONDEPS)
 	go build $(PROJECT)/...
 
-check:
+check: $(VERSIONDEPS)
 	go test $(PROJECT)/...
 
-install:
+install: $(VERSIONDEPS)
 	go install $(INSTALL_FLAGS) -v $(PROJECT)/...
 
 clean:
@@ -83,6 +93,10 @@ deps: $(GOPATH)/bin/godeps
 create-deps: $(GOPATH)/bin/godeps
 	godeps -t $(shell go list $(PROJECT)/...) > dependencies.tsv || true
 
+# Generate version information
+version/init.go: version/init.go.tmpl FORCE
+	gofmt -r "unknownVersion -> Version{GitCommit: \"${GIT_COMMIT}\", Version: \"${GIT_VERSION}\",}" $< > $@
+
 # Install packages required to develop the charm store and run tests.
 APT_BASED := $(shell command -v apt-get >/dev/null; echo $$?)
 sysdeps:
@@ -120,4 +134,4 @@ help:
 	@echo 'make simplify - Format and simplify the source files.'
 	@echo 'make gopkg - Output the current gopkg repository path and version.'
 
-.PHONY: build check clean format gopkg help install simplify sysdeps
+.PHONY: build check clean format gopkg help install simplify sysdeps FORCE
