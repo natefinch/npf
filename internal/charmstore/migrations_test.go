@@ -133,7 +133,7 @@ func init() {
 }
 
 func (s *migrationsSuite) newServer(c *gc.C) error {
-	apiHandler := func(p *Pool, config ServerParams) HTTPCloseHandler {
+	apiHandler := func(p *Pool, config ServerParams, _ string) HTTPCloseHandler {
 		return nopCloseHandler{http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {})}
 	}
 	srv, err := NewServer(s.db.Database, nil, serverParams, map[string]NewAPIHandlerFunc{

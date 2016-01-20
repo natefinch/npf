@@ -55,6 +55,7 @@ type Handler struct {
 	config         charmstore.ServerParams
 	locator        bakery.PublicKeyLocator
 	identityClient *identity.Client
+	rootPath       string
 
 	// searchCache is a cache of search results keyed on the query
 	// parameters of the search. It should only be used for searches
@@ -92,10 +93,11 @@ const (
 	reqHandlerCacheSize       = 50
 )
 
-func New(pool *charmstore.Pool, config charmstore.ServerParams) *Handler {
+func New(pool *charmstore.Pool, config charmstore.ServerParams, rootPath string) *Handler {
 	h := &Handler{
 		Pool:        pool,
 		config:      config,
+		rootPath:    rootPath,
 		searchCache: cache.New(config.SearchCacheMaxAge),
 		locator:     config.PublicKeyLocator,
 		identityClient: identity.NewClient(&identity.Params{
@@ -256,12 +258,6 @@ func newReqHandler() *ReqHandler {
 // request-specific instance of ReqHandler and
 // calling ServeHTTP on that.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	// When requests in this handler use router.RelativeURL, we want
-	// the "absolute path" there to be interpreted relative to the
-	// root of this handler, not the absolute root of the web server,
-	// which may be abitrarily many levels up.
-	req.RequestURI = req.URL.Path
-
 	rh, err := h.NewReqHandler()
 	if err != nil {
 		router.WriteError(w, err)
@@ -279,8 +275,8 @@ func (h *ReqHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 // NewAPIHandler returns a new Handler as an http Handler.
 // It is defined for the convenience of callers that require a
 // charmstore.NewAPIHandlerFunc.
-func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams) charmstore.HTTPCloseHandler {
-	return New(pool, config)
+func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams, rootPath string) charmstore.HTTPCloseHandler {
+	return New(pool, config, rootPath)
 }
 
 // Close closes the ReqHandler. This should always be called when the

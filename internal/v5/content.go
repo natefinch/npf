@@ -39,7 +39,7 @@ func (h *ReqHandler) serveDiagram(id *router.ResolvedURL, w http.ResponseWriter,
 	canvas, err := jujusvg.NewFromBundle(entity.BundleData, func(id *charm.URL) string {
 		// TODO change jujusvg so that the iconURL function can
 		// return an error.
-		absPath := "/" + id.Path() + "/icon.svg"
+		absPath := h.Handler.rootPath + "/" + id.Path() + "/icon.svg"
 		p, err := router.RelativeURLPath(req.RequestURI, absPath)
 		if err != nil {
 			urlErr = errgo.Notef(err, "cannot make relative URL from %q and %q", req.RequestURI, absPath)

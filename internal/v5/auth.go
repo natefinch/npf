@@ -87,11 +87,7 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 		return authorization{}, errgo.Notef(err, "cannot mint macaroon")
 	}
 
-	// Request that this macaroon be supplied for all requests
-	// to the whole handler.
-	// TODO use a relative URL here: router.RelativeURLPath(req.RequestURI, "/")
-	cookiePath := "/"
-	return authorization{}, httpbakery.NewDischargeRequiredErrorForRequest(m, cookiePath, verr, req)
+	return authorization{}, h.newDischargeRequiredError(m, verr, req)
 }
 
 // authorizeEntityAndTerms is similar to the authorize method, but
@@ -163,11 +159,26 @@ func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*rou
 		return authorization{}, errgo.Notef(err, "cannot mint macaroon")
 	}
 
+	return authorization{}, h.newDischargeRequiredError(m, verr, req)
+}
+
+func (h *ReqHandler) newDischargeRequiredError(m *macaroon.Macaroon, verr error, req *http.Request) error {
 	// Request that this macaroon be supplied for all requests
-	// to the whole handler.
-	// TODO use a relative URL here: router.RelativeURLPath(req.RequestURI, "/")
+	// to the whole handler. We use a relative path because
+	// the charm store is conventionally under an external
+	// root path, with other services also under the same
+	// externally visible host name, and we don't want our
+	// cookies to be presnted to those services.
 	cookiePath := "/"
-	return authorization{}, httpbakery.NewDischargeRequiredErrorForRequest(m, cookiePath, verr, req)
+	if p, err := router.RelativeURLPath(req.RequestURI, "/"); err != nil {
+		// Should never happen, as RequestURI should always be absolute.
+		logger.Infof("cannot make relative URL from %v", req.RequestURI)
+	} else {
+		cookiePath = p
+	}
+	dischargeErr := httpbakery.NewDischargeRequiredErrorForRequest(m, cookiePath, verr, req)
+	dischargeErr.(*httpbakery.Error).Info.CookieNameSuffix = "authn"
+	return dischargeErr
 }
 
 // entityAuthInfo returns authorization on the entities with the given ids.

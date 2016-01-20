@@ -50,19 +50,13 @@ type ReqHandler struct {
 	*v5.ReqHandler
 }
 
-func New(pool *charmstore.Pool, config charmstore.ServerParams) Handler {
+func New(pool *charmstore.Pool, config charmstore.ServerParams, rootPath string) Handler {
 	return Handler{
-		Handler: v5.New(pool, config),
+		Handler: v5.New(pool, config, rootPath),
 	}
 }
 
 func (h Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	// When requests in this handler use router.RelativeURL, we want
-	// the "absolute path" there to be interpreted relative to the
-	// root of this handler, not the absolute root of the web server,
-	// which may be abitrarily many levels up.
-	req.RequestURI = req.URL.Path
-
 	rh, err := h.NewReqHandler()
 	if err != nil {
 		router.WriteError(w, err)
@@ -72,8 +66,8 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	rh.ServeHTTP(w, req)
 }
 
-func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams) charmstore.HTTPCloseHandler {
-	return New(pool, config)
+func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams, rootPath string) charmstore.HTTPCloseHandler {
+	return New(pool, config, rootPath)
 }
 
 // The v4 resolvedURL function also requires SupportedSeries.

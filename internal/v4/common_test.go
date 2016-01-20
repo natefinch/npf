@@ -189,7 +189,7 @@ func (s *commonSuite) startServer(c *gc.C) {
 // used to invoke private methods. The caller
 // is responsible for calling Put on the returned handler.
 func (s *commonSuite) handler(c *gc.C) v4.ReqHandler {
-	h := v4.New(s.store.Pool(), s.srvParams)
+	h := v4.New(s.store.Pool(), s.srvParams, "")
 	defer h.Close()
 	rh, err := h.NewReqHandler()
 	c.Assert(err, gc.IsNil)
