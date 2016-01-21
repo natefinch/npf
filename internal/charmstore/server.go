@@ -20,8 +20,9 @@ import (
 )
 
 // NewAPIHandlerFunc is a function that returns a new API handler that uses
-// the given Store.
-type NewAPIHandlerFunc func(*Pool, ServerParams) HTTPCloseHandler
+// the given Store. The absPath parameter holds the root path of the
+// API handler.
+type NewAPIHandlerFunc func(pool *Pool, p ServerParams, absPath string) HTTPCloseHandler
 
 // HTTPCloseHandler represents a HTTP handler that
 // must be closed after use.
@@ -135,8 +136,9 @@ func NewServer(db *mgo.Database, si *SearchIndex, config ServerParams, versions 
 	// Version independent API.
 	handle(srv.mux, "/debug", newServiceDebugHandler(pool, config, srv.mux))
 	for vers, newAPI := range versions {
-		h := newAPI(pool, config)
-		handle(srv.mux, "/"+vers, h)
+		root := "/" + vers
+		h := newAPI(pool, config, root)
+		handle(srv.mux, root, h)
 		srv.handlers = append(srv.handlers, h)
 	}
 

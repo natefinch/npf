@@ -102,9 +102,9 @@ var reqHandlerPool = mempool.Pool{
 	},
 }
 
-func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams) charmstore.HTTPCloseHandler {
+func NewAPIHandler(pool *charmstore.Pool, config charmstore.ServerParams, rootPath string) charmstore.HTTPCloseHandler {
 	return &Handler{
-		v4: v4.New(pool, config),
+		v4: v4.New(pool, config, rootPath),
 	}
 }
 

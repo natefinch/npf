@@ -157,6 +157,9 @@ func (j *cookieJar) SetCookies(url *url.URL, cookies []*http.Cookie) {
 		if cookie.Path != "" {
 			url1.Path = cookie.Path
 		}
+		if cookie.Name != "macaroon-authn" {
+			panic("unexpected cookie name: " + cookie.Name)
+		}
 	}
 	j.cookieURLs = append(j.cookieURLs, url1.String())
 	j.CookieJar.SetCookies(url, cookies)

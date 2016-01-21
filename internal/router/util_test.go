@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 
+	jujutesting "github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
@@ -18,7 +19,9 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
 
-type utilSuite struct{}
+type utilSuite struct {
+	jujutesting.LoggingSuite
+}
 
 var _ = gc.Suite(&utilSuite{})
 var relativeURLTests = []struct {
@@ -46,6 +49,10 @@ var relativeURLTests = []struct {
 	base:   "/foo/",
 	target: "/bar",
 	expect: "../bar",
+}, {
+	base:   "/bar",
+	target: "/foo/",
+	expect: "foo/",
 }, {
 	base:   "/foo/",
 	target: "/bar/",
@@ -97,7 +104,7 @@ var relativeURLTests = []struct {
 }, {
 	base:   "/foo/bar/",
 	target: "/foo/bar/",
-	expect: "",
+	expect: ".",
 }, {
 	base:   "/foo/bar",
 	target: "/foo/bar",
@@ -105,7 +112,27 @@ var relativeURLTests = []struct {
 }, {
 	base:   "/foo/bar/",
 	target: "/foo/bar/",
-	expect: "",
+	expect: ".",
+}, {
+	base:   "/foo/bar",
+	target: "/foo/",
+	expect: ".",
+}, {
+	base:   "/foo",
+	target: "/",
+	expect: ".",
+}, {
+	base:   "/foo/",
+	target: "/",
+	expect: "../",
+}, {
+	base:   "/foo/bar",
+	target: "/",
+	expect: "../",
+}, {
+	base:   "/foo/bar/",
+	target: "/",
+	expect: "../../",
 }}
 
 func (*utilSuite) TestRelativeURL(c *gc.C) {
@@ -116,7 +143,7 @@ func (*utilSuite) TestRelativeURL(c *gc.C) {
 			baseURL := &url.URL{Path: test.base}
 			expectURL := &url.URL{Path: test.expect}
 			targetURL := baseURL.ResolveReference(expectURL)
-			c.Check(targetURL.Path, gc.Equals, test.target, gc.Commentf("resolve reference failure"))
+			c.Check(targetURL.Path, gc.Equals, test.target, gc.Commentf("resolve reference failure (%q + %q != %q)", test.base, test.expect, test.target))
 		}
 
 		result, err := router.RelativeURLPath(test.base, test.target)

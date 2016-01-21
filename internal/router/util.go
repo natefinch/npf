@@ -170,12 +170,12 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	h.ServeHTTP(w, req)
 }
 
-// RelativeURLPath returns a relative URL path that is lexically equivalent to
-// targpath when interpreted by url.URL.ResolveReference.
-// On succes, the returned path will always be relative to basePath, even if basePath
-// and targPath share no elements. An error is returned if targPath can't
-// be made relative to basePath (for example when either basePath
-// or targetPath are non-absolute).
+// RelativeURLPath returns a relative URL path that is lexically
+// equivalent to targpath when interpreted by url.URL.ResolveReference.
+// On success, the returned path will always be non-empty and relative
+// to basePath, even if basePath and targPath share no elements.
+//
+// An error is returned if basePath or targPath are not absolute paths.
 func RelativeURLPath(basePath, targPath string) (string, error) {
 	if !strings.HasPrefix(basePath, "/") {
 		return "", errgo.Newf("non-absolute base URL")
@@ -208,7 +208,15 @@ func RelativeURLPath(basePath, targPath string) (string, error) {
 	}
 	result = append(result, targOnly...)
 	result = append(result, lastElem)
-	return strings.Join(result, "/"), nil
+	final := strings.Join(result, "/")
+	if final == "" {
+		// If the final result is empty, the last element must
+		// have been empty, so the target was slash terminated
+		// and there were no previous elements, so "."
+		// is appropriate.
+		final = "."
+	}
+	return final, nil
 }
 
 // TODO(mhilton) This is not an ideal place for UnmarshalJSONResponse,
