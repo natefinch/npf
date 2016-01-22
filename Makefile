@@ -8,7 +8,7 @@ PROJECT := gopkg.in/juju/charmstore.v5-unstable
 PROJECT_DIR := $(shell go list -e -f '{{.Dir}}' $(PROJECT))
 
 GIT_COMMIT := $(shell git rev-parse --verify HEAD)
-GIT_VERSION := $(shell git describe --dirty)
+VERSION := $(shell git describe --dirty)
 
 
 ifeq ($(shell uname -p | sed -r 's/.*(x86|armel|armhf).*/golang/'), golang)
@@ -95,7 +95,7 @@ create-deps: $(GOPATH)/bin/godeps
 
 # Generate version information
 version/init.go: version/init.go.tmpl FORCE
-	gofmt -r "unknownVersion -> Version{GitCommit: \"${GIT_COMMIT}\", Version: \"${GIT_VERSION}\",}" $< > $@
+	gofmt -r "unknownVersion -> Version{GitCommit: \"${GIT_COMMIT}\", Version: \"${VERSION}\",}" $< > $@
 
 # Install packages required to develop the charm store and run tests.
 APT_BASED := $(shell command -v apt-get >/dev/null; echo $$?)
