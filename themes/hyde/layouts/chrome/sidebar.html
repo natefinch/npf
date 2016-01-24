@@ -1,7 +1,7 @@
 <div class="sidebar">
   <div class="container sidebar-sticky">
     <div class="sidebar-about">
-      <h1 class="brand"><a href="{{.Site.BaseUrl}}">{{ .Site.Title }}</a></h1>
+      <h1 class="brand"><a href="{{.Site.BaseURL}}">{{ .Site.Title }}</a></h1>
       <p class="lead">
       {{ with .Site.Params.description }} {{.}} {{ else }}An elegant open source and mobile first theme for <a href="http://hugo.spf13.com">hugo</a> made by <a href="http://twitter.com/mdo">@mdo</a>. Originally made for Jekyll.{{end}}
       </p>
@@ -10,15 +10,15 @@
 
 
     <ul class="sidebar-nav">
-      <li><a href="{{.Site.BaseUrl}}/blog">Posts</a></li>
+      <li><a href="{{.Site.BaseURL}}/blog">Posts</a></li>
       {{ range .Site.Menus.main }}
-        <li><a href="{{.Url}}">{{ .Name }} </a></li>
+        <li><a href="{{.URL}}">{{ .Name }} </a></li>
       {{end}}
       <br/>
       {{with .Site.Menus.code}}
       <li>Code:</li>
         {{ range . }}
-          <li><a href="{{.Url}}">{{ .Name }} </a></li>
+          <li><a href="{{.URL}}">{{ .Name }} </a></li>
         {{end}}
       {{end}}
     </ul>

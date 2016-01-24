@@ -9,7 +9,7 @@
     <span class="post-date">{{ .Date.Format "Jan 2, 2006" }}</span>
     {{if .Params.series}}
 	    {{ $name := index .Params.series 0 }}
-    	<p class="seriesname">Series: <a href="{{.Site.BaseUrl}}/series/{{$name | urlize}}">{{$name}}</a></p>
+	<p class="seriesname">Series: <a href="{{.Site.BaseURL}}/series/{{$name | urlize}}">{{$name}}</a></p>
     {{end}}
     {{ .Content }}
     
