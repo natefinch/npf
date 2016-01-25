@@ -48,6 +48,7 @@ var Series = map[string]SeriesInfo{
 	"utopic":  SeriesInfo{true, Ubuntu, false, 0},
 	"vivid":   SeriesInfo{true, Ubuntu, true, 1.101},
 	"wily":    SeriesInfo{true, Ubuntu, true, 1.102},
+	"xenial":  SeriesInfo{true, Ubuntu, true, 1.103},
 
 	// Windows
 	"win2012hvr2": SeriesInfo{true, Windows, true, 1.1},
