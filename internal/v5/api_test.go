@@ -37,6 +37,7 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/entitycache"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/series"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting/hashtesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
@@ -894,6 +895,22 @@ func (s *APISuite) TestMetaTermsBundle(c *gc.C) {
 			Message: "metadata not found",
 		},
 	})
+}
+
+func (s *APISuite) TestSeries(c *gc.C) {
+	for k := range series.Series {
+		if k == "bundle" {
+			continue
+		}
+		id := k + "/wordpress-23"
+		s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/"+id, 23))
+		s.assertGet(c, id+"/meta/id", map[string]interface{}{
+			"Id":       "cs:" + k + "/wordpress-23",
+			"Series":   k,
+			"Name":     "wordpress",
+			"Revision": 23,
+		})
+	}
 }
 
 func (s *APISuite) TestExtraInfo(c *gc.C) {

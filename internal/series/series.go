@@ -36,31 +36,32 @@ type SeriesInfo struct {
 // Series contains the data charmstore knows about series names
 var Series = map[string]SeriesInfo{
 	// Bundle
-	"bundle": SeriesInfo{false, "", true, 1.1255},
+	"bundle": {false, "", true, 1.1255},
 
 	// Ubuntu
-	"oneiric": SeriesInfo{true, Ubuntu, false, 0},
-	"precise": SeriesInfo{true, Ubuntu, true, 1.1125},
-	"quantal": SeriesInfo{true, Ubuntu, false, 0},
-	"raring":  SeriesInfo{true, Ubuntu, false, 0},
-	"saucy":   SeriesInfo{true, Ubuntu, false, 0},
-	"trusty":  SeriesInfo{true, Ubuntu, true, 1.125},
-	"utopic":  SeriesInfo{true, Ubuntu, false, 0},
-	"vivid":   SeriesInfo{true, Ubuntu, true, 1.101},
-	"wily":    SeriesInfo{true, Ubuntu, true, 1.102},
+	"oneiric": {true, Ubuntu, false, 0},
+	"precise": {true, Ubuntu, true, 1.1125},
+	"quantal": {true, Ubuntu, false, 0},
+	"raring":  {true, Ubuntu, false, 0},
+	"saucy":   {true, Ubuntu, false, 0},
+	"trusty":  {true, Ubuntu, true, 1.125},
+	"utopic":  {true, Ubuntu, false, 0},
+	"vivid":   {true, Ubuntu, true, 1.101},
+	"wily":    {true, Ubuntu, true, 1.102},
+	"xenial":  {true, Ubuntu, true, 1.103},
 
 	// Windows
-	"win2012hvr2": SeriesInfo{true, Windows, true, 1.1},
-	"win2012hv":   SeriesInfo{true, Windows, true, 1.1},
-	"win2012r2":   SeriesInfo{true, Windows, true, 1.1},
-	"win2012":     SeriesInfo{true, Windows, true, 1.1},
-	"win7":        SeriesInfo{true, Windows, true, 1.1},
-	"win8":        SeriesInfo{true, Windows, true, 1.1},
-	"win81":       SeriesInfo{true, Windows, true, 1.1},
-	"win10":       SeriesInfo{true, Windows, true, 1.1},
-	"win2016":     SeriesInfo{true, Windows, true, 1.1},
-	"win2016nano": SeriesInfo{true, Windows, true, 1.1},
+	"win2012hvr2": {true, Windows, true, 1.1},
+	"win2012hv":   {true, Windows, true, 1.1},
+	"win2012r2":   {true, Windows, true, 1.1},
+	"win2012":     {true, Windows, true, 1.1},
+	"win7":        {true, Windows, true, 1.1},
+	"win8":        {true, Windows, true, 1.1},
+	"win81":       {true, Windows, true, 1.1},
+	"win10":       {true, Windows, true, 1.1},
+	"win2016":     {true, Windows, true, 1.1},
+	"win2016nano": {true, Windows, true, 1.1},
 
 	// Centos
-	"centos7": SeriesInfo{true, CentOS, true, 1.1},
+	"centos7": {true, CentOS, true, 1.1},
 }
