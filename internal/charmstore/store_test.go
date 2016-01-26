@@ -1542,7 +1542,7 @@ func (s *StoreSuite) TestCollections(c *gc.C) {
 	}
 	// Check that all created collections are mentioned in Collections.
 	for _, name := range names {
-		if name == "system.indexes" || name == "managedStoredResources" {
+		if name == "system.indexes" || name == "managedStoredResources" || name == "entitystore.files" {
 			continue
 		}
 		found := false

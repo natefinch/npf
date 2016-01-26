@@ -391,8 +391,18 @@ func (s *Store) ensureIndexes() error {
 		s.DB.Entities(),
 		mgo.Index{Key: []string{"bundlecharms"}},
 	}, {
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"name", "development", "-promulgated-revision", "-supportedseries"}},
+	}, {
+		s.DB.Entities(),
+		mgo.Index{Key: []string{"name", "development", "user", "-revision", "-supportedseries"}},
+	}, {
 		s.DB.BaseEntities(),
 		mgo.Index{Key: []string{"name"}},
+	}, {
+		// TODO this index should be created by the mgo gridfs code.
+		s.DB.C("entitystore.files"),
+		mgo.Index{Key: []string{"filename"}},
 	}}
 	for _, idx := range indexes {
 		err := idx.c.EnsureIndex(idx.i)
