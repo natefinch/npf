@@ -404,7 +404,7 @@ func (s *migrationsSuite) TestMigrateAddDevelopment(c *gc.C) {
 func (s *migrationsSuite) TestMigrateAddDevelopmentACLs(c *gc.C) {
 	s.patchMigrations(c, getMigrations(migrationAddDevelopmentACLs))
 
-	// Populate the database with some entities.
+	// Populate the database with some base entities.
 	entities := []*mongodoc.BaseEntity{{
 		URL:  charm.MustParseURL("~charmers/django"),
 		Name: "django",
@@ -440,6 +440,39 @@ func (s *migrationsSuite) TestMigrateAddDevelopmentACLs(c *gc.C) {
 	for _, e := range entities {
 		e.DevelopmentACLs = e.ACLs
 		s.checkBaseEntity(c, e, migrationAddDevelopmentACLs)
+	}
+}
+
+func (s *migrationsSuite) TestFixBogusPromulgatedURL(c *gc.C) {
+	s.patchMigrations(c, getMigrations(migrationFixBogusPromulgatedURL))
+	// Populate the database with some entities.
+	entities := []*mongodoc.Entity{{
+		URL:            charm.MustParseURL("~charmers/trusty/django-42"),
+		PromulgatedURL: charm.MustParseURL("development/trusty/django-3"),
+	}, {
+		URL:            charm.MustParseURL("~who/utopic/rails-47"),
+		PromulgatedURL: charm.MustParseURL("utopic/rails-3"),
+	}, {
+		URL:            charm.MustParseURL("~who/bundle/solution-0"),
+		PromulgatedURL: charm.MustParseURL("development/bundle/solution-0"),
+	}}
+	for _, e := range entities {
+		denormalizeEntity(e)
+		s.insertEntity(c, e, migrationFixBogusPromulgatedURL)
+	}
+	// Start the server.
+	err := s.newServer(c)
+	c.Assert(err, gc.IsNil)
+
+	// Ensure entities have been updated correctly.
+	s.checkCount(c, s.db.Entities(), len(entities))
+	for _, e := range entities {
+		var entity mongodoc.Entity
+		err := s.db.Entities().FindId(e.URL).One(&entity)
+		c.Assert(err, gc.IsNil)
+		expect := *e.PromulgatedURL
+		expect.Channel = ""
+		c.Assert(entity.PromulgatedURL, jc.DeepEquals, &expect)
 	}
 }
 

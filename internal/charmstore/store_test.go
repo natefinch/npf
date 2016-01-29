@@ -71,7 +71,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, url *r
 		exists, err := store.ES.HasDocument(s.TestIndex, typeName, id)
 		c.Assert(err, gc.IsNil)
 		c.Assert(exists, gc.Equals, true)
-		if purl := url.PromulgatedURL(); purl != nil {
+		if purl := url.DocPromulgatedURL(); purl != nil {
 			c.Assert(result.PromulgatedURL, jc.DeepEquals, purl)
 		}
 	}
@@ -100,7 +100,7 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, url *r
 		CharmConfig:             ch.Config(),
 		CharmProvidedInterfaces: []string{"http", "logging", "monitoring"},
 		CharmRequiredInterfaces: []string{"mysql", "varnish"},
-		PromulgatedURL:          url.PromulgatedURL(),
+		PromulgatedURL:          url.DocPromulgatedURL(),
 		SupportedSeries:         ch.Meta().Series,
 		Development:             url.Development,
 	}))
@@ -188,7 +188,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool, 
 		},
 		BundleMachineCount: newInt(2),
 		BundleUnitCount:    newInt(2),
-		PromulgatedURL:     url.PromulgatedURL(),
+		PromulgatedURL:     url.DocPromulgatedURL(),
 		Development:        url.Development,
 	}))
 
@@ -280,7 +280,7 @@ var urlFindingTests = []struct {
 }, {
 	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
 	expand:  "development/wordpress",
-	expect:  []string{"25 cs:~charmers/development/precise/wordpress-25", "23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24"},
+	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/precise/wordpress-25"},
 }, {
 	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
 	expand:  "precise/wordpress",
@@ -288,7 +288,7 @@ var urlFindingTests = []struct {
 }, {
 	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25", "26 cs:~charmers/development/wily/wordpress-26"},
 	expand:  "development/precise/wordpress",
-	expect:  []string{"25 cs:~charmers/development/precise/wordpress-25", "23 cs:~charmers/precise/wordpress-23"},
+	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "25 cs:~charmers/development/precise/wordpress-25"},
 }, {
 	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "434 cs:~charmers/foo/varnish-434"},
 	expand:  "wordpress",
@@ -514,8 +514,8 @@ func (s *StoreSuite) TestFindEntities(c *gc.C) {
 		for i, url := range expect {
 			c.Assert(gotEntities[i], jc.DeepEquals, &mongodoc.Entity{
 				URL:            &url.URL,
-				PromulgatedURL: url.PromulgatedURL(),
-			})
+				PromulgatedURL: url.DocPromulgatedURL(),
+			}, gc.Commentf("index %d", i))
 		}
 
 		// check FindEntities works when retrieving all fields.
@@ -1871,6 +1871,7 @@ func (s *StoreSuite) TestFindBestEntity(c *gc.C) {
 	}, {
 		URL: charm.MustParseURL("~pluto/wily/multi-series-1"),
 	}}
+	// TODO add development entities above.
 	for _, e := range entities {
 		err := store.DB.Entities().Insert(denormalizedEntity(e))
 		c.Assert(err, gc.IsNil)

@@ -1091,7 +1091,7 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *router.Resolved
 	c.Assert(err, gc.IsNil)
 	c.Assert(entity.BlobHash, gc.Equals, hashSum)
 	c.Assert(entity.BlobHash256, gc.Equals, hash256Sum)
-	c.Assert(entity.PromulgatedURL, gc.DeepEquals, expectedPromulgatedId)
+	c.Assert(entity.PromulgatedURL, gc.DeepEquals, url.DocPromulgatedURL())
 	c.Assert(entity.Development, gc.Equals, url.Development)
 	// Test that the expected entry has been created
 	// in the blob store.
