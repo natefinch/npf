@@ -540,7 +540,7 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 	logger.Infof("add charm url %s; prev %d; dev %v", &id, p.URL.PromulgatedRevision, p.URL.Development)
 	entity := &mongodoc.Entity{
 		URL:                     &id,
-		PromulgatedURL:          p.URL.PromulgatedURL(),
+		PromulgatedURL:          p.URL.DocPromulgatedURL(),
 		BlobHash:                p.BlobHash,
 		BlobHash256:             p.BlobHash256,
 		BlobName:                p.BlobName,
@@ -586,9 +586,6 @@ func (s *Store) AddCharm(c charm.Charm, p AddParams) (err error) {
 // if the entity URL does not contain a series. If the entity
 // URL *does* contain a series, e.SupportedSeries will
 // be overwritten.
-//
-// This is exported for the purposes of tests that
-// need to create directly into the database.
 func denormalizeEntity(e *mongodoc.Entity) {
 	e.BaseURL = mongodoc.BaseURL(e.URL)
 	e.Name = e.URL.Name
@@ -1074,7 +1071,7 @@ func (s *Store) AddBundle(b charm.Bundle, p AddParams) error {
 		BundleReadMe:       b.ReadMe(),
 		BundleCharms:       urls,
 		Contents:           p.Contents,
-		PromulgatedURL:     p.URL.PromulgatedURL(),
+		PromulgatedURL:     p.URL.DocPromulgatedURL(),
 		Development:        p.URL.Development,
 	}
 	denormalizeEntity(entity)

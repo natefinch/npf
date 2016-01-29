@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	migrationAddSupportedSeries mongodoc.MigrationName = "add supported series"
-	migrationAddDevelopment     mongodoc.MigrationName = "add development"
-	migrationAddDevelopmentACLs mongodoc.MigrationName = "add development acls"
+	migrationAddSupportedSeries     mongodoc.MigrationName = "add supported series"
+	migrationAddDevelopment         mongodoc.MigrationName = "add development"
+	migrationAddDevelopmentACLs     mongodoc.MigrationName = "add development acls"
+	migrationFixBogusPromulgatedURL mongodoc.MigrationName = "fix promulgate url"
 )
 
 // migrations holds all the migration functions that are executed in the order
@@ -47,6 +48,9 @@ var migrations = []migration{{
 }, {
 	name:    migrationAddDevelopmentACLs,
 	migrate: addDevelopmentACLs,
+}, {
+	name:    migrationFixBogusPromulgatedURL,
+	migrate: fixBogusPromulgatedURL,
 }}
 
 // migration holds a migration function with its corresponding name.
@@ -178,6 +182,30 @@ func addDevelopmentACLs(db StoreDatabase) error {
 	}
 	if err := iter.Close(); err != nil {
 		return errgo.Notef(err, "cannot iterate base entities")
+	}
+	return nil
+}
+
+func fixBogusPromulgatedURL(db StoreDatabase) error {
+	var entity mongodoc.Entity
+	iter := db.Entities().Find(bson.D{{
+		"promulgated-url", bson.D{{"$regex", "^cs:development/"}},
+	}}).Select(map[string]int{
+		"promulgated-url": 1,
+	}).Iter()
+	for iter.Next(&entity) {
+		if entity.PromulgatedURL.Channel == "" {
+			continue
+		}
+		entity.PromulgatedURL.Channel = ""
+		if err := db.Entities().UpdateId(entity.URL, bson.D{{
+			"$set", bson.D{{"promulgated-url", entity.PromulgatedURL}},
+		}}); err != nil {
+			return errgo.Notef(err, "cannot fix bogus promulgated URL for entity %v", entity.URL)
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return errgo.Notef(err, "cannot iterate through entities")
 	}
 	return nil
 }

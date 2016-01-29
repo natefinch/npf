@@ -463,6 +463,7 @@ func (s *Store) syncSearch() error {
 			return errgo.Notef(err, "cannot index %s", rurl)
 		}
 	}
+	logger.Infof("finished sync search")
 	if err := iter.Close(); err != nil {
 		return err
 	}

@@ -781,6 +781,7 @@ func (h *ReqHandler) metaRevisionInfo(id *router.ResolvedURL, path string, flags
 	}
 	var response params.RevisionInfoResponse
 	for _, doc := range docs {
+		// TODO use proper promulgated URL.
 		if id.PromulgatedRevision != -1 {
 			response.Revisions = append(response.Revisions, doc.PromulgatedURL)
 		} else {
