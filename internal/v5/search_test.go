@@ -17,9 +17,6 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
-	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
-	"gopkg.in/macaroon-bakery.v1/httpbakery"
-	"gopkg.in/macaroon.v1"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
@@ -801,16 +798,10 @@ func (s *SearchSuite) TestSearchWithAdminCredentials(c *gc.C) {
 }
 
 func (s *SearchSuite) TestSearchWithUserMacaroon(c *gc.C) {
-	m, err := s.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
-		checkers.DeclaredCaveat("username", "test-user"),
-	})
-	c.Assert(err, gc.IsNil)
-	macaroonCookie, err := httpbakery.NewCookie(macaroon.Slice{m})
-	c.Assert(err, gc.IsNil)
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("search"),
-		Cookies: []*http.Cookie{macaroonCookie},
+		Do:      s.bakeryDoAsUser(c, "test-user"),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	expected := []*router.ResolvedURL{
@@ -821,25 +812,19 @@ func (s *SearchSuite) TestSearchWithUserMacaroon(c *gc.C) {
 		exportTestBundles["wordpress-simple"],
 	}
 	var sr params.SearchResponse
-	err = json.Unmarshal(rec.Body.Bytes(), &sr)
+	err := json.Unmarshal(rec.Body.Bytes(), &sr)
 	c.Assert(err, gc.IsNil)
 	assertResultSet(c, sr, expected)
 }
 
 func (s *SearchSuite) TestSearchWithUserInGroups(c *gc.C) {
-	m, err := s.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
-		checkers.DeclaredCaveat(v5.UsernameAttr, "bob"),
-	})
-	c.Assert(err, gc.IsNil)
-	macaroonCookie, err := httpbakery.NewCookie(macaroon.Slice{m})
-	c.Assert(err, gc.IsNil)
 	s.idM.groups = map[string][]string{
 		"bob": {"test-user", "test-user2"},
 	}
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("search"),
-		Cookies: []*http.Cookie{macaroonCookie},
+		Do:      s.bakeryDoAsUser(c, "bob"),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	expected := []*router.ResolvedURL{
@@ -850,22 +835,16 @@ func (s *SearchSuite) TestSearchWithUserInGroups(c *gc.C) {
 		exportTestBundles["wordpress-simple"],
 	}
 	var sr params.SearchResponse
-	err = json.Unmarshal(rec.Body.Bytes(), &sr)
+	err := json.Unmarshal(rec.Body.Bytes(), &sr)
 	c.Assert(err, gc.IsNil)
 	assertResultSet(c, sr, expected)
 }
 
 func (s *SearchSuite) TestSearchWithBadAdminCredentialsAndACookie(c *gc.C) {
-	m, err := s.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
-		checkers.DeclaredCaveat("username", "test-user"),
-	})
-	c.Assert(err, gc.IsNil)
-	macaroonCookie, err := httpbakery.NewCookie(macaroon.Slice{m})
-	c.Assert(err, gc.IsNil)
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler:  s.srv,
+		Do:       s.bakeryDoAsUser(c, "test-user"),
 		URL:      storeURL("search"),
-		Cookies:  []*http.Cookie{macaroonCookie},
 		Username: testUsername,
 		Password: "bad-password",
 	})
@@ -877,7 +856,7 @@ func (s *SearchSuite) TestSearchWithBadAdminCredentialsAndACookie(c *gc.C) {
 		exportTestBundles["wordpress-simple"],
 	}
 	var sr params.SearchResponse
-	err = json.Unmarshal(rec.Body.Bytes(), &sr)
+	err := json.Unmarshal(rec.Body.Bytes(), &sr)
 	c.Assert(err, gc.IsNil)
 	assertResultSet(c, sr, expected)
 }

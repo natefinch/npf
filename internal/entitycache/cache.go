@@ -574,19 +574,10 @@ func (iter *Iter) run() {
 		if !iter.iter.Next(&e) {
 			break
 		}
-		if iter.addEntity(entity{&e}) {
-			if len(iter.baseEntityBatch) >= baseEntityThreshold || len(iter.entityBatch) >= entityThreshold {
-				// We've reached one of the thresholds - send the batch.
-				if !iter.sendBatch() {
-					return
-				}
-			}
-		} else {
-			if !iter.send(&e) {
-				// The iterator has been closed. Remove all our pending
-				// base entity entries because we're no longer going to
-				// fetch them now.
-				iter.clearPendingFetches()
+		iter.addEntity(entity{&e})
+		if len(iter.baseEntityBatch) >= baseEntityThreshold || len(iter.entityBatch) >= entityThreshold {
+			// We've reached one of the thresholds - send the batch.
+			if !iter.sendBatch() {
 				return
 			}
 		}
@@ -594,28 +585,12 @@ func (iter *Iter) run() {
 	iter.sendBatch()
 }
 
-// clearPendingFetches clears our pending fetch entries from the base
-// entities stash. This will cause anything waiting on those base
-// entities to start its own fetch.
-func (iter *Iter) clearPendingFetches() {
-	if len(iter.baseEntityBatch) == 0 {
-		return
-	}
-	baseEntities := &iter.cache.baseEntities
-	baseEntities.mu.Lock()
-	defer baseEntities.mu.Unlock()
-	for _, id := range iter.baseEntityBatch {
-		delete(baseEntities.entities, *id)
-	}
-	baseEntities.changed.Broadcast()
-}
-
 // addEntity adds an entity that has been received
-// from the underlying iterator. It reports whether the
-// entity has been added to iter.entityBatch.
+// from the underlying iterator.
 //
 // Called from iter.run without any locks held.
-func (iter *Iter) addEntity(e entity) bool {
+func (iter *Iter) addEntity(e entity) {
+	iter.entityBatch = append(iter.entityBatch, e.Entity)
 	entities := &iter.cache.entities
 	entities.mu.Lock()
 	defer entities.mu.Unlock()
@@ -623,7 +598,7 @@ func (iter *Iter) addEntity(e entity) bool {
 		// The entity has already been fetched, or is being fetched.
 		// This also implies that its base entity has already been added (or
 		// is in the process of being added) to the cache.
-		return false
+		return
 	}
 	if entities.version == iter.version {
 		// The entity we have here is valid to put into the cache, so do that.
@@ -631,7 +606,6 @@ func (iter *Iter) addEntity(e entity) bool {
 		// already present in the cache.
 		entities.addEntity(e, nil)
 	}
-	iter.entityBatch = append(iter.entityBatch, e.Entity)
 
 	baseEntities := &iter.cache.baseEntities
 	baseEntities.mu.Lock()
@@ -648,7 +622,7 @@ func (iter *Iter) addEntity(e entity) bool {
 		iter.baseEntityBatch = append(iter.baseEntityBatch, baseURL)
 		baseEntities.entities[*baseURL] = nil
 	}
-	return true
+	return
 }
 
 // sendBatch obtains all the batched base entities and sends all the
