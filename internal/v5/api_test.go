@@ -1827,11 +1827,12 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 var serveMetaRevisionInfoTests = []struct {
 	about  string
 	url    string
+	asUser string
 	expect params.RevisionInfoResponse
 	err    string
 }{{
 	about: "fully qualified url",
-	url:   "trusty/wordpress-42",
+	url:   "trusty/wordpress-9",
 	expect: params.RevisionInfoResponse{
 		[]*charm.URL{
 			charm.MustParseURL("cs:trusty/wordpress-43"),
@@ -1849,6 +1850,30 @@ var serveMetaRevisionInfoTests = []struct {
 			charm.MustParseURL("cs:trusty/wordpress-42"),
 			charm.MustParseURL("cs:trusty/wordpress-41"),
 			charm.MustParseURL("cs:trusty/wordpress-9"),
+		},
+	},
+}, {
+	about: "development url expands to dev and non-dev revisions",
+	url:   "development/wordpress",
+	expect: params.RevisionInfoResponse{
+		[]*charm.URL{
+			charm.MustParseURL("cs:development/trusty/wordpress-44"),
+			charm.MustParseURL("cs:trusty/wordpress-43"),
+			charm.MustParseURL("cs:trusty/wordpress-42"),
+			charm.MustParseURL("cs:trusty/wordpress-41"),
+			charm.MustParseURL("cs:trusty/wordpress-9"),
+		},
+	},
+}, {
+	about: "development non-promulgated url expands to dev and non-dev revisions",
+	url:   "~charmers/development/wordpress",
+	expect: params.RevisionInfoResponse{
+		[]*charm.URL{
+			charm.MustParseURL("cs:~charmers/development/trusty/wordpress-44"),
+			charm.MustParseURL("cs:~charmers/trusty/wordpress-43"),
+			charm.MustParseURL("cs:~charmers/trusty/wordpress-42"),
+			charm.MustParseURL("cs:~charmers/trusty/wordpress-41"),
+			charm.MustParseURL("cs:~charmers/trusty/wordpress-9"),
 		},
 	},
 }, {
@@ -1946,6 +1971,47 @@ var serveMetaRevisionInfoTests = []struct {
 		},
 	},
 }, {
+	about: "promulgate charm respects permissions when owners change",
+	url:   "trusty/sed-1",
+	expect: params.RevisionInfoResponse{
+		[]*charm.URL{
+			charm.MustParseURL("cs:trusty/sed-3"),
+			charm.MustParseURL("cs:trusty/sed-1"),
+		},
+	},
+}, {
+	about:  "promulgate charm respects permissions when owners change; bob can see bob-specific charm",
+	url:    "trusty/sed-1",
+	asUser: "bob",
+	expect: params.RevisionInfoResponse{
+		[]*charm.URL{
+			charm.MustParseURL("cs:trusty/sed-3"),
+			charm.MustParseURL("cs:trusty/sed-1"),
+		},
+	},
+}, {
+	about:  "promulgate charm respects permissions when owners change; alice can see alice-specific charm",
+	url:    "development/trusty/sed-1",
+	asUser: "alice",
+	expect: params.RevisionInfoResponse{
+		[]*charm.URL{
+			charm.MustParseURL("cs:trusty/sed-3"),
+			charm.MustParseURL("cs:development/trusty/sed-2"),
+			charm.MustParseURL("cs:trusty/sed-1"),
+		},
+	},
+}, {
+	about:  "promulgate charm respects permissions when owners change; bob can see bob-specific dev charm",
+	url:    "development/trusty/sed",
+	asUser: "bob",
+	expect: params.RevisionInfoResponse{
+		[]*charm.URL{
+			charm.MustParseURL("cs:development/trusty/sed-4"),
+			charm.MustParseURL("cs:trusty/sed-3"),
+			charm.MustParseURL("cs:trusty/sed-1"),
+		},
+	},
+}, {
 	about: "no entities found",
 	url:   "precise/no-such-33",
 	err:   `no matching charm or bundle for "cs:precise/no-such-33"`,
@@ -1954,11 +2020,16 @@ var serveMetaRevisionInfoTests = []struct {
 func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mysql-41", 41))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mysql-42", 42))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-41", 41))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-42", 42))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-43", 43))
+
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-9", 9))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-41", 41))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-42", 42))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-43", 43))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/development/trusty/wordpress-44", 44))
+	err := s.store.SetPerms(charm.MustParseURL("cs:~charmers/development/trusty/wordpress"), "read", "everyone")
+	c.Assert(err, gc.IsNil)
+
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-42", 42))
 
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-0", -1))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-1", -1))
@@ -1978,6 +2049,17 @@ func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/mixed-3", 42))
 	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/mixed-4", 43))
 
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/sed-1", 1))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/sed-2", -1))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/development/trusty/sed-3", -1))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/development/trusty/sed-4", 2))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~openstack-charmers/trusty/sed-98", 3))
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~openstack-charmers/development/trusty/sed-99", 4))
+	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/development/trusty/sed"), "read", "alice")
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(charm.MustParseURL("cs:~openstack-charmers/development/trusty/sed"), "read", "bob")
+	c.Assert(err, gc.IsNil)
+
 	for i, test := range serveMetaRevisionInfoTests {
 		c.Logf("test %d: %s", i, test.about)
 		storeURL := storeURL(test.url + "/meta/revision-info")
@@ -1993,9 +2075,14 @@ func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
 				Message: test.err,
 			}
 		}
+		do := bakeryDo(nil)
+		if test.asUser != "" {
+			do = s.bakeryDoAsUser(c, test.asUser)
+		}
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL,
+			Do:           do,
 			ExpectStatus: expectStatus,
 			ExpectBody:   expectBody,
 		})

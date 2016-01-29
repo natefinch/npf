@@ -18,6 +18,7 @@ import (
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/bakerytest"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
+	"gopkg.in/macaroon.v1"
 	"gopkg.in/mgo.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
@@ -282,6 +283,25 @@ func storeURL(path string) string {
 	return "/v5/" + path
 }
 
+func (s *commonSuite) bakeryDoAsUser(c *gc.C, user string) func(*http.Request) (*http.Response, error) {
+	bclient := httpbakery.NewClient()
+	m, err := s.store.Bakery.NewMacaroon("", nil, []checkers.Caveat{
+		checkers.DeclaredCaveat("username", user),
+	})
+	c.Assert(err, gc.IsNil)
+	macaroonCookie, err := httpbakery.NewCookie(macaroon.Slice{m})
+	c.Assert(err, gc.IsNil)
+	return func(req *http.Request) (*http.Response, error) {
+		req.AddCookie(macaroonCookie)
+		if req.Body == nil {
+			return bclient.Do(req)
+		}
+		body := req.Body.(io.ReadSeeker)
+		req.Body = nil
+		return bclient.DoWithBody(req, body)
+	}
+}
+
 func bakeryDo(client *http.Client) func(*http.Request) (*http.Response, error) {
 	if client == nil {
 		client = httpbakery.NewHTTPClient()
@@ -289,12 +309,12 @@ func bakeryDo(client *http.Client) func(*http.Request) (*http.Response, error) {
 	bclient := httpbakery.NewClient()
 	bclient.Client = client
 	return func(req *http.Request) (*http.Response, error) {
-		if req.Body != nil {
-			body := req.Body.(io.ReadSeeker)
-			req.Body = nil
-			return bclient.DoWithBody(req, body)
+		if req.Body == nil {
+			return bclient.Do(req)
 		}
-		return bclient.Do(req)
+		body := req.Body.(io.ReadSeeker)
+		req.Body = nil
+		return bclient.DoWithBody(req, body)
 	}
 }
 

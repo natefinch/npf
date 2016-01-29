@@ -771,25 +771,29 @@ func (h *ReqHandler) metaRevisionInfo(id *router.ResolvedURL, path string, flags
 	} else {
 		q = q.Sort("-revision")
 	}
-	var docs []*mongodoc.Entity
-	if err := q.Select(bson.D{{"_id", 1}, {"promulgated-url", 1}}).All(&docs); err != nil {
-		return "", errgo.Notef(err, "cannot get ids")
-	}
-
-	if len(docs) == 0 {
-		return "", errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
-	}
 	var response params.RevisionInfoResponse
-	for _, doc := range docs {
-		// TODO use proper promulgated URL.
+	iter := h.Cache.Iter(q, nil)
+	for iter.Next() {
+		e := iter.Entity()
+		rurl := charmstore.EntityResolvedURL(e)
+		if err := h.AuthorizeEntity(rurl, req); err != nil {
+			// We're not authorized to see the entity, so leave it out.
+			// Note that the only time this will happen is when
+			// the original URL is promulgated and has a development channel,
+			// the charm has changed owners, and the old owner and
+			// the new one have different dev ACLs. It's easiest
+			// and most reliable just to check everything though.
+			continue
+		}
 		if id.PromulgatedRevision != -1 {
-			response.Revisions = append(response.Revisions, doc.PromulgatedURL)
+			response.Revisions = append(response.Revisions, rurl.PromulgatedURL())
 		} else {
-			response.Revisions = append(response.Revisions, doc.URL)
+			response.Revisions = append(response.Revisions, rurl.UserOwnedURL())
 		}
 	}
-
-	// Write the response in JSON format.
+	if err := iter.Err(); err != nil {
+		return nil, errgo.Notef(err, "iteration failed")
+	}
 	return &response, nil
 }
 

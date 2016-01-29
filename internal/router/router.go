@@ -192,7 +192,7 @@ func (id *ResolvedURL) PreferredURL() *charm.URL {
 	return u
 }
 
-// DocPromulgatedURL the promulgated URL that
+// DocPromulgatedURL returns the promulgated URL that
 // should be stored in the mongodoc.Entity.
 // It does not have the channel set.
 func (id *ResolvedURL) DocPromulgatedURL() *charm.URL {
