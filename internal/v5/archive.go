@@ -5,16 +5,12 @@ package v5 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
 	"archive/zip"
-	"crypto/sha256"
-	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"mime"
 	"net/http"
 	"path"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -29,7 +25,6 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/series"
 )
 
 // GET id/archive
@@ -215,8 +210,7 @@ func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req 
 	if err != nil {
 		return errgo.Mask(err)
 	}
-
-	if err := h.addBlobAndEntity(rid, req.Body, hash, req.ContentLength); err != nil {
+	if err := h.Store.UploadEntity(rid, req.Body, hash, req.ContentLength); err != nil {
 		return errgo.Mask(err,
 			errgo.Is(params.ErrDuplicateUpload),
 			errgo.Is(params.ErrEntityIdNotAllowed),
@@ -277,7 +271,7 @@ func (h *ReqHandler) servePutArchive(id *charm.URL, w http.ResponseWriter, req *
 		}
 		rid.PromulgatedRevision = pid.Revision
 	}
-	if err := h.addBlobAndEntity(rid, req.Body, hash, req.ContentLength); err != nil {
+	if err := h.Store.UploadEntity(rid, req.Body, hash, req.ContentLength); err != nil {
 		return errgo.Mask(err,
 			errgo.Is(params.ErrDuplicateUpload),
 			errgo.Is(params.ErrEntityIdNotAllowed),
@@ -288,157 +282,6 @@ func (h *ReqHandler) servePutArchive(id *charm.URL, w http.ResponseWriter, req *
 		Id:            rid.UserOwnedURL(),
 		PromulgatedId: rid.PromulgatedURL(),
 	})
-	return nil
-}
-
-// addBlobAndEntity streams the contents of the given body
-// to the blob store and adds an entity record for it.
-// The hash and contentLength parameters hold
-// the content hash and the content length respectively.
-func (h *ReqHandler) addBlobAndEntity(id *router.ResolvedURL, body io.Reader, hash string, contentLength int64) (err error) {
-	name := bson.NewObjectId().Hex()
-
-	// Calculate the SHA256 hash while uploading the blob in the blob store.
-	hash256 := sha256.New()
-	body = io.TeeReader(body, hash256)
-
-	// Upload the actual blob, and make sure that it is removed
-	// if we fail later.
-	err = h.Store.BlobStore.PutUnchallenged(body, name, contentLength, hash)
-	if err != nil {
-		return errgo.Notef(err, "cannot put archive blob")
-	}
-	r, _, err := h.Store.BlobStore.Open(name)
-	if err != nil {
-		return errgo.Notef(err, "cannot open newly created blob")
-	}
-	defer r.Close()
-	defer func() {
-		if err != nil {
-			h.Store.BlobStore.Remove(name)
-			// TODO(rog) log if remove fails.
-		}
-	}()
-
-	// Add the entity entry to the charm store.
-	sum256 := fmt.Sprintf("%x", hash256.Sum(nil))
-	if err = h.addEntity(id, r, name, hash, sum256, contentLength); err != nil {
-		return errgo.Mask(err,
-			errgo.Is(params.ErrDuplicateUpload),
-			errgo.Is(params.ErrEntityIdNotAllowed),
-			errgo.Is(params.ErrInvalidEntity),
-		)
-	}
-	return nil
-}
-
-// addEntity adds the entity represented by the contents
-// of the given reader, associating it with the given id.
-func (h *ReqHandler) addEntity(id *router.ResolvedURL, r io.ReadSeeker, blobName, hash, hash256 string, contentLength int64) error {
-	readerAt := charmstore.ReaderAtSeeker(r)
-	p := charmstore.AddParams{
-		URL:         id,
-		BlobName:    blobName,
-		BlobHash:    hash,
-		BlobHash256: hash256,
-		BlobSize:    contentLength,
-	}
-	if id.URL.Series == "bundle" {
-		b, err := charm.ReadBundleArchiveFromReader(readerAt, contentLength)
-		if err != nil {
-			return readError(err, "cannot read bundle archive")
-		}
-		bundleData := b.Data()
-		charms, err := h.bundleCharms(bundleData.RequiredCharms())
-		if err != nil {
-			return errgo.Notef(err, "cannot retrieve bundle charms")
-		}
-		if err := bundleData.VerifyWithCharms(verifyConstraints, verifyStorage, charms); err != nil {
-			// TODO frankban: use multiError (defined in internal/router).
-			return errgo.NoteMask(verificationError(err), "bundle verification failed", errgo.Is(params.ErrInvalidEntity))
-		}
-		if err := h.Store.AddBundle(b, p); err != nil {
-			return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
-		}
-		return nil
-	}
-	ch, err := charm.ReadCharmArchiveFromReader(readerAt, contentLength)
-	if err != nil {
-		return readError(err, "cannot read charm archive")
-	}
-	if err := checkCharmIsValid(ch); err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrInvalidEntity))
-	}
-	if err := checkIdAllowed(id, ch); err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrEntityIdNotAllowed))
-	}
-	if err := h.Store.AddCharm(ch, p); err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
-	}
-	return nil
-}
-
-func checkCharmIsValid(ch charm.Charm) error {
-	m := ch.Meta()
-	for _, rels := range []map[string]charm.Relation{m.Provides, m.Requires, m.Peers} {
-		if err := checkRelationsAreValid(rels); err != nil {
-			return errgo.Mask(err, errgo.Is(params.ErrInvalidEntity))
-		}
-	}
-	if err := checkConsistentSeries(m.Series); err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrInvalidEntity))
-	}
-	return nil
-}
-
-func checkRelationsAreValid(rels map[string]charm.Relation) error {
-	for _, rel := range rels {
-		if rel.Name == "relation-name" {
-			return errgo.WithCausef(nil, params.ErrInvalidEntity, "relation %s has almost certainly not been changed from the template", rel.Name)
-		}
-		if rel.Interface == "interface-name" {
-			return errgo.WithCausef(nil, params.ErrInvalidEntity, "interface %s in relation %s has almost certainly not been changed from the template", rel.Interface, rel.Name)
-		}
-	}
-	return nil
-}
-
-// checkConsistentSeries ensures that all of the series listed in the
-// charm metadata come from the same distribution. If an error is
-// returned it will have a cause of params.ErrInvalidEntity.
-func checkConsistentSeries(metadataSeries []string) error {
-	var dist series.Distribution
-	for _, s := range metadataSeries {
-		d := series.Series[s].Distribution
-		if d == "" {
-			return errgo.WithCausef(nil, params.ErrInvalidEntity, "unrecognised series %q in metadata", s)
-		}
-		if dist == "" {
-			dist = d
-		} else if dist != d {
-			return errgo.WithCausef(nil, params.ErrInvalidEntity, "cannot mix series from %s and %s in single charm", dist, d)
-		}
-	}
-	return nil
-}
-
-// checkIdAllowed ensures that the given id may be used for the provided
-// charm. If an error is returned it will have a cause of
-// params.ErrEntityIdNotAllowed.
-func checkIdAllowed(id *router.ResolvedURL, ch charm.Charm) error {
-	m := ch.Meta()
-	if id.URL.Series == "" && len(m.Series) == 0 {
-		return errgo.WithCausef(nil, params.ErrEntityIdNotAllowed, "series not specified in url or charm metadata")
-	} else if id.URL.Series == "" || len(m.Series) == 0 {
-		return nil
-	}
-	// if we get here we have series in both the id and metadata, ensure they agree.
-	for _, s := range m.Series {
-		if s == id.URL.Series {
-			return nil
-		}
-	}
-	return errgo.WithCausef(nil, params.ErrEntityIdNotAllowed, "%q series not listed in charm metadata", id.URL.Series)
 }
 
 func (h *ReqHandler) latestRevisionInfo(id *charm.URL) (*router.ResolvedURL, string, error) {
@@ -456,16 +299,6 @@ func (h *ReqHandler) latestRevisionInfo(id *charm.URL) (*router.ResolvedURL, str
 		}
 	}
 	return charmstore.EntityResolvedURL(latest), latest.BlobHash, nil
-}
-
-func verifyConstraints(s string) error {
-	// TODO(rog) provide some actual constraints checking here.
-	return nil
-}
-
-func verifyStorage(s string) error {
-	// TODO(frankban) provide some actual storage checking here.
-	return nil
 }
 
 // GET id/archive/path
@@ -521,102 +354,10 @@ func (h *ReqHandler) isPublic(id charm.URL) bool {
 		for _, p := range baseEntity.ACLs.Read {
 			if p == params.Everyone {
 				return true
-				break
 			}
 		}
 	}
 	return false
-}
-
-func (h *ReqHandler) bundleCharms(ids []string) (map[string]charm.Charm, error) {
-	numIds := len(ids)
-	urls := make([]*charm.URL, 0, numIds)
-	idKeys := make([]string, 0, numIds)
-	// TODO resolve ids concurrently.
-	for _, id := range ids {
-		url, err := charm.ParseURL(id)
-		if err != nil {
-			// Ignore this error. This will be caught in the bundle
-			// verification process (see bundleData.VerifyWithCharms) and will
-			// be returned to the user along with other bundle errors.
-			continue
-		}
-		e, err := h.Cache.Entity(url, nil)
-		if err != nil {
-			if errgo.Cause(err) == params.ErrNotFound {
-				// Ignore this error too, for the same reasons
-				// described above.
-				continue
-			}
-			return nil, err
-		}
-		urls = append(urls, e.URL)
-		idKeys = append(idKeys, id)
-	}
-	var entities []mongodoc.Entity
-	if err := h.Store.DB.Entities().
-		Find(bson.D{{"_id", bson.D{{"$in", urls}}}}).
-		All(&entities); err != nil {
-		return nil, err
-	}
-
-	entityCharms := make(map[charm.URL]charm.Charm, len(entities))
-	for i, entity := range entities {
-		entityCharms[*entity.URL] = &entityCharm{entities[i]}
-	}
-	charms := make(map[string]charm.Charm, len(urls))
-	for i, url := range urls {
-		if ch, ok := entityCharms[*url]; ok {
-			charms[idKeys[i]] = ch
-		}
-	}
-	return charms, nil
-}
-
-// entityCharm implements charm.Charm.
-type entityCharm struct {
-	mongodoc.Entity
-}
-
-func (e *entityCharm) Meta() *charm.Meta {
-	return e.CharmMeta
-}
-
-func (e *entityCharm) Metrics() *charm.Metrics {
-	return nil
-}
-
-func (e *entityCharm) Config() *charm.Config {
-	return e.CharmConfig
-}
-
-func (e *entityCharm) Actions() *charm.Actions {
-	return e.CharmActions
-}
-
-func (e *entityCharm) Revision() int {
-	return e.URL.Revision
-}
-
-// verificationError returns an error whose string representation is a list of
-// all the verification error messages stored in err, in JSON format.
-// Note that err must be a *charm.VerificationError.
-func verificationError(err error) error {
-	verr, ok := err.(*charm.VerificationError)
-	if !ok {
-		return err
-	}
-	messages := make([]string, len(verr.Errors))
-	for i, err := range verr.Errors {
-		messages[i] = err.Error()
-	}
-	sort.Strings(messages)
-	encodedMessages, err := json.Marshal(messages)
-	if err != nil {
-		// This should never happen.
-		return err
-	}
-	return errgo.WithCausef(nil, params.ErrInvalidEntity, string(encodedMessages))
 }
 
 // ArchiveCachePublicMaxAge specifies the cache expiry duration for items
@@ -662,18 +403,4 @@ func (h *ReqHandler) getNewPromulgatedRevision(id *charm.URL) (int, error) {
 		return 0, errgo.Mask(err)
 	}
 	return entity.PromulgatedRevision + 1, nil
-}
-
-// readError creates an appropriate error for errors in reading an
-// uploaded archive. If the archive could not be read because the data
-// uploaded is invalid then an error with a cause of
-// params.ErrInvalidEntity will be returned. The given message will be
-// added as context.
-func readError(err error, msg string) error {
-	switch errgo.Cause(err) {
-	case zip.ErrFormat, zip.ErrAlgorithm, zip.ErrChecksum:
-		return errgo.WithCausef(err, params.ErrInvalidEntity, msg)
-
-	}
-	return errgo.Notef(err, msg)
 }

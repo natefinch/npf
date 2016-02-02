@@ -262,6 +262,26 @@ var metaEndpoints = []metaEndpoint{{
 		if url.URL.Series == "bundle" {
 			return nil, nil
 		}
+		switch url.URL.String() {
+		case "cs:~charmers/precise/wordpress-23", "cs:~bob/utopic/wordpress-2":
+			return &params.RelatedResponse{
+				Provides: map[string][]params.EntityResult{
+					"mysql": {{
+						Id: charm.MustParseURL("cs:precise/mysql-5"),
+					}},
+				},
+			}, nil
+		case "cs:~charmers/precise/mysql-5":
+			return &params.RelatedResponse{
+				Requires: map[string][]params.EntityResult{
+					"mysql": {{
+						Id: charm.MustParseURL("cs:~bob/utopic/wordpress-2"),
+					}, {
+						Id: charm.MustParseURL("cs:precise/wordpress-23"),
+					}},
+				},
+			}, nil
+		}
 		return &params.RelatedResponse{}, nil
 	},
 	checkURL: newResolvedURL("~charmers/precise/wordpress-23", 23),
@@ -542,6 +562,8 @@ func (s *APISuite) TestAllMetaEndpointsTested(c *gc.C) {
 var testEntities = []*router.ResolvedURL{
 	// A stock charm.
 	newResolvedURL("cs:~charmers/precise/wordpress-23", 23),
+	// Another stock charm, to satisfy the bundle's requirements.
+	newResolvedURL("cs:~charmers/precise/mysql-5", 5),
 	// A stock bundle.
 	newResolvedURL("cs:~charmers/bundle/wordpress-simple-42", 42),
 	// A charm with some actions.
@@ -557,7 +579,7 @@ var testEntities = []*router.ResolvedURL{
 func (s *APISuite) addTestEntities(c *gc.C) []*router.ResolvedURL {
 	for _, e := range testEntities {
 		if e.URL.Series == "bundle" {
-			s.addPublicBundle(c, e.URL.Name, e)
+			s.addPublicBundle(c, e.URL.Name, e, true)
 		} else {
 			s.addPublicCharm(c, e.URL.Name, e)
 		}
@@ -883,7 +905,7 @@ func (s *APISuite) TestMetaTerms(c *gc.C) {
 
 func (s *APISuite) TestMetaTermsBundle(c *gc.C) {
 	id := newResolvedURL("~charmers/bundle/wordpress-simple-10", 10)
-	s.addPublicBundle(c, "wordpress-simple", id)
+	s.addPublicBundle(c, "wordpress-simple", id, true)
 
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
@@ -1362,15 +1384,7 @@ func (s *APISuite) TestMetaCharmTags(c *gc.C) {
 		meta := wordpress.Meta()
 		meta.Tags, meta.Categories = test.tags, test.categories
 		url.URL.Revision = i
-		err := s.store.AddCharm(&testMetaCharm{
-			meta:  meta,
-			Charm: wordpress,
-		}, charmstore.AddParams{
-			URL:      url,
-			BlobName: "no-such-name",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
-		})
+		err := s.store.AddCharmWithArchive(url, storetesting.NewCharm(meta))
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
@@ -1392,15 +1406,7 @@ func (s *APISuite) TestPromulgatedMetaCharmTags(c *gc.C) {
 		meta.Tags, meta.Categories = test.tags, test.categories
 		url.URL.Revision = i
 		url.PromulgatedRevision = i
-		err := s.store.AddCharm(&testMetaCharm{
-			meta:  meta,
-			Charm: wordpress,
-		}, charmstore.AddParams{
-			URL:      url,
-			BlobName: "no-such-name",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
-		})
+		err := s.store.AddCharmWithArchive(url, storetesting.NewCharm(meta))
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
@@ -1415,15 +1421,11 @@ func (s *APISuite) TestPromulgatedMetaCharmTags(c *gc.C) {
 
 func (s *APISuite) TestBundleTags(c *gc.C) {
 	b := storetesting.Charms.BundleDir("wordpress-simple")
-	url := newResolvedURL("~charmers/bundle/wordpress-2", -1)
+	s.addRequiredCharms(c, b)
+	url := newResolvedURL("~charmers/bundle/wordpress-simple-2", -1)
 	data := b.Data()
 	data.Tags = []string{"foo", "bar"}
-	err := s.store.AddBundle(&testingBundle{data}, charmstore.AddParams{
-		URL:      url,
-		BlobName: "no-such-name",
-		BlobHash: fakeBlobHash,
-		BlobSize: fakeBlobSize,
-	})
+	err := s.store.AddBundleWithArchive(url, storetesting.NewBundle(data))
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 	c.Assert(err, gc.IsNil)
@@ -1437,15 +1439,11 @@ func (s *APISuite) TestBundleTags(c *gc.C) {
 
 func (s *APISuite) TestPromulgatedBundleTags(c *gc.C) {
 	b := storetesting.Charms.BundleDir("wordpress-simple")
-	url := newResolvedURL("~charmers/bundle/wordpress-2", 2)
+	s.addRequiredCharms(c, b)
+	url := newResolvedURL("~charmers/bundle/wordpress-simple-2", 2)
 	data := b.Data()
 	data.Tags = []string{"foo", "bar"}
-	err := s.store.AddBundle(&testingBundle{data}, charmstore.AddParams{
-		URL:      url,
-		BlobName: "no-such-name",
-		BlobHash: fakeBlobHash,
-		BlobSize: fakeBlobSize,
-	})
+	err := s.store.AddBundleWithArchive(url, storetesting.NewBundle(data))
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 	c.Assert(err, gc.IsNil)
@@ -1674,8 +1672,8 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/trusty/wordpress-1", -1))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/precise/wordpress-2", -1))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/precise/other-2", -1))
-	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/bundlelovin-10", 10))
-	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/wordpress-simple-10", 10))
+	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/bundlelovin-10", 10), true)
+	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/wordpress-simple-10", 10), true)
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/development/wily/django-47", 27))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/development/trusty/haproxy-0", -1))
 	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~bob/multi-series-0", -1))
@@ -1797,8 +1795,8 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/precise/builder-5", -1))
 	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/development/precise/builder-6", -1))
 
-	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/mongo-0", 0))
-	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/wordpress-simple-0", 0))
+	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/mongo-0", 0), true)
+	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/wordpress-simple-0", 0), true)
 
 	for i, test := range serveExpandIdTests {
 		c.Logf("test %d: %s", i, test.about)
@@ -2333,7 +2331,7 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 
 			// Add the required entities to the database.
 			if url.URL.Series == "bundle" {
-				s.addPublicBundle(c, "wordpress-simple", url)
+				s.addPublicBundle(c, "wordpress-simple", url, true)
 			} else {
 				s.addPublicCharm(c, "wordpress", url)
 			}

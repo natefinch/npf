@@ -93,7 +93,7 @@ func (s *StatsSuite) TestSumCounters(c *gc.C) {
 	docs1, err := counters.Count()
 	c.Assert(err, gc.IsNil)
 	if docs1 != 3 && docs1 != 4 {
-		fmt.Errorf("Expected 3 or 4 docs in counters collection, got %d", docs1)
+		c.Errorf("Expected 3 or 4 docs in counters collection, got %d", docs1)
 	}
 
 	// Hack times so that the next operation adds another document.

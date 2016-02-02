@@ -237,8 +237,9 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C) {
 		for i, s := range cats {
 			tags[i] = s + "TAG"
 		}
-		charmArchive.Meta().Tags = tags
-		err := s.store.AddCharmWithArchive(EntityResolvedURL(ent), charmArchive)
+		meta := charmArchive.Meta()
+		meta.Tags = tags
+		err := s.store.AddCharmWithArchive(EntityResolvedURL(ent), storetesting.NewCharm(meta))
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < charmDownloadCounts[name]; i++ {
 			err := s.store.IncrementDownloadCounts(EntityResolvedURL(ent))
@@ -254,8 +255,9 @@ func (s *StoreSearchSuite) addCharmsToStore(c *gc.C) {
 	}
 	for name, ent := range exportTestBundles {
 		bundleArchive := storetesting.Charms.BundleDir(name)
-		bundleArchive.Data().Tags = strings.Split(name, "-")
-		err := s.store.AddBundleWithArchive(EntityResolvedURL(ent), bundleArchive)
+		data := bundleArchive.Data()
+		data.Tags = strings.Split(name, "-")
+		err := s.store.AddBundleWithArchive(EntityResolvedURL(ent), storetesting.NewBundle(data))
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < charmDownloadCounts[name]; i++ {
 			err := s.store.IncrementDownloadCounts(EntityResolvedURL(ent))

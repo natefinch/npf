@@ -19,7 +19,6 @@ import (
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 
-	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 )
@@ -51,7 +50,7 @@ func (s *APISuite) TestServeDiagramErrors(c *gc.C) {
 	id := newResolvedURL("cs:~charmers/trusty/wordpress-42", 42)
 	s.addPublicCharm(c, "wordpress", id)
 	id = newResolvedURL("cs:~charmers/bundle/nopositionbundle-42", 42)
-	s.addPublicBundle(c, "wordpress-simple", id)
+	s.addPublicBundle(c, "wordpress-simple", id, true)
 
 	for i, test := range serveDiagramErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
@@ -65,34 +64,29 @@ func (s *APISuite) TestServeDiagramErrors(c *gc.C) {
 }
 
 func (s *APISuite) TestServeDiagram(c *gc.C) {
-	bundle := &testingBundle{
-		data: &charm.BundleData{
-			Services: map[string]*charm.ServiceSpec{
-				"wordpress": {
-					Charm: "wordpress",
-					Annotations: map[string]string{
-						"gui-x": "100",
-						"gui-y": "200",
-					},
+	bundle := storetesting.NewBundle(&charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"wordpress": {
+				Charm: "wordpress",
+				Annotations: map[string]string{
+					"gui-x": "100",
+					"gui-y": "200",
 				},
-				"mysql": {
-					Charm: "utopic/mysql-23",
-					Annotations: map[string]string{
-						"gui-x": "200",
-						"gui-y": "200",
-					},
+			},
+			"mysql": {
+				Charm: "utopic/mysql-23",
+				Annotations: map[string]string{
+					"gui-x": "200",
+					"gui-y": "200",
 				},
 			},
 		},
-	}
+	},
+	)
 
 	url := newResolvedURL("cs:~charmers/bundle/wordpressbundle-42", 42)
-	err := s.store.AddBundle(bundle, charmstore.AddParams{
-		URL:      url,
-		BlobName: "blobName",
-		BlobHash: fakeBlobHash,
-		BlobSize: fakeBlobSize,
-	})
+	s.addRequiredCharms(c, bundle)
+	err := s.store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 	c.Assert(err, gc.IsNil)
@@ -137,8 +131,8 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 }
 
 func (s *APISuite) TestServeDiagramNoPosition(c *gc.C) {
-	bundle := &testingBundle{
-		data: &charm.BundleData{
+	bundle := storetesting.NewBundle(
+		&charm.BundleData{
 			Services: map[string]*charm.ServiceSpec{
 				"wordpress": {
 					Charm: "wordpress",
@@ -151,16 +145,11 @@ func (s *APISuite) TestServeDiagramNoPosition(c *gc.C) {
 					},
 				},
 			},
-		},
-	}
+		})
 
 	url := newResolvedURL("cs:~charmers/bundle/wordpressbundle-42", 42)
-	err := s.store.AddBundle(bundle, charmstore.AddParams{
-		URL:      url,
-		BlobName: "blobName",
-		BlobHash: fakeBlobHash,
-		BlobSize: fakeBlobSize,
-	})
+	s.addRequiredCharms(c, bundle)
+	err := s.store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 	c.Assert(err, gc.IsNil)
@@ -300,7 +289,7 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 }
 
 func (s *APISuite) TestServeBundleIcon(c *gc.C) {
-	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/something-32", 32))
+	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/something-32", 32), true)
 
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
