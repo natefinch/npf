@@ -46,6 +46,21 @@ type Entity struct {
 	// containing the value in Series.
 	SupportedSeries []string
 
+	// PreV5BlobHash holds the hash checksum of the
+	// blob that will be served from the v4 and legacy
+	// APIs. This will be the same as BlobHash for single-series charms.
+	PreV5BlobHash string
+
+	// PreV5BlobSize holds the size of the
+	// blob that will be served from the v4 and legacy
+	// APIs. This will be the same as Size for single-series charms.
+	PreV5BlobSize int64
+
+	// PreV5BlobHash256 holds the SHA256 hash checksum
+	// of the blob that will be served from the v4 and legacy
+	// APIs. This will be the same as Hash256 for single-series charms.
+	PreV5BlobHash256 string
+
 	// BlobHash holds the hash checksum of the blob, in hexadecimal format,
 	// as created by blobstore.NewHash.
 	BlobHash string
@@ -53,6 +68,7 @@ type Entity struct {
 	// BlobHash256 holds the SHA256 hash checksum of the blob,
 	// in hexadecimal format. This is only used by the legacy
 	// API, and is calculated lazily the first time it is required.
+	// Note that this is calculated from the pre-V5 blob.
 	BlobHash256 string
 
 	// Size holds the size of the archive blob.
@@ -60,6 +76,9 @@ type Entity struct {
 	Size int64
 
 	// BlobName holds the name that the archive blob is given in the blob store.
+	// For multi-series charms, there is also a second blob which
+	// stores a "zip-suffix" that overrides metadata.yaml.
+	// This is named BlobName + ".pre-v5-suffix".
 	BlobName string
 
 	UploadTime time.Time

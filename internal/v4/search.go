@@ -13,7 +13,7 @@ const maxConcurrency = 20
 
 // GET search[?text=text][&autocomplete=1][&filter=value…][&limit=limit][&include=meta][&skip=count][&sort=field[+dir]]
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-search
-func (h *ReqHandler) serveSearch(_ http.Header, req *http.Request) (interface{}, error) {
+func (h ReqHandler) serveSearch(_ http.Header, req *http.Request) (interface{}, error) {
 	sp, err := v5.ParseSearchParams(req)
 	if err != nil {
 		return "", err

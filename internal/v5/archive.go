@@ -4,15 +4,14 @@
 package v5 // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
-	"archive/zip"
+	stdzip "archive/zip"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"mime"
 	"net/http"
-	"path"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/juju/httprequest"
@@ -43,10 +42,9 @@ import (
 // in the specification.
 func (h *ReqHandler) serveArchive(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
 	resolveId := h.ResolvedIdHandler
-	authId := h.AuthIdHandler
 	switch req.Method {
 	case "DELETE":
-		return resolveId(authId(h.serveDeleteArchive))(id, w, req)
+		return resolveId(h.AuthIdHandler(h.serveDeleteArchive))(id, w, req)
 	case "GET":
 		return resolveId(h.serveGetArchive)(id, w, req)
 	case "POST", "PUT":
@@ -105,42 +103,39 @@ func (h *ReqHandler) authorizeUpload(id *charm.URL, req *http.Request) error {
 }
 
 func (h *ReqHandler) serveGetArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-	_, err := h.authorizeEntityAndTerms(req, []*router.ResolvedURL{id})
+	_, err := h.AuthorizeEntityAndTerms(req, []*router.ResolvedURL{id})
 	if err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
-	r, size, hash, err := h.Store.OpenBlob(id)
+	blob, err := h.Store.OpenBlob(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
-	defer r.Close()
+	defer blob.Close()
+	h.SendEntityArchive(id, w, req, blob)
+	return nil
+}
+
+// SendEntityArchive writes the given blob, which has been retrieved
+// from the given id, as a response to the given request.
+func (h *ReqHandler) SendEntityArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request, blob *charmstore.Blob) {
 	header := w.Header()
-	setArchiveCacheControl(w.Header(), h.isPublic(id.URL))
-	header.Set(params.ContentHashHeader, hash)
-	header.Set(params.EntityIdHeader, id.String())
+	setArchiveCacheControl(w.Header(), h.isPublic(id))
+	logger.Infof("sendEntityArchive setting %s=%s", params.ContentHashHeader, blob.Hash)
+	header.Set(params.ContentHashHeader, blob.Hash)
+	header.Set(params.EntityIdHeader, id.PreferredURL().String())
 
 	if StatsEnabled(req) {
 		h.Store.IncrementDownloadCountsAsync(id)
 	}
 	// TODO(rog) should we set connection=close here?
 	// See https://codereview.appspot.com/5958045
-	serveContent(w, req, size, r)
-	return nil
+	serveContent(w, req, blob.Size, blob)
 }
 
 func (h *ReqHandler) serveDeleteArchive(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-	// Retrieve the entity blob name from the database.
-	blobName, _, err := h.Store.BlobNameAndHash(id)
-	if err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
-	}
-	// Remove the entity.
-	if err := h.Store.DB.Entities().RemoveId(&id.URL); err != nil {
-		return errgo.Notef(err, "cannot remove %s", id)
-	}
-	// Remove the reference to the archive from the blob store.
-	if err := h.Store.BlobStore.Remove(blobName); err != nil {
-		return errgo.Notef(err, "cannot remove blob %s", blobName)
+	if err := h.Store.DeleteEntity(id); err != nil {
+		return errgo.NoteMask(err, fmt.Sprintf("cannot delete %q", id.PreferredURL()), errgo.Is(params.ErrNotFound))
 	}
 	h.Store.IncCounterAsync(charmstore.EntityStatsKey(&id.URL, params.StatsArchiveDelete))
 	return nil
@@ -282,6 +277,7 @@ func (h *ReqHandler) servePutArchive(id *charm.URL, w http.ResponseWriter, req *
 		Id:            rid.UserOwnedURL(),
 		PromulgatedId: rid.PromulgatedURL(),
 	})
+	return nil
 }
 
 func (h *ReqHandler) latestRevisionInfo(id *charm.URL) (*router.ResolvedURL, string, error) {
@@ -304,52 +300,37 @@ func (h *ReqHandler) latestRevisionInfo(id *charm.URL) (*router.ResolvedURL, str
 // GET id/archive/path
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idarchivepath
 func (h *ReqHandler) serveArchiveFile(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-	entity, err := h.Cache.Entity(id.UserOwnedURL(), charmstore.FieldSelector("blobname", "blobhash"))
-	if err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
-	}
-	r, size, err := h.Store.BlobStore.Open(entity.BlobName)
+	blob, err := h.Store.OpenBlob(id)
 	if err != nil {
 		return errgo.Notef(err, "cannot open archive data for %v", id)
 	}
-	defer r.Close()
-	zipReader, err := zip.NewReader(charmstore.ReaderAtSeeker(r), size)
-	if err != nil {
-		return errgo.Notef(err, "cannot read archive data for %s", id)
-	}
-
-	// Retrieve the requested file from the zip archive.
-	filePath := strings.TrimPrefix(path.Clean(req.URL.Path), "/")
-	for _, file := range zipReader.File {
-		if path.Clean(file.Name) != filePath {
-			continue
-		}
-		// The file is found.
-		fileInfo := file.FileInfo()
-		if fileInfo.IsDir() {
-			return errgo.WithCausef(nil, params.ErrForbidden, "directory listing not allowed")
-		}
-		content, err := file.Open()
-		if err != nil {
-			return errgo.Notef(err, "unable to read file %q", filePath)
-		}
-		defer content.Close()
-		// Send the response to the client.
-		ctype := mime.TypeByExtension(filepath.Ext(filePath))
-		if ctype != "" {
-			w.Header().Set("Content-Type", ctype)
-		}
-		w.Header().Set("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
-		setArchiveCacheControl(w.Header(), h.isPublic(id.URL))
-		w.WriteHeader(http.StatusOK)
-		io.Copy(w, content)
-		return nil
-	}
-	return errgo.WithCausef(nil, params.ErrNotFound, "file %q not found in the archive", filePath)
+	defer blob.Close()
+	return h.ServeBlobFile(w, req, id, blob)
 }
 
-func (h *ReqHandler) isPublic(id charm.URL) bool {
-	baseEntity, err := h.Store.FindBaseEntity(&id, charmstore.FieldSelector("acls"))
+// ServeBlobFile serves a file from the given blob. The
+// path of the file is taken from req.URL.Path.
+// The blob should be associated with the entity
+// with the given id.
+func (h *ReqHandler) ServeBlobFile(w http.ResponseWriter, req *http.Request, id *router.ResolvedURL, blob *charmstore.Blob) error {
+	r, size, err := h.Store.OpenBlobFile(blob, req.URL.Path)
+	if err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound), errgo.Is(params.ErrForbidden))
+	}
+	defer r.Close()
+	ctype := mime.TypeByExtension(filepath.Ext(req.URL.Path))
+	if ctype != "" {
+		w.Header().Set("Content-Type", ctype)
+	}
+	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	setArchiveCacheControl(w.Header(), h.isPublic(id))
+	w.WriteHeader(http.StatusOK)
+	io.Copy(w, r)
+	return nil
+}
+
+func (h *ReqHandler) isPublic(id *router.ResolvedURL) bool {
+	baseEntity, err := h.Cache.BaseEntity(&id.URL, charmstore.FieldSelector("acls"))
 	if err == nil {
 		for _, p := range baseEntity.ACLs.Read {
 			if p == params.Everyone {
@@ -403,4 +384,17 @@ func (h *ReqHandler) getNewPromulgatedRevision(id *charm.URL) (int, error) {
 		return 0, errgo.Mask(err)
 	}
 	return entity.PromulgatedRevision + 1, nil
+}
+
+// archiveReadError creates an appropriate error for errors in reading an
+// uploaded archive. If the archive could not be read because the data
+// uploaded is invalid then an error with a cause of
+// params.ErrInvalidEntity will be returned. The given message will be
+// added as context.
+func archiveReadError(err error, msg string) error {
+	switch errgo.Cause(err) {
+	case stdzip.ErrFormat, stdzip.ErrAlgorithm, stdzip.ErrChecksum:
+		return errgo.WithCausef(err, params.ErrInvalidEntity, msg)
+	}
+	return errgo.Notef(err, msg)
 }

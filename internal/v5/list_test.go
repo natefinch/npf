@@ -289,9 +289,9 @@ func (s *ListSuite) TestListIncludeError(c *gc.C) {
 
 	// Now remove one of the blobs. The list should still
 	// work, but only return a single result.
-	blobName, _, err := s.store.BlobNameAndHash(newResolvedURL("~charmers/precise/wordpress-23", 23))
+	entity, err := s.store.FindEntity(newResolvedURL("~charmers/precise/wordpress-23", 23), nil)
 	c.Assert(err, gc.IsNil)
-	err = s.store.BlobStore.Remove(blobName)
+	err = s.store.BlobStore.Remove(entity.BlobName)
 	c.Assert(err, gc.IsNil)
 
 	// Now list again - we should get one result less

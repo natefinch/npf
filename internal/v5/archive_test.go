@@ -1095,7 +1095,9 @@ func (s *commonArchiveSuite) assertUpload(c *gc.C, method string, url *router.Re
 	err = s.store.DB.Entities().FindId(expectId.WithChannel("")).One(&entity)
 	c.Assert(err, gc.IsNil)
 	c.Assert(entity.BlobHash, gc.Equals, hashSum)
-	c.Assert(entity.BlobHash256, gc.Equals, hash256Sum)
+	if url.URL.Series != "" {
+		c.Assert(entity.BlobHash256, gc.Equals, hash256Sum)
+	}
 	c.Assert(entity.PromulgatedURL, gc.DeepEquals, url.DocPromulgatedURL())
 	c.Assert(entity.Development, gc.Equals, url.Development)
 	// Test that the expected entry has been created
@@ -1367,7 +1369,7 @@ func (s *ArchiveSuite) TestDeleteError(c *gc.C) {
 		Password:     testPassword,
 		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
-			Message: `cannot remove blob no-such-name: resource at path "global/no-such-name" not found`,
+			Message: `cannot delete "cs:~charmers/utopic/mysql-42": cannot remove blob no-such-name: resource at path "global/no-such-name" not found`,
 		},
 	})
 }

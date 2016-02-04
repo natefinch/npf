@@ -4,7 +4,6 @@
 package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 
 import (
-	"archive/zip"
 	"encoding/json"
 	"io"
 	"sync"
@@ -434,16 +433,19 @@ func (s *Store) addAuditAtTime(entry audit.Entry, t time.Time) {
 // assumed to be a promulgated entity. If fields is not nil, only its
 // fields will be populated in the returned entities.
 func (s *Store) FindEntity(url *router.ResolvedURL, fields map[string]int) (*mongodoc.Entity, error) {
-	entities, err := s.FindEntities(url.UserOwnedURL(), fields)
+	q := s.DB.Entities().Find(bson.D{{"_id", &url.URL}})
+	if fields != nil {
+		q = q.Select(fields)
+	}
+	var entity mongodoc.Entity
+	err := q.One(&entity)
 	if err != nil {
+		if err == mgo.ErrNotFound {
+			return nil, errgo.WithCausef(nil, params.ErrNotFound, "entity not found")
+		}
 		return nil, errgo.Mask(err)
 	}
-	if len(entities) == 0 {
-		return nil, errgo.WithCausef(nil, params.ErrNotFound, "entity not found")
-	}
-	// The URL is guaranteed to be fully qualified so we'll always
-	// get exactly one result.
-	return entities[0], nil
+	return &entity, nil
 }
 
 // FindEntities finds all entities in the store matching the given URL.
@@ -800,122 +802,6 @@ func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 	return nil
 }
 
-// OpenBlob opens a blob given its entity id; it returns the blob's
-// data source, its size and its hash. It returns a params.ErrNotFound
-// error if the entity does not exist.
-func (s *Store) OpenBlob(id *router.ResolvedURL) (r blobstore.ReadSeekCloser, size int64, hash string, err error) {
-	blobName, hash, err := s.BlobNameAndHash(id)
-	if err != nil {
-		return nil, 0, "", errgo.Mask(err, errgo.Is(params.ErrNotFound))
-	}
-	r, size, err = s.BlobStore.Open(blobName)
-	if err != nil {
-		return nil, 0, "", errgo.Notef(err, "cannot open archive data for %s", id)
-	}
-	return r, size, hash, nil
-}
-
-// BlobNameAndHash returns the name that is used to store the blob
-// for the entity with the given id and its hash. It returns a params.ErrNotFound
-// error if the entity does not exist.
-func (s *Store) BlobNameAndHash(id *router.ResolvedURL) (name, hash string, err error) {
-	entity, err := s.FindEntity(id, FieldSelector("blobname", "blobhash"))
-	if err != nil {
-		if errgo.Cause(err) == params.ErrNotFound {
-			return "", "", errgo.WithCausef(nil, params.ErrNotFound, "entity not found")
-		}
-		return "", "", errgo.Notef(err, "cannot get %s", id)
-	}
-	return entity.BlobName, entity.BlobHash, nil
-}
-
-// OpenCachedBlobFile opens a file from the given entity's archive blob.
-// The file is identified by the provided fileId. If the file has not
-// previously been opened on this entity, the isFile function will be
-// used to determine which file in the zip file to use. The result will
-// be cached for the next time.
-//
-// When retrieving the entity, at least the BlobName and
-// Contents fields must be populated.
-func (s *Store) OpenCachedBlobFile(
-	entity *mongodoc.Entity,
-	fileId mongodoc.FileId,
-	isFile func(f *zip.File) bool,
-) (_ io.ReadCloser, err error) {
-	if entity.BlobName == "" {
-		// We'd like to check that the Contents field was populated
-		// here but we can't because it doesn't necessarily
-		// exist in the entity.
-		return nil, errgo.New("provided entity does not have required fields")
-	}
-	zipf, ok := entity.Contents[fileId]
-	if ok && !zipf.IsValid() {
-		return nil, errgo.WithCausef(nil, params.ErrNotFound, "")
-	}
-	blob, size, err := s.BlobStore.Open(entity.BlobName)
-	if err != nil {
-		return nil, errgo.Notef(err, "cannot open archive blob")
-	}
-	defer func() {
-		// When there's an error, we want to close
-		// the blob, otherwise we need to keep the blob
-		// open because it's used by the returned Reader.
-		if err != nil {
-			blob.Close()
-		}
-	}()
-	if !ok {
-		// We haven't already searched the archive for the icon,
-		// so find its archive now.
-		zipf, err = s.findZipFile(blob, size, isFile)
-		if err != nil && errgo.Cause(err) != params.ErrNotFound {
-			return nil, errgo.Mask(err)
-		}
-	}
-	// We update the content entry regardless of whether we've
-	// found a file, so that the next time that serveIcon is called
-	// it can know that we've already looked.
-	err = s.DB.Entities().UpdateId(
-		entity.URL,
-		bson.D{{"$set",
-			bson.D{{"contents." + string(fileId), zipf}},
-		}},
-	)
-	if err != nil {
-		return nil, errgo.Notef(err, "cannot update %q", entity.URL)
-	}
-	if !zipf.IsValid() {
-		// We searched for the file and didn't find it.
-		return nil, errgo.WithCausef(nil, params.ErrNotFound, "")
-	}
-
-	// We know where the icon is stored. Now serve it up.
-	r, err := ZipFileReader(blob, zipf)
-	if err != nil {
-		return nil, errgo.Notef(err, "cannot make zip file reader")
-	}
-	// We return a ReadCloser that reads from the newly created
-	// zip file reader, but when closed, will close the originally
-	// opened blob.
-	return struct {
-		io.Reader
-		io.Closer
-	}{r, blob}, nil
-}
-
-func (s *Store) findZipFile(blob io.ReadSeeker, size int64, isFile func(f *zip.File) bool) (mongodoc.ZipFile, error) {
-	zipReader, err := zip.NewReader(&readerAtSeeker{blob}, size)
-	if err != nil {
-		return mongodoc.ZipFile{}, errgo.Notef(err, "cannot read archive data")
-	}
-	for _, f := range zipReader.File {
-		if isFile(f) {
-			return NewZipFile(f)
-		}
-	}
-	return mongodoc.ZipFile{}, params.ErrNotFound
-}
-
 // SetPerms sets the permissions for the base entity with
 // the given id for "which" operations ("read" or "write")
 // to the given ACL. This is mostly provided for testing.
@@ -996,6 +882,33 @@ func (s *Store) AddLog(data *json.RawMessage, logLevel mongodoc.LogLevel, logTyp
 	return nil
 }
 
+func (s *Store) DeleteEntity(id *router.ResolvedURL) error {
+	entity, err := s.FindEntity(id, FieldSelector("blobname", "blobhash", "prev5blobhash"))
+	if err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	// Remove the entity.
+	if err := s.DB.Entities().RemoveId(&id.URL); err != nil {
+		if err == mgo.ErrNotFound {
+			// Someone else got there first.
+			err = params.ErrNotFound
+		}
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	// Remove the reference to the archive from the blob store.
+	if err := s.BlobStore.Remove(entity.BlobName); err != nil {
+		return errgo.Notef(err, "cannot remove blob %s", entity.BlobName)
+	}
+	if entity.BlobHash != entity.PreV5BlobHash {
+		name := preV5CompatibilityBlobName(entity.BlobName)
+		if err := s.BlobStore.Remove(name); err != nil {
+			return errgo.Notef(err, "cannot remove compatibility blob %s", name)
+		}
+	}
+
+	return nil
+}
+
 // StoreDatabase wraps an mgo.DB ands adds a few convenience methods.
 type StoreDatabase struct {
 	*mgo.Database
@@ -1073,22 +986,31 @@ func (s StoreDatabase) Collections() []*mgo.Collection {
 	return cs
 }
 
+// readerAtSeeker adapts an io.ReadSeeker to an io.ReaderAt.
 type readerAtSeeker struct {
-	r io.ReadSeeker
+	r   io.ReadSeeker
+	off int64
 }
 
-func (r *readerAtSeeker) ReadAt(buf []byte, p int64) (int, error) {
-	if _, err := r.r.Seek(p, 0); err != nil {
-		return 0, errgo.Notef(err, "cannot seek")
+// ReadAt implemnts SizeReaderAt.ReadAt.
+func (r *readerAtSeeker) ReadAt(buf []byte, off int64) (n int, err error) {
+	if off != r.off {
+		_, err = r.r.Seek(off, 0)
+		if err != nil {
+			return 0, err
+		}
+		r.off = off
 	}
-	return r.r.Read(buf)
+	n, err = io.ReadFull(r.r, buf)
+	r.off += int64(n)
+	return n, err
 }
 
 // ReaderAtSeeker adapts r so that it can be used as
-// a ReaderAt. Note that, unlike some implementations
-// of ReaderAt, it is not OK to use concurrently.
+// a ReaderAt. Note that, contrary to the io.ReaderAt
+// contract, it is not OK to use concurrently.
 func ReaderAtSeeker(r io.ReadSeeker) io.ReaderAt {
-	return &readerAtSeeker{r}
+	return &readerAtSeeker{r, 0}
 }
 
 // Search searches the store for the given SearchParams.

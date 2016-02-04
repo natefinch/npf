@@ -125,20 +125,14 @@ func (s *ArchiveSuite) TestGetDevelopment(c *gc.C) {
 }
 
 func (s *ArchiveSuite) TestGetWithPartialId(c *gc.C) {
-	id := newResolvedURL("cs:~charmers/utopic/wordpress-42", -1)
-	err := s.store.AddCharmWithArchive(
-		id,
-		storetesting.Charms.CharmArchive(c.MkDir(), "wordpress"))
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/utopic/wordpress-42", -1))
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("~charmers/wordpress/archive"),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	// The complete entity id can be retrieved from the response header.
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, id.URL.String())
+	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/utopic/wordpress-42")
 }
 
 func (s *ArchiveSuite) TestGetPromulgatedWithPartialId(c *gc.C) {
@@ -156,6 +150,37 @@ func (s *ArchiveSuite) TestGetPromulgatedWithPartialId(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	// The complete entity id can be retrieved from the response header.
 	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, id.PromulgatedURL().String())
+}
+
+func (s *ArchiveSuite) TestGetElidesSeriesFromMultiSeriesCharmMetadata(c *gc.C) {
+	_, ch := s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-0", -1))
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("~charmers/multi-series/archive"),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+
+	gotCh, err := charm.ReadCharmArchiveBytes(rec.Body.Bytes())
+	c.Assert(err, gc.IsNil)
+	c.Assert(gotCh.Meta().Series, gc.HasLen, 0)
+
+	// Check that the metadata is elided from the metadata file when retrieved
+	// directly too.
+
+	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("~charmers/multi-series/archive/metadata.yaml"),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+
+	gotMeta, err := charm.ReadMeta(bytes.NewReader(rec.Body.Bytes()))
+	c.Assert(err, gc.IsNil)
+	c.Assert(gotMeta.Series, gc.HasLen, 0)
+
+	chMeta := ch.Meta()
+	chMeta.Series = nil
+
+	c.Assert(gotMeta, jc.DeepEquals, chMeta)
 }
 
 func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
@@ -998,11 +1023,13 @@ func (s *ArchiveSuite) assertUploadCharm(c *gc.C, method string, url *router.Res
 		// return charm ids with a series.
 		id.Series = ch.Meta().Series[0]
 	}
+	meta := ch.Meta()
+	meta.Series = nil
 	s.assertEntityInfo(c, entityInfo{
 		Id: id,
 		Meta: entityMetaInfo{
 			ArchiveSize:  &params.ArchiveSizeResponse{Size: size},
-			CharmMeta:    ch.Meta(),
+			CharmMeta:    meta,
 			CharmConfig:  ch.Config(),
 			CharmActions: ch.Actions(),
 		},
@@ -1071,20 +1098,18 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *router.Resolved
 		},
 	})
 
-	var entity mongodoc.Entity
-	err = s.store.DB.Entities().FindId(expectId.WithChannel("")).One(&entity)
+	entity, err := s.store.FindEntity(url, nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(entity.BlobHash, gc.Equals, hashSum)
 	c.Assert(entity.BlobHash256, gc.Equals, hash256Sum)
+	c.Assert(entity.PreV5BlobHash256, gc.Not(gc.Equals), "")
+	c.Assert(entity.PreV5BlobHash, gc.Not(gc.Equals), "")
+	c.Assert(entity.PreV5BlobSize, gc.Not(gc.Equals), int64(0))
+
 	c.Assert(entity.PromulgatedURL, gc.DeepEquals, url.DocPromulgatedURL())
 	c.Assert(entity.Development, gc.Equals, url.Development)
-	// Test that the expected entry has been created
-	// in the blob store.
-	r, _, err := s.store.BlobStore.Open(entity.BlobName)
-	c.Assert(err, gc.IsNil)
-	r.Close()
 
-	return expectId, size
+	return expectId, entity.PreV5BlobSize
 }
 
 // assertUploadCharmError attempts to upload the testing charm with the
@@ -1205,6 +1230,25 @@ func (s *ArchiveSuite) TestArchiveFileGet(c *gc.C) {
 	s.assertArchiveFileContents(c, zipFile, "~charmers/utopic/all-hooks-0/archive/metadata.yaml")
 	// Check a file in a subdirectory.
 	s.assertArchiveFileContents(c, zipFile, "~charmers/utopic/all-hooks-0/archive/hooks/install")
+}
+
+func (s *ArchiveSuite) TestArchiveFileGetMultiSeries(c *gc.C) {
+	// V4 SPECIFIC:
+	// Check that the series field of a multi-series charm is omitted.
+	url := charm.MustParseURL("~charmers/juju-gui-0")
+	s.assertUploadCharm(c, "POST", newResolvedURL(url.String(), -1), "multi-series")
+	err := s.store.SetPerms(url, "read", params.Everyone)
+	c.Assert(err, gc.IsNil)
+
+	c.Logf("dorequest %v", storeURL(url.String()+"/archive"))
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL(url.Path() + "/archive"),
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("body: %q", rec.Body.Bytes()))
+	ch, err := charm.ReadCharmArchiveBytes(rec.Body.Bytes())
+	c.Assert(err, gc.IsNil)
+	c.Assert(ch.Meta().Series, gc.HasLen, 0)
 }
 
 // assertArchiveFileContents checks that the response returned by the
@@ -1347,7 +1391,7 @@ func (s *ArchiveSuite) TestDeleteError(c *gc.C) {
 		Password:     testPassword,
 		ExpectStatus: http.StatusInternalServerError,
 		ExpectBody: params.Error{
-			Message: `cannot remove blob no-such-name: resource at path "global/no-such-name" not found`,
+			Message: `cannot delete "cs:~charmers/utopic/mysql-42": cannot remove blob no-such-name: resource at path "global/no-such-name" not found`,
 		},
 	})
 }

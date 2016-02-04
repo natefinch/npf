@@ -90,13 +90,13 @@ func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool,
 	return authorization{}, h.newDischargeRequiredError(m, verr, req)
 }
 
-// authorizeEntityAndTerms is similar to the authorize method, but
+// AuthorizeEntityAndTerms is similar to the authorize method, but
 // in addition it also checks if the entity meta data specifies
 // and terms and conditions that the user needs to agree to. If so,
 // it will require the user to agree to those terms and conditions
 // by adding a third party caveat addressed to the terms service
 // requiring the user to have agreements to specified terms.
-func (h *ReqHandler) authorizeEntityAndTerms(req *http.Request, entityIds []*router.ResolvedURL) (authorization, error) {
+func (h *ReqHandler) AuthorizeEntityAndTerms(req *http.Request, entityIds []*router.ResolvedURL) (authorization, error) {
 	logger.Infof(
 		"authorize entity and terms, auth location %q, terms location %q, path: %q, method: %q, entities: %#v",
 		h.Handler.config.IdentityLocation,
@@ -186,6 +186,7 @@ func (h *ReqHandler) newDischargeRequiredError(m *macaroon.Macaroon, verr error,
 // an entry for each id with the corresponding ACL for each entity,
 // and requiredTerms holds entries for all required terms.
 func (h *ReqHandler) entityAuthInfo(entityIds []*router.ResolvedURL) (public bool, acls [][]string, requiredTerms map[string]bool, err error) {
+	// TODO use cache for entity lookup
 	acls = make([][]string, len(entityIds))
 	requiredTerms = make(map[string]bool)
 	public = true

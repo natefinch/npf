@@ -16,6 +16,7 @@ import (
 
 	"github.com/juju/httprequest"
 	"github.com/juju/loggo"
+	"github.com/juju/mempool"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
@@ -31,7 +32,6 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/entitycache"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/identity"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/mempool"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
@@ -695,16 +695,6 @@ func (h *ReqHandler) metaHash(entity *mongodoc.Entity, id *router.ResolvedURL, p
 // GET id/meta/hash256
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetahash256
 func (h *ReqHandler) metaHash256(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	// TODO frankban: remove this lazy calculation after the cshash256
-	// command is run in the production db. At that point, entities
-	// always have their blobhash256 field populated, and there is no
-	// need for this lazy evaluation anymore.
-	if entity.BlobHash256 == "" {
-		var err error
-		if entity.BlobHash256, err = h.Store.UpdateEntitySHA256(id); err != nil {
-			return nil, errgo.Notef(err, "cannot retrieve the SHA256 hash for entity %s", entity.URL)
-		}
-	}
 	return &params.HashResponse{
 		Sum: entity.BlobHash256,
 	}, nil
@@ -1233,7 +1223,7 @@ func (h *ReqHandler) serveDelegatableMacaroon(_ http.Header, req *http.Request) 
 	// anyone to obtain a delegatable macaroon. This means
 	// that we will be able to add the declared caveats to
 	// the returned macaroon.
-	auth, err := h.authorizeEntityAndTerms(req, resolvedURLs)
+	auth, err := h.AuthorizeEntityAndTerms(req, resolvedURLs)
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Any)
 	}

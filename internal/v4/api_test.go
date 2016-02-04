@@ -37,7 +37,6 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting/hashtesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 )
@@ -181,7 +180,7 @@ var metaEndpoints = []metaEndpoint{{
 	name: "archive-size",
 	get: entityGetter(func(entity *mongodoc.Entity) interface{} {
 		return &params.ArchiveSizeResponse{
-			Size: entity.Size,
+			Size: entity.PreV5BlobSize,
 		}
 	}),
 	checkURL:        newResolvedURL("~charmers/precise/wordpress-23", 23),
@@ -1167,6 +1166,14 @@ func (s *APISuite) TestMetaCharmActions(c *gc.C) {
 			},
 		},
 	)
+}
+
+func (s *APISuite) TestMetaCharmMetadataElidesSeriesFromMultiSeriesCharm(c *gc.C) {
+	_, ch := s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-10", 10))
+	expectMeta := *ch.Meta()
+	c.Assert(expectMeta.Series, gc.Not(gc.HasLen), 0)
+	expectMeta.Series = nil
+	s.assertGet(c, "multi-series/meta/charm-metadata", &expectMeta)
 }
 
 func (s *APISuite) TestBulkMeta(c *gc.C) {
@@ -2468,17 +2475,6 @@ func (s *APISuite) TestHash256Laziness(c *gc.C) {
 	entity, err := s.store.FindEntity(id, charmstore.FieldSelector("blobhash256"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(entity.BlobHash256, gc.Not(gc.Equals), "")
-
-	hashtesting.CheckSHA256Laziness(c, s.store, &id.URL, func() {
-		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-			Handler:      s.srv,
-			URL:          storeURL(id.URL.Path() + "/meta/hash256"),
-			ExpectStatus: http.StatusOK,
-			ExpectBody: params.HashResponse{
-				Sum: entity.BlobHash256,
-			},
-		})
-	})
 }
 
 func basicAuthHeader(username, password string) http.Header {

@@ -7,7 +7,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"fmt"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
 	"io"
 	"io/ioutil"
 	"regexp"
@@ -21,6 +20,7 @@ import (
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 
 	"gopkg.in/juju/charmstore.v5-unstable/elasticsearch"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
@@ -129,16 +129,16 @@ func (s *AddEntitySuite) TestAddCharmWithMultiSeries(c *gc.C) {
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
 	s.checkAddCharm(c, ch, false, router.MustNewResolvedURL("~charmers/multi-series-1", 1))
 	// Make sure it can be accessed with a number of names
-	e, err := store.FindEntity(router.MustNewResolvedURL("~charmers/multi-series-1", 1), nil)
+	e, err := store.FindBestEntity(charm.MustParseURL("~charmers/multi-series-1"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	e, err = store.FindEntity(router.MustNewResolvedURL("~charmers/trusty/multi-series-1", 1), nil)
+	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/trusty/multi-series-1"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	e, err = store.FindEntity(router.MustNewResolvedURL("~charmers/wily/multi-series-1", 1), nil)
+	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/wily/multi-series-1"), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	_, err = store.FindEntity(router.MustNewResolvedURL("~charmers/precise/multi-series-1", 1), nil)
+	_, err = store.FindBestEntity(charm.MustParseURL("~charmers/precise/multi-series-1"), nil)
 	c.Assert(err, gc.ErrorMatches, "entity not found")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
@@ -427,11 +427,8 @@ func (s *AddEntitySuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, ur
 
 	doc.UploadTime = time.Time{}
 
-	blobName := doc.BlobName
-	c.Assert(blobName, gc.Matches, "[0-9a-z]+")
-	doc.BlobName = ""
-
-	c.Assert(doc, jc.DeepEquals, denormalizedEntity(&mongodoc.Entity{
+	assertDoc := assertBlobFields(c, doc, url, hash, hash256, size)
+	c.Assert(assertDoc, jc.DeepEquals, denormalizedEntity(&mongodoc.Entity{
 		URL:                     &url.URL,
 		BlobHash:                hash,
 		BlobHash256:             hash256,
@@ -447,7 +444,7 @@ func (s *AddEntitySuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, ur
 	}))
 
 	// The charm archive has been properly added to the blob store.
-	r, obtainedSize, err := store.BlobStore.Open(blobName)
+	r, obtainedSize, err := store.BlobStore.Open(doc.BlobName)
 	c.Assert(err, gc.IsNil)
 	defer r.Close()
 	c.Assert(obtainedSize, gc.Equals, size)
@@ -509,15 +506,11 @@ func (s *AddEntitySuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bo
 	c.Assert(doc.UploadTime, jc.TimeBetween(beforeAdding, afterAdding))
 	doc.UploadTime = time.Time{}
 
-	// The blob name is random, but we check that it's
-	// in the correct format, and non-empty.
-	blobName := doc.BlobName
-	c.Assert(blobName, gc.Matches, "[0-9a-z]+")
-	doc.BlobName = ""
-
 	// The entity doc has been correctly added to the mongo collection.
 	size, hash, hash256 := getSizeAndHashes(bundle)
-	c.Assert(doc, jc.DeepEquals, denormalizedEntity(&mongodoc.Entity{
+
+	assertDoc := assertBlobFields(c, doc, url, hash, hash256, size)
+	c.Assert(assertDoc, jc.DeepEquals, denormalizedEntity(&mongodoc.Entity{
 		URL:          &url.URL,
 		BlobHash:     hash,
 		BlobHash256:  hash256,
@@ -535,7 +528,7 @@ func (s *AddEntitySuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bo
 	}))
 
 	// The bundle archive has been properly added to the blob store.
-	r, obtainedSize, err := store.BlobStore.Open(blobName)
+	r, obtainedSize, err := store.BlobStore.Open(doc.BlobName)
 	c.Assert(err, gc.IsNil)
 	defer r.Close()
 	c.Assert(obtainedSize, gc.Equals, size)
@@ -553,6 +546,39 @@ func (s *AddEntitySuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bo
 	// already there.
 	err = store.AddBundleWithArchive(url, bundle)
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrDuplicateUpload)
+}
+
+// assertBlobFields asserts that the blob-related fields in doc are as expected.
+// It returns a copy of doc with unpredictable fields zeroed out.
+func assertBlobFields(c *gc.C, doc *mongodoc.Entity, url *router.ResolvedURL, hash, hash256 string, size int64) *mongodoc.Entity {
+	doc1 := *doc
+	doc = &doc1
+
+	// The blob name is random, but we check that it's
+	// in the correct format, and non-empty.
+	blobName := doc.BlobName
+	c.Assert(blobName, gc.Matches, "[0-9a-z]+")
+	doc.BlobName = ""
+	// The PreV5* fields are unpredictable, so zero them out
+	// for the purposes of comparison.
+	if doc.CharmMeta != nil && len(doc.CharmMeta.Series) > 0 {
+		// It's a multi-series charm, so the PreV5* fields should be active.
+		if doc.PreV5BlobSize <= doc.Size {
+			c.Fatalf("pre-v5 blobsize %d is unexpectedly less than original blob size %d", doc.PreV5BlobSize, doc.Size)
+		}
+		c.Assert(doc.PreV5BlobHash, gc.Not(gc.Equals), "")
+		c.Assert(doc.PreV5BlobHash, gc.Not(gc.Equals), hash)
+		c.Assert(doc.PreV5BlobHash256, gc.Not(gc.Equals), "")
+		c.Assert(doc.PreV5BlobHash256, gc.Not(gc.Equals), hash256)
+	} else {
+		c.Assert(doc.PreV5BlobSize, gc.Equals, doc.Size)
+		c.Assert(doc.PreV5BlobHash, gc.Equals, doc.BlobHash)
+		c.Assert(doc.PreV5BlobHash256, gc.Equals, doc.BlobHash256)
+	}
+	doc.PreV5BlobSize = 0
+	doc.PreV5BlobHash = ""
+	doc.PreV5BlobHash256 = ""
+	return doc
 }
 
 func assertBaseEntity(c *gc.C, store *Store, url *charm.URL, promulgated bool) {

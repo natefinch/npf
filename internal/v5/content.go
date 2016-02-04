@@ -52,7 +52,7 @@ func (h *ReqHandler) serveDiagram(id *router.ResolvedURL, w http.ResponseWriter,
 	if urlErr != nil {
 		return urlErr
 	}
-	setArchiveCacheControl(w.Header(), h.isPublic(id.URL))
+	setArchiveCacheControl(w.Header(), h.isPublic(id))
 	w.Header().Set("Content-Type", "image/svg+xml")
 	canvas.Marshal(w)
 	return nil
@@ -87,7 +87,7 @@ func (h *ReqHandler) serveReadMe(id *router.ResolvedURL, w http.ResponseWriter, 
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	defer r.Close()
-	setArchiveCacheControl(w.Header(), h.isPublic(id.URL))
+	setArchiveCacheControl(w.Header(), h.isPublic(id))
 	io.Copy(w, r)
 	return nil
 }
@@ -111,14 +111,14 @@ func (h *ReqHandler) serveIcon(id *router.ResolvedURL, w http.ResponseWriter, re
 		if errgo.Cause(err) != params.ErrNotFound {
 			return errgo.Mask(err)
 		}
-		setArchiveCacheControl(w.Header(), h.isPublic(id.URL))
+		setArchiveCacheControl(w.Header(), h.isPublic(id))
 		w.Header().Set("Content-Type", "image/svg+xml")
 		io.Copy(w, strings.NewReader(DefaultIcon))
 		return nil
 	}
 	defer r.Close()
 	w.Header().Set("Content-Type", "image/svg+xml")
-	setArchiveCacheControl(w.Header(), h.isPublic(id.URL))
+	setArchiveCacheControl(w.Header(), h.isPublic(id))
 	if err := processIcon(w, r); err != nil {
 		if errgo.Cause(err) == errProbablyNotXML {
 			logger.Errorf("cannot process icon.svg from %s: %v", id, err)
