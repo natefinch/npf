@@ -45,25 +45,6 @@ type addParams struct {
 	BlobSize int64
 }
 
-// putArchive reads the charm or bundle archive from the given reader and
-// puts into the blob store. The archiveSize and hash must holds the length
-// of the blob content and its SHA384 hash respectively.
-func (s *Store) putArchive(blob io.Reader, blobSize int64, hash string) (blobName, blobHash256 string, err error) {
-	name := bson.NewObjectId().Hex()
-
-	// Calculate the SHA256 hash while uploading the blob in the blob store.
-	hash256 := sha256.New()
-	blob = io.TeeReader(blob, hash256)
-
-	// Upload the actual blob, and make sure that it is removed
-	// if we fail later.
-	err = s.BlobStore.PutUnchallenged(blob, name, blobSize, hash)
-	if err != nil {
-		return "", "", errgo.Notef(err, "cannot put archive blob")
-	}
-	return name, fmt.Sprintf("%x", hash256.Sum(nil)), nil
-}
-
 // AddCharmWithArchive adds the given charm, which must
 // be either a *charm.CharmDir or implement ArchiverTo,
 // to the charmstore under the given URL.
@@ -111,7 +92,16 @@ func (s *Store) addEntityWithArchive(url *router.ResolvedURL, archive interface{
 //	params.ErrEntityIdNotAllowed if the id may not be created.
 //	params.ErrInvalidEntity if the provided blob is invalid.
 func (s *Store) UploadEntity(url *router.ResolvedURL, blob io.Reader, blobHash string, size int64) error {
-	logger.Infof("uploading entity with blob hash %v", blobHash)
+	// Strictly speaking these tests are redundant, because a ResolvedURL should
+	// always be canonical, but check just in case anyway, as this is
+	// final gateway before a potentially invalid url might be stored
+	// in the database.
+	if url.URL.User == "" {
+		return errgo.WithCausef(nil, params.ErrEntityIdNotAllowed, "entity id does not specify user")
+	}
+	if url.URL.Revision == -1 {
+		return errgo.WithCausef(nil, params.ErrEntityIdNotAllowed, "entity id does not specify revision")
+	}
 	blobName, blobHash256, err := s.putArchive(blob, size, blobHash)
 	if err != nil {
 		return errgo.Mask(err)
@@ -132,6 +122,27 @@ func (s *Store) UploadEntity(url *router.ResolvedURL, blob io.Reader, blobHash s
 		)
 	}
 	return nil
+}
+
+// putArchive reads the charm or bundle archive from the given reader and
+// puts into the blob store. The archiveSize and hash must holds the length
+// of the blob content and its SHA384 hash respectively.
+func (s *Store) putArchive(blob io.Reader, blobSize int64, hash string) (blobName, blobHash256 string, err error) {
+	name := bson.NewObjectId().Hex()
+
+	// Calculate the SHA256 hash while uploading the blob in the blob store.
+	hash256 := sha256.New()
+	blob = io.TeeReader(blob, hash256)
+
+	// Upload the actual blob, and make sure that it is removed
+	// if we fail later.
+	err = s.BlobStore.PutUnchallenged(blob, name, blobSize, hash)
+	if err != nil {
+		// TODO return error with ErrInvalidEntity cause when
+		// there's a hash or size mismatch.
+		return "", "", errgo.Notef(err, "cannot put archive blob")
+	}
+	return name, fmt.Sprintf("%x", hash256.Sum(nil)), nil
 }
 
 // addEntityFromReader adds the entity represented by the contents
@@ -217,7 +228,7 @@ func checkConsistentSeries(metadataSeries []string) error {
 	for _, s := range metadataSeries {
 		d := series.Series[s].Distribution
 		if d == "" {
-			return errgo.WithCausef(nil, params.ErrInvalidEntity, "unrecognised series %q in metadata", s)
+			return errgo.WithCausef(nil, params.ErrInvalidEntity, "unrecognized series %q in metadata", s)
 		}
 		if dist == "" {
 			dist = d
@@ -258,9 +269,6 @@ func (s *Store) addCharm(c charm.Charm, p addParams) (err error) {
 	// final gateway before a potentially invalid url might be stored
 	// in the database.
 	id := p.URL.URL
-	if id.Series == "bundle" || id.User == "" || id.Revision == -1 {
-		return errgo.Newf("charm added with invalid id %v", &id)
-	}
 	logger.Infof("add charm url %s; prev %d; dev %v", &id, p.URL.PromulgatedRevision, p.URL.Development)
 	entity := &mongodoc.Entity{
 		URL:                     &id,
@@ -308,13 +316,6 @@ func (s *Store) addCharm(c charm.Charm, p addParams) (err error) {
 // the bundle duplicates an existing bundle then the returned error will
 // have the cause params.ErrDuplicateUpload.
 func (s *Store) addBundle(b charm.Bundle, p addParams) error {
-	// Strictly speaking this test is redundant, because a ResolvedURL should
-	// always be canonical, but check just in case anyway, as this is
-	// final gateway before a potentially invalid url might be stored
-	// in the database.
-	if p.URL.URL.Series != "bundle" || p.URL.URL.User == "" || p.URL.URL.Revision == -1 || p.URL.URL.Series == "" {
-		return errgo.Newf("bundle added with invalid id %v", p.URL)
-	}
 	bundleData := b.Data()
 	urls, err := bundleCharms(bundleData)
 	if err != nil {
@@ -500,7 +501,7 @@ func (s *Store) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 
 // bundleCharms returns all the charm URLs used by a bundle,
 // without duplicates.
-// XXX is this still used?
+// TODO this seems to overlap slightly with Store.bundleCharms.
 func bundleCharms(data *charm.BundleData) ([]*charm.URL, error) {
 	// Use a map to de-duplicate the URL list: a bundle can include services
 	// deployed by the same charm.
@@ -591,7 +592,6 @@ func zipReadError(err error, msg string) error {
 	switch errgo.Cause(err) {
 	case zip.ErrFormat, zip.ErrAlgorithm, zip.ErrChecksum:
 		return errgo.WithCausef(err, params.ErrInvalidEntity, msg)
-
 	}
 	return errgo.Notef(err, msg)
 }

@@ -14,7 +14,6 @@ import (
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
-	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2/bson"
@@ -41,29 +40,29 @@ var _ = gc.Suite(&RelationsSuite{})
 // metaCharmRelatedCharms defines a bunch of charms to be used in
 // the relation tests.
 var metaCharmRelatedCharms = map[string]charm.Charm{
-	"0 ~charmers/utopic/wordpress-0": storetesting.NewCharm(relationMeta(
+	"0 ~charmers/utopic/wordpress-0": storetesting.NewCharm(storetesting.RelationMeta(
 		"provides website http",
 		"requires cache memcache",
 		"requires nfs mount",
 	)),
-	"42 ~charmers/utopic/memcached-42": storetesting.NewCharm(relationMeta(
+	"42 ~charmers/utopic/memcached-42": storetesting.NewCharm(storetesting.RelationMeta(
 		"provides cache memcache",
 	)),
-	"1 ~charmers/precise/nfs-1": storetesting.NewCharm(relationMeta(
+	"1 ~charmers/precise/nfs-1": storetesting.NewCharm(storetesting.RelationMeta(
 		"provides nfs mount",
 	)),
-	"47 ~charmers/trusty/haproxy-47": storetesting.NewCharm(relationMeta(
+	"47 ~charmers/trusty/haproxy-47": storetesting.NewCharm(storetesting.RelationMeta(
 		"requires reverseproxy http",
 	)),
-	"48 ~charmers/precise/haproxy-48": storetesting.NewCharm(relationMeta(
+	"48 ~charmers/precise/haproxy-48": storetesting.NewCharm(storetesting.RelationMeta(
 		"requires reverseproxy http",
 	)),
 	// development charms should not be included in any results.
-	"49 ~charmers/development/precise/haproxy-49": storetesting.NewCharm(relationMeta(
+	"49 ~charmers/development/precise/haproxy-49": storetesting.NewCharm(storetesting.RelationMeta(
 		"requires reverseproxy http",
 	)),
 	"1 ~charmers/multi-series-20": storetesting.NewCharm(
-		metaWithSupportedSeries(relationMeta(
+		storetesting.MetaWithSupportedSeries(storetesting.RelationMeta(
 			"requires reverseproxy http",
 		), "precise", "trusty", "utopic",
 		)),
@@ -136,7 +135,7 @@ var metaCharmRelatedTests = []struct {
 }, {
 	about: "no relations found",
 	charms: map[string]charm.Charm{
-		"0 ~charmers/utopic/wordpress-0": storetesting.NewCharm(relationMeta(
+		"0 ~charmers/utopic/wordpress-0": storetesting.NewCharm(storetesting.RelationMeta(
 			"provides website http",
 			"requires cache memcache",
 			"requires nfs mount",
@@ -152,16 +151,16 @@ var metaCharmRelatedTests = []struct {
 }, {
 	about: "multiple revisions of the same related charm",
 	charms: map[string]charm.Charm{
-		"0 ~charmers/trusty/wordpress-0": storetesting.NewCharm(relationMeta(
+		"0 ~charmers/trusty/wordpress-0": storetesting.NewCharm(storetesting.RelationMeta(
 			"requires cache memcache",
 		)),
-		"1 ~charmers/utopic/memcached-1": storetesting.NewCharm(relationMeta(
+		"1 ~charmers/utopic/memcached-1": storetesting.NewCharm(storetesting.RelationMeta(
 			"provides cache memcache",
 		)),
-		"2 ~charmers/utopic/memcached-2": storetesting.NewCharm(relationMeta(
+		"2 ~charmers/utopic/memcached-2": storetesting.NewCharm(storetesting.RelationMeta(
 			"provides cache memcache",
 		)),
-		"3 ~charmers/utopic/memcached-3": storetesting.NewCharm(relationMeta(
+		"3 ~charmers/utopic/memcached-3": storetesting.NewCharm(storetesting.RelationMeta(
 			"provides cache memcache",
 		)),
 	},
@@ -180,26 +179,26 @@ var metaCharmRelatedTests = []struct {
 }, {
 	about: "reference ordering",
 	charms: map[string]charm.Charm{
-		"0 ~charmers/trusty/wordpress-0": storetesting.NewCharm(relationMeta(
+		"0 ~charmers/trusty/wordpress-0": storetesting.NewCharm(storetesting.RelationMeta(
 			"requires cache memcache",
 			"requires nfs mount",
 		)),
-		"1 ~charmers/utopic/memcached-1": storetesting.NewCharm(relationMeta(
+		"1 ~charmers/utopic/memcached-1": storetesting.NewCharm(storetesting.RelationMeta(
 			"provides cache memcache",
 		)),
-		"2 ~charmers/utopic/memcached-2": storetesting.NewCharm(relationMeta(
+		"2 ~charmers/utopic/memcached-2": storetesting.NewCharm(storetesting.RelationMeta(
 			"provides cache memcache",
 		)),
-		"90 ~charmers/utopic/redis-90": storetesting.NewCharm(relationMeta(
+		"90 ~charmers/utopic/redis-90": storetesting.NewCharm(storetesting.RelationMeta(
 			"provides cache memcache",
 		)),
-		"47 ~charmers/trusty/nfs-47": storetesting.NewCharm(relationMeta(
+		"47 ~charmers/trusty/nfs-47": storetesting.NewCharm(storetesting.RelationMeta(
 			"provides nfs mount",
 		)),
-		"42 ~charmers/precise/nfs-42": storetesting.NewCharm(relationMeta(
+		"42 ~charmers/precise/nfs-42": storetesting.NewCharm(storetesting.RelationMeta(
 			"provides nfs mount",
 		)),
-		"47 ~charmers/precise/nfs-47": storetesting.NewCharm(relationMeta(
+		"47 ~charmers/precise/nfs-47": storetesting.NewCharm(storetesting.RelationMeta(
 			"provides nfs mount",
 		)),
 	},
@@ -317,52 +316,6 @@ func (s *RelationsSuite) TestMetaCharmRelatedIncludeError(c *gc.C) {
 			Message: `cannot retrieve the charm requires: unrecognized metadata name "no-such"`,
 		},
 	})
-}
-
-func metaWithSupportedSeries(m *charm.Meta, series ...string) *charm.Meta {
-	m.Series = series
-	return m
-}
-
-func relationMeta(relations ...string) *charm.Meta {
-	provides := make(map[string]charm.Relation)
-	requires := make(map[string]charm.Relation)
-	for _, rel := range relations {
-		r, err := parseRelation(rel)
-		if err != nil {
-			panic(fmt.Errorf("bad relation %q", err))
-		}
-		if r.Role == charm.RoleProvider {
-			provides[r.Name] = r
-		} else {
-			requires[r.Name] = r
-		}
-	}
-	return &charm.Meta{
-		Provides: provides,
-		Requires: requires,
-	}
-}
-
-func parseRelation(s string) (charm.Relation, error) {
-	fields := strings.Fields(s)
-	if len(fields) != 3 {
-		return charm.Relation{}, errgo.Newf("wrong field count")
-	}
-	r := charm.Relation{
-		Scope:     charm.ScopeGlobal,
-		Name:      fields[1],
-		Interface: fields[2],
-	}
-	switch fields[0] {
-	case "provides":
-		r.Role = charm.RoleProvider
-	case "requires":
-		r.Role = charm.RoleRequirer
-	default:
-		return charm.Relation{}, errgo.Newf("unknown role")
-	}
-	return r, nil
 }
 
 // metaBundlesContainingBundles defines a bunch of bundles to be used in

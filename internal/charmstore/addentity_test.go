@@ -4,7 +4,13 @@
 package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 
 import (
+	"archive/zip"
+	"bytes"
+	"fmt"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
+	"io"
 	"io/ioutil"
+	"regexp"
 	"sort"
 	"time"
 
@@ -155,47 +161,6 @@ func (s *AddEntitySuite) TestAddCharmWithMultiSeriesToES(c *gc.C) {
 	s.checkAddCharm(c, ch, true, router.MustNewResolvedURL("~charmers/juju-gui-1", 1))
 }
 
-var addInvalidCharmURLTests = []string{
-	"cs:precise/wordpress-2",         // no user
-	"cs:~charmers/precise/wordpress", // no revision
-}
-
-func (s *AddEntitySuite) TestAddInvalidCharmURL(c *gc.C) {
-	store := s.newStore(c, false)
-	defer store.Close()
-	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	for i, urlStr := range addInvalidCharmURLTests {
-		c.Logf("test %d: %s", i, urlStr)
-		err := store.AddCharmWithArchive(&router.ResolvedURL{
-			URL:                 *charm.MustParseURL(urlStr),
-			PromulgatedRevision: -1,
-		}, ch,
-		)
-		c.Assert(err, gc.ErrorMatches, `charm added with invalid id .*`)
-	}
-}
-
-var addInvalidBundleURLTests = []string{
-	"cs:bundle/wordpress-2",         // no user
-	"cs:~charmers/bundle/wordpress", // no revision
-}
-
-func (s *AddEntitySuite) TestAddInvalidBundleURL(c *gc.C) {
-	store := s.newStore(c, false)
-	defer store.Close()
-	b := storetesting.Charms.BundleDir("wordpress-simple")
-	s.addRequiredCharms(c, b)
-	for i, urlStr := range addInvalidBundleURLTests {
-		c.Logf("test %d: %s", i, urlStr)
-		err := store.AddBundleWithArchive(&router.ResolvedURL{
-			URL:                 *charm.MustParseURL(urlStr),
-			PromulgatedRevision: -1,
-		}, b,
-		)
-		c.Assert(err, gc.ErrorMatches, `bundle added with invalid id .*`)
-	}
-}
-
 func (s *AddEntitySuite) TestAddBundleDuplicatingCharm(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
@@ -258,6 +223,166 @@ func (s *AddEntitySuite) TestAddBundleArchiveIndexedAndPromulgated(c *gc.C) {
 	)
 	c.Assert(err, gc.IsNil)
 	s.checkAddBundle(c, bundleArchive, true, router.MustNewResolvedURL("cs:~charmers/bundle/baboom-2", 2))
+}
+
+var uploadEntityErrorsTests = []struct {
+	about       string
+	url         string
+	upload      ArchiverTo
+	blobHash    string
+	blobSize    int64
+	expectError string
+	expectCause error
+}{{
+	about:       "revision not specified",
+	url:         "~charmers/precise/wordpress",
+	upload:      storetesting.NewCharm(nil),
+	expectError: "entity id does not specify revision",
+	expectCause: params.ErrEntityIdNotAllowed,
+}, {
+	about:       "user not specified",
+	url:         "precise/wordpress-23",
+	upload:      storetesting.NewCharm(nil),
+	expectError: "entity id does not specify user",
+	expectCause: params.ErrEntityIdNotAllowed,
+}, {
+	about:       "hash mismatch",
+	url:         "~charmers/precise/wordpress-0",
+	upload:      storetesting.NewCharm(nil),
+	blobHash:    "blahblah",
+	expectError: "cannot put archive blob: hash mismatch",
+	// It would be nice if this was:
+	// expectCause: params.ErrInvalidEntity,
+}, {
+	about:       "size mismatch",
+	url:         "~charmers/precise/wordpress-0",
+	upload:      storetesting.NewCharm(nil),
+	blobSize:    99999,
+	expectError: "cannot put archive blob: cannot calculate data checksums: EOF",
+	// It would be nice if the above error was better and
+	// the cause was:
+	// expectCause: params.ErrInvalidEntity,
+}, {
+	about:       "charm uploaded to bundle URL",
+	url:         "~charmers/bundle/foo-0",
+	upload:      storetesting.NewCharm(nil),
+	expectError: `cannot read bundle archive: archive file "bundle.yaml" not found`,
+	// It would be nice if this was:
+	// expectCause: params.ErrInvalidEntity,
+}, {
+	about: "bundle uploaded to charm URL",
+	url:   "~charmers/precise/foo-0",
+	upload: storetesting.NewBundle(&charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"foo": {
+				Charm: "foo",
+			},
+		},
+	}),
+	expectError: `cannot read charm archive: archive file "metadata.yaml" not found`,
+	// It would be nice if this was:
+	// expectCause: params.ErrInvalidEntity,
+}, {
+	about:       "banned relation name",
+	url:         "~charmers/precise/foo-0",
+	upload:      storetesting.NewCharm(storetesting.RelationMeta("requires relation-name foo")),
+	expectError: `relation relation-name has almost certainly not been changed from the template`,
+	expectCause: params.ErrInvalidEntity,
+}, {
+	about:       "banned interface name",
+	url:         "~charmers/precise/foo-0",
+	upload:      storetesting.NewCharm(storetesting.RelationMeta("requires foo interface-name")),
+	expectError: `interface interface-name in relation foo has almost certainly not been changed from the template`,
+	expectCause: params.ErrInvalidEntity,
+}, {
+	about:       "unrecognized series",
+	url:         "~charmers/precise/foo-0",
+	upload:      storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "badseries")),
+	expectError: `unrecognized series "badseries" in metadata`,
+	expectCause: params.ErrInvalidEntity,
+}, {
+	about:       "inconsistent series",
+	url:         "~charmers/trusty/foo-0",
+	upload:      storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "trusty", "win10")),
+	expectError: `cannot mix series from ubuntu and windows in single charm`,
+	expectCause: params.ErrInvalidEntity,
+}, {
+	about:       "series not specified",
+	url:         "~charmers/foo-0",
+	upload:      storetesting.NewCharm(nil),
+	expectError: `series not specified in url or charm metadata`,
+	expectCause: params.ErrEntityIdNotAllowed,
+}, {
+	about:       "series not allowed by metadata",
+	url:         "~charmers/precise/foo-0",
+	upload:      storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "trusty")),
+	expectError: `"precise" series not listed in charm metadata`,
+	expectCause: params.ErrEntityIdNotAllowed,
+}, {
+	about: "bundle refers to non-existent charm",
+	url:   "~charmers/bundle/foo-0",
+	upload: storetesting.NewBundle(&charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"foo": {
+				Charm: "bad-charm",
+			},
+		},
+	}),
+	expectError: regexp.QuoteMeta(`bundle verification failed: ["service \"foo\" refers to non-existent charm \"bad-charm\""]`),
+	expectCause: params.ErrInvalidEntity,
+}, {
+	about:       "bundle verification fails",
+	url:         "~charmers/bundle/foo-0",
+	upload:      storetesting.NewBundle(&charm.BundleData{}),
+	expectError: regexp.QuoteMeta(`bundle verification failed: ["at least one service must be specified"]`),
+	expectCause: params.ErrInvalidEntity,
+}, {
+	about:       "invalid zip format",
+	url:         "~charmers/foo-0",
+	upload:      zipWithInvalidFormat(),
+	expectError: `cannot read charm archive: zip: not a valid zip file`,
+	expectCause: params.ErrInvalidEntity,
+}, {
+	about:       "invalid zip algorithm",
+	url:         "~charmers/foo-0",
+	upload:      zipWithInvalidAlgorithm(),
+	expectError: `cannot read charm archive: zip: unsupported compression algorithm`,
+	expectCause: params.ErrInvalidEntity,
+}, {
+	about:       "invalid zip checksum",
+	url:         "~charmers/foo-0",
+	upload:      zipWithInvalidChecksum(),
+	expectError: `cannot read charm archive: zip: checksum error`,
+	expectCause: params.ErrInvalidEntity,
+}}
+
+func (s *AddEntitySuite) TestUploadEntityErrors(c *gc.C) {
+	store := s.newStore(c, true)
+	defer store.Close()
+	for i, test := range uploadEntityErrorsTests {
+		c.Logf("test %d: %s", i, test.about)
+		var buf bytes.Buffer
+		err := test.upload.ArchiveTo(&buf)
+		c.Assert(err, gc.IsNil)
+		if test.blobHash == "" {
+			h := blobstore.NewHash()
+			h.Write(buf.Bytes())
+			test.blobHash = fmt.Sprintf("%x", h.Sum(nil))
+		}
+		if test.blobSize == 0 {
+			test.blobSize = int64(len(buf.Bytes()))
+		}
+		url := &router.ResolvedURL{
+			URL: *charm.MustParseURL(test.url),
+		}
+		err = store.UploadEntity(url, &buf, test.blobHash, test.blobSize)
+		c.Assert(err, gc.ErrorMatches, test.expectError)
+		if test.expectCause != nil {
+			c.Assert(errgo.Cause(err), gc.Equals, test.expectCause)
+		} else {
+			c.Assert(errgo.Cause(err), gc.Equals, err)
+		}
+	}
 }
 
 func (s *AddEntitySuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, url *router.ResolvedURL) {
@@ -460,4 +585,61 @@ func (o orderedURLs) Swap(i, j int) {
 
 func (o orderedURLs) Len() int {
 	return len(o)
+}
+
+type byteArchiver []byte
+
+func (a byteArchiver) ArchiveTo(w io.Writer) error {
+	_, err := w.Write(a)
+	return err
+}
+
+func zipWithInvalidFormat() ArchiverTo {
+	return byteArchiver(nil)
+}
+
+func zipWithInvalidChecksum() ArchiverTo {
+	return byteArchiver(
+		"PK\x03\x04\x14\x00\b\x00\x00\x00\x00\x00\x00" +
+			"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" +
+			"\x00\x00\r\x00\x00\x00metadata.yamlielloPK\a\b" +
+			"\x86\xa6\x106\x05\x00\x00\x00\x05\x00\x00\x00PK" +
+			"\x01\x02\x14\x00\x14\x00\b\x00\x00\x00\x00\x00" +
+			"\x00\x00\x86\xa6\x106\x05\x00\x00\x00\x05\x00" +
+			"\x00\x00\r\x00\x00\x00\x00\x00\x00\x00\x00\x00" +
+			"\x00\x00\x00\x00\x00\x00\x00\x00metadata.yamlPK" +
+			"\x05\x06\x00\x00\x00\x00\x01\x00\x01\x00;\x00" +
+			"\x00\x00@\x00\x00\x00\x00\x00",
+	)
+
+	data := storetesting.NewCharm(nil).Bytes()
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		panic(err)
+	}
+	// Change the contents of a file so
+	// that it won't (probably) fit the checksum
+	// any more.
+	off, err := zr.File[0].DataOffset()
+	if err != nil {
+		panic(err)
+	}
+	data[off] += 2
+	return byteArchiver(data)
+}
+
+func zipWithInvalidAlgorithm() ArchiverTo {
+	return byteArchiver(
+		"PK\x03\x04\x14\x00\b\x00\t\x00\x00\x00" +
+			"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" +
+			"\x00\x00\x00\x00\r\x00\x00\x00metadata.yamlhello" +
+			"PK\a\b\x86\xa6\x106\x05\x00\x00\x00\x05\x00" +
+			"\x00\x00PK\x01\x02\x14\x00\x14\x00\b\x00" +
+			"\t\x00\x00\x00\x00\x00\x86\xa6\x106\x05\x00" +
+			"\x00\x00\x05\x00\x00\x00\r\x00\x00\x00\x00" +
+			"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" +
+			"\x00\x00metadata.yamlPK\x05\x06\x00\x00\x00" +
+			"\x00\x01\x00\x01\x00;\x00\x00\x00@\x00\x00" +
+			"\x00\x00\x00",
+	)
 }
