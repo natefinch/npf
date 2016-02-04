@@ -14,13 +14,14 @@ import (
 	jc "github.com/juju/testing/checkers"
 	"github.com/juju/testing/httptesting"
 	gc "gopkg.in/check.v1"
+	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 )
 
 // Define fake blob attributes to be used in tests.
@@ -40,83 +41,32 @@ var _ = gc.Suite(&RelationsSuite{})
 // metaCharmRelatedCharms defines a bunch of charms to be used in
 // the relation tests.
 var metaCharmRelatedCharms = map[string]charm.Charm{
-	"0 ~charmers/utopic/wordpress-0": &relationTestingCharm{
-		provides: map[string]charm.Relation{
-			"website": {
-				Name:      "website",
-				Role:      "provider",
-				Interface: "http",
-			},
-		},
-		requires: map[string]charm.Relation{
-			"cache": {
-				Name:      "cache",
-				Role:      "requirer",
-				Interface: "memcache",
-			},
-			"nfs": {
-				Name:      "nfs",
-				Role:      "requirer",
-				Interface: "mount",
-			},
-		},
-	},
-	"42 ~charmers/utopic/memcached-42": &relationTestingCharm{
-		provides: map[string]charm.Relation{
-			"cache": {
-				Name:      "cache",
-				Role:      "provider",
-				Interface: "memcache",
-			},
-		},
-	},
-	"1 ~charmers/precise/nfs-1": &relationTestingCharm{
-		provides: map[string]charm.Relation{
-			"nfs": {
-				Name:      "nfs",
-				Role:      "provider",
-				Interface: "mount",
-			},
-		},
-	},
-	"47 ~charmers/trusty/haproxy-47": &relationTestingCharm{
-		requires: map[string]charm.Relation{
-			"reverseproxy": {
-				Name:      "reverseproxy",
-				Role:      "requirer",
-				Interface: "http",
-			},
-		},
-	},
-	"48 ~charmers/precise/haproxy-48": &relationTestingCharm{
-		requires: map[string]charm.Relation{
-			"reverseproxy": {
-				Name:      "reverseproxy",
-				Role:      "requirer",
-				Interface: "http",
-			},
-		},
-	},
+	"0 ~charmers/utopic/wordpress-0": storetesting.NewCharm(relationMeta(
+		"provides website http",
+		"requires cache memcache",
+		"requires nfs mount",
+	)),
+	"42 ~charmers/utopic/memcached-42": storetesting.NewCharm(relationMeta(
+		"provides cache memcache",
+	)),
+	"1 ~charmers/precise/nfs-1": storetesting.NewCharm(relationMeta(
+		"provides nfs mount",
+	)),
+	"47 ~charmers/trusty/haproxy-47": storetesting.NewCharm(relationMeta(
+		"requires reverseproxy http",
+	)),
+	"48 ~charmers/precise/haproxy-48": storetesting.NewCharm(relationMeta(
+		"requires reverseproxy http",
+	)),
 	// development charms should not be included in any results.
-	"49 ~charmers/development/precise/haproxy-49": &relationTestingCharm{
-		provides: map[string]charm.Relation{
-			"reverseproxy": {
-				Name:      "reverseproxy",
-				Role:      "requirer",
-				Interface: "http",
-			},
-		},
-	},
-	"1 ~charmers/multi-series-20": &relationTestingCharm{
-		supportedSeries: []string{"precise", "trusty", "utopic"},
-		requires: map[string]charm.Relation{
-			"reverseproxy": {
-				Name:      "reverseproxy",
-				Role:      "requirer",
-				Interface: "http",
-			},
-		},
-	},
+	"49 ~charmers/development/precise/haproxy-49": storetesting.NewCharm(relationMeta(
+		"requires reverseproxy http",
+	)),
+	"1 ~charmers/multi-series-20": storetesting.NewCharm(
+		metaWithSupportedSeries(relationMeta(
+			"requires reverseproxy http",
+		), "precise", "trusty", "utopic",
+		)),
 }
 
 var metaCharmRelatedTests = []struct {
@@ -186,74 +136,34 @@ var metaCharmRelatedTests = []struct {
 }, {
 	about: "no relations found",
 	charms: map[string]charm.Charm{
-		"0 ~charmers/utopic/wordpress-0": &relationTestingCharm{
-			provides: map[string]charm.Relation{
-				"website": {
-					Name:      "website",
-					Role:      "provider",
-					Interface: "http",
-				},
-			},
-			requires: map[string]charm.Relation{
-				"cache": {
-					Name:      "cache",
-					Role:      "requirer",
-					Interface: "memcache",
-				},
-				"nfs": {
-					Name:      "nfs",
-					Role:      "requirer",
-					Interface: "mount",
-				},
-			},
-		},
+		"0 ~charmers/utopic/wordpress-0": storetesting.NewCharm(relationMeta(
+			"provides website http",
+			"requires cache memcache",
+			"requires nfs mount",
+		)),
 	},
 	id: "utopic/wordpress-0",
 }, {
 	about: "no relations defined",
 	charms: map[string]charm.Charm{
-		"42 ~charmers/utopic/django-42": &relationTestingCharm{},
+		"42 ~charmers/utopic/django-42": storetesting.NewCharm(nil),
 	},
 	id: "utopic/django-42",
 }, {
 	about: "multiple revisions of the same related charm",
 	charms: map[string]charm.Charm{
-		"0 ~charmers/trusty/wordpress-0": &relationTestingCharm{
-			requires: map[string]charm.Relation{
-				"cache": {
-					Name:      "cache",
-					Role:      "requirer",
-					Interface: "memcache",
-				},
-			},
-		},
-		"1 ~charmers/utopic/memcached-1": &relationTestingCharm{
-			provides: map[string]charm.Relation{
-				"cache": {
-					Name:      "cache",
-					Role:      "provider",
-					Interface: "memcache",
-				},
-			},
-		},
-		"2 ~charmers/utopic/memcached-2": &relationTestingCharm{
-			provides: map[string]charm.Relation{
-				"cache": {
-					Name:      "cache",
-					Role:      "provider",
-					Interface: "memcache",
-				},
-			},
-		},
-		"3 ~charmers/utopic/memcached-3": &relationTestingCharm{
-			provides: map[string]charm.Relation{
-				"cache": {
-					Name:      "cache",
-					Role:      "provider",
-					Interface: "memcache",
-				},
-			},
-		},
+		"0 ~charmers/trusty/wordpress-0": storetesting.NewCharm(relationMeta(
+			"requires cache memcache",
+		)),
+		"1 ~charmers/utopic/memcached-1": storetesting.NewCharm(relationMeta(
+			"provides cache memcache",
+		)),
+		"2 ~charmers/utopic/memcached-2": storetesting.NewCharm(relationMeta(
+			"provides cache memcache",
+		)),
+		"3 ~charmers/utopic/memcached-3": storetesting.NewCharm(relationMeta(
+			"provides cache memcache",
+		)),
 	},
 	id: "trusty/wordpress-0",
 	expectBody: params.RelatedResponse{
@@ -270,74 +180,28 @@ var metaCharmRelatedTests = []struct {
 }, {
 	about: "reference ordering",
 	charms: map[string]charm.Charm{
-		"0 ~charmers/trusty/wordpress-0": &relationTestingCharm{
-			requires: map[string]charm.Relation{
-				"cache": {
-					Name:      "cache",
-					Role:      "requirer",
-					Interface: "memcache",
-				},
-				"nfs": {
-					Name:      "nfs",
-					Role:      "requirer",
-					Interface: "mount",
-				},
-			},
-		},
-		"1 ~charmers/utopic/memcached-1": &relationTestingCharm{
-			provides: map[string]charm.Relation{
-				"cache": {
-					Name:      "cache",
-					Role:      "provider",
-					Interface: "memcache",
-				},
-			},
-		},
-		"2 ~charmers/utopic/memcached-2": &relationTestingCharm{
-			provides: map[string]charm.Relation{
-				"cache": {
-					Name:      "cache",
-					Role:      "provider",
-					Interface: "memcache",
-				},
-			},
-		},
-		"90 ~charmers/utopic/redis-90": &relationTestingCharm{
-			provides: map[string]charm.Relation{
-				"cache": {
-					Name:      "cache",
-					Role:      "provider",
-					Interface: "memcache",
-				},
-			},
-		},
-		"47 ~charmers/trusty/nfs-47": &relationTestingCharm{
-			provides: map[string]charm.Relation{
-				"nfs": {
-					Name:      "nfs",
-					Role:      "provider",
-					Interface: "mount",
-				},
-			},
-		},
-		"42 ~charmers/precise/nfs-42": &relationTestingCharm{
-			provides: map[string]charm.Relation{
-				"nfs": {
-					Name:      "nfs",
-					Role:      "provider",
-					Interface: "mount",
-				},
-			},
-		},
-		"47 ~charmers/precise/nfs-47": &relationTestingCharm{
-			provides: map[string]charm.Relation{
-				"nfs": {
-					Name:      "nfs",
-					Role:      "provider",
-					Interface: "mount",
-				},
-			},
-		},
+		"0 ~charmers/trusty/wordpress-0": storetesting.NewCharm(relationMeta(
+			"requires cache memcache",
+			"requires nfs mount",
+		)),
+		"1 ~charmers/utopic/memcached-1": storetesting.NewCharm(relationMeta(
+			"provides cache memcache",
+		)),
+		"2 ~charmers/utopic/memcached-2": storetesting.NewCharm(relationMeta(
+			"provides cache memcache",
+		)),
+		"90 ~charmers/utopic/redis-90": storetesting.NewCharm(relationMeta(
+			"provides cache memcache",
+		)),
+		"47 ~charmers/trusty/nfs-47": storetesting.NewCharm(relationMeta(
+			"provides nfs mount",
+		)),
+		"42 ~charmers/precise/nfs-42": storetesting.NewCharm(relationMeta(
+			"provides nfs mount",
+		)),
+		"47 ~charmers/precise/nfs-47": storetesting.NewCharm(relationMeta(
+			"provides nfs mount",
+		)),
 	},
 	id: "trusty/wordpress-0",
 	expectBody: params.RelatedResponse{
@@ -362,19 +226,20 @@ var metaCharmRelatedTests = []struct {
 	about:       "includes",
 	charms:      metaCharmRelatedCharms,
 	id:          "precise/nfs-1",
-	querystring: "?include=archive-size&include=charm-metadata",
+	querystring: "?include=id-name&include=charm-metadata",
 	expectBody: params.RelatedResponse{
 		Requires: map[string][]params.EntityResult{
 			"mount": {{
 				Id: charm.MustParseURL("utopic/wordpress-0"),
 				Meta: map[string]interface{}{
-					"archive-size": params.ArchiveSizeResponse{Size: fakeBlobSize},
+					"id-name": params.IdNameResponse{"wordpress"},
 					"charm-metadata": &charm.Meta{
 						Provides: map[string]charm.Relation{
 							"website": {
 								Name:      "website",
 								Role:      "provider",
 								Interface: "http",
+								Scope:     charm.ScopeGlobal,
 							},
 						},
 						Requires: map[string]charm.Relation{
@@ -382,11 +247,13 @@ var metaCharmRelatedTests = []struct {
 								Name:      "cache",
 								Role:      "requirer",
 								Interface: "memcache",
+								Scope:     charm.ScopeGlobal,
 							},
 							"nfs": {
 								Name:      "nfs",
 								Role:      "requirer",
 								Interface: "mount",
+								Scope:     charm.ScopeGlobal,
 							},
 						},
 					},
@@ -452,43 +319,50 @@ func (s *RelationsSuite) TestMetaCharmRelatedIncludeError(c *gc.C) {
 	})
 }
 
-// relationTestingCharm implements charm.Charm, and it is used for testing
-// charm relations.
-type relationTestingCharm struct {
-	supportedSeries []string
-	provides        map[string]charm.Relation
-	requires        map[string]charm.Relation
+func metaWithSupportedSeries(m *charm.Meta, series ...string) *charm.Meta {
+	m.Series = series
+	return m
 }
 
-func (ch *relationTestingCharm) Meta() *charm.Meta {
-	// The only metadata we are interested in is the relation data.
+func relationMeta(relations ...string) *charm.Meta {
+	provides := make(map[string]charm.Relation)
+	requires := make(map[string]charm.Relation)
+	for _, rel := range relations {
+		r, err := parseRelation(rel)
+		if err != nil {
+			panic(fmt.Errorf("bad relation %q", err))
+		}
+		if r.Role == charm.RoleProvider {
+			provides[r.Name] = r
+		} else {
+			requires[r.Name] = r
+		}
+	}
 	return &charm.Meta{
-		Series:   ch.supportedSeries,
-		Provides: ch.provides,
-		Requires: ch.requires,
+		Provides: provides,
+		Requires: requires,
 	}
 }
 
-func (ch *relationTestingCharm) Config() *charm.Config {
-	// For the purposes of this implementation, the charm configuration is not
-	// relevant.
-	return nil
-}
-
-func (e *relationTestingCharm) Metrics() *charm.Metrics {
-	return nil
-}
-
-func (ch *relationTestingCharm) Actions() *charm.Actions {
-	// For the purposes of this implementation, the charm actions are not
-	// relevant.
-	return nil
-}
-
-func (ch *relationTestingCharm) Revision() int {
-	// For the purposes of this implementation, the charm revision is not
-	// relevant.
-	return 0
+func parseRelation(s string) (charm.Relation, error) {
+	fields := strings.Fields(s)
+	if len(fields) != 3 {
+		return charm.Relation{}, errgo.Newf("wrong field count")
+	}
+	r := charm.Relation{
+		Scope:     charm.ScopeGlobal,
+		Name:      fields[1],
+		Interface: fields[2],
+	}
+	switch fields[0] {
+	case "provides":
+		r.Role = charm.RoleProvider
+	case "requires":
+		r.Role = charm.RoleRequirer
+	default:
+		return charm.Relation{}, errgo.Newf("unknown role")
+	}
+	return r, nil
 }
 
 // metaBundlesContainingBundles defines a bunch of bundles to be used in
@@ -506,13 +380,12 @@ var metaBundlesContainingBundles = map[string]charm.Bundle{
 		"cs:utopic/wordpress-42",
 		"cs:utopic/wordpress-47",
 		"cs:trusty/mysql-0",
-		"cs:trusty/mysql-1",
 		"cs:trusty/memcached-2",
 	}),
 	"42 ~charmers/bundle/django-generic-42": relationTestingBundle([]string{
 		"django",
 		"django",
-		"mysql-1",
+		"utopic/mysql-1",
 		"trusty/memcached",
 	}),
 	"0 ~charmers/bundle/useless-0": relationTestingBundle([]string{
@@ -539,6 +412,9 @@ var metaBundlesContainingTests = []struct {
 	about string
 	// The id of the charm for which related bundles are returned.
 	id string
+	// The id of the target charm (only necessary if it hasn't
+	// been added as a result of addRequiredCharms)
+	addCharm *router.ResolvedURL
 	// The querystring to append to the resulting charmstore URL.
 	querystring string
 	// The expected status code of the response.
@@ -565,27 +441,30 @@ var metaBundlesContainingTests = []struct {
 	}},
 }, {
 	about:        "specific charm not present in any bundle",
-	id:           "trusty/django-42",
+	id:           "trusty/django-0",
 	expectStatus: http.StatusOK,
 	expectBody:   []*params.MetaAnyResponse{},
 }, {
 	about:        "specific charm with includes",
-	id:           "trusty/mysql-1",
-	querystring:  "?include=archive-size&include=bundle-metadata",
+	id:           "trusty/mysql-0",
+	querystring:  "?include=id-name&include=bundle-metadata",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: charm.MustParseURL("bundle/wordpress-complex-1"),
 		Meta: map[string]interface{}{
-			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
+			"id-name":         params.IdNameResponse{"wordpress-complex"},
 			"bundle-metadata": metaBundlesContainingBundles["1 ~charmers/bundle/wordpress-complex-1"].Data(),
 		},
 	}},
 }, {
-	about:        "partial charm id",
-	id:           "mysql", // The test will add cs:utopic/mysql-0.
+	about: "partial charm id",
+	// The addRequiredCharms will have added trusty/mysql-0
+	// which is the latest LTS charm, so that's what this id will
+	// resolve to.
+	id:           "mysql",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
-		Id: charm.MustParseURL("bundle/wordpress-simple-0"),
+		Id: charm.MustParseURL("bundle/wordpress-complex-1"),
 	}},
 }, {
 	about:        "any series set to true",
@@ -621,6 +500,7 @@ var metaBundlesContainingTests = []struct {
 }, {
 	about:        "any revision set to true",
 	id:           "trusty/memcached-99",
+	addCharm:     mustParseResolvedURL("99 ~charmers/trusty/memcached-99"),
 	querystring:  "?any-revision=1",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
@@ -631,6 +511,7 @@ var metaBundlesContainingTests = []struct {
 }, {
 	about:        "invalid any revision",
 	id:           "trusty/memcached-99",
+	addCharm:     mustParseResolvedURL("99 ~charmers/trusty/memcached-99"),
 	querystring:  "?any-revision=why-not",
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
@@ -663,6 +544,7 @@ var metaBundlesContainingTests = []struct {
 }, {
 	about:        "invalid all-results",
 	id:           "trusty/memcached-99",
+	addCharm:     mustParseResolvedURL("99 ~charmers/trusty/memcached-99"),
 	querystring:  "?all-results=yes!",
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
@@ -672,6 +554,7 @@ var metaBundlesContainingTests = []struct {
 }, {
 	about:        "any series and revision, all results",
 	id:           "saucy/mysql-99",
+	addCharm:     mustParseResolvedURL("99 ~charmers/saucy/mysql-99"),
 	querystring:  "?any-series=1&any-revision=1&all-results=1",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
@@ -688,6 +571,7 @@ var metaBundlesContainingTests = []struct {
 }, {
 	about:        "any series, any revision",
 	id:           "saucy/mysql-99",
+	addCharm:     mustParseResolvedURL("99 ~charmers/saucy/mysql-99"),
 	querystring:  "?any-series=1&any-revision=1",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
@@ -702,6 +586,7 @@ var metaBundlesContainingTests = []struct {
 }, {
 	about:        "any series and revision, last results",
 	id:           "saucy/mediawiki",
+	addCharm:     mustParseResolvedURL("99 ~charmers/saucy/mediawiki-99"),
 	querystring:  "?any-series=1&any-revision=1",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
@@ -714,24 +599,25 @@ var metaBundlesContainingTests = []struct {
 }, {
 	about:        "any series and revision with includes",
 	id:           "saucy/wordpress-99",
-	querystring:  "?any-series=1&any-revision=1&include=archive-size&include=bundle-metadata",
+	addCharm:     mustParseResolvedURL("99 ~charmers/saucy/wordpress-99"),
+	querystring:  "?any-series=1&any-revision=1&include=id-name&include=bundle-metadata",
 	expectStatus: http.StatusOK,
 	expectBody: []*params.MetaAnyResponse{{
 		Id: charm.MustParseURL("bundle/useless-0"),
 		Meta: map[string]interface{}{
-			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
+			"id-name":         params.IdNameResponse{"useless"},
 			"bundle-metadata": metaBundlesContainingBundles["0 ~charmers/bundle/useless-0"].Data(),
 		},
 	}, {
 		Id: charm.MustParseURL("bundle/wordpress-complex-1"),
 		Meta: map[string]interface{}{
-			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
+			"id-name":         params.IdNameResponse{"wordpress-complex"},
 			"bundle-metadata": metaBundlesContainingBundles["1 ~charmers/bundle/wordpress-complex-1"].Data(),
 		},
 	}, {
 		Id: charm.MustParseURL("bundle/wordpress-simple-1"),
 		Meta: map[string]interface{}{
-			"archive-size":    params.ArchiveSizeResponse{Size: fakeBlobSize},
+			"id-name":         params.IdNameResponse{"wordpress-simple"},
 			"bundle-metadata": metaBundlesContainingBundles["1 ~charmers/bundle/wordpress-simple-1"].Data(),
 		},
 	}},
@@ -749,50 +635,17 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 	// Add the bundles used for testing to the database.
 	for id, b := range metaBundlesContainingBundles {
 		url := mustParseResolvedURL(id)
-		// The blob related info are not used in these tests.
-		// The charm-bundle relations are retrieved from the entities
-		// collection, without accessing the blob store.
-		err := s.store.AddBundle(b, charmstore.AddParams{
-			URL:      url,
-			BlobName: "blobName",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
-		})
+		s.addRequiredCharms(c, b)
+		err := s.store.AddBundleWithArchive(url, b)
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
 	}
-
 	for i, test := range metaBundlesContainingTests {
 		c.Logf("test %d: %s", i, test.about)
-
-		// Expand the URL if required before adding the charm to the database,
-		// so that at least one matching charm can be resolved.
-		rurl := &router.ResolvedURL{
-			URL:                 *charm.MustParseURL(test.id),
-			PromulgatedRevision: -1,
+		if test.addCharm != nil {
+			s.addPublicCharm(c, "wordpress", test.addCharm)
 		}
-		if rurl.URL.Series == "" {
-			rurl.URL.Series = "utopic"
-		}
-		if rurl.URL.Revision == -1 {
-			rurl.URL.Revision = 0
-		}
-		if rurl.URL.User == "" {
-			rurl.URL.User = "charmers"
-			rurl.PromulgatedRevision = rurl.URL.Revision
-		}
-		// Add the charm we need bundle info on to the database.
-		err := s.store.AddCharm(&relationTestingCharm{}, charmstore.AddParams{
-			URL:      rurl,
-			BlobName: "blobName",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
-		})
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
-		c.Assert(err, gc.IsNil)
-
 		// Perform the request and ensure the response is what we expect.
 		storeURL := storeURL(test.id + "/meta/bundles-containing" + test.querystring)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
@@ -801,10 +654,10 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 			ExpectStatus: test.expectStatus,
 			ExpectBody:   sameMetaAnyResponses(test.expectBody),
 		})
-
-		// Clean up the charm entity in the store.
-		err = s.store.DB.Entities().Remove(bson.D{{"_id", &rurl.URL}})
-		c.Assert(err, gc.IsNil)
+		if test.addCharm != nil {
+			err := s.store.DB.Entities().Remove(bson.D{{"_id", &test.addCharm.URL}})
+			c.Assert(err, gc.IsNil)
+		}
 	}
 }
 
@@ -812,15 +665,8 @@ func (s *RelationsSuite) TestMetaBundlesContainingBundleACL(c *gc.C) {
 	// Add the bundles used for testing to the database.
 	for id, b := range metaBundlesContainingBundles {
 		url := mustParseResolvedURL(id)
-		// The blob related info are not used in these tests.
-		// The charm-bundle relations are retrieved from the entities
-		// collection, without accessing the blob store.
-		err := s.store.AddBundle(b, charmstore.AddParams{
-			URL:      url,
-			BlobName: "blobName",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
-		})
+		s.addRequiredCharms(c, b)
+		err := s.store.AddBundleWithArchive(url, storetesting.NewBundle(b.Data()))
 		c.Assert(err, gc.IsNil)
 		if url.URL.Name == "useless" {
 			// The useless bundle is not available for "everyone".
@@ -831,17 +677,6 @@ func (s *RelationsSuite) TestMetaBundlesContainingBundleACL(c *gc.C) {
 		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
 	}
-	rurl := mustParseResolvedURL("42 ~charmers/utopic/wordpress-42")
-	// Add the charm we need bundle info on to the database.
-	err := s.store.AddCharm(&relationTestingCharm{}, charmstore.AddParams{
-		URL:      rurl,
-		BlobName: "blobName",
-		BlobHash: fakeBlobHash,
-		BlobSize: fakeBlobSize,
-	})
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
-	c.Assert(err, gc.IsNil)
 
 	// Perform the request and ensure that the useless bundle isn't listed.
 	storeURL := storeURL("utopic/wordpress-42/meta/bundles-containing")
@@ -889,27 +724,11 @@ func relationTestingBundle(urls []string) charm.Bundle {
 		}
 		services[fmt.Sprintf("service-%d", i)] = service
 	}
-	return &testingBundle{
-		data: &charm.BundleData{
+	return storetesting.NewBundle(
+		&charm.BundleData{
 			Services: services,
-		},
-	}
-}
+		})
 
-// testingBundle is a bundle implementation that
-// returns bundle metadata held in the data field.
-type testingBundle struct {
-	data *charm.BundleData
-}
-
-func (b *testingBundle) Data() *charm.BundleData {
-	return b.data
-}
-
-func (b *testingBundle) ReadMe() string {
-	// For the purposes of this implementation, the charm readme is not
-	// relevant.
-	return ""
 }
 
 type metaAnyResponseById []*params.MetaAnyResponse
@@ -938,6 +757,9 @@ func mustParseResolvedURL(urlStr string) *router.ResolvedURL {
 	case 1:
 	}
 	url := charm.MustParseURL(s[len(s)-1])
+	if url.User == "" {
+		panic(fmt.Sprintf("resolved URL %q does not contain user", urlStr))
+	}
 	return &router.ResolvedURL{
 		URL:                 *url.WithChannel(""),
 		PromulgatedRevision: promRev,

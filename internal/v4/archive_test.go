@@ -1339,14 +1339,16 @@ func (s *ArchiveSuite) TestDeleteError(c *gc.C) {
 	// Add a charm to the database (not including the archive).
 	id := "~charmers/utopic/mysql-42"
 	url := newResolvedURL(id, -1)
-	err := s.store.AddCharm(storetesting.Charms.CharmArchive(c.MkDir(), "mysql"),
-		charmstore.AddParams{
-			URL:      url,
-			BlobName: "no-such-name",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
-		})
+	err := s.store.AddCharmWithArchive(url, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
 	c.Assert(err, gc.IsNil)
+
+	err = s.store.DB.Entities().UpdateId(&url.URL, bson.M{
+		"$set": bson.M{
+			"blobname": "no-such-name",
+		},
+	})
+	c.Assert(err, gc.IsNil)
+	// TODO update entity to change BlobName to "no-such-name"
 
 	// Try to delete the charm using the API.
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{

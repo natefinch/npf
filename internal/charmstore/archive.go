@@ -14,7 +14,10 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
 )
 
-type archiverTo interface {
+// ArchiverTo can be used to archive a charm or bundle's
+// contents to a writer. It is implemented by *charm.CharmArchive
+// and *charm.BundleArchive.
+type ArchiverTo interface {
 	ArchiveTo(io.Writer) error
 }
 
@@ -23,7 +26,7 @@ type archiverTo interface {
 func getArchive(c interface{}) (blobstore.ReadSeekCloser, error) {
 	var path string
 	switch c := c.(type) {
-	case archiverTo:
+	case ArchiverTo:
 		// For example: charm.CharmDir or charm.BundleDir.
 		var buffer bytes.Buffer
 		if err := c.ArchiveTo(&buffer); err != nil {

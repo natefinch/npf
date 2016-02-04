@@ -25,15 +25,15 @@ func (s *APISuite) TestStatus(c *gc.C) {
 	for _, id := range []*router.ResolvedURL{
 		newResolvedURL("cs:~charmers/precise/wordpress-2", 2),
 		newResolvedURL("cs:~charmers/precise/wordpress-3", 3),
-		newResolvedURL("cs:~foo/precise/arble-9", -1),
-		newResolvedURL("cs:~bar/utopic/arble-10", -1),
-		newResolvedURL("cs:~charmers/bundle/oflaughs-3", 3),
-		newResolvedURL("cs:~bar/bundle/oflaughs-4", -1),
+		newResolvedURL("cs:~foo/precise/mysql-9", 1),
+		newResolvedURL("cs:~bar/utopic/mysql-10", -1),
+		newResolvedURL("cs:~charmers/bundle/wordpress-simple-3", 3),
+		newResolvedURL("cs:~bar/bundle/wordpress-simple-4", -1),
 	} {
 		if id.URL.Series == "bundle" {
-			s.addPublicBundle(c, "wordpress-simple", id)
+			s.addPublicBundle(c, id.URL.Name, id, false)
 		} else {
-			s.addPublicCharm(c, "wordpress", id)
+			s.addPublicCharm(c, id.URL.Name, id)
 		}
 	}
 	now := time.Now()
@@ -84,7 +84,7 @@ func (s *APISuite) TestStatus(c *gc.C) {
 		},
 		"entities": {
 			Name:   "Entities in charm store",
-			Value:  "4 charms; 2 bundles; 3 promulgated",
+			Value:  "4 charms; 2 bundles; 4 promulgated",
 			Passed: true,
 		},
 		"base_entities": {

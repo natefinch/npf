@@ -128,6 +128,36 @@ func (s *StoreSuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, url *r
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrDuplicateUpload)
 }
 
+// addRequiredCharms adds any charms required by the given
+// bundle that are not already in the store.
+func (s *StoreSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
+	store := s.newStore(c, true)
+	defer store.Close()
+	for _, svc := range bundle.Data().Services {
+		u := charm.MustParseURL(svc.Charm)
+		if _, err := store.FindBestEntity(u, nil); err == nil {
+			continue
+		}
+		if u.Revision == -1 {
+			u.Revision = 0
+		}
+		var rurl router.ResolvedURL
+		rurl.URL = *u
+		ch := storetesting.Charms.CharmDir(u.Name)
+		if len(ch.Meta().Series) == 0 && u.Series == "" {
+			rurl.URL.Series = "trusty"
+		}
+		if u.User == "" {
+			rurl.URL.User = "charmers"
+			rurl.PromulgatedRevision = rurl.URL.Revision
+		} else {
+			rurl.PromulgatedRevision = -1
+		}
+		err := store.AddCharmWithArchive(&rurl, ch)
+		c.Assert(err, gc.IsNil)
+	}
+}
+
 func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool, url *router.ResolvedURL) {
 	var es *elasticsearch.Database
 
@@ -139,6 +169,7 @@ func (s *StoreSuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bool, 
 
 	// Add the bundle to the store.
 	beforeAdding := time.Now()
+	s.addRequiredCharms(c, bundle)
 	err := store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
 	afterAdding := time.Now()
@@ -572,12 +603,12 @@ var findBaseEntityTests = []struct {
 	expect *mongodoc.BaseEntity
 }{{
 	about:  "entity found, base url, all fields",
-	stored: []string{"42 cs:~charmers/utopic/django-42"},
-	url:    "django",
+	stored: []string{"42 cs:~charmers/utopic/mysql-42"},
+	url:    "mysql",
 	expect: &mongodoc.BaseEntity{
-		URL:         charm.MustParseURL("~charmers/django"),
+		URL:         charm.MustParseURL("~charmers/mysql"),
 		User:        "charmers",
-		Name:        "django",
+		Name:        "mysql",
 		Public:      false,
 		Promulgated: true,
 		ACLs: mongodoc.ACL{
@@ -591,21 +622,21 @@ var findBaseEntityTests = []struct {
 	},
 }, {
 	about:  "entity found, fully qualified url, few fields",
-	stored: []string{"42 cs:~charmers/utopic/django-42", "~who/precise/django-47"},
-	url:    "~who/precise/django-0",
+	stored: []string{"42 cs:~charmers/utopic/mysql-42", "~who/precise/mysql-47"},
+	url:    "~who/precise/mysql-0",
 	fields: []string{"public", "user"},
 	expect: &mongodoc.BaseEntity{
-		URL:    charm.MustParseURL("~who/django"),
+		URL:    charm.MustParseURL("~who/mysql"),
 		User:   "who",
 		Public: false,
 	},
 }, {
 	about:  "entity found, partial url, only the ACLs",
-	stored: []string{"42 cs:~charmers/utopic/django-42", "~who/trusty/django-47"},
-	url:    "~who/django-42",
+	stored: []string{"42 cs:~charmers/utopic/mysql-42", "~who/trusty/mysql-47"},
+	url:    "~who/mysql-42",
 	fields: []string{"acls"},
 	expect: &mongodoc.BaseEntity{
-		URL: charm.MustParseURL("~who/django"),
+		URL: charm.MustParseURL("~who/mysql"),
 		ACLs: mongodoc.ACL{
 			Read:  []string{"who"},
 			Write: []string{"who"},
@@ -613,12 +644,12 @@ var findBaseEntityTests = []struct {
 	},
 }, {
 	about:  "entity not found, charm name",
-	stored: []string{"42 cs:~charmers/utopic/django-42", "~who/trusty/django-47"},
+	stored: []string{"42 cs:~charmers/utopic/mysql-42", "~who/trusty/mysql-47"},
 	url:    "rails",
 }, {
 	about:  "entity not found, user",
-	stored: []string{"42 cs:~charmers/utopic/django-42", "~who/trusty/django-47"},
-	url:    "~dalek/django",
+	stored: []string{"42 cs:~charmers/utopic/mysql-42", "~who/trusty/mysql-47"},
+	url:    "~dalek/mysql",
 	fields: []string{"acls"},
 }}
 
@@ -716,18 +747,15 @@ var bundleUnitCountTests = []struct {
 	data        *charm.BundleData
 	expectUnits int
 }{{
-	about: "empty bundle",
-	data:  &charm.BundleData{},
-}, {
 	about: "no units",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:utopic/django-0",
+			"wordpress": {
+				Charm:    "cs:utopic/wordpress-0",
 				NumUnits: 0,
 			},
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-0",
+			"mysql": {
+				Charm:    "cs:trusty/mysql-0",
 				NumUnits: 0,
 			},
 		},
@@ -736,12 +764,12 @@ var bundleUnitCountTests = []struct {
 	about: "a single unit",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:trusty/django-42",
+			"wordpress": {
+				Charm:    "cs:trusty/wordpress-42",
 				NumUnits: 1,
 			},
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-47",
+			"mysql": {
+				Charm:    "cs:trusty/mysql-47",
 				NumUnits: 0,
 			},
 		},
@@ -751,16 +779,16 @@ var bundleUnitCountTests = []struct {
 	about: "multiple units",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:utopic/django-1",
+			"wordpress": {
+				Charm:    "cs:utopic/wordpress-1",
 				NumUnits: 1,
 			},
-			"haproxy": {
-				Charm:    "cs:utopic/haproxy-2",
+			"mysql": {
+				Charm:    "cs:utopic/mysql-2",
 				NumUnits: 2,
 			},
-			"postgres": {
-				Charm:    "cs:utopic/postgres-3",
+			"riak": {
+				Charm:    "cs:utopic/riak-3",
 				NumUnits: 5,
 			},
 		},
@@ -774,19 +802,14 @@ func (s *StoreSuite) TestBundleUnitCount(c *gc.C) {
 	entities := store.DB.Entities()
 	for i, test := range bundleUnitCountTests {
 		c.Logf("test %d: %s", i, test.about)
-		url := router.MustNewResolvedURL("cs:~charmers/bundle/django-0", -1)
+		url := router.MustNewResolvedURL("cs:~charmers/bundle/wordpress-simple-0", -1)
 		url.URL.Revision = i
 		url.PromulgatedRevision = i
 
 		// Add the bundle used for this test.
-		err := store.AddBundle(&testingBundle{
-			data: test.data,
-		}, AddParams{
-			URL:      url,
-			BlobName: "blobName",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
-		})
+		b := storetesting.NewBundle(test.data)
+		s.addRequiredCharms(c, b)
+		err := store.AddBundleWithArchive(url, b)
 		c.Assert(err, gc.IsNil)
 
 		// Retrieve the bundle from the database.
@@ -806,12 +829,12 @@ var bundleMachineCountTests = []struct {
 	about: "no machines",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:utopic/django-0",
+			"mysql": {
+				Charm:    "cs:utopic/mysql-0",
 				NumUnits: 0,
 			},
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-0",
+			"wordpress": {
+				Charm:    "cs:trusty/wordpress-0",
 				NumUnits: 0,
 			},
 		},
@@ -820,12 +843,12 @@ var bundleMachineCountTests = []struct {
 	about: "a single machine (no placement)",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:trusty/django-42",
+			"mysql": {
+				Charm:    "cs:trusty/mysql-42",
 				NumUnits: 1,
 			},
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-47",
+			"wordpress": {
+				Charm:    "cs:trusty/wordpress-47",
 				NumUnits: 0,
 			},
 		},
@@ -835,8 +858,8 @@ var bundleMachineCountTests = []struct {
 	about: "a single machine (machine placement)",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:trusty/django-42",
+			"mysql": {
+				Charm:    "cs:trusty/mysql-42",
 				NumUnits: 1,
 				To:       []string{"1"},
 			},
@@ -850,13 +873,13 @@ var bundleMachineCountTests = []struct {
 	about: "a single machine (hulk smash)",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:trusty/django-42",
+			"mysql": {
+				Charm:    "cs:trusty/mysql-42",
 				NumUnits: 1,
 				To:       []string{"1"},
 			},
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-47",
+			"wordpress": {
+				Charm:    "cs:trusty/wordpress-47",
 				NumUnits: 1,
 				To:       []string{"1"},
 			},
@@ -870,14 +893,14 @@ var bundleMachineCountTests = []struct {
 	about: "a single machine (co-location)",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:trusty/django-42",
+			"mysql": {
+				Charm:    "cs:trusty/mysql-42",
 				NumUnits: 1,
 			},
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-47",
+			"wordpress": {
+				Charm:    "cs:trusty/wordpress-47",
 				NumUnits: 1,
-				To:       []string{"django/0"},
+				To:       []string{"mysql/0"},
 			},
 		},
 	},
@@ -886,18 +909,18 @@ var bundleMachineCountTests = []struct {
 	about: "a single machine (containerization)",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:trusty/django-42",
+			"mysql": {
+				Charm:    "cs:trusty/mysql-42",
 				NumUnits: 1,
 				To:       []string{"1"},
 			},
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-47",
+			"wordpress": {
+				Charm:    "cs:trusty/wordpress-47",
 				NumUnits: 1,
 				To:       []string{"lxc:1"},
 			},
-			"postgres": {
-				Charm:    "cs:utopic/postgres-3",
+			"riak": {
+				Charm:    "cs:utopic/riak-3",
 				NumUnits: 2,
 				To:       []string{"kvm:1"},
 			},
@@ -911,16 +934,16 @@ var bundleMachineCountTests = []struct {
 	about: "multiple machines (no placement)",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:utopic/django-1",
+			"mysql": {
+				Charm:    "cs:utopic/mysql-1",
 				NumUnits: 1,
 			},
-			"haproxy": {
-				Charm:    "cs:utopic/haproxy-2",
+			"wordpress": {
+				Charm:    "cs:utopic/wordpress-2",
 				NumUnits: 2,
 			},
-			"postgres": {
-				Charm:    "cs:utopic/postgres-3",
+			"riak": {
+				Charm:    "cs:utopic/riak-3",
 				NumUnits: 5,
 			},
 		},
@@ -930,13 +953,13 @@ var bundleMachineCountTests = []struct {
 	about: "multiple machines (machine placement)",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:utopic/django-1",
+			"mysql": {
+				Charm:    "cs:utopic/mysql-1",
 				NumUnits: 2,
 				To:       []string{"1", "3"},
 			},
-			"haproxy": {
-				Charm:    "cs:utopic/haproxy-2",
+			"wordpress": {
+				Charm:    "cs:utopic/wordpress-2",
 				NumUnits: 1,
 				To:       []string{"2"},
 			},
@@ -950,18 +973,18 @@ var bundleMachineCountTests = []struct {
 	about: "multiple machines (hulk smash)",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:trusty/django-42",
+			"mysql": {
+				Charm:    "cs:trusty/mysql-42",
 				NumUnits: 1,
 				To:       []string{"1"},
 			},
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-47",
+			"wordpress": {
+				Charm:    "cs:trusty/wordpress-47",
 				NumUnits: 1,
 				To:       []string{"2"},
 			},
-			"postgres": {
-				Charm:    "cs:utopic/postgres-3",
+			"riak": {
+				Charm:    "cs:utopic/riak-3",
 				NumUnits: 2,
 				To:       []string{"1", "2"},
 			},
@@ -975,14 +998,14 @@ var bundleMachineCountTests = []struct {
 	about: "multiple machines (co-location)",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:trusty/django-42",
+			"mysql": {
+				Charm:    "cs:trusty/mysql-42",
 				NumUnits: 2,
 			},
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-47",
+			"wordpress": {
+				Charm:    "cs:trusty/wordpress-47",
 				NumUnits: 3,
-				To:       []string{"django/0", "django/1", "new"},
+				To:       []string{"mysql/0", "mysql/1", "new"},
 			},
 		},
 	},
@@ -991,18 +1014,18 @@ var bundleMachineCountTests = []struct {
 	about: "multiple machines (containerization)",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:trusty/django-42",
+			"mysql": {
+				Charm:    "cs:trusty/mysql-42",
 				NumUnits: 2,
 				To:       []string{"1", "2"},
 			},
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-47",
+			"wordpress": {
+				Charm:    "cs:trusty/wordpress-47",
 				NumUnits: 4,
 				To:       []string{"lxc:1", "lxc:2", "lxc:3", "lxc:3"},
 			},
-			"postgres": {
-				Charm:    "cs:utopic/postgres-3",
+			"riak": {
+				Charm:    "cs:utopic/riak-3",
 				NumUnits: 1,
 				To:       []string{"kvm:2"},
 			},
@@ -1016,13 +1039,13 @@ var bundleMachineCountTests = []struct {
 	about: "multiple machines (partial placement in a container)",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:trusty/django-42",
+			"mysql": {
+				Charm:    "cs:trusty/mysql-42",
 				NumUnits: 1,
 				To:       []string{"1"},
 			},
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-47",
+			"wordpress": {
+				Charm:    "cs:trusty/wordpress-47",
 				NumUnits: 10,
 				To:       []string{"lxc:1", "lxc:2"},
 			},
@@ -1036,13 +1059,13 @@ var bundleMachineCountTests = []struct {
 	about: "multiple machines (partial placement in a new machine)",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:trusty/django-42",
+			"mysql": {
+				Charm:    "cs:trusty/mysql-42",
 				NumUnits: 1,
 				To:       []string{"1"},
 			},
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-47",
+			"wordpress": {
+				Charm:    "cs:trusty/wordpress-47",
 				NumUnits: 10,
 				To:       []string{"lxc:1", "1", "new"},
 			},
@@ -1056,19 +1079,19 @@ var bundleMachineCountTests = []struct {
 	about: "multiple machines (partial placement with new machines)",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"django": {
-				Charm:    "cs:trusty/django-42",
+			"mysql": {
+				Charm:    "cs:trusty/mysql-42",
 				NumUnits: 3,
 			},
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-47",
+			"wordpress": {
+				Charm:    "cs:trusty/wordpress-47",
 				NumUnits: 6,
 				To:       []string{"new", "1", "lxc:1", "new"},
 			},
-			"postgres": {
-				Charm:    "cs:utopic/postgres-3",
+			"riak": {
+				Charm:    "cs:utopic/riak-3",
 				NumUnits: 10,
-				To:       []string{"kvm:2", "lxc:django/1", "new", "new", "kvm:2"},
+				To:       []string{"kvm:2", "lxc:mysql/1", "new", "new", "kvm:2"},
 			},
 		},
 		Machines: map[string]*charm.MachineSpec{
@@ -1080,8 +1103,8 @@ var bundleMachineCountTests = []struct {
 	about: "placement into container on new machine",
 	data: &charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
-			"haproxy": {
-				Charm:    "cs:trusty/haproxy-47",
+			"wordpress": {
+				Charm:    "cs:trusty/wordpress-47",
 				NumUnits: 6,
 				To:       []string{"lxc:new", "1", "lxc:1", "kvm:new"},
 			},
@@ -1099,20 +1122,15 @@ func (s *StoreSuite) TestBundleMachineCount(c *gc.C) {
 	entities := store.DB.Entities()
 	for i, test := range bundleMachineCountTests {
 		c.Logf("test %d: %s", i, test.about)
-		url := router.MustNewResolvedURL("cs:~charmers/bundle/django-0", -1)
+		url := router.MustNewResolvedURL("cs:~charmers/bundle/testbundle-0", -1)
 		url.URL.Revision = i
 		url.PromulgatedRevision = i
 		err := test.data.Verify(nil, nil)
 		c.Assert(err, gc.IsNil)
 		// Add the bundle used for this test.
-		err = store.AddBundle(&testingBundle{
-			data: test.data,
-		}, AddParams{
-			URL:      url,
-			BlobName: "blobName",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
-		})
+		b := storetesting.NewBundle(test.data)
+		s.addRequiredCharms(c, b)
+		err = store.AddBundleWithArchive(url, b)
 		c.Assert(err, gc.IsNil)
 
 		// Retrieve the bundle from the database.
@@ -1200,6 +1218,7 @@ func (s *StoreSuite) TestAddBundleArchive(c *gc.C) {
 	bundleArchive, err := charm.ReadBundleArchive(
 		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
+	s.addRequiredCharms(c, bundleArchive)
 	c.Assert(err, gc.IsNil)
 	s.checkAddBundle(c, bundleArchive, false, router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-2", 3))
 }
@@ -1242,10 +1261,8 @@ func (s *StoreSuite) TestAddCharmWithBundleSeries(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	err := store.AddCharm(ch, AddParams{
-		URL: router.MustNewResolvedURL("~charmers/bundle/wordpress-2", -1),
-	})
-	c.Assert(err, gc.ErrorMatches, `charm added with invalid id cs:~charmers/bundle/wordpress-2`)
+	err := store.AddCharmWithArchive(router.MustNewResolvedURL("~charmers/bundle/wordpress-2", -1), ch)
+	c.Assert(err, gc.ErrorMatches, `cannot read bundle archive: archive file "bundle.yaml" not found`)
 }
 
 func (s *StoreSuite) TestAddCharmWithMultiSeries(c *gc.C) {
@@ -1272,14 +1289,10 @@ func (s *StoreSuite) TestAddCharmWithSeriesWhenThereIsAnExistingMultiSeriesVersi
 	store := s.newStore(c, false)
 	defer store.Close()
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
-	err := store.AddCharm(ch, AddParams{
-		URL: router.MustNewResolvedURL("~charmers/multi-series-1", -1),
-	})
+	err := store.AddCharmWithArchive(router.MustNewResolvedURL("~charmers/multi-series-1", -1), ch)
 	c.Assert(err, gc.IsNil)
 	ch = storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	err = store.AddCharm(ch, AddParams{
-		URL: router.MustNewResolvedURL("~charmers/trusty/multi-series-2", -1),
-	})
+	err = store.AddCharmWithArchive(router.MustNewResolvedURL("~charmers/trusty/multi-series-2", -1), ch)
 	c.Assert(err, gc.ErrorMatches, `charm name duplicates multi-series charm name cs:~charmers/multi-series-1`)
 }
 
@@ -1291,9 +1304,8 @@ func (s *StoreSuite) TestAddCharmWithMultiSeriesToES(c *gc.C) {
 }
 
 var addInvalidCharmURLTests = []string{
-	"cs:precise/wordpress-2",          // no user
-	"cs:~charmers/precise/wordpress",  // no revision
-	"cs:~charmers/bundle/wordpress-2", // invalid series
+	"cs:precise/wordpress-2",         // no user
+	"cs:~charmers/precise/wordpress", // no revision
 }
 
 func (s *StoreSuite) TestAddInvalidCharmURL(c *gc.C) {
@@ -1302,35 +1314,32 @@ func (s *StoreSuite) TestAddInvalidCharmURL(c *gc.C) {
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
 	for i, urlStr := range addInvalidCharmURLTests {
 		c.Logf("test %d: %s", i, urlStr)
-		err := store.AddCharm(ch, AddParams{
-			URL: &router.ResolvedURL{
-				URL:                 *charm.MustParseURL(urlStr),
-				PromulgatedRevision: -1,
-			},
-		})
+		err := store.AddCharmWithArchive(&router.ResolvedURL{
+			URL:                 *charm.MustParseURL(urlStr),
+			PromulgatedRevision: -1,
+		}, ch,
+		)
 		c.Assert(err, gc.ErrorMatches, `charm added with invalid id .*`)
 	}
 }
 
 var addInvalidBundleURLTests = []string{
-	"cs:bundle/wordpress-2",            // no user
-	"cs:~charmers/bundle/wordpress",    // no revision
-	"cs:~charmers/wordpress-2",         // no series
-	"cs:~charmers/precise/wordpress-3", // invalid series
+	"cs:bundle/wordpress-2",         // no user
+	"cs:~charmers/bundle/wordpress", // no revision
 }
 
-func (s *StoreSuite) TestAddBundleWithCharmSeries(c *gc.C) {
+func (s *StoreSuite) TestAddInvalidBundleURL(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
 	b := storetesting.Charms.BundleDir("wordpress-simple")
+	s.addRequiredCharms(c, b)
 	for i, urlStr := range addInvalidBundleURLTests {
 		c.Logf("test %d: %s", i, urlStr)
-		err := store.AddBundle(b, AddParams{
-			URL: &router.ResolvedURL{
-				URL:                 *charm.MustParseURL(urlStr),
-				PromulgatedRevision: -1,
-			},
-		})
+		err := store.AddBundleWithArchive(&router.ResolvedURL{
+			URL:                 *charm.MustParseURL(urlStr),
+			PromulgatedRevision: -1,
+		}, b,
+		)
 		c.Assert(err, gc.ErrorMatches, `bundle added with invalid id .*`)
 	}
 }
@@ -1343,6 +1352,7 @@ func (s *StoreSuite) TestAddBundleDuplicatingCharm(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	b := storetesting.Charms.BundleDir("wordpress-simple")
+	s.addRequiredCharms(c, b)
 	err = store.AddBundleWithArchive(router.MustNewResolvedURL("~charmers/bundle/wordpress-5", -1), b)
 	c.Assert(err, gc.ErrorMatches, "bundle name duplicates charm name cs:~charmers/precise/wordpress-2")
 }
@@ -1352,12 +1362,13 @@ func (s *StoreSuite) TestAddCharmDuplicatingBundle(c *gc.C) {
 	defer store.Close()
 
 	b := storetesting.Charms.BundleDir("wordpress-simple")
-	err := store.AddBundleWithArchive(router.MustNewResolvedURL("~charmers/bundle/wordpress-2", -1), b)
+	s.addRequiredCharms(c, b)
+	err := store.AddBundleWithArchive(router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-2", -1), b)
 	c.Assert(err, gc.IsNil)
 
 	ch := storetesting.Charms.CharmDir("wordpress")
-	err = store.AddCharmWithArchive(router.MustNewResolvedURL("~charmers/precise/wordpress-5", -1), ch)
-	c.Assert(err, gc.ErrorMatches, "charm name duplicates bundle name cs:~charmers/bundle/wordpress-2")
+	err = store.AddCharmWithArchive(router.MustNewResolvedURL("~charmers/precise/wordpress-simple-5", -1), ch)
+	c.Assert(err, gc.ErrorMatches, "charm name duplicates bundle name cs:~charmers/bundle/wordpress-simple-2")
 }
 
 func (s *StoreSuite) TestOpenBlob(c *gc.C) {
@@ -1414,7 +1425,7 @@ func (s *StoreSuite) TestAddLog(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
 	urls := []*charm.URL{
-		charm.MustParseURL("cs:django"),
+		charm.MustParseURL("cs:mysql"),
 		charm.MustParseURL("cs:rails"),
 	}
 	infoData := json.RawMessage([]byte(`"info data"`))
@@ -1471,7 +1482,7 @@ func (s *StoreSuite) TestAddLogBaseURLs(c *gc.C) {
 	// Add the log to the store with associated URLs.
 	data := json.RawMessage([]byte(`"info data"`))
 	err := store.AddLog(&data, mongodoc.WarningLevel, mongodoc.IngestionType, []*charm.URL{
-		charm.MustParseURL("trusty/django-42"),
+		charm.MustParseURL("trusty/mysql-42"),
 		charm.MustParseURL("~who/utopic/wordpress"),
 	})
 	c.Assert(err, gc.IsNil)
@@ -1483,8 +1494,8 @@ func (s *StoreSuite) TestAddLogBaseURLs(c *gc.C) {
 
 	// The log includes the base URLs.
 	c.Assert(doc.URLs, jc.DeepEquals, []*charm.URL{
-		charm.MustParseURL("trusty/django-42"),
-		charm.MustParseURL("django"),
+		charm.MustParseURL("trusty/mysql-42"),
+		charm.MustParseURL("mysql"),
 		charm.MustParseURL("~who/utopic/wordpress"),
 		charm.MustParseURL("~who/wordpress"),
 	})
@@ -1497,10 +1508,10 @@ func (s *StoreSuite) TestAddLogDuplicateURLs(c *gc.C) {
 	// Add the log to the store with associated URLs.
 	data := json.RawMessage([]byte(`"info data"`))
 	err := store.AddLog(&data, mongodoc.WarningLevel, mongodoc.IngestionType, []*charm.URL{
-		charm.MustParseURL("trusty/django-42"),
-		charm.MustParseURL("django"),
-		charm.MustParseURL("trusty/django-42"),
-		charm.MustParseURL("django"),
+		charm.MustParseURL("trusty/mysql-42"),
+		charm.MustParseURL("mysql"),
+		charm.MustParseURL("trusty/mysql-42"),
+		charm.MustParseURL("mysql"),
 	})
 	c.Assert(err, gc.IsNil)
 
@@ -1511,8 +1522,8 @@ func (s *StoreSuite) TestAddLogDuplicateURLs(c *gc.C) {
 
 	// The log excludes duplicate URLs.
 	c.Assert(doc.URLs, jc.DeepEquals, []*charm.URL{
-		charm.MustParseURL("trusty/django-42"),
-		charm.MustParseURL("django"),
+		charm.MustParseURL("trusty/mysql-42"),
+		charm.MustParseURL("mysql"),
 	})
 }
 
@@ -1683,7 +1694,7 @@ func getSizeAndHashes(c interface{}) (int64, string, string) {
 	var r io.ReadWriter
 	var err error
 	switch c := c.(type) {
-	case archiverTo:
+	case ArchiverTo:
 		r = new(bytes.Buffer)
 		err = c.ArchiveTo(r)
 	case *charm.BundleArchive:
@@ -1756,6 +1767,7 @@ func (s *StoreSuite) TestAddBundleArchiveIndexed(c *gc.C) {
 		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
 	)
 	c.Assert(err, gc.IsNil)
+	s.addRequiredCharms(c, bundleArchive)
 	s.checkAddBundle(c, bundleArchive, true, router.MustNewResolvedURL("cs:~charmers/bundle/baboom-2", -1))
 }
 
@@ -2570,7 +2582,7 @@ func (s *StoreSuite) TestSetDevelopment(c *gc.C) {
 		c.Logf("test %d: %s", i, test.about)
 
 		// Insert the existing entity.
-		url := charm.MustParseURL("~who/wily/django")
+		url := charm.MustParseURL("~who/wily/mysql")
 		url.Revision = i
 		if test.existingDevelopment {
 			url.Channel = charm.DevelopmentChannel
@@ -2803,6 +2815,101 @@ func (s *StoreSuite) TestDenormalizeBundleEntity(c *gc.C) {
 		Series:              "bundle",
 		PromulgatedRevision: -1,
 	})
+}
+
+func (s *StoreSuite) TestBundleCharms(c *gc.C) {
+	// Populate the store with some testing charms.
+	mysql := storetesting.Charms.CharmArchive(c.MkDir(), "mysql")
+	store := s.newStore(c, true)
+	defer store.Close()
+	err := store.AddCharmWithArchive(
+		router.MustNewResolvedURL("cs:~charmers/saucy/mysql-0", 0),
+		mysql,
+	)
+	c.Assert(err, gc.IsNil)
+	riak := storetesting.Charms.CharmArchive(c.MkDir(), "riak")
+	err = store.AddCharmWithArchive(
+		router.MustNewResolvedURL("cs:~charmers/trusty/riak-42", 42),
+		riak,
+	)
+	c.Assert(err, gc.IsNil)
+	wordpress := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
+	err = store.AddCharmWithArchive(
+		router.MustNewResolvedURL("cs:~charmers/utopic/wordpress-47", 47),
+		wordpress,
+	)
+	c.Assert(err, gc.IsNil)
+
+	tests := []struct {
+		about  string
+		ids    []string
+		charms map[string]charm.Charm
+	}{{
+		about: "no ids",
+	}, {
+		about: "fully qualified ids",
+		ids: []string{
+			"cs:~charmers/saucy/mysql-0",
+			"cs:~charmers/trusty/riak-42",
+			"cs:~charmers/utopic/wordpress-47",
+		},
+		charms: map[string]charm.Charm{
+			"cs:~charmers/saucy/mysql-0":       mysql,
+			"cs:~charmers/trusty/riak-42":      riak,
+			"cs:~charmers/utopic/wordpress-47": wordpress,
+		},
+	}, {
+		about: "partial ids",
+		ids:   []string{"~charmers/utopic/wordpress", "~charmers/riak"},
+		charms: map[string]charm.Charm{
+			"~charmers/riak":             riak,
+			"~charmers/utopic/wordpress": wordpress,
+		},
+	}, {
+		about: "charm not found",
+		ids:   []string{"utopic/no-such", "~charmers/mysql"},
+		charms: map[string]charm.Charm{
+			"~charmers/mysql": mysql,
+		},
+	}, {
+		about: "no charms found",
+		ids: []string{
+			"cs:~charmers/saucy/mysql-99",   // Revision not present.
+			"cs:~charmers/precise/riak-42",  // Series not present.
+			"cs:~charmers/utopic/django-47", // Name not present.
+		},
+	}, {
+		about: "repeated charms",
+		ids: []string{
+			"cs:~charmers/saucy/mysql",
+			"cs:~charmers/trusty/riak-42",
+			"~charmers/mysql",
+		},
+		charms: map[string]charm.Charm{
+			"cs:~charmers/saucy/mysql":    mysql,
+			"cs:~charmers/trusty/riak-42": riak,
+			"~charmers/mysql":             mysql,
+		},
+	}}
+
+	// Run the tests.
+	for i, test := range tests {
+		c.Logf("test %d: %s", i, test.about)
+		charms, err := store.bundleCharms(test.ids)
+		c.Assert(err, gc.IsNil)
+		// Ensure the charms returned are what we expect.
+		c.Assert(charms, gc.HasLen, len(test.charms))
+		for i, ch := range charms {
+			expectCharm := test.charms[i]
+			c.Assert(ch.Meta(), jc.DeepEquals, expectCharm.Meta())
+			c.Assert(ch.Config(), jc.DeepEquals, expectCharm.Config())
+			c.Assert(ch.Actions(), jc.DeepEquals, expectCharm.Actions())
+			// Since the charm archive and the charm entity have a slightly
+			// different concept of what a revision is, and since the revision
+			// is not used for bundle validation, we can safely avoid checking
+			// the charm revision.
+		}
+	}
 }
 
 func entity(url, purl string) *mongodoc.Entity {

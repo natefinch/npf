@@ -70,7 +70,7 @@ func (s *ListSuite) SetUpTest(c *gc.C) {
 
 func (s *ListSuite) addCharmsToStore(c *gc.C) {
 	for name, id := range exportListTestCharms {
-		err := s.store.AddCharmWithArchive(id, getCharm(name))
+		err := s.store.AddCharmWithArchive(id, getListCharm(name))
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
@@ -87,16 +87,18 @@ func (s *ListSuite) addCharmsToStore(c *gc.C) {
 	}
 }
 
-func getListCharm(name string) *charm.CharmDir {
+func getListCharm(name string) *storetesting.Charm {
 	ca := storetesting.Charms.CharmDir(name)
-	ca.Meta().Categories = append(strings.Split(name, "-"), "bar")
-	return ca
+	meta := ca.Meta()
+	meta.Categories = append(strings.Split(name, "-"), "bar")
+	return storetesting.NewCharm(meta)
 }
 
-func getListBundle(name string) *charm.BundleDir {
+func getListBundle(name string) *storetesting.Bundle {
 	ba := storetesting.Charms.BundleDir(name)
-	ba.Data().Tags = append(strings.Split(name, "-"), "baz")
-	return ba
+	data := ba.Data()
+	data.Tags = append(strings.Split(name, "-"), "baz")
+	return storetesting.NewBundle(data)
 }
 
 func (s *ListSuite) TestSuccessfulList(c *gc.C) {
@@ -185,7 +187,7 @@ func (s *ListSuite) TestMetadataFields(c *gc.C) {
 		about: "archive-size",
 		query: "name=mysql&include=archive-size",
 		meta: map[string]interface{}{
-			"archive-size": params.ArchiveSizeResponse{438},
+			"archive-size": params.ArchiveSizeResponse{getListCharm("mysql").Size()},
 		},
 	}, {
 		about: "bundle-metadata",
@@ -413,7 +415,7 @@ func (s *ListSuite) TestSortUnsupportedListField(c *gc.C) {
 
 func (s *ListSuite) TestGetLatestRevisionOnly(c *gc.C) {
 	id := newResolvedURL("cs:~charmers/precise/wordpress-24", 24)
-	err := s.store.AddCharmWithArchive(id, getCharm("wordpress"))
+	err := s.store.AddCharmWithArchive(id, getListCharm("wordpress"))
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
 

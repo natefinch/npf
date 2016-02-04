@@ -213,21 +213,25 @@ func (s *commonSuite) addPublicCharm(c *gc.C, charmName string, rurl *router.Res
 	ch := storetesting.Charms.CharmDir(charmName)
 	err := s.store.AddCharmWithArchive(rurl, ch)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", params.Everyone, rurl.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.setPublic(c, rurl)
 	return rurl, ch
 }
 
-func (s *commonSuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Bundle) {
-	bundle := storetesting.Charms.BundleDir(bundleName)
-	err := s.store.AddBundleWithArchive(rurl, bundle)
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+func (s *commonSuite) setPublic(c *gc.C, rurl *router.ResolvedURL) {
+	err := s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", params.Everyone, rurl.URL.User)
 	c.Assert(err, gc.IsNil)
+}
+
+func (s *commonSuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.ResolvedURL, addRequiredCharms bool) (*router.ResolvedURL, charm.Bundle) {
+	bundle := storetesting.Charms.BundleDir(bundleName)
+	if addRequiredCharms {
+		s.addRequiredCharms(c, bundle)
+	}
+	err := s.store.AddBundleWithArchive(rurl, bundle)
+	c.Assert(err, gc.IsNil)
+	s.setPublic(c, rurl)
 	return rurl, bundle
 }
 
@@ -236,15 +240,7 @@ func (s *commonSuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.R
 func (s *commonSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
 	for id, ch := range charms {
 		url := mustParseResolvedURL(id)
-		// The blob related info are not used in these tests.
-		// The related charms are retrieved from the entities collection,
-		// without accessing the blob store.
-		err := s.store.AddCharm(ch, charmstore.AddParams{
-			URL:      url,
-			BlobName: "blobName",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
-		})
+		err := s.store.AddCharmWithArchive(url, storetesting.NewCharm(ch.Meta()))
 		c.Assert(err, gc.IsNil, gc.Commentf("id %q", id))
 		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
@@ -299,6 +295,41 @@ func (s *commonSuite) bakeryDoAsUser(c *gc.C, user string) func(*http.Request) (
 		body := req.Body.(io.ReadSeeker)
 		req.Body = nil
 		return bclient.DoWithBody(req, body)
+	}
+}
+
+// addRequiredCharms adds any charms required by the given
+// bundle that are not already in the store.
+func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
+	for _, svc := range bundle.Data().Services {
+		u := charm.MustParseURL(svc.Charm)
+		if _, err := s.store.FindBestEntity(u, nil); err == nil {
+			continue
+		}
+		if u.Revision == -1 {
+			u.Revision = 0
+		}
+		var rurl router.ResolvedURL
+		rurl.URL = *u
+		chDir, err := charm.ReadCharmDir(storetesting.Charms.CharmDirPath(u.Name))
+		ch := charm.Charm(chDir)
+		if err != nil {
+			// The charm doesn't exist in the local charm repo; make one up.
+			ch = storetesting.NewCharm(nil)
+		}
+		if len(ch.Meta().Series) == 0 && u.Series == "" {
+			rurl.URL.Series = "trusty"
+		}
+		if u.User == "" {
+			rurl.URL.User = "charmers"
+			rurl.PromulgatedRevision = rurl.URL.Revision
+		} else {
+			rurl.PromulgatedRevision = -1
+		}
+		c.Logf("adding charm %v %d required by bundle to fulfil %v", &rurl.URL, rurl.PromulgatedRevision, svc.Charm)
+		err = s.store.AddCharmWithArchive(&rurl, ch)
+		c.Assert(err, gc.IsNil, gc.Commentf("url: %#v", &rurl))
+		s.setPublic(c, &rurl)
 	}
 }
 

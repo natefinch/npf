@@ -1276,104 +1276,6 @@ func (s *ArchiveSuite) assertArchiveFileContents(c *gc.C, zipFile *zip.ReadClose
 	assertCacheControl(c, rec.Header(), true)
 }
 
-func (s *ArchiveSuite) TestBundleCharms(c *gc.C) {
-	// Populate the store with some testing charms.
-	mysql := storetesting.Charms.CharmArchive(c.MkDir(), "mysql")
-	err := s.store.AddCharmWithArchive(
-		newResolvedURL("cs:~charmers/saucy/mysql-0", 0),
-		mysql,
-	)
-	c.Assert(err, gc.IsNil)
-	riak := storetesting.Charms.CharmArchive(c.MkDir(), "riak")
-	err = s.store.AddCharmWithArchive(
-		newResolvedURL("cs:~charmers/trusty/riak-42", 42),
-		riak,
-	)
-	c.Assert(err, gc.IsNil)
-	wordpress := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	err = s.store.AddCharmWithArchive(
-		newResolvedURL("cs:~charmers/utopic/wordpress-47", 47),
-		wordpress,
-	)
-	c.Assert(err, gc.IsNil)
-
-	// Retrieve the base handler so that we can invoke the
-	// bundleCharms method on it.
-	handler := s.handler(c)
-	defer handler.Close()
-
-	tests := []struct {
-		about  string
-		ids    []string
-		charms map[string]charm.Charm
-	}{{
-		about: "no ids",
-	}, {
-		about: "fully qualified ids",
-		ids: []string{
-			"cs:~charmers/saucy/mysql-0",
-			"cs:~charmers/trusty/riak-42",
-			"cs:~charmers/utopic/wordpress-47",
-		},
-		charms: map[string]charm.Charm{
-			"cs:~charmers/saucy/mysql-0":       mysql,
-			"cs:~charmers/trusty/riak-42":      riak,
-			"cs:~charmers/utopic/wordpress-47": wordpress,
-		},
-	}, {
-		about: "partial ids",
-		ids:   []string{"~charmers/utopic/wordpress", "~charmers/riak"},
-		charms: map[string]charm.Charm{
-			"~charmers/riak":             riak,
-			"~charmers/utopic/wordpress": wordpress,
-		},
-	}, {
-		about: "charm not found",
-		ids:   []string{"utopic/no-such", "~charmers/mysql"},
-		charms: map[string]charm.Charm{
-			"~charmers/mysql": mysql,
-		},
-	}, {
-		about: "no charms found",
-		ids: []string{
-			"cs:~charmers/saucy/mysql-99",   // Revision not present.
-			"cs:~charmers/precise/riak-42",  // Series not present.
-			"cs:~charmers/utopic/django-47", // Name not present.
-		},
-	}, {
-		about: "repeated charms",
-		ids: []string{
-			"cs:~charmers/saucy/mysql",
-			"cs:~charmers/trusty/riak-42",
-			"~charmers/mysql",
-		},
-		charms: map[string]charm.Charm{
-			"cs:~charmers/saucy/mysql":    mysql,
-			"cs:~charmers/trusty/riak-42": riak,
-			"~charmers/mysql":             mysql,
-		},
-	}}
-
-	// Run the tests.
-	for i, test := range tests {
-		c.Logf("test %d: %s", i, test.about)
-		charms, err := v5.BundleCharms(handler, test.ids)
-		c.Assert(err, gc.IsNil)
-		// Ensure the charms returned are what we expect.
-		c.Assert(charms, gc.HasLen, len(test.charms))
-		for i, ch := range charms {
-			expectCharm := test.charms[i]
-			c.Assert(ch.Meta(), jc.DeepEquals, expectCharm.Meta())
-			c.Assert(ch.Config(), jc.DeepEquals, expectCharm.Config())
-			c.Assert(ch.Actions(), jc.DeepEquals, expectCharm.Actions())
-			// Since the charm archive and the charm entity have a slightly
-			// different concept of what a revision is, and since the revision
-			// is not used for bundle validation, we can safely avoid checking
-			// the charm revision.
-		}
-	}
-}
-
 func (s *ArchiveSuite) TestDelete(c *gc.C) {
 	// Add a charm to the database (including the archive).
 	id := "~charmers/utopic/mysql-42"
@@ -1457,14 +1359,16 @@ func (s *ArchiveSuite) TestDeleteError(c *gc.C) {
 	// Add a charm to the database (not including the archive).
 	id := "~charmers/utopic/mysql-42"
 	url := newResolvedURL(id, -1)
-	err := s.store.AddCharm(storetesting.Charms.CharmArchive(c.MkDir(), "mysql"),
-		charmstore.AddParams{
-			URL:      url,
-			BlobName: "no-such-name",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
-		})
+	err := s.store.AddCharmWithArchive(url, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
 	c.Assert(err, gc.IsNil)
+
+	err = s.store.DB.Entities().UpdateId(&url.URL, bson.M{
+		"$set": bson.M{
+			"blobname": "no-such-name",
+		},
+	})
+	c.Assert(err, gc.IsNil)
+	// TODO update entity to change BlobName to "no-such-name"
 
 	// Try to delete the charm using the API.
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
@@ -1665,14 +1569,9 @@ func (s *ArchiveSuite) TestGetNewPromulgatedRevision(c *gc.C) {
 		"3 cs:~tom/trusty/awk-3",
 		"4 cs:~tom/trusty/awk-4",
 	}
-	for _, ch := range charms {
-		url := mustParseResolvedURL(ch)
-		err := s.store.AddCharm(&relationTestingCharm{}, charmstore.AddParams{
-			URL:      url,
-			BlobName: "blobName",
-			BlobHash: fakeBlobHash,
-			BlobSize: fakeBlobSize,
-		})
+	for _, url := range charms {
+		ch := storetesting.NewCharm(new(charm.Meta))
+		err := s.store.AddCharmWithArchive(mustParseResolvedURL(url), ch)
 		c.Assert(err, gc.IsNil)
 	}
 	handler := s.handler(c)

@@ -70,7 +70,7 @@ func (s *SearchSuite) SetUpTest(c *gc.C) {
 
 func (s *SearchSuite) addCharmsToStore(c *gc.C) {
 	for name, id := range exportTestCharms {
-		err := s.store.AddCharmWithArchive(id, getCharm(name))
+		err := s.store.AddCharmWithArchive(id, getSearchCharm(name))
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
@@ -78,7 +78,7 @@ func (s *SearchSuite) addCharmsToStore(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 	}
 	for name, id := range exportTestBundles {
-		err := s.store.AddBundleWithArchive(id, getBundle(name))
+		err := s.store.AddBundleWithArchive(id, getSearchBundle(name))
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
@@ -87,16 +87,18 @@ func (s *SearchSuite) addCharmsToStore(c *gc.C) {
 	}
 }
 
-func getCharm(name string) *charm.CharmDir {
+func getSearchCharm(name string) *storetesting.Charm {
 	ca := storetesting.Charms.CharmDir(name)
-	ca.Meta().Categories = append(strings.Split(name, "-"), "bar")
-	return ca
+	meta := ca.Meta()
+	meta.Categories = append(strings.Split(name, "-"), "bar")
+	return storetesting.NewCharm(meta)
 }
 
-func getBundle(name string) *charm.BundleDir {
+func getSearchBundle(name string) *storetesting.Bundle {
 	ba := storetesting.Charms.BundleDir(name)
-	ba.Data().Tags = append(strings.Split(name, "-"), "baz")
-	return ba
+	data := ba.Data()
+	data.Tags = append(strings.Split(name, "-"), "baz")
+	return storetesting.NewBundle(data)
 }
 
 func (s *SearchSuite) TestParseSearchParams(c *gc.C) {
@@ -468,13 +470,13 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 		about: "archive-size",
 		query: "name=mysql&include=archive-size",
 		meta: map[string]interface{}{
-			"archive-size": params.ArchiveSizeResponse{438},
+			"archive-size": params.ArchiveSizeResponse{getSearchCharm("mysql").Size()},
 		},
 	}, {
 		about: "bundle-metadata",
 		query: "name=wordpress-simple&type=bundle&include=bundle-metadata",
 		meta: map[string]interface{}{
-			"bundle-metadata": getBundle("wordpress-simple").Data(),
+			"bundle-metadata": getSearchBundle("wordpress-simple").Data(),
 		},
 	}, {
 		about: "bundle-machine-count",
@@ -492,13 +494,13 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 		about: "charm-actions",
 		query: "name=wordpress&type=charm&include=charm-actions",
 		meta: map[string]interface{}{
-			"charm-actions": getCharm("wordpress").Actions(),
+			"charm-actions": getSearchCharm("wordpress").Actions(),
 		},
 	}, {
 		about: "charm-config",
 		query: "name=wordpress&type=charm&include=charm-config",
 		meta: map[string]interface{}{
-			"charm-config": getCharm("wordpress").Config(),
+			"charm-config": getSearchCharm("wordpress").Config(),
 		},
 	}, {
 		about: "charm-related",
@@ -537,7 +539,7 @@ func (s *SearchSuite) TestMetadataFields(c *gc.C) {
 					},
 				},
 			},
-			"charm-config": getCharm("wordpress").Config(),
+			"charm-config": getSearchCharm("wordpress").Config(),
 		},
 	}}
 	for i, test := range tests {
@@ -720,7 +722,7 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 	for n, cnt := range charmDownloads {
 		url := newResolvedURL("cs:~downloads-test/trusty/x-1", -1)
 		url.URL.Name = n
-		err := s.store.AddCharmWithArchive(url, getCharm(n))
+		err := s.store.AddCharmWithArchive(url, getSearchCharm(n))
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)

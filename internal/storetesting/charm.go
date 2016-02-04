@@ -4,7 +4,175 @@
 package storetesting // import "gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 
 import (
+	"archive/zip"
+	"bytes"
+	"fmt"
+	"io"
+
+	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/testing"
+	"gopkg.in/yaml.v2"
+
+	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
 )
 
+// Charms holds the testing charm repository.
 var Charms = testing.NewRepo("charm-repo", "quantal")
+
+var _ charm.Bundle = (*Bundle)(nil)
+
+// Bundle implements an in-memory charm.Bundle
+// that can archived.
+//
+// Note that because it implements charmstore.ArchiverTo,
+// it can be used as an argument to charmstore.Store.AddBundleWithArchive.
+type Bundle struct {
+	blob     []byte
+	blobHash string
+	data     *charm.BundleData
+	readMe   string
+}
+
+// Data implements charm.Bundle.Data.
+func (b *Bundle) Data() *charm.BundleData {
+	return b.data
+}
+
+// ReadMe implements charm.Bundle.ReadMe.
+func (b *Bundle) ReadMe() string {
+	return b.readMe
+}
+
+// ArchiveTo implements charmstore.ArchiverTo.
+func (b *Bundle) ArchiveTo(w io.Writer) error {
+	_, err := w.Write(b.blob)
+	return err
+}
+
+// Size returns the size of the bundle's archive blob.
+func (b *Bundle) Size() int64 {
+	return int64(len(b.blob))
+}
+
+// NewBundle returns a bundle implementation
+// that contains the given bundle data.
+func NewBundle(data *charm.BundleData) *Bundle {
+	dataYAML, err := yaml.Marshal(data)
+	if err != nil {
+		panic(err)
+	}
+	readMe := "boring"
+	blob, hash := newBlob([]file{{
+		name: "bundle.yaml",
+		data: dataYAML,
+	}, {
+		name: "README.md",
+		data: []byte(readMe),
+	}})
+	return &Bundle{
+		blob:     blob,
+		blobHash: hash,
+		data:     data,
+		readMe:   readMe,
+	}
+}
+
+// Charm implements an in-memory charm.Charm that
+// can be archived.
+//
+// Note that because it implements charmstore.ArchiverTo,
+// it can be used as an argument to charmstore.Store.AddCharmWithArchive.
+type Charm struct {
+	blob     []byte
+	blobHash string
+	meta     *charm.Meta
+}
+
+var _ charm.Charm = (*Charm)(nil)
+
+// NewCharm returns a charm implementation
+// that contains the given charm metadata.
+// All charm.Charm methods other than Meta will return empty values.
+func NewCharm(meta *charm.Meta) *Charm {
+	if meta == nil {
+		meta = new(charm.Meta)
+	}
+	metaYAML, err := yaml.Marshal(meta)
+	if err != nil {
+		panic(err)
+	}
+	blob, hash := newBlob([]file{{
+		name: "metadata.yaml",
+		data: metaYAML,
+	}, {
+		name: "README.md",
+		data: []byte("boring"),
+	}})
+	return &Charm{
+		blob:     blob,
+		blobHash: hash,
+		meta:     meta,
+	}
+}
+
+// Meta implements charm.Charm.Meta.
+func (c *Charm) Meta() *charm.Meta {
+	return c.meta
+}
+
+// Config implements charm.Charm.Config.
+func (c *Charm) Config() *charm.Config {
+	return charm.NewConfig()
+}
+
+// Metrics implements charm.Charm.Metrics.
+func (c *Charm) Metrics() *charm.Metrics {
+	return nil
+}
+
+// Actions implements charm.Charm.Actions.
+func (c *Charm) Actions() *charm.Actions {
+	return charm.NewActions()
+}
+
+// Revision implements charm.Charm.Revision.
+func (c *Charm) Revision() int {
+	return 0
+}
+
+// ArchiveTo implements charmstore.ArchiverTo.
+func (c *Charm) ArchiveTo(w io.Writer) error {
+	_, err := w.Write(c.blob)
+	return err
+}
+
+// Size returns the size of the charm's archive blob.
+func (c *Charm) Size() int64 {
+	return int64(len(c.blob))
+}
+
+type file struct {
+	name string
+	data []byte
+}
+
+// newBlob returns a zip archive containing the given files.
+func newBlob(files []file) ([]byte, string) {
+	var blob bytes.Buffer
+	zw := zip.NewWriter(&blob)
+	for _, f := range files {
+		w, err := zw.Create(f.name)
+		if err != nil {
+			panic(err)
+		}
+		if _, err := w.Write(f.data); err != nil {
+			panic(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		panic(err)
+	}
+	h := blobstore.NewHash()
+	h.Write(blob.Bytes())
+	return blob.Bytes(), fmt.Sprintf("%x", h.Sum(nil))
+}

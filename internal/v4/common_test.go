@@ -12,6 +12,8 @@ import (
 	"github.com/julienschmidt/httprouter"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
+	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/bakerytest"
@@ -19,6 +21,7 @@ import (
 	"gopkg.in/mgo.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 )
@@ -185,6 +188,57 @@ func (s *commonSuite) startServer(c *gc.C) {
 	s.store = s.srv.Pool().Store()
 }
 
+func (s *commonSuite) addPublicCharm(c *gc.C, charmName string, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Charm) {
+	ch := storetesting.Charms.CharmDir(charmName)
+	err := s.store.AddCharmWithArchive(rurl, ch)
+	c.Assert(err, gc.IsNil)
+	s.setPublic(c, rurl)
+	return rurl, ch
+}
+
+func (s *commonSuite) setPublic(c *gc.C, rurl *router.ResolvedURL) {
+	err := s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", params.Everyone, rurl.URL.User)
+	c.Assert(err, gc.IsNil)
+}
+
+func (s *commonSuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.ResolvedURL, addRequiredCharms bool) (*router.ResolvedURL, charm.Bundle) {
+	bundle := storetesting.Charms.BundleDir(bundleName)
+	if addRequiredCharms {
+		s.addRequiredCharms(c, bundle)
+	}
+	err := s.store.AddBundleWithArchive(rurl, bundle)
+	c.Assert(err, gc.IsNil)
+	s.setPublic(c, rurl)
+	return rurl, bundle
+}
+
+// addCharms adds all the given charms to s.store. The
+// map key is the id of the charm.
+func (s *commonSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
+	for id, ch := range charms {
+		url := mustParseResolvedURL(id)
+		err := s.store.AddCharmWithArchive(url, storetesting.NewCharm(ch.Meta()))
+		c.Assert(err, gc.IsNil, gc.Commentf("id %q", id))
+		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+		c.Assert(err, gc.IsNil)
+		if url.Development {
+			err = s.store.SetPerms(url.UserOwnedURL(), "read", params.Everyone, url.URL.User)
+		}
+	}
+}
+
+// setPerms sets the read permissions of a set of entities.
+// The map key is the is the id of each entity; its
+// associated value is its read ACL.
+func (s *commonSuite) setPerms(c *gc.C, readACLs map[string][]string) {
+	for url, acl := range readACLs {
+		err := s.store.SetPerms(charm.MustParseURL(url), "read", acl...)
+		c.Assert(err, gc.IsNil)
+	}
+}
+
 // handler returns a request handler that can be
 // used to invoke private methods. The caller
 // is responsible for calling Put on the returned handler.
@@ -202,6 +256,41 @@ func (s *commonSuite) handler(c *gc.C) v4.ReqHandler {
 
 func storeURL(path string) string {
 	return "/v4/" + path
+}
+
+// addRequiredCharms adds any charms required by the given
+// bundle that are not already in the store.
+func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
+	for _, svc := range bundle.Data().Services {
+		u := charm.MustParseURL(svc.Charm)
+		if _, err := s.store.FindBestEntity(u, nil); err == nil {
+			continue
+		}
+		if u.Revision == -1 {
+			u.Revision = 0
+		}
+		var rurl router.ResolvedURL
+		rurl.URL = *u
+		chDir, err := charm.ReadCharmDir(storetesting.Charms.CharmDirPath(u.Name))
+		ch := charm.Charm(chDir)
+		if err != nil {
+			// The charm doesn't exist in the local charm repo; make one up.
+			ch = storetesting.NewCharm(nil)
+		}
+		if len(ch.Meta().Series) == 0 && u.Series == "" {
+			rurl.URL.Series = "trusty"
+		}
+		if u.User == "" {
+			rurl.URL.User = "charmers"
+			rurl.PromulgatedRevision = rurl.URL.Revision
+		} else {
+			rurl.PromulgatedRevision = -1
+		}
+		c.Logf("adding charm %v %d required by bundle to fulfil %v", &rurl.URL, rurl.PromulgatedRevision, svc.Charm)
+		err = s.store.AddCharmWithArchive(&rurl, ch)
+		c.Assert(err, gc.IsNil, gc.Commentf("url: %#v", &rurl))
+		s.setPublic(c, &rurl)
+	}
 }
 
 func bakeryDo(client *http.Client) func(*http.Request) (*http.Response, error) {

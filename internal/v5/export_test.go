@@ -8,7 +8,6 @@ var (
 	ErrProbablyNotXML    = errProbablyNotXML
 	TestAddAuditCallback = &testAddAuditCallback
 
-	BundleCharms              = (*ReqHandler).bundleCharms
 	GetNewPromulgatedRevision = (*ReqHandler).getNewPromulgatedRevision
 
 	ResolveURL = resolveURL
