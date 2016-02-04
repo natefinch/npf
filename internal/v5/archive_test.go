@@ -238,36 +238,72 @@ func (s *ArchiveSuite) TestGetCountersDisabled(c *gc.C) {
 
 var archivePostErrorsTests = []struct {
 	about           string
-	path            string
+	url             string
 	noContentLength bool
+	noHash          bool
+	entity          charmstore.ArchiverTo
 	expectStatus    int
 	expectMessage   string
 	expectCode      params.ErrorCode
 }{{
 	about:         "revision specified",
-	path:          "~charmers/precise/wordpress-23/archive",
+	url:           "~charmers/precise/wordpress-23",
 	expectStatus:  http.StatusBadRequest,
 	expectMessage: "revision specified, but should not be specified",
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:         "no hash given",
-	path:          "~charmers/precise/wordpress/archive",
+	url:           "~charmers/precise/wordpress",
+	noHash:        true,
 	expectStatus:  http.StatusBadRequest,
 	expectMessage: "hash parameter not specified",
 	expectCode:    params.ErrBadRequest,
 }, {
 	about:           "no content length",
-	path:            "~charmers/precise/wordpress/archive?hash=1234563",
+	url:             "~charmers/precise/wordpress",
 	noContentLength: true,
 	expectStatus:    http.StatusBadRequest,
 	expectMessage:   "Content-Length not specified",
 	expectCode:      params.ErrBadRequest,
 }, {
 	about:         "invalid channel",
-	path:          "~charmers/bad-wolf/trusty/wordpress/archive",
+	url:           "~charmers/bad-wolf/trusty/wordpress",
 	expectStatus:  http.StatusNotFound,
 	expectMessage: "not found",
 	expectCode:    params.ErrNotFound,
+}, {
+	about:         "no series",
+	url:           "~charmers/juju-gui",
+	expectStatus:  http.StatusForbidden,
+	expectMessage: "series not specified in url or charm metadata",
+	expectCode:    params.ErrEntityIdNotAllowed,
+}, {
+	about: "url series not in metadata",
+	url:   "~charmers/precise/juju-gui",
+	entity: storetesting.NewCharm(&charm.Meta{
+		Series: []string{"trusty"},
+	}),
+	expectStatus:  http.StatusForbidden,
+	expectMessage: `"precise" series not listed in charm metadata`,
+	expectCode:    params.ErrEntityIdNotAllowed,
+}, {
+	about: "bad combination of series",
+	url:   "~charmers/juju-gui",
+	entity: storetesting.NewCharm(&charm.Meta{
+		Series: []string{"precise", "win10"},
+	}),
+	expectStatus:  http.StatusBadRequest,
+	expectMessage: `cannot mix series from ubuntu and windows in single charm`,
+	expectCode:    params.ErrInvalidEntity,
+}, {
+	about: "unknown series",
+	url:   "~charmers/juju-gui",
+	entity: storetesting.NewCharm(&charm.Meta{
+		Series: []string{"precise", "nosuchseries"},
+	}),
+	expectStatus:  http.StatusBadRequest,
+	expectMessage: `unrecognized series "nosuchseries" in metadata`,
+	expectCode:    params.ErrInvalidEntity,
 }}
 
 func (s *ArchiveSuite) TestPostErrors(c *gc.C) {
@@ -276,16 +312,24 @@ func (s *ArchiveSuite) TestPostErrors(c *gc.C) {
 	}
 	for i, test := range archivePostErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
-		var body io.Reader = strings.NewReader("bogus")
+		if test.entity == nil {
+			test.entity = storetesting.NewCharm(nil)
+		}
+		blob, hashSum := getBlob(test.entity)
+		body := io.Reader(blob)
 		if test.noContentLength {
 			// net/http will automatically add a Content-Length header
 			// if it sees *strings.Reader, but not if it's a type it doesn't
 			// know about.
 			body = exoticReader{body}
 		}
+		path := storeURL(test.url) + "/archive"
+		if !test.noHash {
+			path += "?hash=" + hashSum
+		}
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: s.srv,
-			URL:     storeURL(test.path),
+			URL:     path,
 			Method:  "POST",
 			Header: http.Header{
 				"Content-Type": {"application/zip"},
@@ -544,65 +588,6 @@ func (s *ArchiveSuite) TestPostMultiSeriesCharm(c *gc.C) {
 func (s *ArchiveSuite) TestPostMultiSeriesDevelopmentCharm(c *gc.C) {
 	// A charm that did not exist before should get revision 0.
 	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/development/juju-gui-0", -1), "multi-series")
-}
-
-var charmPostErrorTests = []struct {
-	about        string
-	url          *charm.URL
-	charm        string
-	expectStatus int
-	expectBody   interface{}
-}{{
-	about:        "no series",
-	url:          charm.MustParseURL("~charmers/juju-gui-0"),
-	charm:        "wordpress",
-	expectStatus: http.StatusForbidden,
-	expectBody: params.Error{
-		Message: "series not specified in url or charm metadata",
-		Code:    params.ErrEntityIdNotAllowed,
-	},
-}, {
-	about:        "url series not in metadata",
-	url:          charm.MustParseURL("~charmers/precise/juju-gui-0"),
-	charm:        "multi-series",
-	expectStatus: http.StatusForbidden,
-	expectBody: params.Error{
-		Message: `"precise" series not listed in charm metadata`,
-		Code:    params.ErrEntityIdNotAllowed,
-	},
-}, {
-	about:        "bad combination of series",
-	url:          charm.MustParseURL("~charmers/juju-gui-0"),
-	charm:        "multi-series-bad-combination",
-	expectStatus: http.StatusBadRequest,
-	expectBody: params.Error{
-		Message: `cannot mix series from ubuntu and windows in single charm`,
-		Code:    params.ErrInvalidEntity,
-	},
-}, {
-	about:        "unknown series",
-	url:          charm.MustParseURL("~charmers/juju-gui-0"),
-	charm:        "multi-series-unknown",
-	expectStatus: http.StatusBadRequest,
-	expectBody: params.Error{
-		Message: `unrecognised series "nosuchseries" in metadata`,
-		Code:    params.ErrInvalidEntity,
-	},
-}}
-
-func (s *ArchiveSuite) TestCharmPostError(c *gc.C) {
-	for i, test := range charmPostErrorTests {
-		c.Logf("%d. %s", i, test.about)
-		s.assertUploadCharmError(
-			c,
-			"POST",
-			test.url,
-			nil,
-			test.charm,
-			test.expectStatus,
-			test.expectBody,
-		)
-	}
 }
 
 func (s *ArchiveSuite) TestPostMultiSeriesCharmRevisionAfterAllSingleSeriesOnes(c *gc.C) {
@@ -1127,8 +1112,8 @@ func (s *commonArchiveSuite) assertUpload(c *gc.C, method string, url *router.Re
 // specified error. The URL must hold the expected revision that the
 // charm will be given when uploaded.
 func (s *ArchiveSuite) assertUploadCharmError(c *gc.C, method string, url, purl *charm.URL, charmName string, expectStatus int, expectBody interface{}) {
-	ch := storetesting.Charms.CharmArchive(c.MkDir(), charmName)
-	s.assertUploadError(c, method, url, purl, ch.Path, expectStatus, expectBody)
+	ch := storetesting.Charms.CharmDir(charmName)
+	s.assertUploadError(c, method, url, purl, ch, expectStatus, expectBody)
 }
 
 // assertUploadError asserts that we get an error when uploading
@@ -1136,18 +1121,8 @@ func (s *ArchiveSuite) assertUploadCharmError(c *gc.C, method string, url, purl 
 // The reason this method does not take a *router.ResolvedURL
 // is so that we can test what happens when an inconsistent promulgated URL
 // is passed in.
-func (s *ArchiveSuite) assertUploadError(c *gc.C, method string, url, purl *charm.URL, fileName string, expectStatus int, expectBody interface{}) {
-	f, err := os.Open(fileName)
-	c.Assert(err, gc.IsNil)
-	defer f.Close()
-
-	// Calculate blob hashes.
-	hash := blobstore.NewHash()
-	size, err := io.Copy(hash, f)
-	c.Assert(err, gc.IsNil)
-	hashSum := fmt.Sprintf("%x", hash.Sum(nil))
-	_, err = f.Seek(0, 0)
-	c.Assert(err, gc.IsNil)
+func (s *ArchiveSuite) assertUploadError(c *gc.C, method string, url, purl *charm.URL, entity charmstore.ArchiverTo, expectStatus int, expectBody interface{}) {
+	blob, hashSum := getBlob(entity)
 
 	uploadURL := *url
 	if method == "POST" {
@@ -1162,16 +1137,29 @@ func (s *ArchiveSuite) assertUploadError(c *gc.C, method string, url, purl *char
 		Handler:       s.srv,
 		URL:           storeURL(path),
 		Method:        method,
-		ContentLength: size,
+		ContentLength: int64(blob.Len()),
 		Header: http.Header{
 			"Content-Type": {"application/zip"},
 		},
-		Body:         f,
+		Body:         blob,
 		Username:     testUsername,
 		Password:     testPassword,
 		ExpectStatus: expectStatus,
 		ExpectBody:   expectBody,
 	})
+}
+
+// getBlob returns the contents and blob checksum of the given entity.
+func getBlob(entity charmstore.ArchiverTo) (blob *bytes.Buffer, hash string) {
+	blob = new(bytes.Buffer)
+	err := entity.ArchiveTo(blob)
+	if err != nil {
+		panic(err)
+	}
+	h := blobstore.NewHash()
+	h.Write(blob.Bytes())
+	hash = fmt.Sprintf("%x", h.Sum(nil))
+	return blob, hash
 }
 
 var archiveFileErrorsTests = []struct {

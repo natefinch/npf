@@ -53,26 +53,26 @@ func (s *BenchmarkSuite) BenchmarkMeta(c *gc.C) {
 }
 
 var benchmarkCharmRelatedAddCharms = map[string]charm.Charm{
-	"0 ~charmers/trusty/wordpress-0": storetesting.NewCharm(relationMeta(
+	"0 ~charmers/trusty/wordpress-0": storetesting.NewCharm(storetesting.RelationMeta(
 		"requires cache memcache",
 		"requires nfs mount",
 	)),
-	"1 ~charmers/utopic/memcached-1": storetesting.NewCharm(relationMeta(
+	"1 ~charmers/utopic/memcached-1": storetesting.NewCharm(storetesting.RelationMeta(
 		"provides cache memcache",
 	)),
-	"2 ~charmers/utopic/memcached-2": storetesting.NewCharm(relationMeta(
+	"2 ~charmers/utopic/memcached-2": storetesting.NewCharm(storetesting.RelationMeta(
 		"provides cache memcache",
 	)),
-	"90 ~charmers/utopic/redis-90": storetesting.NewCharm(relationMeta(
+	"90 ~charmers/utopic/redis-90": storetesting.NewCharm(storetesting.RelationMeta(
 		"provides cache memcache",
 	)),
-	"47 ~charmers/trusty/nfs-47": storetesting.NewCharm(relationMeta(
+	"47 ~charmers/trusty/nfs-47": storetesting.NewCharm(storetesting.RelationMeta(
 		"provides nfs mount",
 	)),
-	"42 ~charmers/precise/nfs-42": storetesting.NewCharm(relationMeta(
+	"42 ~charmers/precise/nfs-42": storetesting.NewCharm(storetesting.RelationMeta(
 		"provides nfs mount",
 	)),
-	"47 ~charmers/precise/nfs-47": storetesting.NewCharm(relationMeta(
+	"47 ~charmers/precise/nfs-47": storetesting.NewCharm(storetesting.RelationMeta(
 		"provides nfs mount",
 	)),
 }

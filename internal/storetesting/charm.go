@@ -8,7 +8,9 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strings"
 
+	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/testing"
 	"gopkg.in/yaml.v2"
@@ -22,7 +24,7 @@ var Charms = testing.NewRepo("charm-repo", "quantal")
 var _ charm.Bundle = (*Bundle)(nil)
 
 // Bundle implements an in-memory charm.Bundle
-// that can archived.
+// that can be archived.
 //
 // Note that because it implements charmstore.ArchiverTo,
 // it can be used as an argument to charmstore.Store.AddBundleWithArchive.
@@ -47,6 +49,11 @@ func (b *Bundle) ReadMe() string {
 func (b *Bundle) ArchiveTo(w io.Writer) error {
 	_, err := w.Write(b.blob)
 	return err
+}
+
+// Bytes returns the contents of the bundle's archive.
+func (b *Bundle) Bytes() []byte {
+	return b.blob
 }
 
 // Size returns the size of the bundle's archive blob.
@@ -146,6 +153,11 @@ func (c *Charm) ArchiveTo(w io.Writer) error {
 	return err
 }
 
+// Bytes returns the contents of the charm's archive.
+func (c *Charm) Bytes() []byte {
+	return c.blob
+}
+
 // Size returns the size of the charm's archive blob.
 func (c *Charm) Size() int64 {
 	return int64(len(c.blob))
@@ -175,4 +187,64 @@ func newBlob(files []file) ([]byte, string) {
 	h := blobstore.NewHash()
 	h.Write(blob.Bytes())
 	return blob.Bytes(), fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// MetaWithSupportedSeries returns m with Series
+// set to series. If m is nil, new(charm.Meta)
+// will be used instead.
+func MetaWithSupportedSeries(m *charm.Meta, series ...string) *charm.Meta {
+	if m == nil {
+		m = new(charm.Meta)
+	}
+	m.Series = series
+	return m
+}
+
+// RelationMeta returns charm metadata for a charm
+// with the given relations, where each relation
+// is specified as a white-space-separated
+// triple:
+//	role name interface
+// where role specifies the role of the interface
+// (provides or requires), name holds the relation
+// name and interface holds the interface relation type.
+func RelationMeta(relations ...string) *charm.Meta {
+	provides := make(map[string]charm.Relation)
+	requires := make(map[string]charm.Relation)
+	for _, rel := range relations {
+		r, err := parseRelation(rel)
+		if err != nil {
+			panic(fmt.Errorf("bad relation %q", err))
+		}
+		if r.Role == charm.RoleProvider {
+			provides[r.Name] = r
+		} else {
+			requires[r.Name] = r
+		}
+	}
+	return &charm.Meta{
+		Provides: provides,
+		Requires: requires,
+	}
+}
+
+func parseRelation(s string) (charm.Relation, error) {
+	fields := strings.Fields(s)
+	if len(fields) != 3 {
+		return charm.Relation{}, errgo.Newf("wrong field count")
+	}
+	r := charm.Relation{
+		Scope:     charm.ScopeGlobal,
+		Name:      fields[1],
+		Interface: fields[2],
+	}
+	switch fields[0] {
+	case "provides":
+		r.Role = charm.RoleProvider
+	case "requires":
+		r.Role = charm.RoleRequirer
+	default:
+		return charm.Relation{}, errgo.Newf("unknown role")
+	}
+	return r, nil
 }
