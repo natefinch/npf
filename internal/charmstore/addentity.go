@@ -5,18 +5,23 @@ package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/char
 
 import (
 	"archive/zip"
+	"bytes"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"sort"
 	"time"
 
+	jujuzip "github.com/juju/zip"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
+	"gopkg.in/yaml.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
@@ -37,6 +42,18 @@ type addParams struct {
 
 	// BlobHash holds the hash of the entity's archive blob.
 	BlobHash string
+
+	// PreV5BlobHash holds the hash of the entity's archive blob for
+	// pre-v5 compatibility purposes.
+	PreV5BlobHash string
+
+	// PreV5BlobHash256 holds the SHA256 hash of the entity's archive blob for
+	// pre-v5 compatibility purposes.
+	PreV5BlobHash256 string
+
+	// PreV5BlobSize holds the size of the entity's archive blob for
+	// pre-v5 compatibility purposes.
+	PreV5BlobSize int64
 
 	// BlobHash256 holds the sha256 hash of the entity's archive blob.
 	BlobHash256 string
@@ -149,11 +166,14 @@ func (s *Store) putArchive(blob io.Reader, blobSize int64, hash string) (blobNam
 // of the given reader, associating it with the given id.
 func (s *Store) addEntityFromReader(id *router.ResolvedURL, r io.ReadSeeker, blobName, hash, hash256 string, blobSize int64) error {
 	p := addParams{
-		URL:         id,
-		BlobName:    blobName,
-		BlobHash:    hash,
-		BlobHash256: hash256,
-		BlobSize:    blobSize,
+		URL:              id,
+		BlobName:         blobName,
+		BlobHash:         hash,
+		BlobHash256:      hash256,
+		BlobSize:         blobSize,
+		PreV5BlobHash:    hash,
+		PreV5BlobHash256: hash256,
+		PreV5BlobSize:    blobSize,
 	}
 	if id.URL.Series == "bundle" {
 		b, err := s.newBundle(id, r, blobSize)
@@ -169,10 +189,122 @@ func (s *Store) addEntityFromReader(id *router.ResolvedURL, r io.ReadSeeker, blo
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrInvalidEntity), errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
 	}
-	if err := s.addCharm(ch, p); err != nil {
+	if len(ch.Meta().Series) > 0 {
+		if _, err := r.Seek(0, 0); err != nil {
+			return errgo.Notef(err, "cannot seek to start of archive")
+		}
+		logger.Infof("adding pre-v5 compat blob for %#v", id)
+		if err := s.addPreV5CompatibilityHackBlob(r, &p); err != nil {
+			return errgo.Notef(err, "cannot add pre-v5 compatibility blob")
+		}
+	}
+	err = s.addCharm(ch, p)
+	if err != nil && len(ch.Meta().Series) > 0 {
+		// We added a compatibility blob so we need to remove it.
+		compatBlobName := preV5CompatibilityBlobName(p.BlobName)
+		if err1 := s.BlobStore.Remove(compatBlobName); err1 != nil {
+			logger.Errorf("cannot remove blob %s after error: %v", compatBlobName, err1)
+		}
+	}
+	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
 	}
 	return nil
+}
+
+// addPreV5CompatibilityHackBlob adds a second blob to the blob store that
+// contains a suffix to the zipped charm archive file that updates the zip
+// index to point to an updated version of metadata.yaml that does
+// not have a series field. The original blob is held in r.
+// It updates the fields in p accordingly.
+//
+// We do this because earlier versions of the charm package have a version
+// of the series field that holds a single string rather than a slice of string
+// so will fail when reading the new slice-of-string form, and we
+// don't want to change the field name from "series".
+func (s *Store) addPreV5CompatibilityHackBlob(r io.ReadSeeker, p *addParams) error {
+	readerAt := ReaderAtSeeker(r)
+	z, err := jujuzip.NewReader(readerAt, p.BlobSize)
+	if err != nil {
+		return errgo.Notef(err, "cannot open charm archive")
+	}
+	var metadataf *jujuzip.File
+	for _, f := range z.File {
+		if f.Name == "metadata.yaml" {
+			metadataf = f
+			break
+		}
+	}
+	if metadataf == nil {
+		return errgo.New("no metadata.yaml file found")
+	}
+	fr, err := metadataf.Open()
+	if err != nil {
+		return errgo.Notef(err, "cannot open metadata.yaml from archive")
+	}
+	defer fr.Close()
+	data, err := removeSeriesField(fr)
+	if err != nil {
+		return errgo.Notef(err, "cannot remove series field from metadata")
+	}
+	var appendedBlob bytes.Buffer
+	zw := z.Append(&appendedBlob)
+	updatedf := metadataf.FileHeader // Work around invalid duplicate FileHeader issue.
+	zwf, err := zw.CreateHeader(&updatedf)
+	if err != nil {
+		return errgo.Notef(err, "cannot create appended metadata entry")
+	}
+	if _, err := zwf.Write(data); err != nil {
+		return errgo.Notef(err, "cannot write appended metadata data")
+	}
+	if err := zw.Close(); err != nil {
+		return errgo.Notef(err, "cannot close zip file")
+	}
+	data = appendedBlob.Bytes()
+	sha384sum := sha512.Sum384(data)
+
+	err = s.BlobStore.PutUnchallenged(&appendedBlob, preV5CompatibilityBlobName(p.BlobName), int64(len(data)), fmt.Sprintf("%x", sha384sum[:]))
+	if err != nil {
+		return errgo.Notef(err, "cannot put archive blob")
+	}
+
+	sha384w := sha512.New384()
+	sha256w := sha256.New()
+	hashw := io.MultiWriter(sha384w, sha256w)
+	if _, err := r.Seek(0, 0); err != nil {
+		return errgo.Notef(err, "cannnot seek to start of blob")
+	}
+	if _, err := io.Copy(hashw, r); err != nil {
+		return errgo.Notef(err, "cannot recalculate blob checksum")
+	}
+	hashw.Write(data)
+	p.PreV5BlobSize = p.BlobSize + int64(len(data))
+	p.PreV5BlobHash256 = fmt.Sprintf("%x", sha256w.Sum(nil))
+	p.PreV5BlobHash = fmt.Sprintf("%x", sha384w.Sum(nil))
+	return nil
+}
+
+// preV5CompatibilityBlobName returns the name of the zip file suffix used
+// to overwrite the metadata.yaml file for pre-v5 compatibility purposes.
+func preV5CompatibilityBlobName(blobName string) string {
+	return blobName + ".pre-v5-suffix"
+}
+
+func removeSeriesField(r io.Reader) ([]byte, error) {
+	data, err := ioutil.ReadAll(r)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	var meta map[string]interface{}
+	if err := yaml.Unmarshal(data, &meta); err != nil {
+		return nil, errgo.Notef(err, "cannot unmarshal metadata.yaml")
+	}
+	delete(meta, "series")
+	data, err = yaml.Marshal(meta)
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot re-marshal metadata.yaml")
+	}
+	return data, nil
 }
 
 // newCharm returns a new charm implementation from the archive blob
@@ -276,6 +408,9 @@ func (s *Store) addCharm(c charm.Charm, p addParams) (err error) {
 		BlobHash:                p.BlobHash,
 		BlobHash256:             p.BlobHash256,
 		BlobName:                p.BlobName,
+		PreV5BlobSize:           p.PreV5BlobSize,
+		PreV5BlobHash:           p.PreV5BlobHash,
+		PreV5BlobHash256:        p.PreV5BlobHash256,
 		Size:                    p.BlobSize,
 		UploadTime:              time.Now(),
 		CharmMeta:               c.Meta(),
@@ -326,6 +461,9 @@ func (s *Store) addBundle(b charm.Bundle, p addParams) error {
 		BlobHash:           p.BlobHash,
 		BlobHash256:        p.BlobHash256,
 		BlobName:           p.BlobName,
+		PreV5BlobSize:      p.PreV5BlobSize,
+		PreV5BlobHash:      p.PreV5BlobHash,
+		PreV5BlobHash256:   p.PreV5BlobHash256,
 		Size:               p.BlobSize,
 		UploadTime:         time.Now(),
 		BundleData:         bundleData,

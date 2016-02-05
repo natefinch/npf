@@ -28,7 +28,6 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/legacy"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting/hashtesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting/stats"
 )
 
@@ -99,6 +98,23 @@ func (s *APISuite) TestCharmArchive(c *gc.C) {
 	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
 	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
 	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
+}
+
+func (s *APISuite) TestGetElidesSeriesFromMultiSeriesCharmMetadata(c *gc.C) {
+	_, ch := s.addPublicCharm(c, "multi-series", "cs:~charmers/multi-series-0")
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     "/charm/~charmers/multi-series",
+	})
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+
+	gotCh, err := charm.ReadCharmArchiveBytes(rec.Body.Bytes())
+	c.Assert(err, gc.IsNil)
+
+	chMeta := ch.Meta()
+	chMeta.Series = nil
+
+	c.Assert(gotCh.Meta(), jc.DeepEquals, chMeta)
 }
 
 func (s *APISuite) TestPostNotAllowed(c *gc.C) {
@@ -350,30 +366,6 @@ func (s *APISuite) TestCharmPackageCharmInfo(c *gc.C) {
 	}, {
 		Errors: []string{"charm not found: " + notFoundURL.String()},
 	}})
-}
-
-func (s *APISuite) TestSHA256Laziness(c *gc.C) {
-	// TODO frankban: remove this test after updating entities in the
-	// production db with their SHA256 hash value. Entities are updated by
-	// running the cshash256 command.
-	id, ch := s.addPublicCharm(c, "wordpress", "cs:~who/precise/wordpress-0")
-	url := id.String()
-	sum256 := fileSHA256(c, ch.Path)
-
-	hashtesting.CheckSHA256Laziness(c, s.store, &id.URL, func() {
-		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-			Handler:      s.srv,
-			URL:          "/charm-info?charms=" + url,
-			ExpectStatus: http.StatusOK,
-			ExpectBody: map[string]charmrepo.InfoResponse{
-				url: {
-					CanonicalURL: url,
-					Sha256:       sum256,
-					Revision:     0,
-				},
-			},
-		})
-	})
 }
 
 var serverStatusTests = []struct {

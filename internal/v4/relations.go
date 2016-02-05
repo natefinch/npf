@@ -18,7 +18,7 @@ import (
 
 // GET id/meta/charm-related[?include=meta[&include=meta…]]
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacharm-related
-func (h *ReqHandler) metaCharmRelated(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h ReqHandler) metaCharmRelated(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	if id.URL.Series == "bundle" {
 		return nil, nil
 	}
@@ -86,7 +86,7 @@ type entityRelatedInterfacesGetter func(*mongodoc.Entity) []string
 //           {Id: "cs:utopic/memcached-0", Meta: ...},
 //       },
 //   }
-func (h *ReqHandler) getRelatedCharmsResponse(
+func (h ReqHandler) getRelatedCharmsResponse(
 	ifaces []string,
 	entities []*mongodoc.Entity,
 	getInterfaces entityRelatedInterfacesGetter,
@@ -106,7 +106,7 @@ func (h *ReqHandler) getRelatedCharmsResponse(
 	return results, nil
 }
 
-func (h *ReqHandler) getRelatedIfaceResponses(
+func (h ReqHandler) getRelatedIfaceResponses(
 	iface string,
 	entities []*mongodoc.Entity,
 	getInterfaces entityRelatedInterfacesGetter,
@@ -131,7 +131,7 @@ func (h *ReqHandler) getRelatedIfaceResponses(
 	return resp, nil
 }
 
-func (h *ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, includes []string, req *http.Request, includeEntity func(*mongodoc.Entity) bool) ([]params.EntityResult, error) {
+func (h ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, includes []string, req *http.Request, includeEntity func(*mongodoc.Entity) bool) ([]params.EntityResult, error) {
 	response := make([]params.EntityResult, 0, len(entities))
 	for _, inc := range includes {
 		if h.Router.MetaHandler(inc) == nil {
@@ -169,7 +169,7 @@ func (h *ReqHandler) getMetadataForEntities(entities []*mongodoc.Entity, include
 
 var errMetadataUnauthorized = errgo.Newf("metadata unauthorized")
 
-func (h *ReqHandler) getMetadataForEntity(e *mongodoc.Entity, includes []string, req *http.Request) (map[string]interface{}, error) {
+func (h ReqHandler) getMetadataForEntity(e *mongodoc.Entity, includes []string, req *http.Request) (map[string]interface{}, error) {
 	rurl := charmstore.EntityResolvedURL(e)
 	// Ignore entities that aren't readable by the current user.
 	if err := h.AuthorizeEntity(rurl, req); err != nil {

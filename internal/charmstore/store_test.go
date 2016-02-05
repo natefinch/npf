@@ -334,31 +334,35 @@ func (s *StoreSuite) TestFindEntities(c *gc.C) {
 }
 
 func (s *StoreSuite) TestFindEntity(c *gc.C) {
-	s.testURLFinding(c, func(store *Store, expand *charm.URL, expect []*router.ResolvedURL) {
-		if expand.Series == "" || expand.Revision == -1 || expand.User == "" {
-			return
-		}
-		rurl := &router.ResolvedURL{
-			URL:                 *expand.WithChannel(""),
-			PromulgatedRevision: -1,
-			Development:         expand.Channel == charm.DevelopmentChannel,
-		}
-		entity, err := store.FindEntity(rurl, FieldSelector("_id", "promulgated-url", "development"))
-		if len(expect) == 0 {
-			c.Assert(err, gc.ErrorMatches, "entity not found")
-			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
-			return
-		}
-		c.Assert(err, gc.IsNil)
-		c.Assert(len(expect), gc.Equals, 1)
-		c.Assert(entity.BlobName, gc.Equals, "")
-		c.Assert(EntityResolvedURL(entity), jc.DeepEquals, expect[0])
+	store := s.newStore(c, false)
+	defer store.Close()
 
-		// Check that it works when returning other fields too.
-		entity, err = store.FindEntity(rurl, FieldSelector("blobname"))
-		c.Assert(err, gc.IsNil)
-		c.Assert(entity.BlobName, gc.Not(gc.Equals), "")
-	})
+	rurl := MustParseResolvedURL("cs:~charmers/precise/wordpress-5")
+	err := store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
+	c.Assert(err, gc.IsNil)
+
+	entity0, err := store.FindEntity(rurl, nil)
+	c.Assert(err, gc.IsNil)
+	c.Assert(entity0, gc.NotNil)
+	c.Assert(entity0.Size, gc.Not(gc.Equals), 0)
+
+	// Check that it doesn't matter if it's a development URL.
+	rurl.Development = true
+	entity1, err := store.FindEntity(rurl, nil)
+	c.Assert(err, gc.IsNil)
+	c.Assert(entity1, jc.DeepEquals, entity0)
+
+	// Check that the field selector works.
+	entity2, err := store.FindEntity(rurl, FieldSelector("blobhash"))
+	c.Assert(err, gc.IsNil)
+	c.Assert(entity2.BlobHash, gc.Equals, entity0.BlobHash)
+	c.Assert(entity2.Size, gc.Equals, int64(0))
+
+	rurl.URL.Name = "another"
+	entity3, err := store.FindEntity(rurl, nil)
+	c.Assert(err, gc.ErrorMatches, "entity not found")
+	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
+	c.Assert(entity3, gc.IsNil)
 }
 
 var findBaseEntityTests = []struct {
@@ -962,41 +966,83 @@ func (s *StoreSuite) TestOpenBlob(c *gc.C) {
 	defer f.Close()
 	expectHash := hashOfReader(c, f)
 
-	r, size, hash, err := store.OpenBlob(url)
+	blob, err := store.OpenBlob(url)
 	c.Assert(err, gc.IsNil)
-	defer r.Close()
+	defer blob.Close()
 
-	c.Assert(hashOfReader(c, r), gc.Equals, expectHash)
-	c.Assert(hash, gc.Equals, expectHash)
+	c.Assert(hashOfReader(c, blob), gc.Equals, expectHash)
+	c.Assert(blob.Hash, gc.Equals, expectHash)
 
 	info, err := f.Stat()
 	c.Assert(err, gc.IsNil)
-	c.Assert(size, gc.Equals, info.Size())
+	c.Assert(blob.Size, gc.Equals, info.Size())
 }
 
-func (s *StoreSuite) TestBlobNameAndHash(c *gc.C) {
-	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-
+func (s *StoreSuite) TestOpenBlobPreV5(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
-	url := router.MustNewResolvedURL("cs:~charmers/precise/wordpress-23", 23)
-	err := store.AddCharmWithArchive(url, charmArchive)
+	ch := storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "trusty", "precise"))
+
+	url := router.MustNewResolvedURL("cs:~charmers/multi-series-23", 23)
+	err := store.AddCharmWithArchive(url, ch)
 	c.Assert(err, gc.IsNil)
 
-	f, err := os.Open(charmArchive.Path)
+	blob, err := store.OpenBlobPreV5(url)
 	c.Assert(err, gc.IsNil)
-	defer f.Close()
-	expectHash := hashOfReader(c, f)
+	defer blob.Close()
 
-	name, hash, err := store.BlobNameAndHash(url)
+	data, err := ioutil.ReadAll(blob)
+	c.Assert(err, gc.IsNil)
+	preV5Ch, err := charm.ReadCharmArchiveBytes(data)
 	c.Assert(err, gc.IsNil)
 
-	r, _, err := store.BlobStore.Open(name)
-	c.Assert(err, gc.IsNil)
-	defer r.Close()
+	// Check that the hashes and sizes are consistent with the data
+	// we've read.
+	c.Assert(blob.Hash, gc.Equals, fmt.Sprintf("%x", sha512.Sum384(data)))
+	c.Assert(blob.Size, gc.Equals, int64(len(data)))
 
-	c.Assert(hash, gc.Equals, expectHash)
-	c.Assert(hashOfReader(c, r), gc.Equals, expectHash)
+	entity, err := store.FindEntity(url, nil)
+	c.Assert(err, gc.IsNil)
+
+	c.Assert(entity.PreV5BlobHash, gc.Equals, blob.Hash)
+	c.Assert(entity.PreV5BlobHash256, gc.Equals, fmt.Sprintf("%x", sha256.Sum256(data)))
+	c.Assert(entity.PreV5BlobSize, gc.Equals, blob.Size)
+
+	c.Assert(preV5Ch.Meta().Series, gc.HasLen, 0)
+
+	// Sanity check that the series really are in the post-v5 blob.
+	blob, err = store.OpenBlob(url)
+	c.Assert(err, gc.IsNil)
+	defer blob.Close()
+
+	data, err = ioutil.ReadAll(blob)
+	c.Assert(err, gc.IsNil)
+
+	postV5Ch, err := charm.ReadCharmArchiveBytes(data)
+	c.Assert(err, gc.IsNil)
+
+	c.Assert(postV5Ch.Meta().Series, jc.DeepEquals, []string{"trusty", "precise"})
+}
+
+func (s *StoreSuite) TestOpenBlobPreV5WithMultiSeriesCharmInSingleSeriesId(c *gc.C) {
+	store := s.newStore(c, false)
+	defer store.Close()
+	ch := storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "trusty", "precise"))
+
+	url := router.MustNewResolvedURL("cs:~charmers/precise/multi-series-23", 23)
+	err := store.AddCharmWithArchive(url, ch)
+	c.Assert(err, gc.IsNil)
+
+	blob, err := store.OpenBlobPreV5(url)
+	c.Assert(err, gc.IsNil)
+	defer blob.Close()
+
+	data, err := ioutil.ReadAll(blob)
+	c.Assert(err, gc.IsNil)
+	preV5Ch, err := charm.ReadCharmArchiveBytes(data)
+	c.Assert(err, gc.IsNil)
+
+	c.Assert(preV5Ch.Meta().Series, gc.HasLen, 0)
 }
 
 func (s *StoreSuite) TestAddLog(c *gc.C) {

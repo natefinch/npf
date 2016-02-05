@@ -72,13 +72,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/juju/mempool"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/mempool"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
@@ -205,15 +205,6 @@ func (h *reqHandler) serveCharmInfo(_ http.Header, req *http.Request) (interface
 				// just treat it as a not-found error.
 				err = errNotFound
 			}
-		}
-		if err == nil && entity.BlobHash256 == "" {
-			// Lazily calculate SHA256 so that we don't burden
-			// non-legacy code with that task.
-			// TODO frankban: remove this lazy calculation after the cshash256
-			// command is run in the production db. At that point, entities
-			// always have their blobhash256 field populated, and there is no
-			// need for this lazy evaluation anymore.
-			entity.BlobHash256, err = h.store.UpdateEntitySHA256(rurl)
 		}
 		// Prepare the response part for this charm.
 		if err == nil {

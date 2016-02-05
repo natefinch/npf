@@ -9,6 +9,7 @@ import (
 
 	"github.com/juju/httprequest"
 	"github.com/juju/loggo"
+	"github.com/juju/mempool"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
@@ -17,7 +18,6 @@ import (
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/entitycache"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/mempool"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
@@ -109,9 +109,14 @@ func newReqHandler() ReqHandler {
 	handlers := v5.RouterHandlers(h.ReqHandler)
 	handlers.Global["search"] = router.HandleJSON(h.serveSearch)
 	handlers.Meta["charm-related"] = h.EntityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces")
+	handlers.Meta["charm-metadata"] = h.EntityHandler(h.metaCharmMetadata, "charmmeta")
 	handlers.Meta["revision-info"] = router.SingleIncludeHandler(h.metaRevisionInfo)
+	handlers.Meta["archive-size"] = h.EntityHandler(h.metaArchiveSize, "prev5blobsize")
+	handlers.Meta["hash"] = h.EntityHandler(h.metaHash, "prev5blobhash")
+	handlers.Meta["hash256"] = h.EntityHandler(h.metaHash256, "prev5blobhash256")
 	handlers.Id["expand-id"] = resolveId(authId(h.serveExpandId))
-
+	handlers.Id["archive"] = h.serveArchive(handlers.Id["archive"])
+	handlers.Id["archive/"] = resolveId(h.serveArchiveFile)
 	h.Router = router.New(handlers, h)
 	return h
 }
@@ -188,9 +193,19 @@ func noMatchingURLError(url *charm.URL) error {
 	return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
 }
 
+// GET id/meta/charm-metadata
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacharm-metadata
+func (h ReqHandler) metaCharmMetadata(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	m := entity.CharmMeta
+	if m != nil {
+		m.Series = nil
+	}
+	return m, nil
+}
+
 // GET id/meta/revision-info
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetarevision-info
-func (h *ReqHandler) metaRevisionInfo(id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+func (h ReqHandler) metaRevisionInfo(id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	searchURL := id.PreferredURL()
 	searchURL.Revision = -1
 
@@ -225,9 +240,33 @@ func (h *ReqHandler) metaRevisionInfo(id *router.ResolvedURL, path string, flags
 	return &response, nil
 }
 
+// GET id/meta/archive-size
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaarchive-size
+func (h ReqHandler) metaArchiveSize(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	return &params.ArchiveSizeResponse{
+		Size: entity.PreV5BlobSize,
+	}, nil
+}
+
+// GET id/meta/hash
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetahash
+func (h ReqHandler) metaHash(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	return &params.HashResponse{
+		Sum: entity.PreV5BlobHash,
+	}, nil
+}
+
+// GET id/meta/hash256
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetahash256
+func (h ReqHandler) metaHash256(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	return &params.HashResponse{
+		Sum: entity.PreV5BlobHash256,
+	}, nil
+}
+
 // GET id/expand-id
 // https://docs.google.com/a/canonical.com/document/d/1TgRA7jW_mmXoKH3JiwBbtPvQu7WiM6XMrz1wSrhTMXw/edit#bookmark=id.4xdnvxphb2si
-func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
+func (h ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	baseURL := id.PreferredURL()
 	baseURL.Revision = -1
 	baseURL.Series = ""
