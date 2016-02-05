@@ -56,6 +56,27 @@ func (s *BlobStoreSuite) TestPutOpen(c *gc.C) {
 	c.Assert(chal, gc.IsNil)
 }
 
+func (s *BlobStoreSuite) TestPutTwice(c *gc.C) {
+	store := blobstore.New(s.Session.DB("db"), "blobstore")
+
+	content := "some data"
+	err := store.PutUnchallenged(strings.NewReader(content), "x", int64(len(content)), hashOf(content))
+	c.Assert(err, gc.IsNil)
+
+	content = "some different data"
+	err = store.PutUnchallenged(strings.NewReader(content), "x", int64(len(content)), hashOf(content))
+	c.Assert(err, gc.IsNil)
+
+	rc, length, err := store.Open("x")
+	c.Assert(err, gc.IsNil)
+	defer rc.Close()
+	c.Assert(length, gc.Equals, int64(len(content)))
+
+	data, err := ioutil.ReadAll(rc)
+	c.Assert(err, gc.IsNil)
+	c.Assert(string(data), gc.Equals, content)
+}
+
 func (s *BlobStoreSuite) TestPutInvalidHash(c *gc.C) {
 	store := blobstore.New(s.Session.DB("db"), "blobstore")
 	content := "some data"

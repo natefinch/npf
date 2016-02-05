@@ -8,6 +8,7 @@ import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
+	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 )
 
@@ -16,6 +17,7 @@ const (
 	migrationAddDevelopment         mongodoc.MigrationName = "add development"
 	migrationAddDevelopmentACLs     mongodoc.MigrationName = "add development acls"
 	migrationFixBogusPromulgatedURL mongodoc.MigrationName = "fix promulgate url"
+	migrationAddPreV5CompatBlob     mongodoc.MigrationName = "add pre-v5 compatibility blobs"
 )
 
 // migrations holds all the migration functions that are executed in the order
@@ -51,6 +53,9 @@ var migrations = []migration{{
 }, {
 	name:    migrationFixBogusPromulgatedURL,
 	migrate: fixBogusPromulgatedURL,
+}, {
+	name:    migrationAddPreV5CompatBlob,
+	migrate: addPreV5CompatBlob,
 }}
 
 // migration holds a migration function with its corresponding name.
@@ -202,6 +207,58 @@ func fixBogusPromulgatedURL(db StoreDatabase) error {
 			"$set", bson.D{{"promulgated-url", entity.PromulgatedURL}},
 		}}); err != nil {
 			return errgo.Notef(err, "cannot fix bogus promulgated URL for entity %v", entity.URL)
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return errgo.Notef(err, "cannot iterate through entities")
+	}
+	return nil
+}
+
+func addPreV5CompatBlob(db StoreDatabase) error {
+	blobStore := blobstore.New(db.Database, "entitystore")
+	entities := db.Entities()
+	iter := entities.Find(bson.D{{
+		"prev5blobhash", bson.D{{"$exists", false}},
+	}}).Select(map[string]int{
+		"size":                  1,
+		"blobhash":              1,
+		"blobname":              1,
+		"blobhash256":           1,
+		"charm-metadata.series": 1,
+	}).Iter()
+	var entity mongodoc.Entity
+	for iter.Next(&entity) {
+		var info *preV5CompatibilityHackBlobInfo
+
+		if entity.CharmMeta == nil || len(entity.CharmMeta.Series) == 0 {
+			info = &preV5CompatibilityHackBlobInfo{
+				hash:    entity.BlobHash,
+				hash256: entity.BlobHash256,
+				size:    entity.Size,
+			}
+		} else {
+			r, _, err := blobStore.Open(entity.BlobName)
+			if err != nil {
+				return errgo.Notef(err, "cannot open original blob")
+			}
+			info, err = addPreV5CompatibilityHackBlob(blobStore, r, entity.BlobName, entity.Size)
+			r.Close()
+			if err != nil {
+				return errgo.Mask(err)
+			}
+		}
+		err := entities.UpdateId(entity.URL, bson.D{{
+			"$set", bson.D{{
+				"prev5blobhash", info.hash,
+			}, {
+				"prev5blobhash256", info.hash256,
+			}, {
+				"prev5blobsize", info.size,
+			}},
+		}})
+		if err != nil {
+			return errgo.Notef(err, "cannot update pre-v5 info")
 		}
 	}
 	if err := iter.Err(); err != nil {
