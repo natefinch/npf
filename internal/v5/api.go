@@ -1184,7 +1184,9 @@ func (h *ReqHandler) serveChangesPublished(_ http.Header, r *http.Request) (inte
 // GET /macaroon
 // See https://github.com/juju/charmstore/blob/v4/docs/API.md#get-macaroon
 func (h *ReqHandler) serveMacaroon(_ http.Header, _ *http.Request) (interface{}, error) {
-	return h.newMacaroon()
+	// will return a macaroon that will enable access to everything except archives
+	// of charms that require agreement to terms and conditions.
+	return h.newMacaroon([]checkers.Caveat{checkers.DenyCaveat(OpAccessCharmWithTerms)}...)
 }
 
 // GET /delegatable-macaroon

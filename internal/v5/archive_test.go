@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -30,6 +31,7 @@ import (
 	charmtesting "gopkg.in/juju/charmrepo.v2-unstable/testing"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
+	"gopkg.in/macaroon.v1"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
@@ -1680,7 +1682,12 @@ func (s *ArchiveSuiteWithTerms) TestGetUserHasAgreedToTermsAndConditions(c *gc.C
 	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
 	s.assertUploadCharm(c, "POST", id, "terms")
 	err := s.store.SetPerms(&id.URL, "read", "bob")
-	c.Assert(err, gc.IsNil)
+	c.Assert(err, jc.ErrorIsNil)
+
+	id1 := newResolvedURL("cs:~charmers/precise/terms1-0", -1)
+	s.assertUploadCharm(c, "POST", id1, "terms1")
+	err = s.store.SetPerms(&id1.URL, "read", "bob")
+	c.Assert(err, jc.ErrorIsNil)
 
 	s.assertArchiveDownload(
 		c,
@@ -1690,7 +1697,69 @@ func (s *ArchiveSuiteWithTerms) TestGetUserHasAgreedToTermsAndConditions(c *gc.C
 		},
 		nil,
 	)
+	c.Assert(termsDischargeAccessed, gc.Equals, true)
+	termsDischargeAccessed = false
 
+	s.dischargeTerms = func(cond, args string) ([]checkers.Caveat, error) {
+		termsDischargeAccessed = true
+		return nil, errgo.New("user has not agreed to specified terms and conditions")
+	}
+
+	archiveUrl := storeURL("~charmers/precise/terms1-0/archive")
+	httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler:     s.srv,
+		URL:         archiveUrl,
+		Do:          bakeryDo(client),
+		ExpectError: ".*third party refused discharge: cannot discharge: user has not agreed to specified terms and conditions",
+	})
+	c.Assert(termsDischargeAccessed, gc.Equals, true)
+}
+
+func (s *ArchiveSuiteWithTerms) TestGetArchiveWithBlankMacaroon(c *gc.C) {
+	termsDischargeAccessed := false
+	s.dischargeTerms = func(cond, args string) ([]checkers.Caveat, error) {
+		termsDischargeAccessed = true
+		return nil, errgo.New("user has not agreed to specified terms and conditions")
+	}
+
+	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
+	s.assertUploadCharm(c, "POST", id, "terms")
+	err := s.store.SetPerms(&id.URL, "read", "bob")
+	c.Assert(err, jc.ErrorIsNil)
+
+	archiveUrl := storeURL("~charmers/precise/terms-0/archive")
+
+	client := httpbakery.NewHTTPClient()
+	var gotBody json.RawMessage
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		URL:          storeURL("macaroon"),
+		Do:           bakeryDo(client),
+		ExpectStatus: http.StatusOK,
+		ExpectBody: httptesting.BodyAsserter(func(c *gc.C, m json.RawMessage) {
+			gotBody = m
+		}),
+	})
+	c.Assert(gotBody, gc.NotNil)
+	var m macaroon.Macaroon
+	err = json.Unmarshal(gotBody, &m)
+	c.Assert(err, jc.ErrorIsNil)
+
+	bClient := httpbakery.NewClient()
+	ms, err := bClient.DischargeAll(&m)
+	c.Assert(err, jc.ErrorIsNil)
+
+	u, err := url.Parse("http://127.0.0.1")
+	c.Assert(err, jc.ErrorIsNil)
+	err = httpbakery.SetCookie(client.Jar, u, ms)
+	c.Assert(err, jc.ErrorIsNil)
+
+	httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler:     s.srv,
+		URL:         archiveUrl,
+		Do:          bakeryDo(client),
+		ExpectError: ".*third party refused discharge: cannot discharge: user has not agreed to specified terms and conditions",
+	})
 	c.Assert(termsDischargeAccessed, gc.Equals, true)
 }
 
