@@ -4,6 +4,9 @@
 package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 
 import (
+	"crypto/sha512"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"sync"
 
@@ -12,10 +15,12 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 )
 
 type migrationsSuite struct {
@@ -473,6 +478,79 @@ func (s *migrationsSuite) TestFixBogusPromulgatedURL(c *gc.C) {
 		expect := *e.PromulgatedURL
 		expect.Channel = ""
 		c.Assert(entity.PromulgatedURL, jc.DeepEquals, &expect)
+	}
+}
+
+func (s *migrationsSuite) TestAddPreV5CompatBlob(c *gc.C) {
+	// Remove all migrations and add some entities.
+	// Then remove all the pre-v5-related stuff from the database,
+	// add the preV5CompatBlob migration and check that it works.
+	s.patchMigrations(c, nil)
+	p, err := NewPool(s.Session.DB("juju_test"), nil, &bakery.NewServiceParams{}, ServerParams{})
+	c.Assert(err, gc.IsNil)
+	store := p.Store()
+	p.Close()
+	defer store.Close()
+
+	err = store.AddCharmWithArchive(MustParseResolvedURL("~charmers/precise/wordpress-0"), storetesting.NewCharm(nil))
+	c.Assert(err, gc.IsNil)
+	err = store.AddCharmWithArchive(MustParseResolvedURL("~charmers/multi-series-1"), storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "precise", "trusty")))
+	c.Assert(err, gc.IsNil)
+	err = store.AddCharmWithArchive(MustParseResolvedURL("~charmers/trusty/multi-in-single-1"), storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "precise", "trusty")))
+	c.Assert(err, gc.IsNil)
+	err = store.AddBundleWithArchive(MustParseResolvedURL("~charmers/bundle/of-fun-1"), storetesting.NewBundle(&charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"x": {
+				Charm: "cs:~charmers/wordpress",
+			},
+		},
+	}))
+	c.Assert(err, gc.IsNil)
+
+	iter := s.db.Entities().Find(nil).Iter()
+	var entity mongodoc.Entity
+	for iter.Next(&entity) {
+		if entity.PreV5BlobHash != entity.BlobHash {
+			err := store.BlobStore.Remove(preV5CompatibilityBlobName(entity.BlobName))
+			c.Assert(err, gc.IsNil)
+		}
+		err := s.db.Entities().UpdateId(entity.URL, bson.D{{
+			"$unset", bson.D{{
+				"prev5blobhash", nil,
+			}, {
+				"prev5blobhash256", nil,
+			}, {
+				"prev5blobsize", nil,
+			}},
+		}})
+		c.Assert(err, gc.IsNil)
+	}
+	c.Assert(iter.Err(), gc.IsNil)
+
+	s.patchMigrations(c, getMigrations(migrationAddPreV5CompatBlob))
+
+	err = s.newServer(c)
+	c.Assert(err, gc.IsNil)
+
+	for _, urlStr := range []string{
+		"~charmers/precise/wordpress-0",
+		"~charmers/multi-series-1",
+		"~charmers/trusty/multi-in-single-1",
+		"~charmers/bundle/of-fun-1",
+	} {
+		url := MustParseResolvedURL(urlStr)
+		blob, err := store.OpenBlobPreV5(url)
+		c.Assert(err, gc.IsNil)
+		data, err := ioutil.ReadAll(blob)
+		c.Assert(err, gc.IsNil)
+		c.Assert(blob.Hash, gc.Equals, fmt.Sprintf("%x", sha512.Sum384(data)))
+		c.Assert(blob.Size, gc.Equals, int64(len(data)))
+		if url.URL.Series == "bundle" {
+			continue
+		}
+		ch, err := charm.ReadCharmArchiveBytes(data)
+		c.Assert(err, gc.IsNil)
+		c.Assert(ch.Meta().Series, gc.HasLen, 0)
 	}
 }
 

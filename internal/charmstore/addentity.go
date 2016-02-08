@@ -32,34 +32,34 @@ import (
 // addParams holds parameters held in common between the
 // Store.addCharm and Store.addBundle methods.
 type addParams struct {
-	// URL holds the id to be associated with the stored entity.
+	// url holds the id to be associated with the stored entity.
 	// If URL.PromulgatedRevision is not -1, the entity will
 	// be promulgated.
-	URL *router.ResolvedURL
+	url *router.ResolvedURL
 
-	// BlobName holds the name of the entity's archive blob.
-	BlobName string
+	// blobName holds the name of the entity's archive blob.
+	blobName string
 
-	// BlobHash holds the hash of the entity's archive blob.
-	BlobHash string
+	// blobHash holds the hash of the entity's archive blob.
+	blobHash string
 
-	// PreV5BlobHash holds the hash of the entity's archive blob for
+	// preV5BlobHash holds the hash of the entity's archive blob for
 	// pre-v5 compatibility purposes.
-	PreV5BlobHash string
+	preV5BlobHash string
 
-	// PreV5BlobHash256 holds the SHA256 hash of the entity's archive blob for
+	// preV5BlobHash256 holds the SHA256 hash of the entity's archive blob for
 	// pre-v5 compatibility purposes.
-	PreV5BlobHash256 string
+	preV5BlobHash256 string
 
-	// PreV5BlobSize holds the size of the entity's archive blob for
+	// preV5BlobSize holds the size of the entity's archive blob for
 	// pre-v5 compatibility purposes.
-	PreV5BlobSize int64
+	preV5BlobSize int64
 
-	// BlobHash256 holds the sha256 hash of the entity's archive blob.
-	BlobHash256 string
+	// blobHash256 holds the sha256 hash of the entity's archive blob.
+	blobHash256 string
 
-	// BlobHash holds the size of the entity's archive blob.
-	BlobSize int64
+	// bobSize holds the size of the entity's archive blob.
+	blobSize int64
 }
 
 // AddCharmWithArchive adds the given charm, which must
@@ -166,14 +166,14 @@ func (s *Store) putArchive(blob io.Reader, blobSize int64, hash string) (blobNam
 // of the given reader, associating it with the given id.
 func (s *Store) addEntityFromReader(id *router.ResolvedURL, r io.ReadSeeker, blobName, hash, hash256 string, blobSize int64) error {
 	p := addParams{
-		URL:              id,
-		BlobName:         blobName,
-		BlobHash:         hash,
-		BlobHash256:      hash256,
-		BlobSize:         blobSize,
-		PreV5BlobHash:    hash,
-		PreV5BlobHash256: hash256,
-		PreV5BlobSize:    blobSize,
+		url:              id,
+		blobName:         blobName,
+		blobHash:         hash,
+		blobHash256:      hash256,
+		blobSize:         blobSize,
+		preV5BlobHash:    hash,
+		preV5BlobHash256: hash256,
+		preV5BlobSize:    blobSize,
 	}
 	if id.URL.Series == "bundle" {
 		b, err := s.newBundle(id, r, blobSize)
@@ -194,14 +194,18 @@ func (s *Store) addEntityFromReader(id *router.ResolvedURL, r io.ReadSeeker, blo
 			return errgo.Notef(err, "cannot seek to start of archive")
 		}
 		logger.Infof("adding pre-v5 compat blob for %#v", id)
-		if err := s.addPreV5CompatibilityHackBlob(r, &p); err != nil {
+		info, err := addPreV5CompatibilityHackBlob(s.BlobStore, r, p.blobName, p.blobSize)
+		if err != nil {
 			return errgo.Notef(err, "cannot add pre-v5 compatibility blob")
 		}
+		p.preV5BlobHash = info.hash
+		p.preV5BlobHash256 = info.hash256
+		p.preV5BlobSize = info.size
 	}
 	err = s.addCharm(ch, p)
 	if err != nil && len(ch.Meta().Series) > 0 {
 		// We added a compatibility blob so we need to remove it.
-		compatBlobName := preV5CompatibilityBlobName(p.BlobName)
+		compatBlobName := preV5CompatibilityBlobName(p.blobName)
 		if err1 := s.BlobStore.Remove(compatBlobName); err1 != nil {
 			logger.Errorf("cannot remove blob %s after error: %v", compatBlobName, err1)
 		}
@@ -210,6 +214,12 @@ func (s *Store) addEntityFromReader(id *router.ResolvedURL, r io.ReadSeeker, blo
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload), errgo.Is(params.ErrEntityIdNotAllowed))
 	}
 	return nil
+}
+
+type preV5CompatibilityHackBlobInfo struct {
+	hash    string
+	hash256 string
+	size    int64
 }
 
 // addPreV5CompatibilityHackBlob adds a second blob to the blob store that
@@ -222,11 +232,11 @@ func (s *Store) addEntityFromReader(id *router.ResolvedURL, r io.ReadSeeker, blo
 // of the series field that holds a single string rather than a slice of string
 // so will fail when reading the new slice-of-string form, and we
 // don't want to change the field name from "series".
-func (s *Store) addPreV5CompatibilityHackBlob(r io.ReadSeeker, p *addParams) error {
+func addPreV5CompatibilityHackBlob(blobStore *blobstore.Store, r io.ReadSeeker, blobName string, blobSize int64) (*preV5CompatibilityHackBlobInfo, error) {
 	readerAt := ReaderAtSeeker(r)
-	z, err := jujuzip.NewReader(readerAt, p.BlobSize)
+	z, err := jujuzip.NewReader(readerAt, blobSize)
 	if err != nil {
-		return errgo.Notef(err, "cannot open charm archive")
+		return nil, errgo.Notef(err, "cannot open charm archive")
 	}
 	var metadataf *jujuzip.File
 	for _, f := range z.File {
@@ -236,52 +246,53 @@ func (s *Store) addPreV5CompatibilityHackBlob(r io.ReadSeeker, p *addParams) err
 		}
 	}
 	if metadataf == nil {
-		return errgo.New("no metadata.yaml file found")
+		return nil, errgo.New("no metadata.yaml file found")
 	}
 	fr, err := metadataf.Open()
 	if err != nil {
-		return errgo.Notef(err, "cannot open metadata.yaml from archive")
+		return nil, errgo.Notef(err, "cannot open metadata.yaml from archive")
 	}
 	defer fr.Close()
 	data, err := removeSeriesField(fr)
 	if err != nil {
-		return errgo.Notef(err, "cannot remove series field from metadata")
+		return nil, errgo.Notef(err, "cannot remove series field from metadata")
 	}
 	var appendedBlob bytes.Buffer
 	zw := z.Append(&appendedBlob)
 	updatedf := metadataf.FileHeader // Work around invalid duplicate FileHeader issue.
 	zwf, err := zw.CreateHeader(&updatedf)
 	if err != nil {
-		return errgo.Notef(err, "cannot create appended metadata entry")
+		return nil, errgo.Notef(err, "cannot create appended metadata entry")
 	}
 	if _, err := zwf.Write(data); err != nil {
-		return errgo.Notef(err, "cannot write appended metadata data")
+		return nil, errgo.Notef(err, "cannot write appended metadata data")
 	}
 	if err := zw.Close(); err != nil {
-		return errgo.Notef(err, "cannot close zip file")
+		return nil, errgo.Notef(err, "cannot close zip file")
 	}
 	data = appendedBlob.Bytes()
 	sha384sum := sha512.Sum384(data)
 
-	err = s.BlobStore.PutUnchallenged(&appendedBlob, preV5CompatibilityBlobName(p.BlobName), int64(len(data)), fmt.Sprintf("%x", sha384sum[:]))
+	err = blobStore.PutUnchallenged(&appendedBlob, preV5CompatibilityBlobName(blobName), int64(len(data)), fmt.Sprintf("%x", sha384sum[:]))
 	if err != nil {
-		return errgo.Notef(err, "cannot put archive blob")
+		return nil, errgo.Notef(err, "cannot put archive blob")
 	}
 
 	sha384w := sha512.New384()
 	sha256w := sha256.New()
 	hashw := io.MultiWriter(sha384w, sha256w)
 	if _, err := r.Seek(0, 0); err != nil {
-		return errgo.Notef(err, "cannnot seek to start of blob")
+		return nil, errgo.Notef(err, "cannnot seek to start of blob")
 	}
 	if _, err := io.Copy(hashw, r); err != nil {
-		return errgo.Notef(err, "cannot recalculate blob checksum")
+		return nil, errgo.Notef(err, "cannot recalculate blob checksum")
 	}
 	hashw.Write(data)
-	p.PreV5BlobSize = p.BlobSize + int64(len(data))
-	p.PreV5BlobHash256 = fmt.Sprintf("%x", sha256w.Sum(nil))
-	p.PreV5BlobHash = fmt.Sprintf("%x", sha384w.Sum(nil))
-	return nil
+	return &preV5CompatibilityHackBlobInfo{
+		size:    blobSize + int64(len(data)),
+		hash256: fmt.Sprintf("%x", sha256w.Sum(nil)),
+		hash:    fmt.Sprintf("%x", sha384w.Sum(nil)),
+	}, nil
 }
 
 // preV5CompatibilityBlobName returns the name of the zip file suffix used
@@ -400,18 +411,18 @@ func (s *Store) addCharm(c charm.Charm, p addParams) (err error) {
 	// always be canonical, but check just in case anyway, as this is
 	// final gateway before a potentially invalid url might be stored
 	// in the database.
-	id := p.URL.URL
-	logger.Infof("add charm url %s; prev %d; dev %v", &id, p.URL.PromulgatedRevision, p.URL.Development)
+	id := p.url.URL
+	logger.Infof("add charm url %s; prev %d; dev %v", &id, p.url.PromulgatedRevision, p.url.Development)
 	entity := &mongodoc.Entity{
 		URL:                     &id,
-		PromulgatedURL:          p.URL.DocPromulgatedURL(),
-		BlobHash:                p.BlobHash,
-		BlobHash256:             p.BlobHash256,
-		BlobName:                p.BlobName,
-		PreV5BlobSize:           p.PreV5BlobSize,
-		PreV5BlobHash:           p.PreV5BlobHash,
-		PreV5BlobHash256:        p.PreV5BlobHash256,
-		Size:                    p.BlobSize,
+		PromulgatedURL:          p.url.DocPromulgatedURL(),
+		BlobHash:                p.blobHash,
+		BlobHash256:             p.blobHash256,
+		BlobName:                p.blobName,
+		PreV5BlobSize:           p.preV5BlobSize,
+		PreV5BlobHash:           p.preV5BlobHash,
+		PreV5BlobHash256:        p.preV5BlobHash256,
+		Size:                    p.blobSize,
 		UploadTime:              time.Now(),
 		CharmMeta:               c.Meta(),
 		CharmConfig:             c.Config(),
@@ -419,7 +430,7 @@ func (s *Store) addCharm(c charm.Charm, p addParams) (err error) {
 		CharmProvidedInterfaces: interfacesForRelations(c.Meta().Provides),
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
 		SupportedSeries:         c.Meta().Series,
-		Development:             p.URL.Development,
+		Development:             p.url.Development,
 	}
 	denormalizeEntity(entity)
 
@@ -457,22 +468,22 @@ func (s *Store) addBundle(b charm.Bundle, p addParams) error {
 		return errgo.Mask(err)
 	}
 	entity := &mongodoc.Entity{
-		URL:                &p.URL.URL,
-		BlobHash:           p.BlobHash,
-		BlobHash256:        p.BlobHash256,
-		BlobName:           p.BlobName,
-		PreV5BlobSize:      p.PreV5BlobSize,
-		PreV5BlobHash:      p.PreV5BlobHash,
-		PreV5BlobHash256:   p.PreV5BlobHash256,
-		Size:               p.BlobSize,
+		URL:                &p.url.URL,
+		BlobHash:           p.blobHash,
+		BlobHash256:        p.blobHash256,
+		BlobName:           p.blobName,
+		PreV5BlobSize:      p.preV5BlobSize,
+		PreV5BlobHash:      p.preV5BlobHash,
+		PreV5BlobHash256:   p.preV5BlobHash256,
+		Size:               p.blobSize,
 		UploadTime:         time.Now(),
 		BundleData:         bundleData,
 		BundleUnitCount:    newInt(bundleUnitCount(bundleData)),
 		BundleMachineCount: newInt(bundleMachineCount(bundleData)),
 		BundleReadMe:       b.ReadMe(),
 		BundleCharms:       urls,
-		PromulgatedURL:     p.URL.DocPromulgatedURL(),
-		Development:        p.URL.Development,
+		PromulgatedURL:     p.url.DocPromulgatedURL(),
+		Development:        p.url.Development,
 	}
 	denormalizeEntity(entity)
 
