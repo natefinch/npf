@@ -148,7 +148,12 @@ func (h *ReqHandler) AuthorizeEntityAndTerms(req *http.Request, entityIds []*rou
 		for term, _ := range requiredTerms {
 			terms = append(terms, term)
 		}
+		resolvedURLstrings := make([]string, len(entityIds))
+		for i, id := range entityIds {
+			resolvedURLstrings[i] = id.String()
+		}
 		caveats = append(caveats,
+			checkers.Caveat{Condition: "is-entity " + strings.Join(resolvedURLstrings, " ")},
 			checkers.Caveat{h.Handler.config.TermsLocation, "has-agreed " + strings.Join(terms, " ")},
 		)
 	}
