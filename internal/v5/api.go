@@ -171,6 +171,7 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"debug/status":         router.HandleJSON(h.serveDebugStatus),
 			"list":                 router.HandleJSON(h.serveList),
 			"log":                  router.HandleErrors(h.serveLog),
+			"logout":               http.HandlerFunc(logout),
 			"search":               router.HandleJSON(h.serveSearch),
 			"search/interesting":   http.HandlerFunc(h.serveSearchInteresting),
 			"set-auth-cookie":      router.HandleErrors(h.serveSetAuthCookie),
@@ -1450,5 +1451,19 @@ func (h *ReqHandler) addAudit(e audit.Entry) {
 	h.Store.AddAudit(e)
 	if testAddAuditCallback != nil {
 		testAddAuditCallback(e)
+	}
+}
+
+// logout handles the GET /v5/logout endpoint that is used to log out of
+// charmstore.
+func logout(w http.ResponseWriter, r *http.Request) {
+	for _, c := range r.Cookies() {
+		if !strings.HasPrefix(c.Name, "macaroon-") {
+			continue
+		}
+		c.Value = ""
+		c.MaxAge = -1
+		c.Path = "/"
+		http.SetCookie(w, c)
 	}
 }
