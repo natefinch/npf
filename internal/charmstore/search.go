@@ -83,7 +83,7 @@ func (s *Store) UpdateSearch(r *router.ResolvedURL) error {
 	if s.ES == nil || s.ES.Database == nil {
 		return nil
 	}
-	if r.Development || r.URL.Series != "" && !series.Series[r.URL.Series].SearchIndex {
+	if r.URL.Series != "" && !series.Series[r.URL.Series].SearchIndex {
 		return nil
 	}
 

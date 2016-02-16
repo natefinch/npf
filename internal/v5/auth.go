@@ -200,15 +200,12 @@ func (h *ReqHandler) entityAuthInfo(entityIds []*router.ResolvedURL) (public boo
 		if err != nil {
 			return false, nil, nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
-		baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, charmstore.FieldSelector("acls", "developmentacls"))
+		baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, charmstore.FieldSelector("acls"))
 		if err != nil {
 			return false, nil, nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
 
 		acls[i] = baseEntity.ACLs.Read
-		if entityId.Development {
-			acls[i] = baseEntity.DevelopmentACLs.Read
-		}
 
 		if entity.CharmMeta == nil || len(entity.CharmMeta.Terms) == 0 {
 			// No need to authenticate if the ACL is open to everyone.
@@ -299,7 +296,7 @@ func areAllowedEntities(entityIds []*router.ResolvedURL, allowedEntities string)
 // AuthorizeEntity checks that the given HTTP request
 // can access the entity with the given id.
 func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) error {
-	baseEntity, err := h.Cache.BaseEntity(id.UserOwnedURL(), charmstore.FieldSelector("acls", "developmentacls"))
+	baseEntity, err := h.Cache.BaseEntity(id.UserOwnedURL(), charmstore.FieldSelector("acls"))
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
 			return errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
@@ -307,9 +304,6 @@ func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) 
 		return errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}
 	acls := baseEntity.ACLs
-	if id.Development {
-		acls = baseEntity.DevelopmentACLs
-	}
 	return h.authorizeWithPerms(req, acls.Read, acls.Write, id)
 }
 

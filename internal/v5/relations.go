@@ -34,7 +34,6 @@ func (h *ReqHandler) metaCharmRelated(entity *mongodoc.Entity, id *router.Resolv
 	fields := bson.D{
 		{"_id", 1},
 		{"supportedseries", 1},
-		{"development", 1},
 		{"charmrequiredinterfaces", 1},
 		{"charmprovidedinterfaces", 1},
 		{"promulgated-url", 1},

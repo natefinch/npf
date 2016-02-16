@@ -319,11 +319,8 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
 
-		// Change the ACLs for the testing charm
-		// (both published and development versions).
+		// Change the ACLs for the testing charm.
 		err = s.store.SetPerms(&rurl.URL, "read", test.readPerm...)
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", test.readPerm...)
 		c.Assert(err, gc.IsNil)
 
 		// Define an helper function used to send requests and check responses.
@@ -346,25 +343,12 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		makeRequest("~charmers/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
 		makeRequest("~charmers/wordpress/expand-id", test.expectStatus, test.expectBody)
 
-		// Perform meta and id requests to the development channel.
-		makeRequest("~charmers/development/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
-		makeRequest("~charmers/development/wordpress/expand-id", test.expectStatus, test.expectBody)
-
 		// Remove permissions for the published charm.
 		err = s.store.SetPerms(&rurl.URL, "read")
 		c.Assert(err, gc.IsNil)
 
-		// Check that now accessing the published charm is not allowed,
-		// but accessing the development charm still works as expected.
+		// Check that now accessing the published charm is not allowed.
 		makeRequest("~charmers/wordpress/meta/archive-size", http.StatusUnauthorized, nil)
-		makeRequest("~charmers/development/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
-
-		// Remove permissions for the development charm as well.
-		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read")
-		c.Assert(err, gc.IsNil)
-
-		// Check that now accessing the development charm is also denied.
-		makeRequest("~charmers/development/wordpress/meta/archive-size", http.StatusUnauthorized, nil)
 
 		// Remove all entities from the store.
 		_, err = s.store.DB.Entities().RemoveAll(nil)
@@ -468,10 +452,7 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 
 		// Change the ACLs for the testing charm.
-		// (both published and development versions).
 		err = s.store.SetPerms(&rurl.URL, "write", test.writePerm...)
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "write", test.writePerm...)
 		c.Assert(err, gc.IsNil)
 
 		makeRequest := func(path string, expectStatus int, expectBody interface{}) {
@@ -493,25 +474,15 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 			}
 		}
 
-		// Perform a meta PUT request to the published and development URLs.
+		// Perform a meta PUT request to the URL.
 		makeRequest("~charmers/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
-		makeRequest("~charmers/development/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
 
 		// Remove permissions to write on the published entity.
 		err = s.store.SetPerms(&rurl.URL, "write")
 		c.Assert(err, gc.IsNil)
 
-		// Check that now writing to the published charm is not allowed,
-		// but accessing the development charm still works as expected.
+		// Check that now writing to the published charm is not allowed.
 		makeRequest("~charmers/wordpress/meta/extra-info/key", http.StatusUnauthorized, nil)
-		makeRequest("~charmers/development/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
-
-		// Remove write permissions for the development charm as well.
-		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "write")
-		c.Assert(err, gc.IsNil)
-
-		// Check that now modifying the development charm is also denied.
-		makeRequest("~charmers/development/wordpress/meta/extra-info/key", http.StatusUnauthorized, nil)
 
 		// Remove all entities from the store.
 		_, err = s.store.DB.Entities().RemoveAll(nil)
@@ -533,10 +504,6 @@ var uploadEntityAuthorizationTests = []struct {
 	// promulgated holds whether the corresponding promulgated entity must be
 	// already present in the charm store before performing the upload.
 	promulgated bool
-	// developmentWriteAcls can be used to set customized write ACLs for the
-	// development entity before performing the upload. If empty, default ACLs
-	// are used.
-	developmentWriteAcls []string
 	// writeAcls can be used to set customized write ACLs for the published
 	// entity before performing the upload. If empty, default ACLs are used.
 	writeAcls []string
@@ -551,19 +518,10 @@ var uploadEntityAuthorizationTests = []struct {
 	username: "who",
 	id:       "~who/utopic/django",
 }, {
-	about:    "user owned development entity",
-	username: "who",
-	id:       "~who/development/utopic/django",
-}, {
 	about:    "group owned entity",
 	username: "dalek",
 	groups:   []string{"group1", "group2"},
 	id:       "~group1/utopic/django",
-}, {
-	about:    "group owned development entity",
-	username: "dalek",
-	groups:   []string{"group1", "group2"},
-	id:       "~group1/development/utopic/django",
 }, {
 	about:    "specific group",
 	username: "dalek",
@@ -576,27 +534,10 @@ var uploadEntityAuthorizationTests = []struct {
 	id:          "~charmers/utopic/django",
 	promulgated: true,
 }, {
-	about:       "promulgated entity in development",
-	username:    "sisko",
-	groups:      []string{"group1", "charmers"},
-	id:          "~charmers/development/utopic/django",
-	promulgated: true,
-}, {
 	about:        "unauthorized: promulgated entity",
 	username:     "sisko",
 	groups:       []string{"group1", "group2"},
 	id:           "~charmers/utopic/django",
-	promulgated:  true,
-	expectStatus: http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: `unauthorized: access denied for user "sisko"`,
-	},
-}, {
-	about:        "unauthorized: promulgated entity in development",
-	username:     "sisko",
-	groups:       []string{"group1", "group2"},
-	id:           "~charmers/development/utopic/django",
 	promulgated:  true,
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -612,25 +553,8 @@ var uploadEntityAuthorizationTests = []struct {
 		Message: "unauthorized: no username declared",
 	},
 }, {
-	about:        "unauthorized: anonymous user, development entity",
-	id:           "~who/development/utopic/django",
-	expectStatus: http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: "unauthorized: no username declared",
-	},
-}, {
 	about:        "unauthorized: anonymous user and promulgated entity",
 	id:           "~charmers/utopic/django",
-	promulgated:  true,
-	expectStatus: http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: "unauthorized: no username declared",
-	},
-}, {
-	about:        "unauthorized: anonymous user and promulgated entity in development",
-	id:           "~charmers/development/utopic/django",
 	promulgated:  true,
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -647,29 +571,10 @@ var uploadEntityAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
 }, {
-	about:        "unauthorized: user does not match for a development entity",
-	username:     "kirk",
-	id:           "~picard/development/utopic/django",
-	expectStatus: http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: `unauthorized: access denied for user "kirk"`,
-	},
-}, {
 	about:        "unauthorized: group does not match",
 	username:     "kirk",
 	groups:       []string{"group1", "group2", "group3"},
 	id:           "~group0/utopic/django",
-	expectStatus: http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: `unauthorized: access denied for user "kirk"`,
-	},
-}, {
-	about:        "unauthorized: group does not match for a development entity",
-	username:     "kirk",
-	groups:       []string{"group1", "group2", "group3"},
-	id:           "~group0/development/utopic/django",
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
@@ -685,27 +590,6 @@ var uploadEntityAuthorizationTests = []struct {
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "janeway"`,
-	},
-}, {
-	about:        "unauthorized: specific group and promulgated entity in development",
-	username:     "janeway",
-	groups:       []string{"group1"},
-	id:           "~charmers/development/utopic/django",
-	promulgated:  true,
-	expectStatus: http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: `unauthorized: access denied for user "janeway"`,
-	},
-}, {
-	about:                "unauthorized: published entity no development permissions",
-	username:             "picard",
-	id:                   "~picard/wily/django",
-	developmentWriteAcls: []string{"group2"},
-	expectStatus:         http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: `unauthorized: access denied for user "picard"`,
 	},
 }, {
 	about:        "unauthorized: published entity no published permissions",
@@ -735,7 +619,7 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 		}
 
 		// Add a pre-existing entity if required.
-		if test.promulgated || len(test.developmentWriteAcls) != 0 || len(test.writeAcls) != 0 {
+		if test.promulgated || len(test.writeAcls) != 0 {
 			id := charm.MustParseURL(test.id).WithRevision(0)
 			revision := -1
 			if test.promulgated {
@@ -743,9 +627,6 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 			}
 			rurl := newResolvedURL(id.String(), revision)
 			s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
-			if len(test.developmentWriteAcls) != 0 {
-				s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "write", test.developmentWriteAcls...)
-			}
 			if len(test.writeAcls) != 0 {
 				s.store.SetPerms(&rurl.URL, "write", test.writeAcls...)
 			}

@@ -73,12 +73,6 @@ func (s *AddEntitySuite) TestAddUserOwnedCharmArchive(c *gc.C) {
 	s.checkAddCharm(c, charmArchive, false, router.MustNewResolvedURL("~charmers/precise/wordpress-1", -1))
 }
 
-func (s *AddEntitySuite) TestAddDevelopmentCharmArchive(c *gc.C) {
-	charmArchive := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	url := router.MustNewResolvedURL("~charmers/development/precise/wordpress-1", 1)
-	s.checkAddCharm(c, charmArchive, false, url)
-}
-
 func (s *AddEntitySuite) TestAddBundleDir(c *gc.C) {
 	bundleDir := storetesting.Charms.BundleDir("wordpress-simple")
 	s.checkAddBundle(c, bundleDir, false, router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-2", 3))
@@ -104,15 +98,6 @@ func (s *AddEntitySuite) TestAddUserOwnedBundleArchive(c *gc.C) {
 	)
 	c.Assert(err, gc.IsNil)
 	s.checkAddBundle(c, bundleArchive, false, router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-1", -1))
-}
-
-func (s *AddEntitySuite) TestAddDevelopmentBundleArchive(c *gc.C) {
-	bundleArchive, err := charm.ReadBundleArchive(
-		storetesting.Charms.BundleArchivePath(c.MkDir(), "wordpress-simple"),
-	)
-	c.Assert(err, gc.IsNil)
-	url := router.MustNewResolvedURL("~charmers/development/bundle/wordpress-simple-2", 3)
-	s.checkAddBundle(c, bundleArchive, false, url)
 }
 
 func (s *AddEntitySuite) TestAddCharmWithBundleSeries(c *gc.C) {
@@ -440,7 +425,6 @@ func (s *AddEntitySuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, ur
 		CharmRequiredInterfaces: []string{"mysql", "varnish"},
 		PromulgatedURL:          url.DocPromulgatedURL(),
 		SupportedSeries:         ch.Meta().Series,
-		Development:             url.Development,
 	}))
 
 	// The charm archive has been properly added to the blob store.
@@ -524,7 +508,6 @@ func (s *AddEntitySuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bo
 		BundleMachineCount: newInt(2),
 		BundleUnitCount:    newInt(2),
 		PromulgatedURL:     url.DocPromulgatedURL(),
-		Development:        url.Development,
 	}))
 
 	// The bundle archive has been properly added to the blob store.
@@ -589,13 +572,12 @@ func assertBaseEntity(c *gc.C, store *Store, url *charm.URL, promulgated bool) {
 		Write: []string{url.User},
 	}
 	c.Assert(baseEntity, jc.DeepEquals, &mongodoc.BaseEntity{
-		URL:             url,
-		User:            url.User,
-		Name:            url.Name,
-		Public:          false,
-		ACLs:            expectACLs,
-		DevelopmentACLs: expectACLs,
-		Promulgated:     mongodoc.IntBool(promulgated),
+		URL:         url,
+		User:        url.User,
+		Name:        url.Name,
+		Public:      false,
+		ACLs:        expectACLs,
+		Promulgated: mongodoc.IntBool(promulgated),
 	})
 }
 

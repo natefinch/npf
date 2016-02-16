@@ -220,8 +220,6 @@ func (s *commonSuite) addPublicCharm(c *gc.C, charmName string, rurl *router.Res
 func (s *commonSuite) setPublic(c *gc.C, rurl *router.ResolvedURL) {
 	err := s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", params.Everyone, rurl.URL.User)
-	c.Assert(err, gc.IsNil)
 }
 
 func (s *commonSuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.ResolvedURL, addRequiredCharms bool) (*router.ResolvedURL, charm.Bundle) {
@@ -244,9 +242,6 @@ func (s *commonSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
 		c.Assert(err, gc.IsNil, gc.Commentf("id %q", id))
 		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
-		if url.Development {
-			err = s.store.SetPerms(url.UserOwnedURL(), "read", params.Everyone, url.URL.User)
-		}
 	}
 }
 

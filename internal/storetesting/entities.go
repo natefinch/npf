@@ -110,7 +110,7 @@ func (b BaseEntityBuilder) WithPromulgated(promulgated bool) BaseEntityBuilder {
 	return b
 }
 
-// WithACLs sets the non-development ACLs field on the BaseEntity.
+// WithACLs sets the ACLs field on the BaseEntity.
 func (b BaseEntityBuilder) WithACLs(acls mongodoc.ACL) BaseEntityBuilder {
 	b = b.copy()
 	b.baseEntity.ACLs = acls

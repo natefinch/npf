@@ -155,7 +155,6 @@ func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, 
 	rurl := &router.ResolvedURL{
 		URL:                 *entity.URL,
 		PromulgatedRevision: -1,
-		Development:         url.Channel == charm.DevelopmentChannel,
 	}
 	if url.User == "" {
 		rurl.PromulgatedRevision = entity.PromulgatedRevision
@@ -216,7 +215,7 @@ func (h ReqHandler) metaRevisionInfo(id *router.ResolvedURL, path string, flags 
 		q = q.Sort("-revision")
 	}
 	var docs []*mongodoc.Entity
-	if err := q.Select(bson.D{{"_id", 1}, {"promulgated-url", 1}, {"supportedseries", 1}, {"development", 1}}).All(&docs); err != nil {
+	if err := q.Select(bson.D{{"_id", 1}, {"promulgated-url", 1}, {"supportedseries", 1}}).All(&docs); err != nil {
 		return "", errgo.Notef(err, "cannot get ids")
 	}
 
@@ -280,13 +279,7 @@ func (h ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter,
 	// Note that we don't do any permission checking of the returned URLs.
 	// This is because we know that the user is allowed to read at
 	// least the resolved URL passed into serveExpandId.
-	// If this does not specify "development", then no development
-	// revisions will be chosen, so the single ACL already checked
-	// is sufficient. If it *does* specify "development", then we assume
-	// that the development ACLs are more restrictive than the
-	// non-development ACLs, and given that, we can allow all
-	// the URLs.
-	q := h.Store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}, {"development", 1}, {"supportedseries", 1}})
+	q := h.Store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}, {"supportedseries", 1}})
 	if id.PromulgatedRevision != -1 {
 		q = q.Sort("-series", "-promulgated-revision")
 	} else {

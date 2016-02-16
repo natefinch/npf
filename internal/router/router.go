@@ -138,10 +138,6 @@ type ResolvedURL struct {
 	// PromulgatedRevision holds the revision of the promulgated version of the
 	// charm or -1 if the corresponding entity is not promulgated.
 	PromulgatedRevision int
-
-	// Development holds whether the original entity URL included the
-	// "development" channel.
-	Development bool
 }
 
 // MustNewResolvedURL returns a new ResolvedURL by parsing
@@ -159,7 +155,6 @@ func MustNewResolvedURL(urlStr string, promulgatedRev int) *ResolvedURL {
 	return &ResolvedURL{
 		URL:                 *url.WithChannel(""),
 		PromulgatedRevision: promulgatedRev,
-		Development:         url.Channel == charm.DevelopmentChannel,
 	}
 }
 
@@ -167,9 +162,6 @@ func MustNewResolvedURL(urlStr string, promulgatedRev int) *ResolvedURL {
 // The returned *charm.URL may be modified freely.
 func (id *ResolvedURL) UserOwnedURL() *charm.URL {
 	u := id.URL
-	if id.Development {
-		u.Channel = charm.DevelopmentChannel
-	}
 	return &u
 }
 
@@ -222,12 +214,10 @@ func (id *ResolvedURL) GoString() string {
 		URL                 string
 		PreferredSeries     string
 		PromulgatedRevision int
-		Development         bool
 	}{
 		URL:                 id.URL.String(),
 		PreferredSeries:     id.PreferredSeries,
 		PromulgatedRevision: id.PromulgatedRevision,
-		Development:         id.Development,
 	}
 	return fmt.Sprintf("%#v", gid)
 }

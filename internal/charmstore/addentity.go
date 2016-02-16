@@ -412,7 +412,7 @@ func (s *Store) addCharm(c charm.Charm, p addParams) (err error) {
 	// final gateway before a potentially invalid url might be stored
 	// in the database.
 	id := p.url.URL
-	logger.Infof("add charm url %s; prev %d; dev %v", &id, p.url.PromulgatedRevision, p.url.Development)
+	logger.Infof("add charm url %s; prev %d", &id, p.url.PromulgatedRevision)
 	entity := &mongodoc.Entity{
 		URL:                     &id,
 		PromulgatedURL:          p.url.DocPromulgatedURL(),
@@ -430,7 +430,6 @@ func (s *Store) addCharm(c charm.Charm, p addParams) (err error) {
 		CharmProvidedInterfaces: interfacesForRelations(c.Meta().Provides),
 		CharmRequiredInterfaces: interfacesForRelations(c.Meta().Requires),
 		SupportedSeries:         c.Meta().Series,
-		Development:             p.url.Development,
 	}
 	denormalizeEntity(entity)
 
@@ -483,7 +482,6 @@ func (s *Store) addBundle(b charm.Bundle, p addParams) error {
 		BundleReadMe:       b.ReadMe(),
 		BundleCharms:       urls,
 		PromulgatedURL:     p.url.DocPromulgatedURL(),
-		Development:        p.url.Development,
 	}
 	denormalizeEntity(entity)
 
@@ -515,13 +513,12 @@ func (s *Store) addEntity(entity *mongodoc.Entity) (err error) {
 		Write: perms,
 	}
 	baseEntity := &mongodoc.BaseEntity{
-		URL:             entity.BaseURL,
-		User:            entity.User,
-		Name:            entity.Name,
-		Public:          false,
-		ACLs:            acls,
-		DevelopmentACLs: acls,
-		Promulgated:     entity.PromulgatedURL != nil,
+		URL:         entity.BaseURL,
+		User:        entity.User,
+		Name:        entity.Name,
+		Public:      false,
+		ACLs:        acls,
+		Promulgated: entity.PromulgatedURL != nil,
 	}
 	err = s.DB.BaseEntities().Insert(baseEntity)
 	if err != nil && !mgo.IsDup(err) {

@@ -51,41 +51,21 @@ var urlFindingTests = []struct {
 	expand:  "wordpress",
 	expect:  []string{"23 cs:~charmers/precise/wordpress-23"},
 }, {
-	inStore: []string{"23 cs:~charmers/development/precise/wordpress-23"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/precise/wordpress-25"},
 	expand:  "wordpress",
-	expect:  []string{},
+	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/precise/wordpress-25"},
 }, {
-	inStore: []string{"23 cs:~charmers/development/precise/wordpress-23"},
-	expand:  "development/wordpress",
-	expect:  []string{"23 cs:~charmers/development/precise/wordpress-23"},
-}, {
-	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
-	expand:  "wordpress",
-	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24"},
-}, {
-	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/precise/wordpress-25"},
 	expand:  "~charmers/precise/wordpress-24",
 	expect:  []string{"24 cs:~charmers/precise/wordpress-24"},
 }, {
-	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
-	expand:  "~charmers/development/precise/wordpress-25",
-	expect:  []string{"25 cs:~charmers/development/precise/wordpress-25"},
-}, {
-	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/precise/wordpress-25"},
 	expand:  "~charmers/precise/wordpress-25",
-	expect:  []string{},
+	expect:  []string{"25 cs:~charmers/precise/wordpress-25"},
 }, {
-	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
-	expand:  "development/wordpress",
-	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/precise/wordpress-24", "25 cs:~charmers/precise/wordpress-25"},
-}, {
-	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25"},
+	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "25 cs:~charmers/precise/wordpress-25"},
 	expand:  "precise/wordpress",
-	expect:  []string{"23 cs:~charmers/precise/wordpress-23"},
-}, {
-	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "25 cs:~charmers/development/precise/wordpress-25", "26 cs:~charmers/development/wily/wordpress-26"},
-	expand:  "development/precise/wordpress",
-	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "25 cs:~charmers/development/precise/wordpress-25"},
+	expect:  []string{"23 cs:~charmers/precise/wordpress-23", "25 cs:~charmers/precise/wordpress-25"},
 }, {
 	inStore: []string{"23 cs:~charmers/precise/wordpress-23", "24 cs:~charmers/trusty/wordpress-24", "434 cs:~charmers/foo/varnish-434"},
 	expand:  "wordpress",
@@ -141,10 +121,6 @@ var urlFindingTests = []struct {
 }, {
 	inStore: []string{},
 	expand:  "precise/wordpress-23",
-	expect:  []string{},
-}, {
-	inStore: []string{},
-	expand:  "development/precise/wordpress-23",
 	expect:  []string{},
 }}
 
@@ -346,12 +322,6 @@ func (s *StoreSuite) TestFindEntity(c *gc.C) {
 	c.Assert(entity0, gc.NotNil)
 	c.Assert(entity0.Size, gc.Not(gc.Equals), 0)
 
-	// Check that it doesn't matter if it's a development URL.
-	rurl.Development = true
-	entity1, err := store.FindEntity(rurl, nil)
-	c.Assert(err, gc.IsNil)
-	c.Assert(entity1, jc.DeepEquals, entity0)
-
 	// Check that the field selector works.
 	entity2, err := store.FindEntity(rurl, FieldSelector("blobhash"))
 	c.Assert(err, gc.IsNil)
@@ -382,10 +352,6 @@ var findBaseEntityTests = []struct {
 		Public:      false,
 		Promulgated: true,
 		ACLs: mongodoc.ACL{
-			Read:  []string{"charmers"},
-			Write: []string{"charmers"},
-		},
-		DevelopmentACLs: mongodoc.ACL{
 			Read:  []string{"charmers"},
 			Write: []string{"charmers"},
 		},
@@ -941,7 +907,6 @@ func MustParseResolvedURL(urlStr string) *router.ResolvedURL {
 	return &router.ResolvedURL{
 		URL:                 *url.WithChannel(""),
 		PromulgatedRevision: promRev,
-		Development:         url.Channel == charm.DevelopmentChannel,
 	}
 }
 
@@ -1449,7 +1414,6 @@ func (s *StoreSuite) TestFindBestEntity(c *gc.C) {
 	}, {
 		URL: charm.MustParseURL("~pluto/wily/multi-series-1"),
 	}}
-	// TODO add development entities above.
 	for _, e := range entities {
 		err := store.DB.Entities().Insert(denormalizedEntity(e))
 		c.Assert(err, gc.IsNil)
@@ -1506,13 +1470,6 @@ func (s *StoreSuite) TestMatchingInterfacesQuery(c *gc.C) {
 	}, {
 		URL:                     charm.MustParseURL("~charmers/trusty/wordpress-2"),
 		PromulgatedURL:          charm.MustParseURL("trusty/wordpress-2"),
-		CharmProvidedInterfaces: []string{"a", "b"},
-		CharmRequiredInterfaces: []string{"b", "c", "x"},
-	}, {
-		// Note: development charm should never be found.
-		URL:                     charm.MustParseURL("~charmers/trusty/wordpress-3"),
-		PromulgatedURL:          charm.MustParseURL("trusty/wordpress-3"),
-		Development:             true,
 		CharmProvidedInterfaces: []string{"a", "b"},
 		CharmRequiredInterfaces: []string{"b", "c", "x"},
 	}, {
@@ -2122,69 +2079,6 @@ func (s *StoreSuite) TestSetPromulgatedUpdateSearch(c *gc.C) {
 	c.Assert(doc.PromulgatedRevision, gc.Equals, -1)
 }
 
-var setDevelopmentTests = []struct {
-	about               string
-	existingDevelopment bool
-	development         bool
-}{{
-	about:               "keep entity under development",
-	existingDevelopment: true,
-	development:         true,
-}, {
-	about:               "publish an entity",
-	existingDevelopment: true,
-}, {
-	about:       "unpublish an entity",
-	development: true,
-}, {
-	about: "keep entity published",
-}}
-
-func (s *StoreSuite) TestSetDevelopment(c *gc.C) {
-	store := s.newStore(c, true)
-	defer store.Close()
-
-	for i, test := range setDevelopmentTests {
-		c.Logf("test %d: %s", i, test.about)
-
-		// Insert the existing entity.
-		url := charm.MustParseURL("~who/wily/mysql")
-		url.Revision = i
-		if test.existingDevelopment {
-			url.Channel = charm.DevelopmentChannel
-		}
-		rurl := router.MustNewResolvedURL(url.Path(), -1)
-		err := store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
-		c.Assert(err, gc.IsNil)
-
-		// Set whether the entity is under development or published.
-		err = store.SetDevelopment(rurl, test.development)
-		c.Assert(err, gc.IsNil)
-
-		// Ensure the entity development flag has been correctly set.
-		rurl.Development = test.development
-		e, err := store.FindEntity(rurl, FieldSelector("development"))
-		c.Assert(err, gc.IsNil)
-		c.Assert(e.Development, gc.Equals, test.development)
-
-		// Check that the entity can be found in the database if published.
-		if !test.development {
-			found, err := store.ES.HasDocument(s.TestIndex, typeName, store.ES.getID(&rurl.URL))
-			c.Assert(err, gc.IsNil)
-			c.Assert(found, jc.IsTrue)
-		}
-	}
-}
-
-func (s *StoreSuite) TestSetDevelopmentErrorNotFound(c *gc.C) {
-	store := s.newStore(c, false)
-	defer store.Close()
-
-	err := store.SetDevelopment(router.MustNewResolvedURL("~who/wily/no-such-42", -1), true)
-	c.Assert(err, gc.ErrorMatches, `cannot update "cs:~who/wily/no-such-42": not found`)
-	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
-}
-
 var entityResolvedURLTests = []struct {
 	about  string
 	entity *mongodoc.Entity
@@ -2207,29 +2101,6 @@ var entityResolvedURLTests = []struct {
 	rurl: &router.ResolvedURL{
 		URL:                 *charm.MustParseURL("~charmers/precise/wordpress-23"),
 		PromulgatedRevision: 4,
-	},
-}, {
-	about: "user owned, under development",
-	entity: &mongodoc.Entity{
-		URL:         charm.MustParseURL("~charmers/trusty/wordpress-42"),
-		Development: true,
-	},
-	rurl: &router.ResolvedURL{
-		URL:                 *charm.MustParseURL("~charmers/trusty/wordpress-42"),
-		PromulgatedRevision: -1,
-		Development:         true,
-	},
-}, {
-	about: "promulgated, under development",
-	entity: &mongodoc.Entity{
-		URL:            charm.MustParseURL("~charmers/wily/wordpress-42"),
-		PromulgatedURL: charm.MustParseURL("wily/wordpress-0"),
-		Development:    true,
-	},
-	rurl: &router.ResolvedURL{
-		URL:                 *charm.MustParseURL("~charmers/wily/wordpress-42"),
-		PromulgatedRevision: 0,
-		Development:         true,
 	},
 }}
 
