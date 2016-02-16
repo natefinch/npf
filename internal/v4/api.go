@@ -116,7 +116,7 @@ func newReqHandler() ReqHandler {
 	handlers.Meta["hash256"] = h.EntityHandler(h.metaHash256, "prev5blobhash256")
 	handlers.Id["expand-id"] = resolveId(authId(h.serveExpandId))
 	handlers.Id["archive"] = h.serveArchive(handlers.Id["archive"])
-	handlers.Id["archive/"] = resolveId(h.serveArchiveFile)
+	handlers.Id["archive/"] = resolveId(authId(h.serveArchiveFile))
 	h.Router = router.New(handlers, h)
 	return h
 }
