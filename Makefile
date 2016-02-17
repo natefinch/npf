@@ -38,7 +38,9 @@ endif
 default: build
 
 $(GOPATH)/bin/godeps:
-	go get -v launchpad.net/godeps
+	# godeps needs to be fetched with the insecure flag as launchpad
+	# uses http for part of the checkout process.
+	go get -v -insecure launchpad.net/godeps
 
 # Start of GOPATH-dependent targets. Some targets only make sense -
 # and will only work - when this tree is found on the GOPATH.

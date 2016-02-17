@@ -1190,6 +1190,12 @@ var archiveFileErrorsTests = []struct {
 	expectStatus:  http.StatusNotFound,
 	expectMessage: `file "no-such" not found in the archive`,
 	expectCode:    params.ErrNotFound,
+}, {
+	about:         "no permissions",
+	path:          "~charmers/utopic/mysql-0/archive/metadata.yaml",
+	expectStatus:  http.StatusUnauthorized,
+	expectMessage: `authentication failed: missing HTTP auth header`,
+	expectCode:    params.ErrUnauthorized,
 }}
 
 func (s *ArchiveSuite) TestArchiveFileErrors(c *gc.C) {
@@ -1198,6 +1204,10 @@ func (s *ArchiveSuite) TestArchiveFileErrors(c *gc.C) {
 	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+	c.Assert(err, gc.IsNil)
+	mysql := storetesting.Charms.CharmArchive(c.MkDir(), "mysql")
+	url = newResolvedURL("cs:~charmers/utopic/mysql-0", 0)
+	err = s.store.AddCharmWithArchive(url, mysql)
 	c.Assert(err, gc.IsNil)
 	for i, test := range archiveFileErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
