@@ -459,19 +459,6 @@ var routerGetTests = []struct {
 		CharmURL: "cs:precise/wordpress-42",
 	},
 }, {
-	about: "meta handler with development channel",
-	handlers: Handlers{
-		Meta: map[string]BulkIncludeHandler{
-			"foo": testMetaHandler(0),
-		},
-	},
-	urlStr: "/development/precise/wordpress/meta/foo",
-	expectWillIncludeMetadata: []string{"foo"},
-	expectStatus:              http.StatusOK,
-	expectBody: &metaHandlerTestResp{
-		CharmURL: "cs:development/precise/wordpress-0",
-	},
-}, {
 	about: "meta handler with additional elements",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
@@ -748,21 +735,6 @@ var routerGetTests = []struct {
 		},
 	},
 }, {
-	about:  "bulk meta handler, single development id",
-	urlStr: "/meta/foo?id=~user/development/wily/wordpress-42",
-	handlers: Handlers{
-		Meta: map[string]BulkIncludeHandler{
-			"foo": testMetaHandler(0),
-		},
-	},
-	expectWillIncludeMetadata: []string{"foo"},
-	expectStatus:              http.StatusOK,
-	expectBody: map[string]metaHandlerTestResp{
-		"~user/development/wily/wordpress-42": {
-			CharmURL: "cs:~user/development/wily/wordpress-42",
-		},
-	},
-}, {
 	about:  "bulk meta handler, single id with invalid channel",
 	urlStr: "/meta/foo?id=~user/bad-wolf/wily/wordpress-42",
 	handlers: Handlers{
@@ -794,7 +766,7 @@ var routerGetTests = []struct {
 			CharmURL: "cs:utopic/foo-32",
 		},
 		"development/django": {
-			CharmURL: "cs:development/precise/django-0",
+			CharmURL: "cs:precise/django-0",
 		},
 	},
 }, {
@@ -834,13 +806,13 @@ var routerGetTests = []struct {
 			},
 		},
 		"development/django-47": {
-			Id: charm.MustParseURL("cs:development/precise/django-47"),
+			Id: charm.MustParseURL("cs:precise/django-47"),
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
-					CharmURL: "cs:development/precise/django-47",
+					CharmURL: "cs:precise/django-47",
 				},
 				"bar/something": metaHandlerTestResp{
-					CharmURL: "cs:development/precise/django-47",
+					CharmURL: "cs:precise/django-47",
 					Path:     "/something",
 				},
 			},
@@ -1494,19 +1466,13 @@ var routerPutTests = []struct {
 				"baz/ppp":  "baz/ppp-mysql-val",
 			},
 		},
-		"development/trusty/django-47": {
+		"trusty/django-47": {
 			Meta: map[string]interface{}{
 				"foo": "foo-django-val",
 			},
 		},
 	},
 	expectRecordedCalls: []interface{}{
-		metaHandlerTestPutParams{
-			NumHandlers: 1,
-			Id:          "cs:development/trusty/django-47",
-			Paths:       []string{""},
-			Values:      []interface{}{"foo-django-val"},
-		},
 		metaHandlerTestPutParams{
 			NumHandlers: 3,
 			Id:          "cs:precise/mysql-134",
@@ -1518,6 +1484,12 @@ var routerPutTests = []struct {
 			Id:          "cs:precise/wordpress-42",
 			Paths:       []string{"", ""},
 			Values:      []interface{}{"foo-wordpress-val", "bar-wordpress-val"},
+		},
+		metaHandlerTestPutParams{
+			NumHandlers: 1,
+			Id:          "cs:trusty/django-47",
+			Paths:       []string{""},
+			Values:      []interface{}{"foo-django-val"},
 		},
 	},
 }, {
@@ -2351,17 +2323,17 @@ var resolvedURLTests = []struct {
 	expectPromulgatedURL: charm.MustParseURL("precise/wordpress-4"),
 }, {
 	rurl:               MustNewResolvedURL("~who/development/trusty/wordpress-42", -1),
-	expectUserOwnedURL: charm.MustParseURL("~who/development/trusty/wordpress-42"),
-	expectPreferredURL: charm.MustParseURL("~who/development/trusty/wordpress-42"),
+	expectUserOwnedURL: charm.MustParseURL("~who/trusty/wordpress-42"),
+	expectPreferredURL: charm.MustParseURL("~who/trusty/wordpress-42"),
 }, {
 	rurl:               MustNewResolvedURL("~charmers/precise/wordpress-23", -1),
 	expectUserOwnedURL: charm.MustParseURL("~charmers/precise/wordpress-23"),
 	expectPreferredURL: charm.MustParseURL("~charmers/precise/wordpress-23"),
 }, {
 	rurl:                 MustNewResolvedURL("~charmers/development/trusty/wordpress-42", 0),
-	expectUserOwnedURL:   charm.MustParseURL("~charmers/development/trusty/wordpress-42"),
-	expectPreferredURL:   charm.MustParseURL("development/trusty/wordpress-0"),
-	expectPromulgatedURL: charm.MustParseURL("development/trusty/wordpress-0"),
+	expectUserOwnedURL:   charm.MustParseURL("~charmers/trusty/wordpress-42"),
+	expectPreferredURL:   charm.MustParseURL("trusty/wordpress-0"),
+	expectPromulgatedURL: charm.MustParseURL("trusty/wordpress-0"),
 }, {
 	rurl:                 withPreferredSeries(MustNewResolvedURL("~charmers/wordpress-42", 0), "trusty"),
 	expectUserOwnedURL:   charm.MustParseURL("~charmers/wordpress-42"),

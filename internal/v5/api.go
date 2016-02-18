@@ -120,7 +120,6 @@ var (
 		"revision",
 		"series",
 		"promulgated-revision",
-		"development",
 		"promulgated-url",
 	)
 	RequiredBaseEntityFields = charmstore.FieldSelector(
@@ -128,7 +127,6 @@ var (
 		"name",
 		"acls",
 		"public",
-		"developmentacls",
 		"promulgated",
 	)
 )
@@ -188,7 +186,6 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"expand-id":   resolveId(authId(h.serveExpandId)),
 			"icon.svg":    resolveId(authId(h.serveIcon), "contents", "blobname"),
 			"promulgate":  resolveId(h.serveAdminPromulgate),
-			"publish":     h.servePublish,
 			"readme":      resolveId(authId(h.serveReadMe), "contents", "blobname"),
 			"resources":   resolveId(authId(h.serveResources)),
 		},
@@ -231,8 +228,8 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"id-revision":      h.EntityHandler(h.metaIdRevision, "_id"),
 			"id-series":        h.EntityHandler(h.metaIdSeries, "_id"),
 			"manifest":         h.EntityHandler(h.metaManifest, "blobname"),
-			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "acls", "developmentacls"),
-			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "acls", "developmentacls"),
+			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "acls"),
+			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "acls"),
 			"promulgated":      h.baseEntityHandler(h.metaPromulgated, "promulgated"),
 			"revision-info":    router.SingleIncludeHandler(h.metaRevisionInfo),
 			"stats":            h.EntityHandler(h.metaStats),
@@ -355,7 +352,6 @@ func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, 
 	rurl := &router.ResolvedURL{
 		URL:                 *entity.URL,
 		PromulgatedRevision: -1,
-		Development:         url.Channel == charm.DevelopmentChannel,
 	}
 	if url.User == "" {
 		rurl.PromulgatedRevision = entity.PromulgatedRevision
@@ -552,13 +548,7 @@ func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter
 	// Note that we don't do any permission checking of the returned URLs.
 	// This is because we know that the user is allowed to read at
 	// least the resolved URL passed into serveExpandId.
-	// If this does not specify "development", then no development
-	// revisions will be chosen, so the single ACL already checked
-	// is sufficient. If it *does* specify "development", then we assume
-	// that the development ACLs are more restrictive than the
-	// non-development ACLs, and given that, we can allow all
-	// the URLs.
-	q := h.Store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}, {"development", 1}})
+	q := h.Store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}})
 	if id.PromulgatedRevision != -1 {
 		q = q.Sort("-series", "-promulgated-revision")
 	} else {
@@ -986,9 +976,6 @@ func checkExtraInfoKey(key string, field string) error {
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaperm
 func (h *ReqHandler) metaPerm(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	acls := entity.ACLs
-	if id.Development {
-		acls = entity.DevelopmentACLs
-	}
 	return params.PermResponse{
 		Read:  acls.Read,
 		Write: acls.Write,
@@ -1002,27 +989,22 @@ func (h *ReqHandler) putMetaPerm(id *router.ResolvedURL, path string, val *json.
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
 	}
-	field := "acls"
-	if id.Development {
-		field = "developmentacls"
-	} else {
-		isPublic := false
-		for _, p := range perms.Read {
-			if p == params.Everyone {
-				isPublic = true
-				break
-			}
+	isPublic := false
+	for _, p := range perms.Read {
+		if p == params.Everyone {
+			isPublic = true
+			break
 		}
-		updater.UpdateField("public", isPublic, nil)
 	}
-	updater.UpdateField(field+".read", perms.Read, &audit.Entry{
+	updater.UpdateField("public", isPublic, nil)
+	updater.UpdateField("acls.read", perms.Read, &audit.Entry{
 		Op:     audit.OpSetPerm,
 		Entity: &id.URL,
 		ACL: &audit.ACL{
 			Read: perms.Read,
 		},
 	})
-	updater.UpdateField(field+".write", perms.Write, &audit.Entry{
+	updater.UpdateField("acls.write", perms.Write, &audit.Entry{
 		Op:     audit.OpSetPerm,
 		Entity: &id.URL,
 		ACL: &audit.ACL{
@@ -1045,9 +1027,6 @@ func (h *ReqHandler) metaPromulgated(entity *mongodoc.BaseEntity, id *router.Res
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapermkey
 func (h *ReqHandler) metaPermWithKey(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	acls := entity.ACLs
-	if id.Development {
-		acls = entity.DevelopmentACLs
-	}
 	switch path {
 	case "/read":
 		return acls.Read, nil
@@ -1064,33 +1043,27 @@ func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
 	}
-	field := "acls"
-	if id.Development {
-		field = "developmentacls"
-	}
 	switch path {
 	case "/read":
-		updater.UpdateField(field+".read", perms, &audit.Entry{
+		updater.UpdateField("acls.read", perms, &audit.Entry{
 			Op:     audit.OpSetPerm,
 			Entity: &id.URL,
 			ACL: &audit.ACL{
 				Read: perms,
 			},
 		})
-		if !id.Development {
-			isPublic := false
-			for _, p := range perms {
-				if p == params.Everyone {
-					isPublic = true
-					break
-				}
+		isPublic := false
+		for _, p := range perms {
+			if p == params.Everyone {
+				isPublic = true
+				break
 			}
-			updater.UpdateField("public", isPublic, nil)
 		}
+		updater.UpdateField("public", isPublic, nil)
 		updater.UpdateSearch()
 		return nil
 	case "/write":
-		updater.UpdateField(field+".write", perms, &audit.Entry{
+		updater.UpdateField("acls.write", perms, &audit.Entry{
 			Op:     audit.OpSetPerm,
 			Entity: &id.URL,
 			ACL: &audit.ACL{
@@ -1292,10 +1265,11 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 	}
 
 	if promulgate.Promulgated {
-		// Set write permissions for the non-development entity to promulgators
-		// only, so that the user cannot just publish newer promulgated
-		// versions of the charm or bundle. Promulgators are responsible of
-		// reviewing and publishing subsequent revisions of this entity.
+		// Set write permissions to promulgators only, so that
+		// the user cannot just publish newer promulgated
+		// versions of the charm or bundle. Promulgators are
+		// responsible of reviewing and publishing subsequent
+		// revisions of this entity.
 		if err := h.updateBaseEntity(id, map[string]interface{}{
 			"acls.write": []string{PromulgatorsGroup},
 		}, nil); err != nil {
@@ -1315,58 +1289,6 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 	h.addAudit(e)
 
 	return nil
-}
-
-// PUT id/publish
-// See https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idpublish
-func (h *ReqHandler) servePublish(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
-	// Perform basic validation of the request.
-	if req.Method != "PUT" {
-		return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)
-	}
-	if id.Channel != "" {
-		return errgo.WithCausef(nil, params.ErrForbidden, "can only set publish on published URL, %q provided", id)
-	}
-
-	// Retrieve the requested action from the request body.
-	var publish struct {
-		params.PublishRequest `httprequest:",body"`
-	}
-	if err := httprequest.Unmarshal(httprequest.Params{Request: req}, &publish); err != nil {
-		return errgo.WithCausef(err, params.ErrBadRequest, "cannot unmarshal publish request body")
-	}
-
-	// Retrieve the resolved URL for the entity to update. It will be referring
-	// to the entity under development is the action is to publish a charm or
-	// bundle, or the published one otherwise.
-	url := *id
-	if publish.Published {
-		url = *id.WithChannel(charm.DevelopmentChannel)
-	}
-	rurl, err := h.Router.Context.ResolveURL(&url)
-	if err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
-	}
-
-	// Authorize the operation: users must have write permissions on the
-	// published charm or bundle.
-	prurl := *rurl
-	prurl.Development = false
-	if err := h.AuthorizeEntity(&prurl, req); err != nil {
-		return errgo.Mask(err, errgo.Any)
-	}
-
-	// Update the entity.
-	if err := h.Store.SetDevelopment(rurl, !publish.Published); err != nil {
-		return errgo.NoteMask(err, "cannot publish or unpublish charm or bundle", errgo.Is(params.ErrNotFound))
-	}
-
-	// Return information on the updated charm or bundle.
-	rurl.Development = !publish.Published
-	return httprequest.WriteJSON(w, http.StatusOK, &params.PublishResponse{
-		Id:            rurl.UserOwnedURL(),
-		PromulgatedId: rurl.PromulgatedURL(),
-	})
 }
 
 // serveSetAuthCookie sets the provided macaroon slice as a cookie on the

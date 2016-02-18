@@ -64,7 +64,6 @@ type Cache struct {
 var requiredEntityFields = map[string]int{
 	"_id":             1,
 	"promulgated-url": 1,
-	"development":     1,
 	"baseurl":         1,
 }
 
@@ -677,9 +676,6 @@ type entity struct {
 
 func (e entity) url() *charm.URL {
 	u := *e.URL
-	if e.Development {
-		u.Channel = charm.DevelopmentChannel
-	}
 	return &u
 }
 
@@ -688,9 +684,6 @@ func (e entity) promulgatedURL() *charm.URL {
 		return nil
 	}
 	u := *e.PromulgatedURL
-	if e.Development {
-		u.Channel = charm.DevelopmentChannel
-	}
 	return &u
 }
 

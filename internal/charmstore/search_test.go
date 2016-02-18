@@ -141,19 +141,6 @@ func (s *StoreSearchSuite) TestNoExportDeprecated(c *gc.C) {
 	c.Assert(present, gc.Equals, false)
 }
 
-func (s *StoreSearchSuite) TestNoExportDevelopment(c *gc.C) {
-	rurl := router.MustNewResolvedURL("cs:~charmers/development/trusty/mysql-42", -1)
-	err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("mysql"))
-	c.Assert(err, gc.IsNil)
-
-	var entity *mongodoc.Entity
-	err = s.store.DB.Entities().FindId(rurl.URL.String()).One(&entity)
-	c.Assert(err, gc.IsNil)
-	present, err := s.store.ES.HasDocument(s.TestIndex, typeName, s.store.ES.getID(entity.URL))
-	c.Assert(err, gc.IsNil)
-	c.Assert(present, gc.Equals, false)
-}
-
 func (s *StoreSearchSuite) TestExportOnlyLatest(c *gc.C) {
 	charmArchive := storetesting.Charms.CharmDir("wordpress")
 	url := router.MustNewResolvedURL("cs:~charmers/precise/wordpress-24", -1)

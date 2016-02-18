@@ -547,9 +547,6 @@ func (s *Store) EntitiesQuery(url *charm.URL) *mgo.Query {
 	entities := s.DB.Entities()
 	query := make(bson.D, 1, 5)
 	query[0] = bson.DocElem{"name", url.Name}
-	if url.Channel != charm.DevelopmentChannel {
-		query = append(query, bson.DocElem{"development", false})
-	}
 	if url.User == "" {
 		if url.Revision > -1 {
 			query = append(query, bson.DocElem{"promulgated-revision", url.Revision})
@@ -632,25 +629,6 @@ func (s *Store) UpdateBaseEntity(url *router.ResolvedURL, update interface{}) er
 			return errgo.WithCausef(err, params.ErrNotFound, "cannot update base entity for %q", url)
 		}
 		return errgo.Notef(err, "cannot update base entity for %q", url)
-	}
-	return nil
-}
-
-// SetDevelopment sets whether the entity corresponding to the given URL will
-// be only available in its development version (in essence, not published).
-func (s *Store) SetDevelopment(url *router.ResolvedURL, development bool) error {
-	if err := s.UpdateEntity(url, bson.D{{
-		"$set", bson.D{{"development", development}},
-	}}); err != nil {
-		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
-	}
-	if !development {
-		// If the entity is published, update the search index.
-		rurl := *url
-		rurl.Development = development
-		if err := s.UpdateSearch(&rurl); err != nil {
-			return errgo.Notef(err, "cannot update search entities for %q", rurl)
-		}
 	}
 	return nil
 }
@@ -807,9 +785,6 @@ func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 // to the given ACL. This is mostly provided for testing.
 func (s *Store) SetPerms(id *charm.URL, which string, acl ...string) error {
 	field := "acls"
-	if id.Channel == charm.DevelopmentChannel {
-		field = "developmentacls"
-	}
 	return s.DB.BaseEntities().UpdateId(mongodoc.BaseURL(id), bson.D{{"$set",
 		bson.D{{field + "." + which, acl}},
 	}})
@@ -819,13 +794,8 @@ func (s *Store) SetPerms(id *charm.URL, which string, acl ...string) error {
 // that will find any charms that require any interfaces
 // in the required slice or provide any interfaces in the
 // provided slice.
-//
-// Development charms are never matched.
-// TODO do we actually want to match dev charms here?
 func (s *Store) MatchingInterfacesQuery(required, provided []string) *mgo.Query {
 	return s.DB.Entities().Find(bson.D{{
-		"development", false,
-	}, {
 		"$or", []bson.D{{{
 			"charmrequiredinterfaces", bson.D{{
 				"$elemMatch", bson.D{{
@@ -1188,14 +1158,12 @@ func (s *Store) SynchroniseElasticsearch() error {
 	return nil
 }
 
-// EntityResolvedURL returns the ResolvedURL for the entity.
-// It requires PromulgatedURL and Development fields to have been
-// filled out in the entity.
+// EntityResolvedURL returns the ResolvedURL for the entity. It requires
+// that the PromulgatedURL field has been filled out in the entity.
 func EntityResolvedURL(e *mongodoc.Entity) *router.ResolvedURL {
 	rurl := &router.ResolvedURL{
 		URL:                 *e.URL,
 		PromulgatedRevision: -1,
-		Development:         e.Development,
 	}
 	if e.PromulgatedURL != nil {
 		rurl.PromulgatedRevision = e.PromulgatedURL.Revision

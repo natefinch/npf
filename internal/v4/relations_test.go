@@ -57,10 +57,6 @@ var metaCharmRelatedCharms = map[string]charm.Charm{
 	"48 ~charmers/precise/haproxy-48": storetesting.NewCharm(storetesting.RelationMeta(
 		"requires reverseproxy http",
 	)),
-	// development charms should not be included in any results.
-	"49 ~charmers/development/precise/haproxy-49": storetesting.NewCharm(storetesting.RelationMeta(
-		"requires reverseproxy http",
-	)),
 	"1 ~charmers/multi-series-20": storetesting.NewCharm(
 		storetesting.MetaWithSupportedSeries(storetesting.RelationMeta(
 			"requires reverseproxy http",
@@ -687,6 +683,5 @@ func mustParseResolvedURL(urlStr string) *router.ResolvedURL {
 	return &router.ResolvedURL{
 		URL:                 *url.WithChannel(""),
 		PromulgatedRevision: promRev,
-		Development:         url.Channel == charm.DevelopmentChannel,
 	}
 }
