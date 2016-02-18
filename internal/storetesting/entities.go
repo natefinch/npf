@@ -127,5 +127,23 @@ func AssertBaseEntity(c *gc.C, db *mgo.Collection, expect *mongodoc.BaseEntity) 
 	var baseEntity mongodoc.BaseEntity
 	err := db.FindId(expect.URL).One(&baseEntity)
 	c.Assert(err, gc.IsNil)
-	c.Assert(&baseEntity, jc.DeepEquals, expect)
+	c.Assert(&baseEntity, jc.DeepEquals, NormalizeBaseEntity(expect))
+}
+
+// NormalizeBaseEntity modifies a base entity so that it can be compared
+// with a base entity retrieved from mongodb using jc.DeepEquals. If
+// either StableSeries or DevelopmentSeries are nil maps then they will
+// be modified to be empty maps.
+func NormalizeBaseEntity(be *mongodoc.BaseEntity) *mongodoc.BaseEntity {
+	if be.StableSeries != nil && be.DevelopmentSeries != nil {
+		return be
+	}
+	be1 := *be
+	if be1.DevelopmentSeries == nil {
+		be1.DevelopmentSeries = make(map[string]*charm.URL)
+	}
+	if be1.StableSeries == nil {
+		be1.StableSeries = make(map[string]*charm.URL)
+	}
+	return &be1
 }

@@ -345,7 +345,7 @@ var findBaseEntityTests = []struct {
 	about:  "entity found, base url, all fields",
 	stored: []string{"42 cs:~charmers/utopic/mysql-42"},
 	url:    "mysql",
-	expect: &mongodoc.BaseEntity{
+	expect: storetesting.NormalizeBaseEntity(&mongodoc.BaseEntity{
 		URL:         charm.MustParseURL("~charmers/mysql"),
 		User:        "charmers",
 		Name:        "mysql",
@@ -355,7 +355,7 @@ var findBaseEntityTests = []struct {
 			Read:  []string{"charmers"},
 			Write: []string{"charmers"},
 		},
-	},
+	}),
 }, {
 	about:  "entity found, fully qualified url, few fields",
 	stored: []string{"42 cs:~charmers/utopic/mysql-42", "~who/precise/mysql-47"},
@@ -2366,10 +2366,12 @@ func entity(url, purl string) *mongodoc.Entity {
 func baseEntity(url string, promulgated bool) *mongodoc.BaseEntity {
 	id := charm.MustParseURL(url)
 	return &mongodoc.BaseEntity{
-		URL:         id,
-		Name:        id.Name,
-		User:        id.User,
-		Promulgated: mongodoc.IntBool(promulgated),
+		URL:               id,
+		Name:              id.Name,
+		User:              id.User,
+		Promulgated:       mongodoc.IntBool(promulgated),
+		DevelopmentSeries: make(map[string]*charm.URL),
+		StableSeries:      make(map[string]*charm.URL),
 	}
 }
 

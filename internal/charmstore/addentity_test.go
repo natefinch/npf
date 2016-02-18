@@ -572,12 +572,16 @@ func assertBaseEntity(c *gc.C, store *Store, url *charm.URL, promulgated bool) {
 		Write: []string{url.User},
 	}
 	c.Assert(baseEntity, jc.DeepEquals, &mongodoc.BaseEntity{
-		URL:         url,
-		User:        url.User,
-		Name:        url.Name,
-		Public:      false,
-		ACLs:        expectACLs,
-		Promulgated: mongodoc.IntBool(promulgated),
+		URL:               url,
+		User:              url.User,
+		Name:              url.Name,
+		Public:            false,
+		ACLs:              expectACLs,
+		DevelopmentACLs:   mongodoc.ACL{},
+		StableACLs:        mongodoc.ACL{},
+		Promulgated:       mongodoc.IntBool(promulgated),
+		DevelopmentSeries: make(map[string]*charm.URL),
+		StableSeries:      make(map[string]*charm.URL),
 	})
 }
 
