@@ -134,10 +134,13 @@ type Entity struct {
 	// If the entity is not promulgated this should be set to -1.
 	PromulgatedRevision int `bson:"promulgated-revision"`
 
-	// Development holds whether the entity is in development or published.
-	// A development entity can only be referred to using URLs including the
+	// Development holds whether the entity has been published in the
 	// "development" channel.
 	Development bool
+
+	// Stable holds whether the entity has been published in the
+	// "stable" channel.
+	Stable bool
 }
 
 // PreferredURL returns the preferred way to refer to this entity. If
@@ -179,12 +182,16 @@ type BaseEntity struct {
 	Public bool
 
 	// ACLs holds permission information relevant to the base entity.
-	// The permissions apply to all revisions.
+	// The permissions apply to all unpublished revisions.
 	ACLs ACL
 
-	// DevelopmentACLs is similar to ACLs but applies to all development
-	// revisions.
+	// DevelopmentACLs is similar to ACLs but applies to entities
+	// published in the "development" channel.
 	DevelopmentACLs ACL
+
+	// StableACLs is similar to ACLs but applies to entities
+	// published in the "stable" channel.
+	StableACLs ACL
 
 	// Promulgated specifies whether the charm or bundle should be
 	// promulgated.
@@ -194,6 +201,14 @@ type BaseEntity struct {
 	// the base entity. Thhose data apply to all revisions.
 	// The byte slices hold JSON-encoded data.
 	CommonInfo map[string][]byte `bson:",omitempty" json:",omitempty"`
+
+	// DevelopmentSeries maps the latest revision published in the
+	// "development" channel for each series.
+	DevelopmentSeries map[string]*charm.URL
+
+	// StableSeries maps the latest revision published in the
+	// "stable" channel for each series.
+	StableSeries map[string]*charm.URL
 }
 
 // ACL holds lists of users and groups that are
