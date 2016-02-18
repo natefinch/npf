@@ -121,11 +121,15 @@ var (
 		"series",
 		"promulgated-revision",
 		"promulgated-url",
+		"development",
+		"stable",
 	)
 	RequiredBaseEntityFields = charmstore.FieldSelector(
 		"user",
 		"name",
 		"acls",
+		"developmentacls",
+		"stableacls",
 		"public",
 		"promulgated",
 	)

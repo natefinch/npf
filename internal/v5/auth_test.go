@@ -25,6 +25,7 @@ import (
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/macaroon.v1"
 
+	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 )
@@ -214,6 +215,12 @@ var readAuthorizationTests = []struct {
 	groups []string
 	// readPerm stores a list of users with read permissions.
 	readPerm []string
+	// developmentReadPerm stores a list of users with read permissions on the development channel.
+	developmentReadPerm []string
+	// stableReadPerm stores a list of users with read permissions on the stable channel.
+	stableReadPerm []string
+	// channels contains a list of channels, to which the entity belongs.
+	channels []charmstore.Channel
 	// expectStatus is the expected HTTP response status.
 	// Defaults to 200 status OK.
 	expectStatus int
@@ -295,6 +302,45 @@ var readAuthorizationTests = []struct {
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
+}, {
+	about:               "access provided through development channel",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	readPerm:            []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group1"},
+	channels:            []charmstore.Channel{charmstore.DevelopmentChannel},
+}, {
+	about:               "access provided through development channel, but charm not published",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	readPerm:            []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group1"},
+	expectStatus:        http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:               "access provided through stable channel",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	readPerm:            []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group12"},
+	stableReadPerm:      []string{"group2"},
+	channels:            []charmstore.Channel{charmstore.DevelopmentChannel, charmstore.StableChannel},
+}, {
+	about:               "access provided through stable channel, but charm not published",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	readPerm:            []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group12"},
+	stableReadPerm:      []string{"group2"},
+	channels:            []charmstore.Channel{charmstore.DevelopmentChannel},
+	expectStatus:        http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
 }}
 
 func dischargeForUser(username string) func(_, _ string) ([]checkers.Caveat, error) {
@@ -319,8 +365,18 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
 
+		// publish the charm on any required channels.
+		if len(test.channels) > 0 {
+			err := s.store.Publish(rurl, test.channels...)
+			c.Assert(err, gc.IsNil)
+		}
+
 		// Change the ACLs for the testing charm.
 		err = s.store.SetPerms(&rurl.URL, "read", test.readPerm...)
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&rurl.URL, "development.read", test.developmentReadPerm...)
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&rurl.URL, "stable.read", test.stableReadPerm...)
 		c.Assert(err, gc.IsNil)
 
 		// Define an helper function used to send requests and check responses.
@@ -342,13 +398,6 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		// Perform meta and id requests.
 		makeRequest("~charmers/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
 		makeRequest("~charmers/wordpress/expand-id", test.expectStatus, test.expectBody)
-
-		// Remove permissions for the published charm.
-		err = s.store.SetPerms(&rurl.URL, "read")
-		c.Assert(err, gc.IsNil)
-
-		// Check that now accessing the published charm is not allowed.
-		makeRequest("~charmers/wordpress/meta/archive-size", http.StatusUnauthorized, nil)
 
 		// Remove all entities from the store.
 		_, err = s.store.DB.Entities().RemoveAll(nil)
