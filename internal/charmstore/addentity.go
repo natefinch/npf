@@ -412,7 +412,7 @@ func (s *Store) addCharm(c charm.Charm, p addParams) (err error) {
 	// final gateway before a potentially invalid url might be stored
 	// in the database.
 	id := p.url.URL
-	logger.Infof("add charm url %s; prev %d", &id, p.url.PromulgatedRevision)
+	logger.Infof("add charm url %s; promulgated rev %d", &id, p.url.PromulgatedRevision)
 	entity := &mongodoc.Entity{
 		URL:                     &id,
 		PromulgatedURL:          p.url.DocPromulgatedURL(),

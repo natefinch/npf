@@ -2349,6 +2349,445 @@ func (s *StoreSuite) TestBundleCharms(c *gc.C) {
 	}
 }
 
+var publishTests = []struct {
+	about              string
+	url                *router.ResolvedURL
+	channels           []Channel
+	initialEntity      *mongodoc.Entity
+	initialBaseEntity  *mongodoc.BaseEntity
+	expectedEntity     *mongodoc.Entity
+	expectedBaseEntity *mongodoc.BaseEntity
+	expectedErr        string
+}{{
+	about:    "unpublished, single series, publish development",
+	url:      MustParseResolvedURL("~who/trusty/django-42"),
+	channels: []Channel{DevelopmentChannel},
+	initialEntity: &mongodoc.Entity{
+		URL: charm.MustParseURL("~who/trusty/django-42"),
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:         charm.MustParseURL("~who/trusty/django-42"),
+		Development: true,
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		DevelopmentSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/trusty/django-42"),
+		},
+	},
+}, {
+	about:    "development, single series, publish development",
+	url:      MustParseResolvedURL("~who/trusty/django-42"),
+	channels: []Channel{DevelopmentChannel},
+	initialEntity: &mongodoc.Entity{
+		URL:         charm.MustParseURL("~who/trusty/django-42"),
+		Development: true,
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		DevelopmentSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/trusty/django-41"),
+		},
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:         charm.MustParseURL("~who/trusty/django-42"),
+		Development: true,
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		DevelopmentSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/trusty/django-42"),
+		},
+	},
+}, {
+	about:    "stable, single series, publish development",
+	url:      MustParseResolvedURL("~who/trusty/django-42"),
+	channels: []Channel{DevelopmentChannel},
+	initialEntity: &mongodoc.Entity{
+		URL:    charm.MustParseURL("~who/trusty/django-42"),
+		Stable: true,
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		StableSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/trusty/django-42"),
+		},
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:         charm.MustParseURL("~who/trusty/django-42"),
+		Stable:      true,
+		Development: true,
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		StableSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/trusty/django-42"),
+		},
+		DevelopmentSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/trusty/django-42"),
+		},
+	},
+}, {
+	about:    "unpublished, single series, publish stable",
+	url:      MustParseResolvedURL("~who/trusty/django-42"),
+	channels: []Channel{StableChannel},
+	initialEntity: &mongodoc.Entity{
+		URL: charm.MustParseURL("~who/trusty/django-42"),
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:    charm.MustParseURL("~who/trusty/django-42"),
+		Stable: true,
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		StableSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/trusty/django-42"),
+		},
+	},
+}, {
+	about:    "development, single series, publish stable",
+	url:      MustParseResolvedURL("~who/trusty/django-42"),
+	channels: []Channel{StableChannel},
+	initialEntity: &mongodoc.Entity{
+		URL:         charm.MustParseURL("~who/trusty/django-42"),
+		Development: true,
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		DevelopmentSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/trusty/django-41"),
+		},
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:         charm.MustParseURL("~who/trusty/django-42"),
+		Development: true,
+		Stable:      true,
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		DevelopmentSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/trusty/django-41"),
+		},
+		StableSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/trusty/django-42"),
+		},
+	},
+}, {
+	about:    "stable, single series, publish stable",
+	url:      MustParseResolvedURL("~who/trusty/django-42"),
+	channels: []Channel{StableChannel},
+	initialEntity: &mongodoc.Entity{
+		URL:    charm.MustParseURL("~who/trusty/django-42"),
+		Stable: true,
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		StableSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/trusty/django-40"),
+		},
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:    charm.MustParseURL("~who/trusty/django-42"),
+		Stable: true,
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		StableSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/trusty/django-42"),
+		},
+	},
+}, {
+	about:    "unpublished, multi series, publish development",
+	url:      MustParseResolvedURL("~who/django-42"),
+	channels: []Channel{DevelopmentChannel},
+	initialEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-42"),
+		SupportedSeries: []string{"trusty", "wily"},
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-42"),
+		SupportedSeries: []string{"trusty", "wily"},
+		Development:     true,
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		DevelopmentSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/django-42"),
+			"wily":   charm.MustParseURL("~who/django-42"),
+		},
+	},
+}, {
+	about:    "development, multi series, publish development",
+	url:      MustParseResolvedURL("~who/django-42"),
+	channels: []Channel{DevelopmentChannel},
+	initialEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-42"),
+		Development:     true,
+		SupportedSeries: []string{"trusty", "wily"},
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		DevelopmentSeries: map[string]*charm.URL{
+			"precise": charm.MustParseURL("~who/django-0"),
+			"trusty":  charm.MustParseURL("~who/trusty/django-0"),
+		},
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-42"),
+		Development:     true,
+		SupportedSeries: []string{"trusty", "wily"},
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		DevelopmentSeries: map[string]*charm.URL{
+			"precise": charm.MustParseURL("~who/django-0"),
+			"trusty":  charm.MustParseURL("~who/django-42"),
+			"wily":    charm.MustParseURL("~who/django-42"),
+		},
+	},
+}, {
+	about:    "stable, multi series, publish development",
+	url:      MustParseResolvedURL("~who/django-47"),
+	channels: []Channel{DevelopmentChannel},
+	initialEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-47"),
+		SupportedSeries: []string{"trusty", "wily", "precise"},
+		Stable:          true,
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		StableSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/django-47"),
+		},
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-47"),
+		SupportedSeries: []string{"trusty", "wily", "precise"},
+		Stable:          true,
+		Development:     true,
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		StableSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/django-47"),
+		},
+		DevelopmentSeries: map[string]*charm.URL{
+			"trusty":  charm.MustParseURL("~who/django-47"),
+			"wily":    charm.MustParseURL("~who/django-47"),
+			"precise": charm.MustParseURL("~who/django-47"),
+		},
+	},
+}, {
+	about:    "unpublished, multi series, publish stable",
+	url:      MustParseResolvedURL("~who/django-42"),
+	channels: []Channel{StableChannel},
+	initialEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-42"),
+		SupportedSeries: []string{"trusty", "wily", "precise"},
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-42"),
+		SupportedSeries: []string{"trusty", "wily", "precise"},
+		Stable:          true,
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		StableSeries: map[string]*charm.URL{
+			"trusty":  charm.MustParseURL("~who/django-42"),
+			"wily":    charm.MustParseURL("~who/django-42"),
+			"precise": charm.MustParseURL("~who/django-42"),
+		},
+	},
+}, {
+	about:    "development, multi series, publish stable",
+	url:      MustParseResolvedURL("~who/django-42"),
+	channels: []Channel{StableChannel},
+	initialEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-42"),
+		SupportedSeries: []string{"wily"},
+		Development:     true,
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		DevelopmentSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/django-0"),
+		},
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-42"),
+		SupportedSeries: []string{"wily"},
+		Development:     true,
+		Stable:          true,
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		DevelopmentSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/django-0"),
+		},
+		StableSeries: map[string]*charm.URL{
+			"wily": charm.MustParseURL("~who/django-42"),
+		},
+	},
+}, {
+	about:    "stable, multi series, publish stable",
+	url:      MustParseResolvedURL("~who/django-42"),
+	channels: []Channel{StableChannel},
+	initialEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-42"),
+		SupportedSeries: []string{"trusty", "wily", "precise"},
+		Stable:          true,
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		StableSeries: map[string]*charm.URL{
+			"precise": charm.MustParseURL("~who/django-1"),
+			"quantal": charm.MustParseURL("~who/django-2"),
+			"saucy":   charm.MustParseURL("~who/django-3"),
+			"trusty":  charm.MustParseURL("~who/django-4"),
+		},
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-42"),
+		SupportedSeries: []string{"trusty", "wily", "precise"},
+		Stable:          true,
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		StableSeries: map[string]*charm.URL{
+			"precise": charm.MustParseURL("~who/django-42"),
+			"quantal": charm.MustParseURL("~who/django-2"),
+			"saucy":   charm.MustParseURL("~who/django-3"),
+			"trusty":  charm.MustParseURL("~who/django-42"),
+			"wily":    charm.MustParseURL("~who/django-42"),
+		},
+	},
+}, {
+	about:    "bundle",
+	url:      MustParseResolvedURL("~who/bundle/django-42"),
+	channels: []Channel{StableChannel},
+	initialEntity: &mongodoc.Entity{
+		URL: charm.MustParseURL("~who/bundle/django-42"),
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:    charm.MustParseURL("~who/bundle/django-42"),
+		Stable: true,
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		StableSeries: map[string]*charm.URL{
+			"bundle": charm.MustParseURL("~who/bundle/django-42"),
+		},
+	},
+}, {
+	about:    "unpublished, multi series, publish multiple channels",
+	url:      MustParseResolvedURL("~who/django-42"),
+	channels: []Channel{DevelopmentChannel, StableChannel, Channel("no-such")},
+	initialEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-42"),
+		SupportedSeries: []string{"trusty", "wily"},
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		StableSeries: map[string]*charm.URL{
+			"precise": charm.MustParseURL("~who/django-1"),
+			"trusty":  charm.MustParseURL("~who/django-4"),
+		},
+		DevelopmentSeries: map[string]*charm.URL{
+			"wily": charm.MustParseURL("~who/django-10"),
+		},
+	},
+	expectedEntity: &mongodoc.Entity{
+		URL:             charm.MustParseURL("~who/django-42"),
+		SupportedSeries: []string{"trusty", "wily"},
+		Development:     true,
+		Stable:          true,
+	},
+	expectedBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+		DevelopmentSeries: map[string]*charm.URL{
+			"trusty": charm.MustParseURL("~who/django-42"),
+			"wily":   charm.MustParseURL("~who/django-42"),
+		},
+		StableSeries: map[string]*charm.URL{
+			"precise": charm.MustParseURL("~who/django-1"),
+			"trusty":  charm.MustParseURL("~who/django-42"),
+			"wily":    charm.MustParseURL("~who/django-42"),
+		},
+	},
+}, {
+	about:    "not found",
+	url:      MustParseResolvedURL("~who/trusty/no-such-42"),
+	channels: []Channel{DevelopmentChannel},
+	initialEntity: &mongodoc.Entity{
+		URL: charm.MustParseURL("~who/trusty/django-42"),
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+	},
+	expectedErr: `cannot update "cs:~who/trusty/no-such-42": not found`,
+}, {
+	about:    "no valid channels provided",
+	url:      MustParseResolvedURL("~who/trusty/django-42"),
+	channels: []Channel{Channel("not-valid")},
+	initialEntity: &mongodoc.Entity{
+		URL: charm.MustParseURL("~who/trusty/django-42"),
+	},
+	initialBaseEntity: &mongodoc.BaseEntity{
+		URL: charm.MustParseURL("~who/django"),
+	},
+	expectedErr: `cannot update "cs:~who/trusty/django-42": no channels provided`,
+}}
+
+func (s *StoreSuite) TestPublish(c *gc.C) {
+	store := s.newStore(c, true)
+	defer store.Close()
+
+	for i, test := range publishTests {
+		c.Logf("test %d: %s", i, test.about)
+
+		// Remove existing entities and base entities.
+		_, err := store.DB.Entities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+		_, err = store.DB.BaseEntities().RemoveAll(nil)
+		c.Assert(err, gc.IsNil)
+		// Insert the existing entity.
+		err = store.DB.Entities().Insert(denormalizedEntity(test.initialEntity))
+		c.Assert(err, gc.IsNil)
+		// Insert the existing base entity.
+		err = store.DB.BaseEntities().Insert(test.initialBaseEntity)
+		c.Assert(err, gc.IsNil)
+
+		// Publish the entity.
+		err = store.Publish(test.url, test.channels...)
+		if test.expectedErr != "" {
+			c.Assert(err, gc.ErrorMatches, test.expectedErr)
+			continue
+		}
+		c.Assert(err, gc.IsNil)
+		entity, err := store.FindEntity(test.url, nil)
+		c.Assert(err, gc.IsNil)
+		c.Assert(entity, jc.DeepEquals, denormalizedEntity(test.expectedEntity))
+		baseEntity, err := store.FindBaseEntity(test.url.UserOwnedURL(), nil)
+		c.Assert(err, gc.IsNil)
+		c.Assert(baseEntity, jc.DeepEquals, storetesting.NormalizeBaseEntity(test.expectedBaseEntity))
+	}
+}
+
 func entity(url, purl string) *mongodoc.Entity {
 	id := charm.MustParseURL(url)
 	var pid *charm.URL

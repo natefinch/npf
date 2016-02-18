@@ -29,6 +29,17 @@ import (
 
 var logger = loggo.GetLogger("charmstore.internal.charmstore")
 
+// Channel is the name of a channel in which a charm may be published.
+type Channel string
+
+const (
+	// DevelopmentChannel is the channel used for charms or bundles under development.
+	DevelopmentChannel Channel = "development"
+
+	// StableChannel is the channel used for stable charms or bundles.
+	StableChannel Channel = "stable"
+)
+
 var (
 	errClosed          = errgo.New("charm store has been closed")
 	ErrTooManySessions = errgo.New("too many mongo sessions in use")
@@ -629,6 +640,59 @@ func (s *Store) UpdateBaseEntity(url *router.ResolvedURL, update interface{}) er
 			return errgo.WithCausef(err, params.ErrNotFound, "cannot update base entity for %q", url)
 		}
 		return errgo.Notef(err, "cannot update base entity for %q", url)
+	}
+	return nil
+}
+
+// Publish assigns channels to the entity corresponding to the given URL.
+// An error is returned if no channels are provided. For the time being,
+// the only supported channels are "development" and "stable".
+func (s *Store) Publish(url *router.ResolvedURL, channels ...Channel) error {
+	// Validate channels.
+	actual := make([]Channel, 0, len(channels))
+	for _, c := range channels {
+		if c == DevelopmentChannel || c == StableChannel {
+			actual = append(actual, c)
+		}
+	}
+	numChannels := len(actual)
+	if numChannels == 0 {
+		return errgo.Newf("cannot update %q: no channels provided", url)
+	}
+
+	// Update the entity.
+	update := make(bson.D, numChannels)
+	for i, c := range actual {
+		update[i] = bson.DocElem{string(c), true}
+	}
+	if err := s.UpdateEntity(url, bson.D{{"$set", update}}); err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+
+	// Update the base entity.
+	entity, err := s.FindEntity(url, FieldSelector("series", "supportedseries"))
+	if err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	series := entity.SupportedSeries
+	numSeries := len(series)
+	if numSeries == 0 {
+		series = []string{entity.Series}
+		numSeries = 1
+	}
+	update = make(bson.D, 0, numChannels*numSeries)
+	for _, c := range actual {
+		for _, s := range series {
+			update = append(update, bson.DocElem{string(c) + "series." + s, entity.URL})
+		}
+	}
+	if err := s.UpdateBaseEntity(url, bson.D{{"$set", update}}); err != nil {
+		return errgo.Mask(err)
+	}
+
+	// Add entity to ElasticSearch.
+	if err := s.UpdateSearch(url); err != nil {
+		return errgo.Notef(err, "cannot index %s to ElasticSearch", url)
 	}
 	return nil
 }
