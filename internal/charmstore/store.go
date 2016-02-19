@@ -6,6 +6,7 @@ package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/char
 import (
 	"encoding/json"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -844,13 +845,22 @@ func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 	return nil
 }
 
-// SetPerms sets the permissions for the base entity with
-// the given id for "which" operations ("read" or "write")
-// to the given ACL. This is mostly provided for testing.
+// SetPerms sets the ACL specified by which for the base entity with the
+// given id. The which parameter is in the form "[channel].operation",
+// where channel, if specified, is one of "development" or "stable" and
+// operation is one of "read" or "write". If which does not specify a
+// channel then the unpublished ACL is updated. This is only provided for
+// testing.
 func (s *Store) SetPerms(id *charm.URL, which string, acl ...string) error {
 	field := "acls"
+	spec := strings.SplitN(which, ".", 2)
+	op := spec[0]
+	if len(spec) > 1 {
+		field = spec[0] + "acls"
+		op = spec[1]
+	}
 	return s.DB.BaseEntities().UpdateId(mongodoc.BaseURL(id), bson.D{{"$set",
-		bson.D{{field + "." + which, acl}},
+		bson.D{{field + "." + op, acl}},
 	}})
 }
 
