@@ -200,7 +200,7 @@ func (h *ReqHandler) entityAuthInfo(entityIds []*router.ResolvedURL) (public boo
 		if err != nil {
 			return false, nil, nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
-		acl, err := h.entityACL(entityId)
+		acl, err := h.entityACLs(entityId)
 		if err != nil {
 			return false, nil, nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
@@ -295,14 +295,19 @@ func areAllowedEntities(entityIds []*router.ResolvedURL, allowedEntities string)
 // AuthorizeEntity checks that the given HTTP request
 // can access the entity with the given id.
 func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) error {
-	acls, err := h.entityACL(id)
+	acls, err := h.entityACLs(id)
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	return h.authorizeWithPerms(req, acls.Read, acls.Write, id)
 }
 
-func (h *ReqHandler) entityACL(id *router.ResolvedURL) (mongodoc.ACL, error) {
+// entityACLs calculates the ACLs for the specified entity. If the entity
+// has been published to the stable channel then the StableACLs will be
+// used, if the entity has been published to development, but not stable
+// then the DevelopmentACLs will be used. If the entity is not published
+// at all then the unpublished ACLs are used.
+func (h *ReqHandler) entityACLs(id *router.ResolvedURL) (mongodoc.ACL, error) {
 	entity, err := h.Cache.Entity(id.UserOwnedURL(), charmstore.FieldSelector("development", "stable"))
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
@@ -314,14 +319,14 @@ func (h *ReqHandler) entityACL(id *router.ResolvedURL) (mongodoc.ACL, error) {
 	if err != nil {
 		return mongodoc.ACL{}, errgo.Notef(err, "cannot retrieve base entity %q for authorization", id)
 	}
-	acls := baseEntity.ACLs
-	if entity.Development {
-		acls.Read = append(acls.Read, baseEntity.DevelopmentACLs.Read...)
+	switch {
+	case entity.Stable:
+		return baseEntity.StableACLs, nil
+	case entity.Development:
+		return baseEntity.DevelopmentACLs, nil
+	default:
+		return baseEntity.ACLs, nil
 	}
-	if entity.Stable {
-		acls.Read = append(acls.Read, baseEntity.StableACLs.Read...)
-	}
-	return acls, nil
 }
 
 func (h *ReqHandler) authorizeWithPerms(req *http.Request, read, write []string, entityId *router.ResolvedURL) error {

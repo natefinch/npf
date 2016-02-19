@@ -849,11 +849,11 @@ func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 // given id. The which parameter is in the form "[channel].operation",
 // where channel, if specified, is one of "development" or "stable" and
 // operation is one of "read" or "write". If which does not specify a
-// channel then the unpublished ACL is updated. This is mostly provided
-// for testing.
+// channel then the unpublished ACL is updated. This is only provided for
+// testing.
 func (s *Store) SetPerms(id *charm.URL, which string, acl ...string) error {
 	field := "acls"
-	spec := strings.Split(which, ".")
+	spec := strings.SplitN(which, ".", 2)
 	op := spec[0]
 	if len(spec) > 1 {
 		field = spec[0] + "acls"
