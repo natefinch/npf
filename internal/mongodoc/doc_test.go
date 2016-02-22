@@ -85,15 +85,15 @@ var preferredURLTests = []struct {
 		PromulgatedURL: charm.MustParseURL("trusty/c-2"),
 		Development:    true,
 	},
-	expectURLFalse: "cs:~dmr/development/trusty/c-1",
-	expectURLTrue:  "cs:development/trusty/c-2",
+	expectURLFalse: "cs:~dmr/trusty/c-1",
+	expectURLTrue:  "cs:trusty/c-2",
 }, {
 	entity: &mongodoc.Entity{
 		URL:         charm.MustParseURL("~dmr/trusty/c-1"),
 		Development: true,
 	},
-	expectURLFalse: "cs:~dmr/development/trusty/c-1",
-	expectURLTrue:  "cs:~dmr/development/trusty/c-1",
+	expectURLFalse: "cs:~dmr/trusty/c-1",
+	expectURLTrue:  "cs:~dmr/trusty/c-1",
 }}
 
 func (s *DocSuite) TestPreferredURL(c *gc.C) {

@@ -287,7 +287,7 @@ func (s *StoreSuite) TestFindEntities(c *gc.C) {
 		for i, url := range expect {
 			c.Assert(gotEntities[i], jc.DeepEquals, &mongodoc.Entity{
 				URL:            &url.URL,
-				PromulgatedURL: url.DocPromulgatedURL(),
+				PromulgatedURL: url.PromulgatedURL(),
 			}, gc.Commentf("index %d", i))
 		}
 
@@ -2782,7 +2782,7 @@ func (s *StoreSuite) TestPublish(c *gc.C) {
 		entity, err := store.FindEntity(test.url, nil)
 		c.Assert(err, gc.IsNil)
 		c.Assert(entity, jc.DeepEquals, denormalizedEntity(test.expectedEntity))
-		baseEntity, err := store.FindBaseEntity(test.url.UserOwnedURL(), nil)
+		baseEntity, err := store.FindBaseEntity(&test.url.URL, nil)
 		c.Assert(err, gc.IsNil)
 		c.Assert(baseEntity, jc.DeepEquals, storetesting.NormalizeBaseEntity(test.expectedBaseEntity))
 	}

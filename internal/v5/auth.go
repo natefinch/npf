@@ -196,7 +196,7 @@ func (h *ReqHandler) entityAuthInfo(entityIds []*router.ResolvedURL) (public boo
 	requiredTerms = make(map[string]bool)
 	public = true
 	for i, entityId := range entityIds {
-		entity, err := h.Cache.Entity(entityId.UserOwnedURL(), charmstore.FieldSelector("charmmeta"))
+		entity, err := h.Cache.Entity(&entityId.URL, charmstore.FieldSelector("charmmeta"))
 		if err != nil {
 			return false, nil, nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
@@ -308,14 +308,14 @@ func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) 
 // then the DevelopmentACLs will be used. If the entity is not published
 // at all then the unpublished ACLs are used.
 func (h *ReqHandler) entityACLs(id *router.ResolvedURL) (mongodoc.ACL, error) {
-	entity, err := h.Cache.Entity(id.UserOwnedURL(), charmstore.FieldSelector("development", "stable"))
+	entity, err := h.Cache.Entity(&id.URL, charmstore.FieldSelector("development", "stable"))
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
 			return mongodoc.ACL{}, errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
 		}
 		return mongodoc.ACL{}, errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}
-	baseEntity, err := h.Cache.BaseEntity(id.UserOwnedURL(), charmstore.FieldSelector("acls", "developmentacls", "stableacls"))
+	baseEntity, err := h.Cache.BaseEntity(&id.URL, charmstore.FieldSelector("acls", "developmentacls", "stableacls"))
 	if err != nil {
 		return mongodoc.ACL{}, errgo.Notef(err, "cannot retrieve base entity %q for authorization", id)
 	}

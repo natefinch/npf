@@ -397,7 +397,7 @@ func (s *AddEntitySuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, ur
 		exists, err := store.ES.HasDocument(s.TestIndex, typeName, id)
 		c.Assert(err, gc.IsNil)
 		c.Assert(exists, gc.Equals, true)
-		if purl := url.DocPromulgatedURL(); purl != nil {
+		if purl := url.PromulgatedURL(); purl != nil {
 			c.Assert(result.PromulgatedURL, jc.DeepEquals, purl)
 		}
 	}
@@ -423,7 +423,7 @@ func (s *AddEntitySuite) checkAddCharm(c *gc.C, ch charm.Charm, addToES bool, ur
 		CharmConfig:             ch.Config(),
 		CharmProvidedInterfaces: []string{"http", "logging", "monitoring"},
 		CharmRequiredInterfaces: []string{"mysql", "varnish"},
-		PromulgatedURL:          url.DocPromulgatedURL(),
+		PromulgatedURL:          url.PromulgatedURL(),
 		SupportedSeries:         ch.Meta().Series,
 	}))
 
@@ -458,7 +458,6 @@ func (s *AddEntitySuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bo
 	}
 	store := s.newStore(c, true)
 	defer store.Close()
-
 	// Add the bundle to the store.
 	beforeAdding := time.Now()
 	s.addRequiredCharms(c, bundle)
@@ -507,7 +506,7 @@ func (s *AddEntitySuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bo
 		},
 		BundleMachineCount: newInt(2),
 		BundleUnitCount:    newInt(2),
-		PromulgatedURL:     url.DocPromulgatedURL(),
+		PromulgatedURL:     url.PromulgatedURL(),
 	}))
 
 	// The bundle archive has been properly added to the blob store.
@@ -528,7 +527,7 @@ func (s *AddEntitySuite) checkAddBundle(c *gc.C, bundle charm.Bundle, addToES bo
 	// Try inserting the bundle again - it should fail because the bundle is
 	// already there.
 	err = store.AddBundleWithArchive(url, bundle)
-	c.Assert(errgo.Cause(err), gc.Equals, params.ErrDuplicateUpload)
+	c.Assert(errgo.Cause(err), gc.Equals, params.ErrDuplicateUpload, gc.Commentf("error: %v", err))
 }
 
 // assertBlobFields asserts that the blob-related fields in doc are as expected.

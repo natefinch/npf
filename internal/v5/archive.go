@@ -170,7 +170,7 @@ func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req 
 		// The hash matches the hash of the latest revision, so
 		// no need to upload anything.
 		return httprequest.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
-			Id:            oldURL.UserOwnedURL(),
+			Id:            &oldURL.URL,
 			PromulgatedId: oldURL.PromulgatedURL(),
 		})
 	}
@@ -195,7 +195,7 @@ func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req 
 		)
 	}
 	return httprequest.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
-		Id:            rid.UserOwnedURL(),
+		Id:            &rid.URL,
 		PromulgatedId: rid.PromulgatedURL(),
 	})
 }
@@ -255,7 +255,7 @@ func (h *ReqHandler) servePutArchive(id *charm.URL, w http.ResponseWriter, req *
 		)
 	}
 	return httprequest.WriteJSON(w, http.StatusOK, &params.ArchiveUploadResponse{
-		Id:            rid.UserOwnedURL(),
+		Id:            &rid.URL,
 		PromulgatedId: rid.PromulgatedURL(),
 	})
 	return nil
@@ -353,7 +353,6 @@ func (h *ReqHandler) getNewPromulgatedRevision(id *charm.URL) (int, error) {
 	query := h.Store.EntitiesQuery(&charm.URL{
 		Series:   id.Series,
 		Name:     id.Name,
-		Channel:  id.Channel,
 		Revision: -1,
 	})
 	var entity mongodoc.Entity

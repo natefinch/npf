@@ -505,7 +505,7 @@ func (h *ReqHandler) baseEntityQuery(id *router.ResolvedURL, fields map[string]i
 }
 
 func (h *ReqHandler) entityQuery(id *router.ResolvedURL, selector map[string]int, req *http.Request) (interface{}, error) {
-	val, err := h.Cache.Entity(id.UserOwnedURL(), selector)
+	val, err := h.Cache.Entity(&id.URL, selector)
 	if errgo.Cause(err) == params.ErrNotFound {
 		logger.Infof("entity %#v not found: %#v", id, err)
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
@@ -772,7 +772,7 @@ func (h *ReqHandler) metaRevisionInfo(id *router.ResolvedURL, path string, flags
 		if id.PromulgatedRevision != -1 {
 			response.Revisions = append(response.Revisions, rurl.PromulgatedURL())
 		} else {
-			response.Revisions = append(response.Revisions, rurl.UserOwnedURL())
+			response.Revisions = append(response.Revisions, &rurl.URL)
 		}
 	}
 	if err := iter.Err(); err != nil {

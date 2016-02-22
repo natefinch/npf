@@ -921,7 +921,7 @@ func (s *commonArchiveSuite) assertUpload(c *gc.C, method string, url *router.Re
 	_, err = f.Seek(0, 0)
 	c.Assert(err, gc.IsNil)
 
-	uploadURL := url.UserOwnedURL()
+	uploadURL := url.URL
 	if method == "POST" {
 		uploadURL.Revision = -1
 	}
@@ -956,7 +956,7 @@ func (s *commonArchiveSuite) assertUpload(c *gc.C, method string, url *router.Re
 	if url.URL.Series != "" {
 		c.Assert(entity.BlobHash256, gc.Equals, hash256Sum)
 	}
-	c.Assert(entity.PromulgatedURL, gc.DeepEquals, url.DocPromulgatedURL())
+	c.Assert(entity.PromulgatedURL, gc.DeepEquals, url.PromulgatedURL())
 	c.Assert(entity.Development, gc.Equals, false)
 	// Test that the expected entry has been created
 	// in the blob store.

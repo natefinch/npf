@@ -148,21 +148,14 @@ type ResolvedURL struct {
 // This function panics if urlStr cannot be parsed as a charm.URL
 // or if it is not fully specified, including user and revision.
 func MustNewResolvedURL(urlStr string, promulgatedRev int) *ResolvedURL {
-	url := charm.MustParseURL(urlStr)
+	url := mustParseURL(urlStr)
 	if url.User == "" || url.Revision == -1 {
 		panic(fmt.Errorf("incomplete url %v", urlStr))
 	}
 	return &ResolvedURL{
-		URL:                 *url.WithChannel(""),
+		URL:                 *url,
 		PromulgatedRevision: promulgatedRev,
 	}
-}
-
-// UserOwnedURL returns the non-promulgated URL for the given id.
-// The returned *charm.URL may be modified freely.
-func (id *ResolvedURL) UserOwnedURL() *charm.URL {
-	u := id.URL
-	return &u
 }
 
 // PreferredURL returns the promulgated URL for the given id if there is
@@ -172,27 +165,16 @@ func (id *ResolvedURL) UserOwnedURL() *charm.URL {
 // If id.PreferredSeries is non-empty, the returns charm URL
 // will always have a non-empty series.
 func (id *ResolvedURL) PreferredURL() *charm.URL {
-	u := id.UserOwnedURL()
+	u := id.URL
 	if u.Series == "" && id.PreferredSeries != "" {
 		u.Series = id.PreferredSeries
 	}
 	if id.PromulgatedRevision == -1 {
-		return u
+		return &u
 	}
 	u.User = ""
 	u.Revision = id.PromulgatedRevision
-	return u
-}
-
-// DocPromulgatedURL returns the promulgated URL that
-// should be stored in the mongodoc.Entity.
-// It does not have the channel set.
-func (id *ResolvedURL) DocPromulgatedURL() *charm.URL {
-	u := id.PromulgatedURL()
-	if u != nil {
-		u.Channel = ""
-	}
-	return u
+	return &u
 }
 
 // PromulgatedURL returns the promulgated URL for id if there
@@ -201,10 +183,10 @@ func (id *ResolvedURL) PromulgatedURL() *charm.URL {
 	if id.PromulgatedRevision == -1 {
 		return nil
 	}
-	u := id.UserOwnedURL()
+	u := id.URL
 	u.User = ""
 	u.Revision = id.PromulgatedRevision
-	return u
+	return &u
 }
 
 func (id *ResolvedURL) GoString() string {
@@ -608,7 +590,7 @@ func (r *Router) serveBulkMetaGet(req *http.Request) (interface{}, error) {
 	r.willIncludeMetadata(req)
 	urls := make([]*charm.URL, len(ids))
 	for i, id := range ids {
-		url, err := charm.ParseURL(id)
+		url, err := parseURL(id)
 		if err != nil {
 			return nil, errgo.WithCausef(err, params.ErrBadRequest, "")
 		}
@@ -693,7 +675,7 @@ func (r *Router) serveBulkMetaPut(req *http.Request) error {
 // serveBulkMetaPutOne serves a PUT to a single id as part of a bulk PUT
 // request. It's in a separate function to make the error handling easier.
 func (r *Router) serveBulkMetaPutOne(req *http.Request, id string, val *json.RawMessage) error {
-	url, err := charm.ParseURL(id)
+	url, err := parseURL(id)
 	if err != nil {
 		return errgo.Mask(err)
 	}
@@ -882,11 +864,6 @@ func splitId(path string) (url *charm.URL, rest string, err error) {
 		part, i = splitPath(path, i)
 	}
 
-	// Skip channel.
-	if charm.Channel(part) == charm.DevelopmentChannel {
-		part, i = splitPath(path, i)
-	}
-
 	// Skip series.
 	if _, ok := series.Series[part]; ok {
 		part, i = splitPath(path, i)
@@ -896,9 +873,28 @@ func splitId(path string) (url *charm.URL, rest string, err error) {
 	// and path[0:i] should contain the entire
 	// charm id.
 	urlStr := strings.TrimSuffix(path[0:i], "/")
-	url, err = charm.ParseURL(urlStr)
+	url, err = parseURL(urlStr)
 	if err != nil {
 		return nil, "", errgo.Mask(err)
 	}
 	return url, path[i:], nil
+}
+
+func mustParseURL(s string) *charm.URL {
+	u, err := parseURL(s)
+	if err != nil {
+		panic(err)
+	}
+	return u
+}
+
+func parseURL(s string) (*charm.URL, error) {
+	u, err := charm.ParseURL(s)
+	if err != nil {
+		return nil, err
+	}
+	if u.Channel != "" {
+		return nil, errgo.Newf("charmstore ids must not contain a channel")
+	}
+	return u, nil
 }
