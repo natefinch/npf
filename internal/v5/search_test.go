@@ -56,7 +56,7 @@ func (s *SearchSuite) SetUpTest(c *gc.C) {
 	err := s.store.DB.BaseEntities().UpdateId(
 		charm.MustParseURL("cs:~charmers/riak"),
 		bson.D{{"$set", map[string]mongodoc.ACL{
-			"acls": {
+			"stableacls": {
 				Read: []string{"charmers", "test-user"},
 			},
 		}}},
@@ -72,17 +72,17 @@ func (s *SearchSuite) addCharmsToStore(c *gc.C) {
 	for name, id := range exportTestCharms {
 		err := s.store.AddCharmWithArchive(id, getSearchCharm(name))
 		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+		err = s.store.SetPerms(&id.URL, "stable.read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
-		err = s.store.UpdateSearch(id)
+		err = s.store.Publish(id, charmstore.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 	for name, id := range exportTestBundles {
 		err := s.store.AddBundleWithArchive(id, getSearchBundle(name))
 		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+		err = s.store.SetPerms(&id.URL, "stable.read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
-		err = s.store.UpdateSearch(id)
+		err = s.store.Publish(id, charmstore.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -725,14 +725,14 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 		url.URL.Name = n
 		err := s.store.AddCharmWithArchive(url, getSearchCharm(n))
 		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
-		err = s.store.UpdateSearch(url)
+		err = s.store.SetPerms(&url.URL, "stable.read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
 		for i := 0; i < cnt; i++ {
 			err := s.store.IncrementDownloadCounts(url)
 			c.Assert(err, gc.IsNil)
 		}
+		err = s.store.Publish(url, charmstore.StableChannel)
+		c.Assert(err, gc.IsNil)
 	}
 	err := s.esSuite.ES.RefreshIndex(s.esSuite.TestIndex)
 	c.Assert(err, gc.IsNil)

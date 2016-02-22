@@ -1490,6 +1490,10 @@ func (s *ArchiveSearchSuite) TestGetSearchUpdate(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&url.URL, "stable.read", params.Everyone, url.URL.User)
+		c.Assert(err, gc.IsNil)
+		err = s.store.Publish(url, charmstore.StableChannel)
+		c.Assert(err, gc.IsNil)
 
 		// Download the charm archive using the API.
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{

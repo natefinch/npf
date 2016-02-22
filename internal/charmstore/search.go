@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -14,7 +15,6 @@ import (
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
-	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/elasticsearch"
@@ -76,36 +76,38 @@ func (s *Store) UpdateSearchAsync(r *router.ResolvedURL) {
 	})
 }
 
-// UpdateSearch updates the search record for the entity reference r.
-// The search index only includes the latest revision of each entity so
-// the latest revision of the charm specified by r will be indexed.
+// UpdateSearch updates the search record for the entity reference r. The
+// search index only includes the latest stable revision of each entity
+// so the latest stable revision of the charm specified by r will be
+// indexed.
 func (s *Store) UpdateSearch(r *router.ResolvedURL) error {
 	if s.ES == nil || s.ES.Database == nil {
 		return nil
 	}
-	if r.URL.Series != "" && !series.Series[r.URL.Series].SearchIndex {
-		return nil
+	// For multi-series charms update the whole base URL.
+	if r.URL.Series == "" {
+		return s.UpdateSearchBaseURL(r.PreferredURL())
 	}
 
-	var query *mgo.Query
-	query = s.DB.Entities().Find(bson.D{
-		{"user", r.URL.User},
-		{"name", r.URL.Name},
-		{"series", r.URL.Series},
-	}).Sort("-revision")
-	var entity mongodoc.Entity
-	if err := query.One(&entity); err != nil {
-		if err == mgo.ErrNotFound {
-			return errgo.WithCausef(nil, params.ErrNotFound, "entity not found %s", r)
-		}
-		return errgo.Notef(err, "cannot get %s", r)
+	if !series.Series[r.URL.Series].SearchIndex {
+		return nil
 	}
-	baseEntity, err := s.FindBaseEntity(entity.BaseURL, nil)
+	baseEntity, err := s.FindBaseEntity(r.PreferredURL(), nil)
 	if err != nil {
-		return errgo.Notef(err, "cannot get %s", entity.BaseURL)
+		return errgo.NoteMask(err, fmt.Sprintf("cannot update search record for %q", r.PreferredURL()), errgo.Is(params.ErrNotFound))
 	}
-	if err := s.updateSearchEntity(&entity, baseEntity); err != nil {
-		return errgo.Notef(err, "cannot update search record for %q", entity.URL)
+	series := r.URL.Series
+	entityURL := baseEntity.StableSeries[series]
+	if entityURL == nil {
+		// There is no stable version of the entity to index.
+		return nil
+	}
+	entity, err := s.FindEntity(&router.ResolvedURL{URL: *entityURL}, nil)
+	if err != nil {
+		return errgo.Notef(err, "cannot update search record for %q", entityURL)
+	}
+	if err := s.updateSearchEntity(entity, baseEntity); err != nil {
+		return errgo.Notef(err, "cannot update search record for %q", entityURL)
 	}
 	return nil
 }
@@ -117,41 +119,26 @@ func (s *Store) UpdateSearchBaseURL(baseURL *charm.URL) error {
 	if s.ES == nil || s.ES.Database == nil {
 		return nil
 	}
-	if baseURL.Series != "" {
-		return errgo.New("base url cannot contain series")
+	baseEntity, err := s.FindBaseEntity(baseURL, nil)
+	if err != nil {
+		return errgo.NoteMask(err, fmt.Sprintf("cannot index %s", baseURL), errgo.Is(params.ErrNotFound))
 	}
-	if baseURL.Revision != -1 {
-		return errgo.New("base url cannot contain revision")
-	}
-	// From the entities with the specified base URL find the latest revision in
-	// each of the available series.
-	//
-	// Note: It is possible to return the complete entity here and save some
-	// database round trips. Unfortunately the version of mongoDB we support
-	// (2.4) would require every field to be enumerated in this query, which
-	// would make it too fragile.
-	iter := s.DB.Entities().Pipe([]bson.D{
-		{{"$match", bson.D{{"baseurl", baseURL}, {"development", false}}}},
-		{{"$sort", bson.D{{"revision", 1}}}},
-		{{"$group", bson.D{
-			{"_id", "$series"},
-			{"url", bson.D{{"$last", "$_id"}}},
-		}}},
-	}).Iter()
-	defer iter.Close()
-	var result struct {
-		URL *charm.URL
-	}
-	for iter.Next(&result) {
-		if result.URL.Series != "" && !series.Series[result.URL.Series].SearchIndex {
+	updated := make(map[string]bool, len(baseEntity.StableSeries))
+	for urlSeries, url := range baseEntity.StableSeries {
+		if !series.Series[urlSeries].SearchIndex {
 			continue
 		}
-		if err := s.UpdateSearch(&router.ResolvedURL{URL: *result.URL, PromulgatedRevision: -1}); err != nil {
-			return errgo.Notef(err, "cannot update search record for %q", result.URL)
+		if updated[url.String()] {
+			continue
 		}
-	}
-	if err := iter.Close(); err != nil {
-		return errgo.Mask(err)
+		updated[url.String()] = true
+		entity, err := s.FindEntity(&router.ResolvedURL{URL: *url}, nil)
+		if err != nil {
+			return errgo.Notef(err, "cannot update search record for %q", url)
+		}
+		if err := s.updateSearchEntity(entity, baseEntity); err != nil {
+			return errgo.Notef(err, "cannot update search record for %q", url)
+		}
 	}
 	return nil
 }
@@ -194,7 +181,7 @@ func (s *Store) UpdateSearchFields(r *router.ResolvedURL, fields map[string]inte
 // for indexing.
 func (s *Store) searchDocFromEntity(e *mongodoc.Entity, be *mongodoc.BaseEntity) (*SearchDoc, error) {
 	doc := SearchDoc{Entity: e}
-	doc.ReadACLs = be.ACLs.Read
+	doc.ReadACLs = be.StableACLs.Read
 	// There should only be one record for the promulgated entity, which
 	// should be the latest promulgated revision. In the case that the base
 	// entity is not promulgated assume that there is a later promulgated

@@ -649,10 +649,15 @@ func (s *Store) UpdateBaseEntity(url *router.ResolvedURL, update interface{}) er
 // An error is returned if no channels are provided. For the time being,
 // the only supported channels are "development" and "stable".
 func (s *Store) Publish(url *router.ResolvedURL, channels ...Channel) error {
+	var updateSearch bool
 	// Validate channels.
 	actual := make([]Channel, 0, len(channels))
 	for _, c := range channels {
-		if c == DevelopmentChannel || c == StableChannel {
+		switch c {
+		case StableChannel:
+			updateSearch = true
+			fallthrough
+		case DevelopmentChannel:
 			actual = append(actual, c)
 		}
 	}
@@ -689,6 +694,10 @@ func (s *Store) Publish(url *router.ResolvedURL, channels ...Channel) error {
 	}
 	if err := s.UpdateBaseEntity(url, bson.D{{"$set", update}}); err != nil {
 		return errgo.Mask(err)
+	}
+
+	if !updateSearch {
+		return nil
 	}
 
 	// Add entity to ElasticSearch.
