@@ -422,26 +422,6 @@ func (s *StoreSuite) TestFindBaseEntity(c *gc.C) {
 	}
 }
 
-func (s *StoreSuite) TestAddCharmWithFailedESInsert(c *gc.C) {
-	// Make an elastic search with a non-existent address,
-	// so that will try to add the charm there, but fail.
-	esdb := &elasticsearch.Database{
-		Addr: "0.1.2.3:0123",
-	}
-
-	store := s.newStore(c, false)
-	defer store.Close()
-	store.ES = &SearchIndex{esdb, "no-index"}
-
-	url := router.MustNewResolvedURL("~charmers/precise/wordpress-12", -1)
-	err := store.AddCharmWithArchive(url, storetesting.Charms.CharmDir("wordpress"))
-	c.Assert(err, gc.ErrorMatches, "cannot index cs:~charmers/precise/wordpress-12 to ElasticSearch: .*")
-
-	// Check that the entity has been correctly removed.
-	_, err = store.FindEntity(url, nil)
-	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
-}
-
 func (s *StoreSuite) TestAddCharmsWithTheSameBaseEntity(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
@@ -2007,23 +1987,45 @@ func (s *StoreSuite) TestSetPromulgatedUpdateSearch(c *gc.C) {
 	store := s.newStore(c, true)
 	defer store.Close()
 
-	// Insert some entities in the store, ensure there are a number of revisions of the same charm.
-	err := store.DB.Entities().Insert(entity("~charmers/trusty/wordpress-0", "trusty/wordpress-2"))
-	c.Assert(err, gc.IsNil)
-	err = store.DB.Entities().Insert(entity("~charmers/precise/wordpress-0", "precise/wordpress-1"))
-	c.Assert(err, gc.IsNil)
-	err = store.DB.Entities().Insert(entity("~openstack-charmers/trusty/wordpress-0", ""))
-	c.Assert(err, gc.IsNil)
-	err = store.DB.Entities().Insert(entity("~openstack-charmers/precise/wordpress-0", ""))
-	c.Assert(err, gc.IsNil)
-	err = store.DB.BaseEntities().Insert(baseEntity("~charmers/wordpress", true))
-	c.Assert(err, gc.IsNil)
-	err = store.DB.BaseEntities().Insert(baseEntity("~openstack-charmers/wordpress", false))
-	c.Assert(err, gc.IsNil)
+	wordpress := storetesting.NewCharm(&charm.Meta{
+		Name: "wordpress",
+	})
+	addCharmForSearch(
+		c,
+		store,
+		router.MustNewResolvedURL("~charmers/trusty/wordpress-0", 2),
+		wordpress,
+		nil,
+		0,
+	)
+	addCharmForSearch(
+		c,
+		store,
+		router.MustNewResolvedURL("~charmers/precise/wordpress-0", 1),
+		wordpress,
+		nil,
+		0,
+	)
+	addCharmForSearch(
+		c,
+		store,
+		router.MustNewResolvedURL("~openstack-charmers/trusty/wordpress-0", -1),
+		wordpress,
+		nil,
+		0,
+	)
+	addCharmForSearch(
+		c,
+		store,
+		router.MustNewResolvedURL("~openstack-charmers/precise/wordpress-0", -1),
+		wordpress,
+		nil,
+		0,
+	)
 	url := router.MustNewResolvedURL("~openstack-charmers/trusty/wordpress-0", -1)
 
-	// Change the promulgated mysql version to openstack-charmers.
-	err = store.SetPromulgated(url, true)
+	// Change the promulgated wordpress version to openstack-charmers.
+	err := store.SetPromulgated(url, true)
 	c.Assert(err, gc.IsNil)
 	err = store.ES.RefreshIndex(s.TestIndex)
 	c.Assert(err, gc.IsNil)
@@ -2050,7 +2052,7 @@ func (s *StoreSuite) TestSetPromulgatedUpdateSearch(c *gc.C) {
 	c.Assert(doc.PromulgatedURL.String(), gc.Equals, "cs:precise/wordpress-2")
 	c.Assert(doc.PromulgatedRevision, gc.Equals, 2)
 
-	// Remove the promulgated flag from openstack-charmers, meaning mysql is
+	// Remove the promulgated flag from openstack-charmers, meaning wordpress is
 	// no longer promulgated.
 	err = store.SetPromulgated(url, false)
 	c.Assert(err, gc.IsNil)
@@ -2704,7 +2706,7 @@ var publishTests = []struct {
 	initialBaseEntity: &mongodoc.BaseEntity{
 		URL: charm.MustParseURL("~who/django"),
 		StableSeries: map[string]*charm.URL{
-			"precise": charm.MustParseURL("~who/django-1"),
+			"quantal": charm.MustParseURL("~who/django-1"),
 			"trusty":  charm.MustParseURL("~who/django-4"),
 		},
 		DevelopmentSeries: map[string]*charm.URL{
@@ -2724,7 +2726,7 @@ var publishTests = []struct {
 			"wily":   charm.MustParseURL("~who/django-42"),
 		},
 		StableSeries: map[string]*charm.URL{
-			"precise": charm.MustParseURL("~who/django-1"),
+			"quantal": charm.MustParseURL("~who/django-1"),
 			"trusty":  charm.MustParseURL("~who/django-42"),
 			"wily":    charm.MustParseURL("~who/django-42"),
 		},
@@ -2786,6 +2788,24 @@ func (s *StoreSuite) TestPublish(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		c.Assert(baseEntity, jc.DeepEquals, storetesting.NormalizeBaseEntity(test.expectedBaseEntity))
 	}
+}
+
+func (s *StoreSuite) TestPublishWithFailedESInsert(c *gc.C) {
+	// Make an elastic search with a non-existent address,
+	// so that will try to add the charm there, but fail.
+	esdb := &elasticsearch.Database{
+		Addr: "0.1.2.3:0123",
+	}
+
+	store := s.newStore(c, false)
+	defer store.Close()
+	store.ES = &SearchIndex{esdb, "no-index"}
+
+	url := router.MustNewResolvedURL("~charmers/precise/wordpress-12", -1)
+	err := store.AddCharmWithArchive(url, storetesting.Charms.CharmDir("wordpress"))
+	c.Assert(err, gc.IsNil)
+	err = store.Publish(url, StableChannel)
+	c.Assert(err, gc.ErrorMatches, "cannot index cs:~charmers/precise/wordpress-12 to ElasticSearch: .*")
 }
 
 func entity(url, purl string) *mongodoc.Entity {

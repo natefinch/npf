@@ -533,20 +533,6 @@ func (s *Store) addEntity(entity *mongodoc.Entity) (err error) {
 	if err != nil {
 		return errgo.Notef(err, "cannot insert entity")
 	}
-	// Ensure that if anything fails after this, that we delete
-	// the entity, otherwise we will be left in an internally
-	// inconsistent state.
-	defer func() {
-		if err != nil {
-			if err := s.DB.Entities().RemoveId(entity.URL); err != nil {
-				logger.Errorf("cannot remove entity after elastic search failure: %v", err)
-			}
-		}
-	}()
-	// Add entity to ElasticSearch.
-	if err := s.UpdateSearch(EntityResolvedURL(entity)); err != nil {
-		return errgo.Notef(err, "cannot index %s to ElasticSearch", entity.URL)
-	}
 	return nil
 }
 
