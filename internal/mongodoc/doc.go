@@ -155,9 +155,6 @@ func (e *Entity) PreferredURL(usePromulgated bool) *charm.URL {
 	} else {
 		u = *e.URL
 	}
-	if e.Development {
-		u.Channel = charm.DevelopmentChannel
-	}
 	return &u
 }
 
@@ -340,7 +337,6 @@ func BaseURL(url *charm.URL) *charm.URL {
 	newURL := *url
 	newURL.Revision = -1
 	newURL.Series = ""
-	newURL.Channel = ""
 	return &newURL
 }
 

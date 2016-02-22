@@ -922,7 +922,7 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *router.Resolved
 	_, err = f.Seek(0, 0)
 	c.Assert(err, gc.IsNil)
 
-	uploadURL := url.UserOwnedURL()
+	uploadURL := url.URL
 	if method == "POST" {
 		uploadURL.Revision = -1
 	}
@@ -958,7 +958,7 @@ func (s *ArchiveSuite) assertUpload(c *gc.C, method string, url *router.Resolved
 	c.Assert(entity.PreV5BlobHash, gc.Not(gc.Equals), "")
 	c.Assert(entity.PreV5BlobSize, gc.Not(gc.Equals), int64(0))
 
-	c.Assert(entity.PromulgatedURL, gc.DeepEquals, url.DocPromulgatedURL())
+	c.Assert(entity.PromulgatedURL, gc.DeepEquals, url.PromulgatedURL())
 	c.Assert(entity.Development, gc.Equals, false)
 
 	return expectId, entity.PreV5BlobSize

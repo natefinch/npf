@@ -415,7 +415,7 @@ func (s *Store) addCharm(c charm.Charm, p addParams) (err error) {
 	logger.Infof("add charm url %s; promulgated rev %d", &id, p.url.PromulgatedRevision)
 	entity := &mongodoc.Entity{
 		URL:                     &id,
-		PromulgatedURL:          p.url.DocPromulgatedURL(),
+		PromulgatedURL:          p.url.PromulgatedURL(),
 		BlobHash:                p.blobHash,
 		BlobHash256:             p.blobHash256,
 		BlobName:                p.blobName,
@@ -481,7 +481,7 @@ func (s *Store) addBundle(b charm.Bundle, p addParams) error {
 		BundleMachineCount: newInt(bundleMachineCount(bundleData)),
 		BundleReadMe:       b.ReadMe(),
 		BundleCharms:       urls,
-		PromulgatedURL:     p.url.DocPromulgatedURL(),
+		PromulgatedURL:     p.url.PromulgatedURL(),
 	}
 	denormalizeEntity(entity)
 
