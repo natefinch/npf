@@ -220,6 +220,11 @@ func (s *commonSuite) addPublicCharm(c *gc.C, charmName string, rurl *router.Res
 func (s *commonSuite) setPublic(c *gc.C, rurl *router.ResolvedURL) {
 	err := s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
 	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&rurl.URL, "stable.read", params.Everyone, rurl.URL.User)
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(&rurl.URL, "stable.write", rurl.URL.User)
+	c.Assert(err, gc.IsNil)
+	err = s.store.Publish(rurl, charmstore.StableChannel)
 }
 
 func (s *commonSuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.ResolvedURL, addRequiredCharms bool) (*router.ResolvedURL, charm.Bundle) {
@@ -298,7 +303,7 @@ func (s *commonSuite) bakeryDoAsUser(c *gc.C, user string) func(*http.Request) (
 func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
 	for _, svc := range bundle.Data().Services {
 		u := charm.MustParseURL(svc.Charm)
-		if _, err := s.store.FindBestEntity(u, nil); err == nil {
+		if _, err := s.store.FindBestEntity(u, charmstore.StableChannel, nil); err == nil {
 			continue
 		}
 		if u.Revision == -1 {

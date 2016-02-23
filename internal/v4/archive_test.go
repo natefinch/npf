@@ -557,18 +557,16 @@ func (s *ArchiveSuite) TestPutCharm(c *gc.C) {
 
 func (s *ArchiveSuite) TestPostBundle(c *gc.C) {
 	// Upload the required charms.
-	err := s.store.AddCharmWithArchive(
+	for _, rurl := range []*router.ResolvedURL{
 		newResolvedURL("cs:~charmers/utopic/mysql-42", 42),
-		storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
-	c.Assert(err, gc.IsNil)
-	err = s.store.AddCharmWithArchive(
 		newResolvedURL("cs:~charmers/utopic/wordpress-47", 47),
-		storetesting.Charms.CharmArchive(c.MkDir(), "wordpress"))
-	c.Assert(err, gc.IsNil)
-	err = s.store.AddCharmWithArchive(
 		newResolvedURL("cs:~charmers/utopic/logging-1", 1),
-		storetesting.Charms.CharmArchive(c.MkDir(), "logging"))
-	c.Assert(err, gc.IsNil)
+	} {
+		err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmArchive(c.MkDir(), rurl.URL.Name))
+		c.Assert(err, gc.IsNil)
+		err = s.store.Publish(rurl, charmstore.StableChannel)
+		c.Assert(err, gc.IsNil)
+	}
 
 	// A bundle that did not exist before should get revision 0.
 	s.assertUploadBundle(c, "POST", newResolvedURL("~charmers/bundle/wordpress-simple-0", -1), "wordpress-simple")

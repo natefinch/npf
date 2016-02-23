@@ -759,6 +759,13 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	// Try deleting all permissions.
 	s.assertPut(c, "wordpress/meta/perm/read", []string{})
 	s.assertPut(c, "wordpress/meta/perm/write", []string{})
+
+	// TODO (mhilton) remove when /meta/perm supports channels properly.
+	err = s.store.SetPerms(charm.MustParseURL("~charmers/precise/wordpress-23"), "stable.read")
+	c.Assert(err, gc.IsNil)
+	err = s.store.SetPerms(charm.MustParseURL("~charmers/precise/wordpress-23"), "stable.write")
+	c.Assert(err, gc.IsNil)
+
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		Do:           bakeryDo(nil),
@@ -1520,7 +1527,7 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 	for i, test := range resolveURLTests {
 		c.Logf("test %d: %s", i, test.url)
 		url := charm.MustParseURL(test.url)
-		rurl, err := v5.ResolveURL(entitycache.New(s.store), url)
+		rurl, err := v5.ResolveURL(entitycache.New(v5.ChannelStore{Store: s.store, Channel: charmstore.UnpublishedChannel}), url)
 		if test.notFound {
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 			c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for ".*"`)
@@ -2332,6 +2339,8 @@ func (s *APISuite) publishCharmsAtKnownTimes(c *gc.C, charms []publishSpec) {
 		if len(ch.acl) > 0 {
 			err := s.store.SetPerms(&id.URL, "read", ch.acl...)
 			c.Assert(err, gc.IsNil)
+			err = s.store.SetPerms(&id.URL, "stable.read", ch.acl...)
+			c.Assert(err, gc.IsNil)
 		}
 	}
 }
@@ -3054,3 +3063,5 @@ func (s *APISuite) TestSetAuthCookieMethodError(c *gc.C) {
 		},
 	})
 }
+
+var _ entitycache.Store = v5.ChannelStore{}

@@ -135,6 +135,23 @@ var (
 	)
 )
 
+// ChannelStore is a wrapper around Store for use with the entity cache.
+// Channel specifies the channel to use when resolving entities. It is
+// expected this will be used as a temporary workaround until channels
+// are fully integrated.
+type ChannelStore struct {
+	Store   *charmstore.Store
+	Channel charmstore.Channel
+}
+
+func (s ChannelStore) FindBestEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
+	return s.Store.FindBestEntity(url, s.Channel, fields)
+}
+
+func (s ChannelStore) FindBaseEntity(url *charm.URL, fields map[string]int) (*mongodoc.BaseEntity, error) {
+	return s.Store.FindBaseEntity(url, fields)
+}
+
 // NewReqHandler returns an instance of a *ReqHandler
 // suitable for handling an HTTP request. After use, the ReqHandler.Close
 // method should be called to close it.
@@ -152,7 +169,7 @@ func (h *Handler) NewReqHandler() (*ReqHandler, error) {
 	rh := reqHandlerPool.Get().(*ReqHandler)
 	rh.Handler = h
 	rh.Store = store
-	rh.Cache = entitycache.New(store)
+	rh.Cache = entitycache.New(ChannelStore{Store: store, Channel: charmstore.UnpublishedChannel})
 	rh.Cache.AddEntityFields(RequiredEntityFields)
 	rh.Cache.AddBaseEntityFields(RequiredBaseEntityFields)
 	return rh, nil

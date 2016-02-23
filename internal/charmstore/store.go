@@ -39,6 +39,12 @@ const (
 
 	// StableChannel is the channel used for stable charms or bundles.
 	StableChannel Channel = "stable"
+
+	// UnpublishedChannel is the default channel to which charms are uploaded.
+	UnpublishedChannel Channel = "unpublished"
+
+	// NoChannel represents where no channel has been specifically requested.
+	NoChannel Channel = ""
 )
 
 var (
@@ -480,10 +486,17 @@ func (s *Store) FindEntities(url *charm.URL, fields map[string]int) ([]*mongodoc
 }
 
 // FindBestEntity finds the entity that provides the preferred match to
-// the given URL. If the given URL has no user then only promulgated
-// entities will be queried. If fields is not nil, only its fields will
-// be populated in the returned entities.
-func (s *Store) FindBestEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
+// the given URL, on the given channel. If the given URL has no user then
+// only promulgated entities will be queried. If fields is not nil, only
+// those fields will be populated in the returned entities.
+//
+// If the URL contains a revision then it is assumed to be fully formed
+// and refer to a single entity, that entity is retrieved and verified
+// against the requested channel, for this purpose an NoChannel
+// is treated as UnpublishedChannel. If the URL does not contain a
+// revision then channel is searched for the best match, here
+// NoChannel will be treated as StableChannel.
+func (s *Store) FindBestEntity(url *charm.URL, channel Channel, fields map[string]int) (*mongodoc.Entity, error) {
 	if fields != nil {
 		// Make sure we have all the fields we need to make a decision.
 		// TODO this would be more efficient if we used bitmasks for field selection.
@@ -493,19 +506,130 @@ func (s *Store) FindBestEntity(url *charm.URL, fields map[string]int) (*mongodoc
 			"promulgated-revision": 1,
 			"series":               1,
 			"revision":             1,
+			"development":          1,
+			"stable":               1,
 		}
 		for f := range fields {
 			nfields[f] = 1
 		}
 		fields = nfields
 	}
+	if url.Revision != -1 {
+		// If the URL contains a revision, then it refers to a single entity.
+		entity, err := s.findSingleEntity(url, fields)
+		if errgo.Cause(err) == params.ErrNotFound {
+			return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
+		} else if err != nil {
+			return nil, errgo.Mask(err)
+		}
+		// If a channel was spedified make sure the entity is in that channel.
+		if channel == StableChannel && !entity.Stable {
+			return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
+		}
+		if channel == DevelopmentChannel && !entity.Development {
+			return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
+		}
+		return entity, nil
+	}
+	switch channel {
+	case StableChannel, NoChannel:
+		return s.findStableEntity(url, fields)
+	case DevelopmentChannel:
+		return s.findDevelopmentEntity(url, fields)
+	case UnpublishedChannel:
+		return s.findUnpublishedEntity(url, fields)
+	default:
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
+	}
+}
 
+// findSingleEntity returns the entity referred to by URL. It is expected
+// that the URL refers to only one entity and is fully formed. The url may
+// refer to either a user-owned or promulgated charm name.
+func (s *Store) findSingleEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
+	query := s.EntitiesQuery(url)
+	if fields != nil {
+		query = query.Select(fields)
+	}
+	var entity mongodoc.Entity
+	err := query.One(&entity)
+	if err == nil {
+		return &entity, nil
+	}
+	if err == mgo.ErrNotFound {
+		return nil, errgo.WithCausef(err, params.ErrNotFound, "no matching charm or bundle for %s", url)
+	}
+	return nil, errgo.Notef(err, "cannot find entities matching %s", url)
+}
+
+// findStableEntity attempts to find an entity on the stable channel. The
+// base entity for URL is retrieved and the series with the best match to
+// URL.Series is used as the resolved entity.
+func (s *Store) findStableEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
+	baseEntity, err := s.FindBaseEntity(url, map[string]int{
+		"_id":          1,
+		"stableseries": 1,
+	})
+	if errgo.Cause(err) == params.ErrNotFound {
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
+	} else if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	var entityURL *charm.URL
+	if url.Series == "" {
+		for _, u := range baseEntity.StableSeries {
+			if entityURL == nil || seriesScore[u.Series] > seriesScore[entityURL.Series] {
+				entityURL = u
+			}
+		}
+	} else {
+		entityURL = baseEntity.StableSeries[url.Series]
+	}
+	if entityURL == nil {
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
+	}
+	return s.findSingleEntity(entityURL, fields)
+}
+
+// findDevelopmentEntity attempts to find an entity on the development
+// channel. The base entity for URL is retrieved and the series with the
+// best match to URL.Series is used as the resolved entity.
+func (s *Store) findDevelopmentEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
+	baseEntity, err := s.FindBaseEntity(url, map[string]int{
+		"_id":               1,
+		"developmentseries": 1,
+	})
+	if errgo.Cause(err) == params.ErrNotFound {
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
+	} else if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	var entityURL *charm.URL
+	if url.Series == "" {
+		for _, u := range baseEntity.DevelopmentSeries {
+			if entityURL == nil || seriesScore[u.Series] > seriesScore[entityURL.Series] {
+				entityURL = u
+			}
+		}
+	} else {
+		entityURL = baseEntity.DevelopmentSeries[url.Series]
+	}
+	if entityURL == nil {
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
+	}
+	return s.findSingleEntity(entityURL, fields)
+}
+
+// findUnpublishedEntity attempts to find an entity on the unpublished
+// channel. This searches all entities in the store for the best match to
+// the URL.
+func (s *Store) findUnpublishedEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
 	entities, err := s.FindEntities(url, fields)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
 	if len(entities) == 0 {
-		return nil, errgo.WithCausef(nil, params.ErrNotFound, "entity not found")
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
 	}
 	best := entities[0]
 	for _, e := range entities {

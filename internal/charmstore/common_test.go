@@ -24,7 +24,7 @@ func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
 	defer store.Close()
 	for _, svc := range bundle.Data().Services {
 		u := charm.MustParseURL(svc.Charm)
-		if _, err := store.FindBestEntity(u, nil); err == nil {
+		if _, err := store.FindBestEntity(u, StableChannel, nil); err == nil {
 			continue
 		}
 		if u.Revision == -1 {
@@ -43,6 +43,8 @@ func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
 			rurl.PromulgatedRevision = -1
 		}
 		err := store.AddCharmWithArchive(&rurl, ch)
+		c.Assert(err, gc.IsNil)
+		err = store.Publish(&rurl, StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 }

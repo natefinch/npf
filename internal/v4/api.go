@@ -94,7 +94,7 @@ func (h *Handler) NewReqHandler() (ReqHandler, error) {
 	rh := reqHandlerPool.Get().(ReqHandler)
 	rh.Handler = h.Handler
 	rh.Store = store
-	rh.Cache = entitycache.New(store)
+	rh.Cache = entitycache.New(v5.ChannelStore{Store: store, Channel: charmstore.UnpublishedChannel})
 	rh.Cache.AddEntityFields(requiredEntityFields)
 	rh.Cache.AddBaseEntityFields(v5.RequiredBaseEntityFields)
 	return rh, nil

@@ -20,6 +20,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 )
 
@@ -492,12 +493,16 @@ func (s *migrationsSuite) TestAddPreV5CompatBlob(c *gc.C) {
 	p.Close()
 	defer store.Close()
 
-	err = store.AddCharmWithArchive(MustParseResolvedURL("~charmers/precise/wordpress-0"), storetesting.NewCharm(nil))
-	c.Assert(err, gc.IsNil)
-	err = store.AddCharmWithArchive(MustParseResolvedURL("~charmers/multi-series-1"), storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "precise", "trusty")))
-	c.Assert(err, gc.IsNil)
-	err = store.AddCharmWithArchive(MustParseResolvedURL("~charmers/trusty/multi-in-single-1"), storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "precise", "trusty")))
-	c.Assert(err, gc.IsNil)
+	for rurl, ch := range map[*router.ResolvedURL]charm.Charm{
+		MustParseResolvedURL("~charmers/precise/wordpress-0"):      storetesting.NewCharm(nil),
+		MustParseResolvedURL("~charmers/multi-series-1"):           storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "precise", "trusty")),
+		MustParseResolvedURL("~charmers/trusty/multi-in-single-1"): storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "precise", "trusty")),
+	} {
+		err := store.AddCharmWithArchive(rurl, ch)
+		c.Assert(err, gc.IsNil)
+		err = store.Publish(rurl, StableChannel)
+		c.Assert(err, gc.IsNil)
+	}
 	err = store.AddBundleWithArchive(MustParseResolvedURL("~charmers/bundle/of-fun-1"), storetesting.NewBundle(&charm.BundleData{
 		Services: map[string]*charm.ServiceSpec{
 			"x": {

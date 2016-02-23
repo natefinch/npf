@@ -103,17 +103,17 @@ func (s *AddEntitySuite) TestAddCharmWithMultiSeries(c *gc.C) {
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
 	s.checkAddCharm(c, ch, router.MustNewResolvedURL("~charmers/multi-series-1", 1))
 	// Make sure it can be accessed with a number of names
-	e, err := store.FindBestEntity(charm.MustParseURL("~charmers/multi-series-1"), nil)
+	e, err := store.FindBestEntity(charm.MustParseURL("~charmers/multi-series-1"), UnpublishedChannel, nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/trusty/multi-series-1"), nil)
+	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/trusty/multi-series-1"), UnpublishedChannel, nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/wily/multi-series-1"), nil)
+	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/wily/multi-series-1"), UnpublishedChannel, nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	_, err = store.FindBestEntity(charm.MustParseURL("~charmers/precise/multi-series-1"), nil)
-	c.Assert(err, gc.ErrorMatches, "entity not found")
+	_, err = store.FindBestEntity(charm.MustParseURL("~charmers/precise/multi-series-1"), UnpublishedChannel, nil)
+	c.Assert(err, gc.ErrorMatches, "no matching charm or bundle for cs:~charmers/precise/multi-series-1")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
 
@@ -139,13 +139,13 @@ func (s *AddEntitySuite) TestAddBundleDuplicatingCharm(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
 	ch := storetesting.Charms.CharmDir("wordpress")
-	err := store.AddCharmWithArchive(router.MustNewResolvedURL("~charmers/precise/wordpress-2", -1), ch)
+	err := store.AddCharmWithArchive(router.MustNewResolvedURL("~tester/precise/wordpress-2", -1), ch)
 	c.Assert(err, gc.IsNil)
 
 	b := storetesting.Charms.BundleDir("wordpress-simple")
 	s.addRequiredCharms(c, b)
-	err = store.AddBundleWithArchive(router.MustNewResolvedURL("~charmers/bundle/wordpress-5", -1), b)
-	c.Assert(err, gc.ErrorMatches, "bundle name duplicates charm name cs:~charmers/precise/wordpress-2")
+	err = store.AddBundleWithArchive(router.MustNewResolvedURL("~tester/bundle/wordpress-5", -1), b)
+	c.Assert(err, gc.ErrorMatches, "bundle name duplicates charm name cs:~tester/precise/wordpress-2")
 }
 
 func (s *AddEntitySuite) TestAddCharmDuplicatingBundle(c *gc.C) {

@@ -86,15 +86,15 @@ func (s *Store) UpdateSearch(r *router.ResolvedURL) error {
 	}
 	// For multi-series charms update the whole base URL.
 	if r.URL.Series == "" {
-		return s.UpdateSearchBaseURL(r.PreferredURL())
+		return s.UpdateSearchBaseURL(&r.URL)
 	}
 
 	if !series.Series[r.URL.Series].SearchIndex {
 		return nil
 	}
-	baseEntity, err := s.FindBaseEntity(r.PreferredURL(), nil)
+	baseEntity, err := s.FindBaseEntity(&r.URL, nil)
 	if err != nil {
-		return errgo.NoteMask(err, fmt.Sprintf("cannot update search record for %q", r.PreferredURL()), errgo.Is(params.ErrNotFound))
+		return errgo.NoteMask(err, fmt.Sprintf("cannot update search record for %q", &r.URL), errgo.Is(params.ErrNotFound))
 	}
 	series := r.URL.Series
 	entityURL := baseEntity.StableSeries[series]
