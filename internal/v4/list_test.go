@@ -21,6 +21,7 @@ import (
 	"gopkg.in/macaroon.v1"
 	"gopkg.in/mgo.v2/bson"
 
+	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
@@ -59,6 +60,9 @@ func (s *ListSuite) SetUpTest(c *gc.C) {
 			"acls": {
 				Read: []string{"charmers", "test-user"},
 			},
+			"stableacls": {
+				Read: []string{"charmers", "test-user"},
+			},
 		}}},
 	)
 	c.Assert(err, gc.IsNil)
@@ -74,7 +78,9 @@ func (s *ListSuite) addCharmsToStore(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
-		err = s.store.UpdateSearch(id)
+		err = s.store.SetPerms(&id.URL, "stable.read", params.Everyone, id.URL.User)
+		c.Assert(err, gc.IsNil)
+		err = s.store.Publish(id, charmstore.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 	for name, id := range exportListTestBundles {
@@ -82,7 +88,9 @@ func (s *ListSuite) addCharmsToStore(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
-		err = s.store.UpdateSearch(id)
+		err = s.store.SetPerms(&id.URL, "stable.read", params.Everyone, id.URL.User)
+		c.Assert(err, gc.IsNil)
+		err = s.store.Publish(id, charmstore.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 }

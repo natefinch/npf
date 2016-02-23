@@ -188,7 +188,7 @@ func (h *reqHandler) serveCharmInfo(_ http.Header, req *http.Request) (interface
 		}
 		var entity *mongodoc.Entity
 		if err == nil {
-			entity, err = h.store.FindBestEntity(curl, nil)
+			entity, err = h.store.FindBestEntity(curl, charmstore.UnpublishedChannel, nil)
 			if errgo.Cause(err) == params.ErrNotFound {
 				// The old API actually returned "entry not found"
 				// on *any* error, but it seems reasonable to be
@@ -257,7 +257,7 @@ func (h *reqHandler) serveCharmEvent(_ http.Header, req *http.Request) (interfac
 		}
 
 		// Retrieve the charm.
-		entity, err := h.store.FindBestEntity(id, charmstore.FieldSelector("_id", "uploadtime", "extrainfo"))
+		entity, err := h.store.FindBestEntity(id, charmstore.UnpublishedChannel, charmstore.FieldSelector("_id", "uploadtime", "extrainfo"))
 		if err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				// The old API actually returned "entry not found"

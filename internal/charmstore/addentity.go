@@ -599,7 +599,7 @@ func (s *Store) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 			// be returned to the user along with other bundle errors.
 			continue
 		}
-		e, err := s.FindBestEntity(url, map[string]int{})
+		e, err := s.FindBestEntity(url, StableChannel, map[string]int{})
 		if err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				// Ignore this error too, for the same reasons

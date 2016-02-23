@@ -1305,109 +1305,1237 @@ func (s *StoreSuite) TestSESPutDoesNotErrorWithNoESConfigured(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 }
 
-var findBestEntityTests = []struct {
-	url       string
-	expectURL string
-	expectErr string
+var findBestEntityCharms = []struct {
+	id          *router.ResolvedURL
+	charm       charm.Charm
+	development bool
+	stable      bool
 }{{
-	url:       "~charmers/trusty/wordpress-10",
-	expectURL: "~charmers/trusty/wordpress-10",
+	id:          router.MustNewResolvedURL("~charmers/trusty/wordpress-0", 0),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      true,
 }, {
-	url:       "~charmers/trusty/wordpress",
-	expectURL: "~charmers/trusty/wordpress-12",
+	id:          router.MustNewResolvedURL("~charmers/trusty/wordpress-1", 1),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      true,
 }, {
-	url:       "trusty/wordpress-11",
-	expectURL: "~charmers/trusty/wordpress-11",
+	id:          router.MustNewResolvedURL("~charmers/trusty/wordpress-2", 2),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      false,
 }, {
-	url:       "trusty/wordpress",
-	expectURL: "~mickey/trusty/wordpress-13",
+	id:          router.MustNewResolvedURL("~charmers/trusty/wordpress-3", 3),
+	charm:       storetesting.NewCharm(nil),
+	development: false,
+	stable:      false,
 }, {
-	url:       "wordpress",
-	expectURL: "~mickey/trusty/wordpress-13",
+	id:          router.MustNewResolvedURL("~charmers/precise/wordpress-4", 4),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      true,
 }, {
-	url:       "~mickey/wordpress-12",
-	expectErr: "entity not found",
+	id:          router.MustNewResolvedURL("~charmers/precise/wordpress-5", 5),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      true,
 }, {
-	url:       "~mickey/precise/wordpress",
-	expectURL: "~mickey/precise/wordpress-24",
+	id:          router.MustNewResolvedURL("~charmers/precise/wordpress-6", 6),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      false,
 }, {
-	url:       "mysql",
-	expectErr: "entity not found",
+	id:          router.MustNewResolvedURL("~charmers/precise/wordpress-7", 7),
+	charm:       storetesting.NewCharm(nil),
+	development: false,
+	stable:      false,
 }, {
-	url:       "precise/wordpress",
-	expectURL: "~mickey/precise/wordpress-24",
+	id:          router.MustNewResolvedURL("~charmers/mysql-0", 0),
+	charm:       storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "trusty", "precise")),
+	development: true,
+	stable:      true,
 }, {
-	url:       "~donald/bundle/wordpress-simple-0",
-	expectURL: "~donald/bundle/wordpress-simple-0",
+	id:          router.MustNewResolvedURL("~charmers/mysql-1", 1),
+	charm:       storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "trusty", "precise")),
+	development: true,
+	stable:      true,
 }, {
-	url:       "~donald/bundle/wordpress-simple",
-	expectURL: "~donald/bundle/wordpress-simple-1",
+	id:          router.MustNewResolvedURL("~charmers/mysql-2", 2),
+	charm:       storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "trusty", "precise")),
+	development: true,
+	stable:      false,
 }, {
-	url:       "~donald/wordpress-simple-0",
-	expectURL: "~donald/bundle/wordpress-simple-0",
+	id:          router.MustNewResolvedURL("~charmers/mysql-3", 3),
+	charm:       storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "trusty", "precise")),
+	development: false,
+	stable:      false,
 }, {
-	url:       "bundle/wordpress-simple-0",
-	expectURL: "~donald/bundle/wordpress-simple-1",
+	id:          router.MustNewResolvedURL("~charmers/trusty/mongodb-0", -1),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      true,
 }, {
-	url:       "bundle/wordpress-simple",
-	expectURL: "~donald/bundle/wordpress-simple-1",
+	id:          router.MustNewResolvedURL("~charmers/trusty/mongodb-1", -1),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      true,
 }, {
-	url:       "wordpress-simple",
-	expectURL: "~donald/bundle/wordpress-simple-1",
+	id:          router.MustNewResolvedURL("~charmers/trusty/mongodb-2", -1),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      false,
 }, {
-	url:       "~pluto/multi-series",
-	expectURL: "~pluto/wily/multi-series-1",
+	id:          router.MustNewResolvedURL("~charmers/trusty/mongodb-3", -1),
+	charm:       storetesting.NewCharm(nil),
+	development: false,
+	stable:      false,
+}, {
+	id:          router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      false,
+}, {
+	id:          router.MustNewResolvedURL("~charmers/trusty/nginx-0", 0),
+	charm:       storetesting.NewCharm(nil),
+	development: false,
+	stable:      false,
+}, {
+	id:          router.MustNewResolvedURL("~charmers/trusty/postgresql-0", 0),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      true,
+}, {
+	id:          router.MustNewResolvedURL("~charmers/precise/postgresql-0", 0),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      true,
+}, {
+	id:          router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+	charm:       storetesting.NewCharm(storetesting.MetaWithSupportedSeries(nil, "trusty", "precise")),
+	development: true,
+	stable:      true,
+}, {
+	id:          router.MustNewResolvedURL("~charmers/trusty/ceph-0", 0),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      true,
+}, {
+	id:          router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+	charm:       storetesting.NewCharm(nil),
+	development: true,
+	stable:      false,
+}}
+
+var findBestEntityBundles = []struct {
+	id          *router.ResolvedURL
+	bundle      charm.Bundle
+	development bool
+	stable      bool
+}{{
+	id: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
+	bundle: storetesting.NewBundle(&charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"wordpress": &charm.ServiceSpec{
+				Charm: "cs:wordpress",
+			},
+			"mysql": &charm.ServiceSpec{
+				Charm: "cs:mysql",
+			},
+		},
+	}),
+	development: true,
+	stable:      true,
+}, {
+	id: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-1", 1),
+	bundle: storetesting.NewBundle(&charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"wordpress": &charm.ServiceSpec{
+				Charm: "cs:wordpress",
+			},
+			"mysql": &charm.ServiceSpec{
+				Charm: "cs:mysql",
+			},
+		},
+	}),
+	development: true,
+	stable:      true,
+}, {
+	id: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-2", 2),
+	bundle: storetesting.NewBundle(&charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"wordpress": &charm.ServiceSpec{
+				Charm: "cs:wordpress",
+			},
+			"mysql": &charm.ServiceSpec{
+				Charm: "cs:mysql",
+			},
+		},
+	}),
+	development: true,
+	stable:      false,
+}, {
+	id: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-3", 3),
+	bundle: storetesting.NewBundle(&charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"wordpress": &charm.ServiceSpec{
+				Charm: "cs:wordpress",
+			},
+			"mysql": &charm.ServiceSpec{
+				Charm: "cs:mysql",
+			},
+		},
+	}),
+	development: false,
+	stable:      false,
+}}
+
+var findBestEntityTests = []struct {
+	url              string
+	channel          Channel
+	expectID         *router.ResolvedURL
+	expectError      string
+	expectErrorCause error
+}{{
+	url:      "~charmers/trusty/wordpress-0",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-0", 0),
+}, {
+	url:      "~charmers/trusty/wordpress-0",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-0", 0),
+}, {
+	url:      "~charmers/trusty/wordpress-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-0", 0),
+}, {
+	url:      "~charmers/trusty/wordpress-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-0", 0),
+}, {
+	url:      "~charmers/trusty/wordpress-3",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-3", 3),
+}, {
+	url:      "~charmers/trusty/wordpress-3",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-3", 3),
+}, {
+	url:              "~charmers/trusty/wordpress-3",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/trusty/wordpress-3",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "~charmers/trusty/wordpress-2",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/trusty/wordpress-2",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "trusty/wordpress-0",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-0", 0),
+}, {
+	url:      "trusty/wordpress-0",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-0", 0),
+}, {
+	url:      "trusty/wordpress-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-0", 0),
+}, {
+	url:      "trusty/wordpress-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-0", 0),
+}, {
+	url:      "trusty/wordpress-3",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-3", 3),
+}, {
+	url:      "trusty/wordpress-3",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-3", 3),
+}, {
+	url:              "trusty/wordpress-3",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/wordpress-3",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "trusty/wordpress-2",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/wordpress-2",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "~charmers/trusty/wordpress",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-1", 1),
+}, {
+	url:      "~charmers/trusty/wordpress",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-1", 1),
+}, {
+	url:      "~charmers/trusty/wordpress",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-2", 2),
+}, {
+	url:      "~charmers/trusty/wordpress",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-3", 3),
+}, {
+	url:      "trusty/wordpress",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-1", 1),
+}, {
+	url:      "trusty/wordpress",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-1", 1),
+}, {
+	url:      "trusty/wordpress",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-2", 2),
+}, {
+	url:      "trusty/wordpress",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-3", 3),
+}, {
+	url:      "precise/wordpress",
+	expectID: router.MustNewResolvedURL("~charmers/precise/wordpress-5", 5),
+}, {
+	url:      "precise/wordpress",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/precise/wordpress-5", 5),
+}, {
+	url:      "precise/wordpress",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/precise/wordpress-6", 6),
+}, {
+	url:      "precise/wordpress",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/precise/wordpress-7", 7),
+}, {
+	url:      "wordpress",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-1", 1),
+}, {
+	url:      "wordpress",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-1", 1),
+}, {
+	url:      "wordpress",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-2", 2),
+}, {
+	url:      "wordpress",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-3", 3),
+}, {
+	url:      "~charmers/wordpress",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-1", 1),
+}, {
+	url:      "~charmers/wordpress",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-1", 1),
+}, {
+	url:      "~charmers/wordpress",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-2", 2),
+}, {
+	url:      "~charmers/wordpress",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-3", 3),
+}, {
+	url:              "~charmers/wordpress-0",
+	expectError:      "no matching charm or bundle for cs:~charmers/wordpress-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "~charmers/wordpress-0",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/wordpress-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "~charmers/wordpress-0",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/wordpress-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "~charmers/wordpress-0",
+	channel:          UnpublishedChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/wordpress-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "~charmers/mysql-0",
+	expectID: router.MustNewResolvedURL("~charmers/mysql-0", 0),
+}, {
+	url:      "~charmers/mysql-0",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-0", 0),
+}, {
+	url:      "~charmers/mysql-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-0", 0),
+}, {
+	url:      "~charmers/mysql-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-0", 0),
+}, {
+	url:      "~charmers/mysql-3",
+	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
+}, {
+	url:      "~charmers/mysql-3",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
+}, {
+	url:              "~charmers/mysql-3",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/mysql-3",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "~charmers/mysql-2",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/mysql-2",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "mysql-0",
+	expectID: findBestEntityCharms[8].id,
+}, {
+	url:      "mysql-0",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-0", 0),
+}, {
+	url:      "mysql-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-0", 0),
+}, {
+	url:      "mysql-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-0", 0),
+}, {
+	url:      "mysql-3",
+	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
+}, {
+	url:      "mysql-3",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
+}, {
+	url:              "mysql-3",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:mysql-3",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "mysql-2",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:mysql-2",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "~charmers/mysql",
+	expectID: router.MustNewResolvedURL("~charmers/mysql-1", 1),
+}, {
+	url:      "~charmers/mysql",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-1", 1),
+}, {
+	url:      "~charmers/mysql",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-2", 2),
+}, {
+	url:      "~charmers/mysql",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
+}, {
+	url:      "mysql",
+	expectID: router.MustNewResolvedURL("~charmers/mysql-1", 1),
+}, {
+	url:      "mysql",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-1", 1),
+}, {
+	url:      "mysql",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-2", 2),
+}, {
+	url:      "mysql",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
+}, {
+	url:      "~charmers/precise/mysql",
+	expectID: router.MustNewResolvedURL("~charmers/mysql-1", 1),
+}, {
+	url:      "~charmers/precise/mysql",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-1", 1),
+}, {
+	url:      "~charmers/precise/mysql",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-2", 2),
+}, {
+	url:      "~charmers/precise/mysql",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
+}, {
+	url:      "precise/mysql",
+	expectID: router.MustNewResolvedURL("~charmers/mysql-1", 1),
+}, {
+	url:      "precise/mysql",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-1", 1),
+}, {
+	url:      "precise/mysql",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-2", 2),
+}, {
+	url:      "precise/mysql",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
+}, {
+	url:      "~charmers/trusty/mysql",
+	expectID: router.MustNewResolvedURL("~charmers/mysql-1", 1),
+}, {
+	url:      "~charmers/trusty/mysql",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-1", 1),
+}, {
+	url:      "~charmers/trusty/mysql",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-2", 2),
+}, {
+	url:      "~charmers/trusty/mysql",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
+}, {
+	url:      "trusty/mysql",
+	expectID: router.MustNewResolvedURL("~charmers/mysql-1", 1),
+}, {
+	url:      "trusty/mysql",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-1", 1),
+}, {
+	url:      "trusty/mysql",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-2", 2),
+}, {
+	url:      "trusty/mysql",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
+}, {
+	url:      "~charmers/trusty/mongodb-0",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/mongodb-0", -1),
+}, {
+	url:      "~charmers/trusty/mongodb-0",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/mongodb-0", -1),
+}, {
+	url:      "~charmers/trusty/mongodb-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/mongodb-0", -1),
+}, {
+	url:      "~charmers/trusty/mongodb-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/mongodb-0", -1),
+}, {
+	url:      "~charmers/trusty/mongodb-3",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/mongodb-3", -1),
+}, {
+	url:      "~charmers/trusty/mongodb-3",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/mongodb-3", -1),
+}, {
+	url:              "~charmers/trusty/mongodb-3",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/trusty/mongodb-3",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "~charmers/trusty/mongodb-2",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/trusty/mongodb-2",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "trusty/mongodb-0",
+	expectError:      "no matching charm or bundle for cs:trusty/mongodb-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "trusty/mongodb-0",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/mongodb-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "trusty/mongodb-0",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/mongodb-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "trusty/mongodb-0",
+	channel:          UnpublishedChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/mongodb-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "~charmers/trusty/mongodb",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/mongodb-1", -1),
+}, {
+	url:      "~charmers/trusty/mongodb",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/mongodb-1", -1),
+}, {
+	url:      "~charmers/trusty/mongodb",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/mongodb-2", -1),
+}, {
+	url:      "~charmers/trusty/mongodb",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/mongodb-3", -1),
+}, {
+	url:              "trusty/mongodb",
+	expectError:      "no matching charm or bundle for cs:trusty/mongodb",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "trusty/mongodb",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/mongodb",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "trusty/mongodb",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/mongodb",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "trusty/mongodb",
+	channel:          UnpublishedChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/mongodb",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "mongodb",
+	expectError:      "no matching charm or bundle for cs:mongodb",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "mongodb",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:mongodb",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "mongodb",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:mongodb",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "mongodb",
+	channel:          UnpublishedChannel,
+	expectError:      "no matching charm or bundle for cs:mongodb",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "~charmers/trusty/apache",
+	expectError:      "no matching charm or bundle for cs:~charmers/trusty/apache",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "~charmers/trusty/apache",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/trusty/apache",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "~charmers/trusty/apache",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
+}, {
+	url:      "~charmers/trusty/apache",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
+}, {
+	url:      "~charmers/trusty/apache-0",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
+}, {
+	url:              "~charmers/trusty/apache-0",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/trusty/apache-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "~charmers/trusty/apache-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
+}, {
+	url:      "~charmers/trusty/apache-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
+}, {
+	url:              "trusty/apache",
+	expectError:      "no matching charm or bundle for cs:trusty/apache",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "trusty/apache",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/apache",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "trusty/apache",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
+}, {
+	url:      "trusty/apache",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
+}, {
+	url:      "trusty/apache-0",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
+}, {
+	url:              "trusty/apache-0",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/apache-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "trusty/apache-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
+}, {
+	url:      "trusty/apache-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
+}, {
+	url:              "~charmers/trusty/nginx",
+	expectError:      "no matching charm or bundle for cs:~charmers/trusty/nginx",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "~charmers/trusty/nginx",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/trusty/nginx",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "~charmers/trusty/nginx",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/trusty/nginx",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "~charmers/trusty/nginx",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/nginx-0", 0),
+}, {
+	url:      "~charmers/trusty/nginx-0",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/nginx-0", 0),
+}, {
+	url:              "~charmers/trusty/nginx-0",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/trusty/nginx-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "~charmers/trusty/nginx-0",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/trusty/nginx-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "~charmers/trusty/nginx-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/nginx-0", 0),
+}, {
+	url:              "trusty/nginx",
+	expectError:      "no matching charm or bundle for cs:trusty/nginx",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "trusty/nginx",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/nginx",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "trusty/nginx",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/nginx",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "trusty/nginx",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/nginx-0", 0),
+}, {
+	url:      "trusty/nginx-0",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/nginx-0", 0),
+}, {
+	url:              "trusty/nginx-0",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/nginx-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "trusty/nginx-0",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/nginx-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "trusty/nginx-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/nginx-0", 0),
+}, {
+	url:      "~charmers/bundle/wordpress-simple-0",
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
+}, {
+	url:      "~charmers/bundle/wordpress-simple-0",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
+}, {
+	url:      "~charmers/bundle/wordpress-simple-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
+}, {
+	url:      "~charmers/bundle/wordpress-simple-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
+}, {
+	url:      "~charmers/bundle/wordpress-simple-3",
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-3", 3),
+}, {
+	url:      "~charmers/bundle/wordpress-simple-3",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-3", 3),
+}, {
+	url:              "~charmers/bundle/wordpress-simple-3",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/bundle/wordpress-simple-3",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "~charmers/bundle/wordpress-simple-2",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:~charmers/bundle/wordpress-simple-2",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "bundle/wordpress-simple-0",
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
+}, {
+	url:      "bundle/wordpress-simple-0",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
+}, {
+	url:      "bundle/wordpress-simple-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
+}, {
+	url:      "bundle/wordpress-simple-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
+}, {
+	url:      "bundle/wordpress-simple-3",
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-3", 3),
+}, {
+	url:      "bundle/wordpress-simple-3",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-3", 3),
+}, {
+	url:              "bundle/wordpress-simple-3",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:bundle/wordpress-simple-3",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "bundle/wordpress-simple-2",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:bundle/wordpress-simple-2",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "~charmers/bundle/wordpress-simple",
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-1", 1),
+}, {
+	url:      "~charmers/bundle/wordpress-simple",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-1", 1),
+}, {
+	url:      "~charmers/bundle/wordpress-simple",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-2", 2),
+}, {
+	url:      "~charmers/bundle/wordpress-simple",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-3", 3),
+}, {
+	url:      "bundle/wordpress-simple",
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-1", 1),
+}, {
+	url:      "bundle/wordpress-simple",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-1", 1),
+}, {
+	url:      "bundle/wordpress-simple",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-2", 2),
+}, {
+	url:      "bundle/wordpress-simple",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-3", 3),
+}, {
+	url:      "wordpress-simple",
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-1", 1),
+}, {
+	url:      "wordpress-simple",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-1", 1),
+}, {
+	url:      "wordpress-simple",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-2", 2),
+}, {
+	url:      "wordpress-simple",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-3", 3),
+}, {
+	url:      "~charmers/wordpress-simple",
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-1", 1),
+}, {
+	url:      "~charmers/wordpress-simple",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-1", 1),
+}, {
+	url:      "~charmers/wordpress-simple",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-2", 2),
+}, {
+	url:      "~charmers/wordpress-simple",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-3", 3),
+}, {
+	url:      "~charmers/wordpress-simple-0",
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
+}, {
+	url:      "~charmers/wordpress-simple-0",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
+}, {
+	url:      "~charmers/wordpress-simple-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
+}, {
+	url:      "~charmers/wordpress-simple-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
+}, {
+	url:              "~charmers/trusty/wordpress",
+	channel:          "no-such-channel",
+	expectError:      "no matching charm or bundle for cs:~charmers/trusty/wordpress",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "~charmers/trusty/postgresql-0",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/postgresql-0", 0),
+}, {
+	url:      "~charmers/trusty/postgresql-0",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/postgresql-0", 0),
+}, {
+	url:      "~charmers/trusty/postgresql-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/postgresql-0", 0),
+}, {
+	url:      "~charmers/trusty/postgresql-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/postgresql-0", 0),
+}, {
+	url:      "~charmers/precise/postgresql-0",
+	expectID: router.MustNewResolvedURL("~charmers/precise/postgresql-0", 0),
+}, {
+	url:      "~charmers/precise/postgresql-0",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/precise/postgresql-0", 0),
+}, {
+	url:      "~charmers/precise/postgresql-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/precise/postgresql-0", 0),
+}, {
+	url:      "~charmers/precise/postgresql-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/precise/postgresql-0", 0),
+}, {
+	url:      "~charmers/trusty/postgresql-1",
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/trusty/postgresql-1",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/trusty/postgresql-1",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/trusty/postgresql-1",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/precise/postgresql-1",
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/precise/postgresql-1",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/precise/postgresql-1",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/precise/postgresql-1",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/trusty/postgresql",
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/trusty/postgresql",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/trusty/postgresql",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/trusty/postgresql",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/precise/postgresql",
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/precise/postgresql",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/precise/postgresql",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "~charmers/precise/postgresql",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "trusty/postgresql",
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "trusty/postgresql",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "trusty/postgresql",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "trusty/postgresql",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "precise/postgresql",
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "precise/postgresql",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "precise/postgresql",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "precise/postgresql",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "postgresql",
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "postgresql",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "postgresql",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "postgresql",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "postgresql-1",
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "postgresql-1",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "postgresql-1",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:      "postgresql-1",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/postgresql-1", 1),
+}, {
+	url:              "postgresql-0",
+	expectError:      "no matching charm or bundle for cs:postgresql-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "postgresql-0",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:postgresql-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "postgresql-0",
+	channel:          DevelopmentChannel,
+	expectError:      "no matching charm or bundle for cs:postgresql-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "postgresql-0",
+	channel:          UnpublishedChannel,
+	expectError:      "no matching charm or bundle for cs:postgresql-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "~charmers/trusty/ceph-0",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/ceph-0", 0),
+}, {
+	url:      "~charmers/trusty/ceph-0",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/ceph-0", 0),
+}, {
+	url:      "~charmers/trusty/ceph-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/ceph-0", 0),
+}, {
+	url:      "~charmers/trusty/ceph-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/ceph-0", 0),
+}, {
+	url:      "~charmers/trusty/ceph",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/ceph-0", 0),
+}, {
+	url:      "~charmers/trusty/ceph",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/ceph-0", 0),
+}, {
+	url:      "~charmers/trusty/ceph",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/ceph-0", 0),
+}, {
+	url:      "~charmers/trusty/ceph",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/ceph-0", 0),
+}, {
+	url:      "~openstack-charmers/trusty/ceph-0",
+	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+}, {
+	url:              "~openstack-charmers/trusty/ceph-0",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:~openstack-charmers/trusty/ceph-0",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "~openstack-charmers/trusty/ceph-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+}, {
+	url:      "~openstack-charmers/trusty/ceph-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+}, {
+	url:              "~openstack-charmers/trusty/ceph",
+	expectError:      "no matching charm or bundle for cs:~openstack-charmers/trusty/ceph",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "~openstack-charmers/trusty/ceph",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:~openstack-charmers/trusty/ceph",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "~openstack-charmers/trusty/ceph",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+}, {
+	url:      "~openstack-charmers/trusty/ceph",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+}, {
+	url:      "trusty/ceph-0",
+	expectID: router.MustNewResolvedURL("~charmers/trusty/ceph-0", 0),
+}, {
+	url:      "trusty/ceph-0",
+	channel:  StableChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/ceph-0", 0),
+}, {
+	url:      "trusty/ceph-0",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/ceph-0", 0),
+}, {
+	url:      "trusty/ceph-0",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~charmers/trusty/ceph-0", 0),
+}, {
+	url:      "trusty/ceph-1",
+	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+}, {
+	url:              "trusty/ceph-1",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/ceph-1",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "trusty/ceph-1",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+}, {
+	url:      "trusty/ceph-1",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+}, {
+	url:              "trusty/ceph",
+	expectError:      "no matching charm or bundle for cs:trusty/ceph",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "trusty/ceph",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:trusty/ceph",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "trusty/ceph",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+}, {
+	url:      "trusty/ceph",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+}, {
+	url:              "ceph",
+	expectError:      "no matching charm or bundle for cs:ceph",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:              "ceph",
+	channel:          StableChannel,
+	expectError:      "no matching charm or bundle for cs:ceph",
+	expectErrorCause: params.ErrNotFound,
+}, {
+	url:      "ceph",
+	channel:  DevelopmentChannel,
+	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+}, {
+	url:      "ceph",
+	channel:  UnpublishedChannel,
+	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
 }}
 
 func (s *StoreSuite) TestFindBestEntity(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
-	entities := []*mongodoc.Entity{{
-		URL:            charm.MustParseURL("~charmers/trusty/wordpress-9"),
-		PromulgatedURL: charm.MustParseURL("trusty/wordpress-9"),
-	}, {
-		URL:            charm.MustParseURL("~charmers/trusty/wordpress-10"),
-		PromulgatedURL: charm.MustParseURL("trusty/wordpress-10"),
-	}, {
-		URL:            charm.MustParseURL("~charmers/trusty/wordpress-11"),
-		PromulgatedURL: charm.MustParseURL("trusty/wordpress-11"),
-	}, {
-		URL:            charm.MustParseURL("~charmers/trusty/wordpress-12"),
-		PromulgatedURL: charm.MustParseURL("trusty/wordpress-12"),
-	}, {
-		URL: charm.MustParseURL("~mickey/precise/wordpress-12"),
-	}, {
-		URL: charm.MustParseURL("~mickey/trusty/wordpress-12"),
-	}, {
-		URL:            charm.MustParseURL("~mickey/trusty/wordpress-13"),
-		PromulgatedURL: charm.MustParseURL("trusty/wordpress-13"),
-	}, {
-		URL:            charm.MustParseURL("~mickey/precise/wordpress-24"),
-		PromulgatedURL: charm.MustParseURL("precise/wordpress-24"),
-	}, {
-		URL: charm.MustParseURL("~donald/bundle/wordpress-simple-0"),
-	}, {
-		URL:            charm.MustParseURL("~donald/bundle/wordpress-simple-1"),
-		PromulgatedURL: charm.MustParseURL("bundle/wordpress-simple-0"),
-	}, {
-		URL: charm.MustParseURL("~pluto/utopic/multi-series-2"),
-	}, {
-		URL: charm.MustParseURL("~pluto/wily/multi-series-1"),
-	}}
-	for _, e := range entities {
-		err := store.DB.Entities().Insert(denormalizedEntity(e))
+	for _, ch := range findBestEntityCharms {
+		err := store.AddCharmWithArchive(ch.id, ch.charm)
 		c.Assert(err, gc.IsNil)
+		err = store.SetPromulgated(ch.id, ch.id.PromulgatedRevision != -1)
+		c.Assert(err, gc.IsNil)
+		if ch.development {
+			err := store.Publish(ch.id, DevelopmentChannel)
+			c.Assert(err, gc.IsNil)
+		}
+		if ch.stable {
+			err := store.Publish(ch.id, StableChannel)
+			c.Assert(err, gc.IsNil)
+		}
+	}
+
+	for _, b := range findBestEntityBundles {
+		err := store.AddBundleWithArchive(b.id, b.bundle)
+		c.Assert(err, gc.IsNil)
+		err = store.SetPromulgated(b.id, b.id.PromulgatedRevision != -1)
+		c.Assert(err, gc.IsNil)
+		if b.development {
+			err := store.Publish(b.id, DevelopmentChannel)
+			c.Assert(err, gc.IsNil)
+		}
+		if b.stable {
+			err := store.Publish(b.id, StableChannel)
+			c.Assert(err, gc.IsNil)
+		}
 	}
 
 	for i, test := range findBestEntityTests {
-		c.Logf("test %d: %s", i, test.url)
-		entity, err := store.FindBestEntity(charm.MustParseURL(test.url), nil)
-		if test.expectErr != "" {
-			c.Assert(err, gc.ErrorMatches, test.expectErr)
-		} else {
-			c.Assert(err, gc.IsNil)
-			c.Assert(entity.URL.String(), gc.Equals, charm.MustParseURL(test.expectURL).String())
+		c.Logf("test %d: %s (%s)", i, test.url, test.channel)
+		entity, err := store.FindBestEntity(charm.MustParseURL(test.url), test.channel, nil)
+		if test.expectError != "" {
+			c.Assert(err, gc.ErrorMatches, test.expectError)
+			if test.expectErrorCause != nil {
+				c.Assert(errgo.Cause(err), gc.Equals, test.expectErrorCause)
+			}
+			continue
 		}
+		c.Assert(err, gc.IsNil)
+		c.Assert(EntityResolvedURL(entity), jc.DeepEquals, test.expectID)
 	}
 }
 
@@ -1473,189 +2601,6 @@ func (s *StoreSuite) TestMatchingInterfacesQuery(c *gc.C) {
 		}
 		sort.Strings(got)
 		c.Assert(got, jc.DeepEquals, test.expect)
-	}
-}
-
-var findBestEntityWithMultiSeriesCharmsTests = []struct {
-	about     string
-	entities  []*mongodoc.Entity
-	url       string
-	expectURL string
-}{{
-	about: "URL with series and revision can select multi-series charm",
-	entities: []*mongodoc.Entity{{
-		URL:             charm.MustParseURL("~charmers/wordpress-10"),
-		SupportedSeries: []string{"precise", "trusty"},
-	}},
-	url:       "~charmers/trusty/wordpress-10",
-	expectURL: "~charmers/wordpress-10",
-}, {
-	about: "URL with series and revision gives not found if series not supported",
-	entities: []*mongodoc.Entity{{
-		URL:             charm.MustParseURL("~charmers/wordpress-10"),
-		SupportedSeries: []string{"trusty"},
-	}, {
-		URL:             charm.MustParseURL("~bob/wordpress-12"),
-		SupportedSeries: []string{"quantal"},
-	}},
-	url: "~charmers/utopic/wordpress-10",
-}, {
-	about: "URL with series and no revision prefers latest revision that supports that series",
-	entities: []*mongodoc.Entity{{
-		URL:             charm.MustParseURL("~charmers/wordpress-10"),
-		SupportedSeries: []string{"precise", "trusty"},
-	}, {
-		URL:             charm.MustParseURL("~charmers/wordpress-11"),
-		SupportedSeries: []string{"quantal"},
-	}, {
-		URL:             charm.MustParseURL("~charmers/wordpress-12"),
-		SupportedSeries: []string{"precise"},
-	}, {
-		URL:             charm.MustParseURL("~charmers/wordpress-13"),
-		SupportedSeries: []string{"trusty"},
-	}, {
-		URL:             charm.MustParseURL("~bob/wordpress-14"),
-		SupportedSeries: []string{"precise"},
-	}},
-	url:       "~charmers/precise/wordpress",
-	expectURL: "~charmers/wordpress-12",
-}, {
-	about: "URL with no series and revision resolves to the given exact entity",
-	entities: []*mongodoc.Entity{{
-		URL:             charm.MustParseURL("~charmers/wordpress-10"),
-		SupportedSeries: []string{"precise", "trusty"},
-	}},
-	url:       "~charmers/wordpress-10",
-	expectURL: "~charmers/wordpress-10",
-}, {
-	about: "URL with no series and revision will not find non-multi-series charm",
-	entities: []*mongodoc.Entity{{
-		URL: charm.MustParseURL("~charmers/precise/wordpress-10"),
-	}},
-	url: "~charmers/wordpress-10",
-}, {
-	about: "URL with no series and revision can find bundle",
-	entities: []*mongodoc.Entity{{
-		URL: charm.MustParseURL("~charmers/bundle/trundle-10"),
-	}},
-	url:       "~charmers/trundle-10",
-	expectURL: "~charmers/bundle/trundle-10",
-}, {
-	about: "URL with no series and no revision finds latest multi-series charm",
-	entities: []*mongodoc.Entity{{
-		URL:             charm.MustParseURL("~charmers/wordpress-11"),
-		SupportedSeries: []string{"precise", "trusty"},
-	}, {
-		URL:             charm.MustParseURL("~charmers/wordpress-10"),
-		SupportedSeries: []string{"precise"},
-	}, {
-		URL:             charm.MustParseURL("~charmers/wordpress-12"),
-		SupportedSeries: []string{"precise"},
-	}},
-	url:       "~charmers/wordpress",
-	expectURL: "~charmers/wordpress-12",
-}, {
-	about: "promulgated URL with series, name and revision can select multi-series charm",
-	entities: []*mongodoc.Entity{{
-		URL:             charm.MustParseURL("~charmers/wordpress-10"),
-		PromulgatedURL:  charm.MustParseURL("wordpress-2"),
-		SupportedSeries: []string{"precise", "trusty"},
-	}},
-	url:       "precise/wordpress-2",
-	expectURL: "~charmers/wordpress-10",
-}, {
-	about: "promulgated URL with series and no revision prefers latest promulgated revision that supports that series",
-	entities: []*mongodoc.Entity{{
-		URL:             charm.MustParseURL("~charmers/wordpress-10"),
-		PromulgatedURL:  charm.MustParseURL("wordpress-1"),
-		SupportedSeries: []string{"precise", "trusty"},
-	}, {
-		URL:             charm.MustParseURL("~charmers/wordpress-11"),
-		PromulgatedURL:  charm.MustParseURL("wordpress-2"),
-		SupportedSeries: []string{"quantal"},
-	}, {
-		URL:             charm.MustParseURL("~newcharmers/wordpress-1"),
-		PromulgatedURL:  charm.MustParseURL("wordpress-3"),
-		SupportedSeries: []string{"precise"},
-	}, {
-		URL:             charm.MustParseURL("~newcharmers/wordpress-13"),
-		PromulgatedURL:  charm.MustParseURL("wordpress-4"),
-		SupportedSeries: []string{"trusty"},
-	}, {
-		URL:             charm.MustParseURL("~bob/wordpress-14"),
-		SupportedSeries: []string{"precise"},
-	}},
-	url:       "precise/wordpress",
-	expectURL: "~newcharmers/wordpress-1",
-}, {
-	about: "promulgated URL with no series and revision resolves to the given exact entity",
-	entities: []*mongodoc.Entity{{
-		URL:             charm.MustParseURL("~charmers/wordpress-10"),
-		PromulgatedURL:  charm.MustParseURL("wordpress-3"),
-		SupportedSeries: []string{"precise", "trusty"},
-	}},
-	url:       "wordpress-3",
-	expectURL: "~charmers/wordpress-10",
-}, {
-	about: "promulgated URL with no series and revision will not find non-multi-series charm",
-	entities: []*mongodoc.Entity{{
-		URL:            charm.MustParseURL("~charmers/precise/wordpress-10"),
-		PromulgatedURL: charm.MustParseURL("precise/wordpress-3"),
-	}},
-	url: "wordpress-3",
-}, {
-	about: "promulgated URL with no series and revision can find bundle",
-	entities: []*mongodoc.Entity{{
-		URL:            charm.MustParseURL("~charmers/bundle/trundle-10"),
-		PromulgatedURL: charm.MustParseURL("bundle/trundle-10"),
-	}},
-	url:       "trundle-10",
-	expectURL: "~charmers/bundle/trundle-10",
-}, {
-	about: "promulgated URL with no series and no revision finds latest multi-series charm",
-	entities: []*mongodoc.Entity{{
-		URL:             charm.MustParseURL("~charmers/wordpress-10"),
-		PromulgatedURL:  charm.MustParseURL("wordpress-1"),
-		SupportedSeries: []string{"precise", "trusty"},
-	}, {
-		URL:             charm.MustParseURL("~charmers/wordpress-11"),
-		PromulgatedURL:  charm.MustParseURL("wordpress-2"),
-		SupportedSeries: []string{"quantal"},
-	}, {
-		URL:             charm.MustParseURL("~newcharmers/wordpress-1"),
-		PromulgatedURL:  charm.MustParseURL("wordpress-3"),
-		SupportedSeries: []string{"precise"},
-	}, {
-		URL:             charm.MustParseURL("~newcharmers/wordpress-13"),
-		PromulgatedURL:  charm.MustParseURL("wordpress-4"),
-		SupportedSeries: []string{"trusty"},
-	}, {
-		URL:             charm.MustParseURL("~bob/wordpress-14"),
-		SupportedSeries: []string{"precise"},
-	}},
-	url:       "wordpress",
-	expectURL: "~newcharmers/wordpress-13",
-}}
-
-func (s *StoreSuite) TestFindBestEntityWithMultiSeriesCharms(c *gc.C) {
-	store := s.newStore(c, false)
-	defer store.Close()
-
-	for i, test := range findBestEntityWithMultiSeriesCharmsTests {
-		c.Logf("test %d: %s", i, test.about)
-		_, err := store.DB.Entities().RemoveAll(nil)
-		c.Assert(err, gc.IsNil)
-		for _, e := range test.entities {
-			err := store.DB.Entities().Insert(denormalizedEntity(e))
-			c.Assert(err, gc.IsNil)
-		}
-		entity, err := store.FindBestEntity(charm.MustParseURL(test.url), nil)
-		if test.expectURL == "" {
-			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
-		} else {
-			c.Assert(err, gc.IsNil)
-			c.Assert(entity.URL.String(), gc.Equals, charm.MustParseURL(test.expectURL).String())
-		}
 	}
 }
 
@@ -2261,22 +3206,22 @@ func (s *StoreSuite) TestBundleCharms(c *gc.C) {
 	mysql := storetesting.Charms.CharmArchive(c.MkDir(), "mysql")
 	store := s.newStore(c, true)
 	defer store.Close()
-	err := store.AddCharmWithArchive(
-		router.MustNewResolvedURL("cs:~charmers/saucy/mysql-0", 0),
-		mysql,
-	)
+	rurl := router.MustNewResolvedURL("cs:~charmers/saucy/mysql-0", 0)
+	err := store.AddCharmWithArchive(rurl, mysql)
+	c.Assert(err, gc.IsNil)
+	err = store.Publish(rurl, StableChannel)
 	c.Assert(err, gc.IsNil)
 	riak := storetesting.Charms.CharmArchive(c.MkDir(), "riak")
-	err = store.AddCharmWithArchive(
-		router.MustNewResolvedURL("cs:~charmers/trusty/riak-42", 42),
-		riak,
-	)
+	rurl = router.MustNewResolvedURL("cs:~charmers/trusty/riak-42", 42)
+	err = store.AddCharmWithArchive(rurl, riak)
+	c.Assert(err, gc.IsNil)
+	err = store.Publish(rurl, StableChannel)
 	c.Assert(err, gc.IsNil)
 	wordpress := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	err = store.AddCharmWithArchive(
-		router.MustNewResolvedURL("cs:~charmers/utopic/wordpress-47", 47),
-		wordpress,
-	)
+	rurl = router.MustNewResolvedURL("cs:~charmers/utopic/wordpress-47", 47)
+	err = store.AddCharmWithArchive(rurl, wordpress)
+	c.Assert(err, gc.IsNil)
+	err = store.Publish(rurl, StableChannel)
 	c.Assert(err, gc.IsNil)
 
 	tests := []struct {
