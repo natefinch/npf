@@ -8,6 +8,7 @@ import (
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 )
@@ -24,7 +25,7 @@ func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
 	defer store.Close()
 	for _, svc := range bundle.Data().Services {
 		u := charm.MustParseURL(svc.Charm)
-		if _, err := store.FindBestEntity(u, StableChannel, nil); err == nil {
+		if _, err := store.FindBestEntity(u, mongodoc.NoChannel, nil); err == nil {
 			continue
 		}
 		if u.Revision == -1 {
@@ -44,7 +45,7 @@ func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
 		}
 		err := store.AddCharmWithArchive(&rurl, ch)
 		c.Assert(err, gc.IsNil)
-		err = store.Publish(&rurl, StableChannel)
+		err = store.Publish(&rurl, mongodoc.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 }

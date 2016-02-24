@@ -97,7 +97,7 @@ func (s *Store) UpdateSearch(r *router.ResolvedURL) error {
 		return errgo.NoteMask(err, fmt.Sprintf("cannot update search record for %q", &r.URL), errgo.Is(params.ErrNotFound))
 	}
 	series := r.URL.Series
-	entityURL := baseEntity.StableSeries[series]
+	entityURL := baseEntity.ChannelEntities[mongodoc.StableChannel][series]
 	if entityURL == nil {
 		// There is no stable version of the entity to index.
 		return nil
@@ -123,8 +123,9 @@ func (s *Store) UpdateSearchBaseURL(baseURL *charm.URL) error {
 	if err != nil {
 		return errgo.NoteMask(err, fmt.Sprintf("cannot index %s", baseURL), errgo.Is(params.ErrNotFound))
 	}
-	updated := make(map[string]bool, len(baseEntity.StableSeries))
-	for urlSeries, url := range baseEntity.StableSeries {
+	stableEntities := baseEntity.ChannelEntities[mongodoc.StableChannel]
+	updated := make(map[string]bool, len(stableEntities))
+	for urlSeries, url := range stableEntities {
 		if !series.Series[urlSeries].SearchIndex {
 			continue
 		}
@@ -181,7 +182,7 @@ func (s *Store) UpdateSearchFields(r *router.ResolvedURL, fields map[string]inte
 // for indexing.
 func (s *Store) searchDocFromEntity(e *mongodoc.Entity, be *mongodoc.BaseEntity) (*SearchDoc, error) {
 	doc := SearchDoc{Entity: e}
-	doc.ReadACLs = be.StableACLs.Read
+	doc.ReadACLs = be.ChannelACLs[mongodoc.StableChannel].Read
 	// There should only be one record for the promulgated entity, which
 	// should be the latest promulgated revision. In the case that the base
 	// entity is not promulgated assume that there is a later promulgated

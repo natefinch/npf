@@ -103,16 +103,16 @@ func (s *AddEntitySuite) TestAddCharmWithMultiSeries(c *gc.C) {
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
 	s.checkAddCharm(c, ch, router.MustNewResolvedURL("~charmers/multi-series-1", 1))
 	// Make sure it can be accessed with a number of names
-	e, err := store.FindBestEntity(charm.MustParseURL("~charmers/multi-series-1"), UnpublishedChannel, nil)
+	e, err := store.FindBestEntity(charm.MustParseURL("~charmers/multi-series-1"), mongodoc.UnpublishedChannel, nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/trusty/multi-series-1"), UnpublishedChannel, nil)
+	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/trusty/multi-series-1"), mongodoc.UnpublishedChannel, nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/wily/multi-series-1"), UnpublishedChannel, nil)
+	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/wily/multi-series-1"), mongodoc.UnpublishedChannel, nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	_, err = store.FindBestEntity(charm.MustParseURL("~charmers/precise/multi-series-1"), UnpublishedChannel, nil)
+	_, err = store.FindBestEntity(charm.MustParseURL("~charmers/precise/multi-series-1"), mongodoc.UnpublishedChannel, nil)
 	c.Assert(err, gc.ErrorMatches, "no matching charm or bundle for cs:~charmers/precise/multi-series-1")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
@@ -482,22 +482,19 @@ func assertBlobFields(c *gc.C, doc *mongodoc.Entity, url *router.ResolvedURL, ha
 func assertBaseEntity(c *gc.C, store *Store, url *charm.URL, promulgated bool) {
 	baseEntity, err := store.FindBaseEntity(url, nil)
 	c.Assert(err, gc.IsNil)
-	expectACLs := mongodoc.ACL{
-		Read:  []string{url.User},
-		Write: []string{url.User},
+	expectACLs := map[mongodoc.Channel]mongodoc.ACL{
+		mongodoc.UnpublishedChannel: {
+			Read:  []string{url.User},
+			Write: []string{url.User},
+		},
 	}
-	c.Assert(baseEntity, jc.DeepEquals, &mongodoc.BaseEntity{
-		URL:               url,
-		User:              url.User,
-		Name:              url.Name,
-		Public:            false,
-		ACLs:              expectACLs,
-		DevelopmentACLs:   mongodoc.ACL{},
-		StableACLs:        mongodoc.ACL{},
-		Promulgated:       mongodoc.IntBool(promulgated),
-		DevelopmentSeries: make(map[string]*charm.URL),
-		StableSeries:      make(map[string]*charm.URL),
-	})
+	c.Assert(storetesting.NormalizeBaseEntity(baseEntity), jc.DeepEquals, storetesting.NormalizeBaseEntity(&mongodoc.BaseEntity{
+		URL:         url,
+		User:        url.User,
+		Name:        url.Name,
+		Promulgated: mongodoc.IntBool(promulgated),
+		ChannelACLs: expectACLs,
+	}))
 }
 
 type orderedURLs []*charm.URL

@@ -17,7 +17,6 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
-	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
@@ -52,15 +51,7 @@ func (s *SearchSuite) SetUpSuite(c *gc.C) {
 func (s *SearchSuite) SetUpTest(c *gc.C) {
 	s.commonSuite.SetUpTest(c)
 	s.addCharmsToStore(c)
-	// hide the riak charm
-	err := s.store.DB.BaseEntities().UpdateId(
-		charm.MustParseURL("cs:~charmers/riak"),
-		bson.D{{"$set", map[string]mongodoc.ACL{
-			"stableacls": {
-				Read: []string{"charmers", "test-user"},
-			},
-		}}},
-	)
+	err := s.store.SetPerms(charm.MustParseURL("cs:~charmers/riak"), "stable.read", "charmers", "test-user")
 	c.Assert(err, gc.IsNil)
 	err = s.store.UpdateSearch(newResolvedURL("~charmers/trusty/riak-0", 0))
 	c.Assert(err, gc.IsNil)
@@ -74,7 +65,7 @@ func (s *SearchSuite) addCharmsToStore(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&id.URL, "stable.read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
-		err = s.store.Publish(id, charmstore.StableChannel)
+		err = s.store.Publish(id, mongodoc.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 	for name, id := range exportTestBundles {
@@ -82,7 +73,7 @@ func (s *SearchSuite) addCharmsToStore(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&id.URL, "stable.read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
-		err = s.store.Publish(id, charmstore.StableChannel)
+		err = s.store.Publish(id, mongodoc.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -731,7 +722,7 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 			err := s.store.IncrementDownloadCounts(url)
 			c.Assert(err, gc.IsNil)
 		}
-		err = s.store.Publish(url, charmstore.StableChannel)
+		err = s.store.Publish(url, mongodoc.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 	err := s.esSuite.ES.RefreshIndex(s.esSuite.TestIndex)

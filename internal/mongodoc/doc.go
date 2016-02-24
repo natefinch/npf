@@ -173,23 +173,6 @@ type BaseEntity struct {
 	// Name holds the name of the entity (for instance "wordpress").
 	Name string
 
-	// Public specifies whether the charm or bundle
-	// is available to all users. If this is true, the ACLs will
-	// be ignored when reading a charm.
-	Public bool
-
-	// ACLs holds permission information relevant to the base entity.
-	// The permissions apply to all unpublished revisions.
-	ACLs ACL
-
-	// DevelopmentACLs is similar to ACLs but applies to entities
-	// published in the "development" channel.
-	DevelopmentACLs ACL
-
-	// StableACLs is similar to ACLs but applies to entities
-	// published in the "stable" channel.
-	StableACLs ACL
-
 	// Promulgated specifies whether the charm or bundle should be
 	// promulgated.
 	Promulgated IntBool
@@ -199,13 +182,15 @@ type BaseEntity struct {
 	// The byte slices hold JSON-encoded data.
 	CommonInfo map[string][]byte `bson:",omitempty" json:",omitempty"`
 
-	// DevelopmentSeries maps the latest revision published in the
-	// "development" channel for each series.
-	DevelopmentSeries map[string]*charm.URL
+	// ChannelACLs holds a map from an entity channel to the ACLs
+	// that apply to entities that use this base entity that are associated
+	// with the given channel.
+	ChannelACLs map[Channel]ACL
 
-	// StableSeries maps the latest revision published in the
-	// "stable" channel for each series.
-	StableSeries map[string]*charm.URL
+	// ChannelEntities holds a set of channels, each containing a set
+	// of series holding the currently published entity revision for
+	// that channel and series.
+	ChannelEntities map[Channel]map[string]*charm.URL
 }
 
 // ACL holds lists of users and groups that are
@@ -329,6 +314,23 @@ func (b *IntBool) SetBSON(raw bson.Raw) error {
 	}
 	return nil
 }
+
+// Channel is the name of a channel in which an entity may be published.
+type Channel string
+
+const (
+	// DevelopmentChannel is the channel used for charms or bundles under development.
+	DevelopmentChannel Channel = "development"
+
+	// StableChannel is the channel used for stable charms or bundles.
+	StableChannel Channel = "stable"
+
+	// UnpublishedChannel is the default channel to which charms are uploaded.
+	UnpublishedChannel Channel = "unpublished"
+
+	// NoChannel represents where no channel has been specifically requested.
+	NoChannel Channel = ""
+)
 
 // BaseURL returns the "base" version of url. If
 // url represents an entity, then the returned URL

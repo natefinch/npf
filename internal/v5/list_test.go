@@ -19,9 +19,7 @@ import (
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/macaroon.v1"
-	"gopkg.in/mgo.v2/bson"
 
-	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
@@ -53,17 +51,7 @@ func (s *ListSuite) SetUpTest(c *gc.C) {
 	s.commonSuite.SetUpTest(c)
 	s.addCharmsToStore(c)
 	// hide the riak charm
-	err := s.store.DB.BaseEntities().UpdateId(
-		charm.MustParseURL("cs:~charmers/riak"),
-		bson.D{{"$set", map[string]mongodoc.ACL{
-			"acls": {
-				Read: []string{"charmers", "test-user"},
-			},
-			"stableacls": {
-				Read: []string{"charmers", "test-user"},
-			},
-		}}},
-	)
+	err := s.store.SetPerms(charm.MustParseURL("cs:~charmers/riak"), "stable.read", "charmers", "test-user")
 	c.Assert(err, gc.IsNil)
 }
 
@@ -71,21 +59,21 @@ func (s *ListSuite) addCharmsToStore(c *gc.C) {
 	for name, id := range exportListTestCharms {
 		err := s.store.AddCharmWithArchive(id, getListCharm(name))
 		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+		err = s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&id.URL, "stable.read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
-		err = s.store.Publish(id, charmstore.StableChannel)
+		err = s.store.Publish(id, mongodoc.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 	for name, id := range exportListTestBundles {
 		err := s.store.AddBundleWithArchive(id, getListBundle(name))
 		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+		err = s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&id.URL, "stable.read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
-		err = s.store.Publish(id, charmstore.StableChannel)
+		err = s.store.Publish(id, mongodoc.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -419,7 +407,7 @@ func (s *ListSuite) TestGetLatestRevisionOnly(c *gc.C) {
 	id := newResolvedURL("cs:~charmers/precise/wordpress-24", 24)
 	err := s.store.AddCharmWithArchive(id, getListCharm("wordpress"))
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+	err = s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
 
 	testresults := []*router.ResolvedURL{
 		exportTestBundles["wordpress-simple"],

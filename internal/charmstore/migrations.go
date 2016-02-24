@@ -175,12 +175,12 @@ func addDevelopmentACLs(db StoreDatabase) error {
 	baseEntities := db.BaseEntities()
 	var baseEntity mongodoc.BaseEntity
 	iter := baseEntities.Find(bson.D{{
-		"developmentacls", bson.D{{"$exists", false}},
-	}}).Select(bson.D{{"_id", 1}, {"acls", 1}}).Iter()
+		"channelacls.development", bson.D{{"$exists", false}},
+	}}).Select(bson.D{{"_id", 1}, {"channelacls", 1}}).Iter()
 	defer iter.Close()
 	for iter.Next(&baseEntity) {
 		if err := baseEntities.UpdateId(baseEntity.URL, bson.D{{
-			"$set", bson.D{{"developmentacls", baseEntity.ACLs}},
+			"$set", bson.D{{"channelacls.development", baseEntity.ChannelACLs[mongodoc.DevelopmentChannel]}},
 		}}); err != nil {
 			return errgo.Notef(err, "cannot add development ACLs to base entity id %s", baseEntity.URL)
 		}

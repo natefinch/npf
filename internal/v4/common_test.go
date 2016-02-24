@@ -21,6 +21,7 @@ import (
 	"gopkg.in/mgo.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
@@ -197,13 +198,13 @@ func (s *commonSuite) addPublicCharm(c *gc.C, charmName string, rurl *router.Res
 }
 
 func (s *commonSuite) setPublic(c *gc.C, rurl *router.ResolvedURL) {
-	err := s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	err := s.store.SetPerms(&rurl.URL, "unpublished.read", params.Everyone, rurl.URL.User)
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(&rurl.URL, "stable.read", params.Everyone, rurl.URL.User)
 	c.Assert(err, gc.IsNil)
 	err = s.store.SetPerms(&rurl.URL, "stable.write", rurl.URL.User)
 	c.Assert(err, gc.IsNil)
-	err = s.store.Publish(rurl, charmstore.StableChannel)
+	err = s.store.Publish(rurl, mongodoc.StableChannel)
 }
 
 func (s *commonSuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.ResolvedURL, addRequiredCharms bool) (*router.ResolvedURL, charm.Bundle) {
@@ -224,7 +225,7 @@ func (s *commonSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
 		url := mustParseResolvedURL(id)
 		err := s.store.AddCharmWithArchive(url, storetesting.NewCharm(ch.Meta()))
 		c.Assert(err, gc.IsNil, gc.Commentf("id %q", id))
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+		err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -234,7 +235,7 @@ func (s *commonSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
 // associated value is its read ACL.
 func (s *commonSuite) setPerms(c *gc.C, readACLs map[string][]string) {
 	for url, acl := range readACLs {
-		err := s.store.SetPerms(charm.MustParseURL(url), "read", acl...)
+		err := s.store.SetPerms(charm.MustParseURL(url), "unpublished.read", acl...)
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -263,7 +264,7 @@ func storeURL(path string) string {
 func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
 	for _, svc := range bundle.Data().Services {
 		u := charm.MustParseURL(svc.Charm)
-		if _, err := s.store.FindBestEntity(u, charmstore.StableChannel, nil); err == nil {
+		if _, err := s.store.FindBestEntity(u, mongodoc.StableChannel, nil); err == nil {
 			continue
 		}
 		if u.Revision == -1 {

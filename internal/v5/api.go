@@ -127,10 +127,8 @@ var (
 	RequiredBaseEntityFields = charmstore.FieldSelector(
 		"user",
 		"name",
-		"acls",
-		"developmentacls",
-		"stableacls",
-		"public",
+		"channelacls",
+		"channelentities",
 		"promulgated",
 	)
 )
@@ -141,7 +139,7 @@ var (
 // are fully integrated.
 type ChannelStore struct {
 	Store   *charmstore.Store
-	Channel charmstore.Channel
+	Channel mongodoc.Channel
 }
 
 func (s ChannelStore) FindBestEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
@@ -169,7 +167,7 @@ func (h *Handler) NewReqHandler() (*ReqHandler, error) {
 	rh := reqHandlerPool.Get().(*ReqHandler)
 	rh.Handler = h
 	rh.Store = store
-	rh.Cache = entitycache.New(ChannelStore{Store: store, Channel: charmstore.UnpublishedChannel})
+	rh.Cache = entitycache.New(ChannelStore{Store: store, Channel: mongodoc.UnpublishedChannel})
 	rh.Cache.AddEntityFields(RequiredEntityFields)
 	rh.Cache.AddBaseEntityFields(RequiredBaseEntityFields)
 	return rh, nil
@@ -249,8 +247,8 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"id-revision":      h.EntityHandler(h.metaIdRevision, "_id"),
 			"id-series":        h.EntityHandler(h.metaIdSeries, "_id"),
 			"manifest":         h.EntityHandler(h.metaManifest, "blobname"),
-			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "acls"),
-			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "acls"),
+			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "channelacls"),
+			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "channelacls"),
 			"promulgated":      h.baseEntityHandler(h.metaPromulgated, "promulgated"),
 			"revision-info":    router.SingleIncludeHandler(h.metaRevisionInfo),
 			"stats":            h.EntityHandler(h.metaStats),
@@ -996,7 +994,9 @@ func checkExtraInfoKey(key string, field string) error {
 // GET id/meta/perm
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaperm
 func (h *ReqHandler) metaPerm(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	acls := entity.ACLs
+	// TODO: choose appropriate ACLs based on currently appropriate channel
+	// for chosen entity or "channel" form value if specified.
+	acls := entity.ChannelACLs[mongodoc.UnpublishedChannel]
 	return params.PermResponse{
 		Read:  acls.Read,
 		Write: acls.Write,
@@ -1010,22 +1010,15 @@ func (h *ReqHandler) putMetaPerm(id *router.ResolvedURL, path string, val *json.
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
 	}
-	isPublic := false
-	for _, p := range perms.Read {
-		if p == params.Everyone {
-			isPublic = true
-			break
-		}
-	}
-	updater.UpdateField("public", isPublic, nil)
-	updater.UpdateField("acls.read", perms.Read, &audit.Entry{
+	// TODO update ACLs in appropriate channel.
+	updater.UpdateField("channelacls.unpublished.read", perms.Read, &audit.Entry{
 		Op:     audit.OpSetPerm,
 		Entity: &id.URL,
 		ACL: &audit.ACL{
 			Read: perms.Read,
 		},
 	})
-	updater.UpdateField("acls.write", perms.Write, &audit.Entry{
+	updater.UpdateField("channelacls.unpublished.write", perms.Write, &audit.Entry{
 		Op:     audit.OpSetPerm,
 		Entity: &id.URL,
 		ACL: &audit.ACL{
@@ -1047,7 +1040,8 @@ func (h *ReqHandler) metaPromulgated(entity *mongodoc.BaseEntity, id *router.Res
 // GET id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapermkey
 func (h *ReqHandler) metaPermWithKey(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	acls := entity.ACLs
+	// TODO use appropriate ACLs.
+	acls := entity.ChannelACLs[mongodoc.UnpublishedChannel]
 	switch path {
 	case "/read":
 		return acls.Read, nil
@@ -1066,25 +1060,17 @@ func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val
 	}
 	switch path {
 	case "/read":
-		updater.UpdateField("acls.read", perms, &audit.Entry{
+		updater.UpdateField("channelacls.unpublished.read", perms, &audit.Entry{
 			Op:     audit.OpSetPerm,
 			Entity: &id.URL,
 			ACL: &audit.ACL{
 				Read: perms,
 			},
 		})
-		isPublic := false
-		for _, p := range perms {
-			if p == params.Everyone {
-				isPublic = true
-				break
-			}
-		}
-		updater.UpdateField("public", isPublic, nil)
 		updater.UpdateSearch()
 		return nil
 	case "/write":
-		updater.UpdateField("acls.write", perms, &audit.Entry{
+		updater.UpdateField("channelacls.unpublished.write", perms, &audit.Entry{
 			Op:     audit.OpSetPerm,
 			Entity: &id.URL,
 			ACL: &audit.ACL{
@@ -1292,7 +1278,7 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 		// responsible of reviewing and publishing subsequent
 		// revisions of this entity.
 		if err := h.updateBaseEntity(id, map[string]interface{}{
-			"stableacls.write": []string{PromulgatorsGroup},
+			"channelacls.stable.write": []string{PromulgatorsGroup},
 		}, nil); err != nil {
 			return errgo.Notef(err, "cannot set permissions for %q", id)
 		}

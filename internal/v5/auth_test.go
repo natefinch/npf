@@ -25,7 +25,7 @@ import (
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/macaroon.v1"
 
-	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 )
@@ -220,7 +220,7 @@ var readAuthorizationTests = []struct {
 	// stableReadPerm stores a list of users with read permissions on the stable channel.
 	stableReadPerm []string
 	// channels contains a list of channels, to which the entity belongs.
-	channels []charmstore.Channel
+	channels []mongodoc.Channel
 	// expectStatus is the expected HTTP response status.
 	// Defaults to 200 status OK.
 	expectStatus int
@@ -308,7 +308,7 @@ var readAuthorizationTests = []struct {
 	groups:              []string{"group1", "group2", "group3"},
 	readPerm:            []string{"picard", "sisko", "group42", "group47"},
 	developmentReadPerm: []string{"group1"},
-	channels:            []charmstore.Channel{charmstore.DevelopmentChannel},
+	channels:            []mongodoc.Channel{mongodoc.DevelopmentChannel},
 }, {
 	about:               "access provided through development channel, but charm not published",
 	username:            "kirk",
@@ -327,7 +327,7 @@ var readAuthorizationTests = []struct {
 	readPerm:            []string{"picard", "sisko", "group42", "group47"},
 	developmentReadPerm: []string{"group12"},
 	stableReadPerm:      []string{"group2"},
-	channels:            []charmstore.Channel{charmstore.DevelopmentChannel, charmstore.StableChannel},
+	channels:            []mongodoc.Channel{mongodoc.DevelopmentChannel, mongodoc.StableChannel},
 }, {
 	about:               "access provided through stable channel, but charm not published",
 	username:            "kirk",
@@ -335,7 +335,7 @@ var readAuthorizationTests = []struct {
 	readPerm:            []string{"picard", "sisko", "group42", "group47"},
 	developmentReadPerm: []string{"group12"},
 	stableReadPerm:      []string{"group2"},
-	channels:            []charmstore.Channel{charmstore.DevelopmentChannel},
+	channels:            []mongodoc.Channel{mongodoc.DevelopmentChannel},
 	expectStatus:        http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
@@ -348,9 +348,9 @@ var readAuthorizationTests = []struct {
 	readPerm:            []string{"picard", "sisko", "group42", "group47"},
 	developmentReadPerm: []string{"group1"},
 	stableReadPerm:      []string{"group11"},
-	channels: []charmstore.Channel{
-		charmstore.DevelopmentChannel,
-		charmstore.StableChannel,
+	channels: []mongodoc.Channel{
+		mongodoc.DevelopmentChannel,
+		mongodoc.StableChannel,
 	},
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -363,9 +363,9 @@ var readAuthorizationTests = []struct {
 	groups:         []string{"group1", "group2", "group3"},
 	readPerm:       []string{"picard", "sisko", "group42", "group1"},
 	stableReadPerm: []string{"group11"},
-	channels: []charmstore.Channel{
-		charmstore.DevelopmentChannel,
-		charmstore.StableChannel,
+	channels: []mongodoc.Channel{
+		mongodoc.DevelopmentChannel,
+		mongodoc.StableChannel,
 	},
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -378,8 +378,8 @@ var readAuthorizationTests = []struct {
 	groups:              []string{"group1", "group2", "group3"},
 	readPerm:            []string{"picard", "sisko", "group42", "group1"},
 	developmentReadPerm: []string{"group11"},
-	channels: []charmstore.Channel{
-		charmstore.DevelopmentChannel,
+	channels: []mongodoc.Channel{
+		mongodoc.DevelopmentChannel,
 	},
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -417,7 +417,7 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		}
 
 		// Change the ACLs for the testing charm.
-		err = s.store.SetPerms(&rurl.URL, "read", test.readPerm...)
+		err = s.store.SetPerms(&rurl.URL, "unpublished.read", test.readPerm...)
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&rurl.URL, "development.read", test.developmentReadPerm...)
 		c.Assert(err, gc.IsNil)
@@ -466,7 +466,7 @@ var writeAuthorizationTests = []struct {
 	// stableWritePerm stores a list of users with write permissions on the stable channel.
 	stableWritePerm []string
 	// channels contains a list of channels, to which the entity belongs.
-	channels []charmstore.Channel
+	channels []mongodoc.Channel
 	// expectStatus is the expected HTTP response status.
 	// Defaults to 200 status OK.
 	expectStatus int
@@ -541,7 +541,7 @@ var writeAuthorizationTests = []struct {
 	groups:               []string{"group1", "group2", "group3"},
 	writePerm:            []string{"picard", "sisko", "group42", "group47"},
 	developmentWritePerm: []string{"group1"},
-	channels:             []charmstore.Channel{charmstore.DevelopmentChannel},
+	channels:             []mongodoc.Channel{mongodoc.DevelopmentChannel},
 }, {
 	about:                "access provided through development channel, but charm not published",
 	username:             "kirk",
@@ -560,7 +560,7 @@ var writeAuthorizationTests = []struct {
 	writePerm:            []string{"picard", "sisko", "group42", "group47"},
 	developmentWritePerm: []string{"group12"},
 	stableWritePerm:      []string{"group2"},
-	channels:             []charmstore.Channel{charmstore.DevelopmentChannel, charmstore.StableChannel},
+	channels:             []mongodoc.Channel{mongodoc.DevelopmentChannel, mongodoc.StableChannel},
 }, {
 	about:                "access provided through stable channel, but charm not published",
 	username:             "kirk",
@@ -568,7 +568,7 @@ var writeAuthorizationTests = []struct {
 	writePerm:            []string{"picard", "sisko", "group42", "group47"},
 	developmentWritePerm: []string{"group12"},
 	stableWritePerm:      []string{"group2"},
-	channels:             []charmstore.Channel{charmstore.DevelopmentChannel},
+	channels:             []mongodoc.Channel{mongodoc.DevelopmentChannel},
 	expectStatus:         http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
@@ -581,9 +581,9 @@ var writeAuthorizationTests = []struct {
 	writePerm:            []string{"picard", "sisko", "group42", "group47"},
 	developmentWritePerm: []string{"group1"},
 	stableWritePerm:      []string{"group11"},
-	channels: []charmstore.Channel{
-		charmstore.DevelopmentChannel,
-		charmstore.StableChannel,
+	channels: []mongodoc.Channel{
+		mongodoc.DevelopmentChannel,
+		mongodoc.StableChannel,
 	},
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -596,9 +596,9 @@ var writeAuthorizationTests = []struct {
 	groups:          []string{"group1", "group2", "group3"},
 	writePerm:       []string{"picard", "sisko", "group42", "group1"},
 	stableWritePerm: []string{"group11"},
-	channels: []charmstore.Channel{
-		charmstore.DevelopmentChannel,
-		charmstore.StableChannel,
+	channels: []mongodoc.Channel{
+		mongodoc.DevelopmentChannel,
+		mongodoc.StableChannel,
 	},
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -611,8 +611,8 @@ var writeAuthorizationTests = []struct {
 	groups:               []string{"group1", "group2", "group3"},
 	writePerm:            []string{"picard", "sisko", "group42", "group1"},
 	developmentWritePerm: []string{"group11"},
-	channels: []charmstore.Channel{
-		charmstore.DevelopmentChannel,
+	channels: []mongodoc.Channel{
+		mongodoc.DevelopmentChannel,
 	},
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -642,7 +642,7 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 		}
 
 		// Change the ACLs for the testing charm.
-		err = s.store.SetPerms(&rurl.URL, "write", test.writePerm...)
+		err = s.store.SetPerms(&rurl.URL, "unpublished.write", test.writePerm...)
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&rurl.URL, "development.write", test.developmentWritePerm...)
 		c.Assert(err, gc.IsNil)
@@ -815,7 +815,7 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 			rurl := newResolvedURL(id.String(), revision)
 			s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
 			if len(test.writeAcls) != 0 {
-				s.store.SetPerms(&rurl.URL, "write", test.writeAcls...)
+				s.store.SetPerms(&rurl.URL, "unpublished.write", test.writeAcls...)
 			}
 		}
 
@@ -915,7 +915,7 @@ func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
 	// Change the ACLs for the testing charm.
-	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "read", "bob")
+	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "unpublished.read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	for i, test := range isEntityCaveatTests {
@@ -1005,7 +1005,7 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
 	// Change the ACLs for the testing charm.
-	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "read", "bob")
+	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "unpublished.read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	// First check that we require authorization to access the charm.

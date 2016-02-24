@@ -300,7 +300,7 @@ func (s *APISuite) TestCharmInfoCounters(c *gc.C) {
 
 func (s *APISuite) TestAPIInfoWithGatedCharm(c *gc.C) {
 	wordpressURL, _ := s.addPublicCharm(c, "wordpress", "cs:precise/wordpress-0")
-	s.store.SetPerms(&wordpressURL.URL, "read", "bob")
+	s.store.SetPerms(&wordpressURL.URL, "unpublished.read", "bob")
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          "/charm-info?charms=" + wordpressURL.URL.String(),
@@ -402,7 +402,7 @@ func (s *APISuite) addPublicCharm(c *gc.C, charmName, curl string) (*router.Reso
 	archive := storetesting.Charms.CharmArchive(c.MkDir(), charmName)
 	err := s.store.AddCharmWithArchive(rurl, archive)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	err = s.store.SetPerms(&rurl.URL, "unpublished.read", params.Everyone, rurl.URL.User)
 	c.Assert(err, gc.IsNil)
 	return rurl, archive
 }

@@ -5,8 +5,8 @@ package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/char
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
-	"strings"
 	"sync"
 	"time"
 
@@ -29,23 +29,6 @@ import (
 )
 
 var logger = loggo.GetLogger("charmstore.internal.charmstore")
-
-// Channel is the name of a channel in which a charm may be published.
-type Channel string
-
-const (
-	// DevelopmentChannel is the channel used for charms or bundles under development.
-	DevelopmentChannel Channel = "development"
-
-	// StableChannel is the channel used for stable charms or bundles.
-	StableChannel Channel = "stable"
-
-	// UnpublishedChannel is the default channel to which charms are uploaded.
-	UnpublishedChannel Channel = "unpublished"
-
-	// NoChannel represents where no channel has been specifically requested.
-	NoChannel Channel = ""
-)
 
 var (
 	errClosed          = errgo.New("charm store has been closed")
@@ -375,9 +358,6 @@ func (s *Store) ensureIndexes() error {
 		s.DB.Entities(),
 		mgo.Index{Key: []string{"promulgated-url"}, Unique: true, Sparse: true},
 	}, {
-		s.DB.BaseEntities(),
-		mgo.Index{Key: []string{"public"}},
-	}, {
 		s.DB.Logs(),
 		mgo.Index{Key: []string{"urls"}},
 	}, {
@@ -493,10 +473,10 @@ func (s *Store) FindEntities(url *charm.URL, fields map[string]int) ([]*mongodoc
 // If the URL contains a revision then it is assumed to be fully formed
 // and refer to a single entity, that entity is retrieved and verified
 // against the requested channel, for this purpose an NoChannel
-// is treated as UnpublishedChannel. If the URL does not contain a
+// is treated as mongodoc.UnpublishedChannel. If the URL does not contain a
 // revision then channel is searched for the best match, here
-// NoChannel will be treated as StableChannel.
-func (s *Store) FindBestEntity(url *charm.URL, channel Channel, fields map[string]int) (*mongodoc.Entity, error) {
+// NoChannel will be treated as mongodoc.StableChannel.
+func (s *Store) FindBestEntity(url *charm.URL, channel mongodoc.Channel, fields map[string]int) (*mongodoc.Entity, error) {
 	if fields != nil {
 		// Make sure we have all the fields we need to make a decision.
 		// TODO this would be more efficient if we used bitmasks for field selection.
@@ -523,23 +503,23 @@ func (s *Store) FindBestEntity(url *charm.URL, channel Channel, fields map[strin
 			return nil, errgo.Mask(err)
 		}
 		// If a channel was spedified make sure the entity is in that channel.
-		if channel == StableChannel && !entity.Stable {
+		if channel == mongodoc.StableChannel && !entity.Stable {
 			return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
 		}
-		if channel == DevelopmentChannel && !entity.Development {
+		if channel == mongodoc.DevelopmentChannel && !entity.Development {
 			return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
 		}
 		return entity, nil
 	}
+
 	switch channel {
-	case StableChannel, NoChannel:
-		return s.findStableEntity(url, fields)
-	case DevelopmentChannel:
-		return s.findDevelopmentEntity(url, fields)
-	case UnpublishedChannel:
+	case mongodoc.UnpublishedChannel:
 		return s.findUnpublishedEntity(url, fields)
+	case mongodoc.NoChannel:
+		channel = mongodoc.StableChannel
+		fallthrough
 	default:
-		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
+		return s.findEntityInChannel(url, channel, fields)
 	}
 }
 
@@ -562,13 +542,13 @@ func (s *Store) findSingleEntity(url *charm.URL, fields map[string]int) (*mongod
 	return nil, errgo.Notef(err, "cannot find entities matching %s", url)
 }
 
-// findStableEntity attempts to find an entity on the stable channel. The
+// findEntityInChannel attempts to find an entity on the given channel. The
 // base entity for URL is retrieved and the series with the best match to
 // URL.Series is used as the resolved entity.
-func (s *Store) findStableEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
+func (s *Store) findEntityInChannel(url *charm.URL, ch mongodoc.Channel, fields map[string]int) (*mongodoc.Entity, error) {
 	baseEntity, err := s.FindBaseEntity(url, map[string]int{
-		"_id":          1,
-		"stableseries": 1,
+		"_id":             1,
+		"channelentities": 1,
 	})
 	if errgo.Cause(err) == params.ErrNotFound {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
@@ -577,42 +557,13 @@ func (s *Store) findStableEntity(url *charm.URL, fields map[string]int) (*mongod
 	}
 	var entityURL *charm.URL
 	if url.Series == "" {
-		for _, u := range baseEntity.StableSeries {
+		for _, u := range baseEntity.ChannelEntities[ch] {
 			if entityURL == nil || seriesScore[u.Series] > seriesScore[entityURL.Series] {
 				entityURL = u
 			}
 		}
 	} else {
-		entityURL = baseEntity.StableSeries[url.Series]
-	}
-	if entityURL == nil {
-		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
-	}
-	return s.findSingleEntity(entityURL, fields)
-}
-
-// findDevelopmentEntity attempts to find an entity on the development
-// channel. The base entity for URL is retrieved and the series with the
-// best match to URL.Series is used as the resolved entity.
-func (s *Store) findDevelopmentEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
-	baseEntity, err := s.FindBaseEntity(url, map[string]int{
-		"_id":               1,
-		"developmentseries": 1,
-	})
-	if errgo.Cause(err) == params.ErrNotFound {
-		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
-	} else if err != nil {
-		return nil, errgo.Mask(err)
-	}
-	var entityURL *charm.URL
-	if url.Series == "" {
-		for _, u := range baseEntity.DevelopmentSeries {
-			if entityURL == nil || seriesScore[u.Series] > seriesScore[entityURL.Series] {
-				entityURL = u
-			}
-		}
-	} else {
-		entityURL = baseEntity.DevelopmentSeries[url.Series]
+		entityURL = baseEntity.ChannelEntities[ch][url.Series]
 	}
 	if entityURL == nil {
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
@@ -772,16 +723,16 @@ func (s *Store) UpdateBaseEntity(url *router.ResolvedURL, update interface{}) er
 // Publish assigns channels to the entity corresponding to the given URL.
 // An error is returned if no channels are provided. For the time being,
 // the only supported channels are "development" and "stable".
-func (s *Store) Publish(url *router.ResolvedURL, channels ...Channel) error {
+func (s *Store) Publish(url *router.ResolvedURL, channels ...mongodoc.Channel) error {
 	var updateSearch bool
 	// Validate channels.
-	actual := make([]Channel, 0, len(channels))
+	actual := make([]mongodoc.Channel, 0, len(channels))
 	for _, c := range channels {
 		switch c {
-		case StableChannel:
+		case mongodoc.StableChannel:
 			updateSearch = true
 			fallthrough
-		case DevelopmentChannel:
+		case mongodoc.DevelopmentChannel:
 			actual = append(actual, c)
 		}
 	}
@@ -813,7 +764,7 @@ func (s *Store) Publish(url *router.ResolvedURL, channels ...Channel) error {
 	update = make(bson.D, 0, numChannels*numSeries)
 	for _, c := range actual {
 		for _, s := range series {
-			update = append(update, bson.DocElem{string(c) + "series." + s, entity.URL})
+			update = append(update, bson.DocElem{fmt.Sprintf("channelentities.%s.%s", c, s), entity.URL})
 		}
 	}
 	if err := s.UpdateBaseEntity(url, bson.D{{"$set", update}}); err != nil {
@@ -985,15 +936,8 @@ func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 // channel then the unpublished ACL is updated. This is only provided for
 // testing.
 func (s *Store) SetPerms(id *charm.URL, which string, acl ...string) error {
-	field := "acls"
-	spec := strings.SplitN(which, ".", 2)
-	op := spec[0]
-	if len(spec) > 1 {
-		field = spec[0] + "acls"
-		op = spec[1]
-	}
 	return s.DB.BaseEntities().UpdateId(mongodoc.BaseURL(id), bson.D{{"$set",
-		bson.D{{field + "." + op, acl}},
+		bson.D{{"channelacls." + which, acl}},
 	}})
 }
 
