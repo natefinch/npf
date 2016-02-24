@@ -312,13 +312,10 @@ func (h *ReqHandler) ServeBlobFile(w http.ResponseWriter, req *http.Request, id 
 }
 
 func (h *ReqHandler) isPublic(id *router.ResolvedURL) bool {
-	baseEntity, err := h.Cache.BaseEntity(&id.URL, charmstore.FieldSelector("channelacls"))
-	if err == nil {
-		// TODO use entityACLs.
-		for _, p := range baseEntity.ChannelACLs[mongodoc.UnpublishedChannel].Read {
-			if p == params.Everyone {
-				return true
-			}
+	acls, _ := h.entityACLs(id)
+	for _, p := range acls.Read {
+		if p == params.Everyone {
+			return true
 		}
 	}
 	return false

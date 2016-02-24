@@ -302,22 +302,13 @@ func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) 
 	return h.authorizeWithPerms(req, acls.Read, acls.Write, id)
 }
 
-// entityACLs calculates the ACLs for the specified entity. If the entity
-// has been published to the stable channel then the StableChannel ACLs will be
-// used; if the entity has been published to development, but not stable
-// then the StableChannel ACLs will be used; otherwise
-// the unpublished ACLs are used.
-func (h *ReqHandler) entityACLs(id *router.ResolvedURL) (mongodoc.ACL, error) {
+func (h *ReqHandler) entityChannel(id *router.ResolvedURL) (mongodoc.Channel, error) {
 	entity, err := h.Cache.Entity(&id.URL, charmstore.FieldSelector("development", "stable"))
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
-			return mongodoc.ACL{}, errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
+			return mongodoc.NoChannel, errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
 		}
-		return mongodoc.ACL{}, errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
-	}
-	baseEntity, err := h.Cache.BaseEntity(&id.URL, charmstore.FieldSelector("channelacls"))
-	if err != nil {
-		return mongodoc.ACL{}, errgo.Notef(err, "cannot retrieve base entity %q for authorization", id)
+		return mongodoc.NoChannel, errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}
 	var ch mongodoc.Channel
 	switch {
@@ -327,6 +318,23 @@ func (h *ReqHandler) entityACLs(id *router.ResolvedURL) (mongodoc.ACL, error) {
 		ch = mongodoc.DevelopmentChannel
 	default:
 		ch = mongodoc.UnpublishedChannel
+	}
+	return ch, nil
+}
+
+// entityACLs calculates the ACLs for the specified entity. If the entity
+// has been published to the stable channel then the StableChannel ACLs will be
+// used; if the entity has been published to development, but not stable
+// then the StableChannel ACLs will be used; otherwise
+// the unpublished ACLs are used.
+func (h *ReqHandler) entityACLs(id *router.ResolvedURL) (mongodoc.ACL, error) {
+	ch, err := h.entityChannel(id)
+	if err != nil {
+		return mongodoc.ACL{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	baseEntity, err := h.Cache.BaseEntity(&id.URL, charmstore.FieldSelector("channelacls"))
+	if err != nil {
+		return mongodoc.ACL{}, errgo.Notef(err, "cannot retrieve base entity %q for authorization", id)
 	}
 	return baseEntity.ChannelACLs[ch], nil
 }
