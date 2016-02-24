@@ -303,10 +303,10 @@ func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) 
 }
 
 // entityACLs calculates the ACLs for the specified entity. If the entity
-// has been published to the stable channel then the StableACLs will be
-// used, if the entity has been published to development, but not stable
-// then the DevelopmentACLs will be used. If the entity is not published
-// at all then the unpublished ACLs are used.
+// has been published to the stable channel then the StableChannel ACLs will be
+// used; if the entity has been published to development, but not stable
+// then the StableChannel ACLs will be used; otherwise
+// the unpublished ACLs are used.
 func (h *ReqHandler) entityACLs(id *router.ResolvedURL) (mongodoc.ACL, error) {
 	entity, err := h.Cache.Entity(&id.URL, charmstore.FieldSelector("development", "stable"))
 	if err != nil {
@@ -315,18 +315,20 @@ func (h *ReqHandler) entityACLs(id *router.ResolvedURL) (mongodoc.ACL, error) {
 		}
 		return mongodoc.ACL{}, errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}
-	baseEntity, err := h.Cache.BaseEntity(&id.URL, charmstore.FieldSelector("acls", "developmentacls", "stableacls"))
+	baseEntity, err := h.Cache.BaseEntity(&id.URL, charmstore.FieldSelector("channelacls"))
 	if err != nil {
 		return mongodoc.ACL{}, errgo.Notef(err, "cannot retrieve base entity %q for authorization", id)
 	}
+	var ch mongodoc.Channel
 	switch {
 	case entity.Stable:
-		return baseEntity.StableACLs, nil
+		ch = mongodoc.StableChannel
 	case entity.Development:
-		return baseEntity.DevelopmentACLs, nil
+		ch = mongodoc.DevelopmentChannel
 	default:
-		return baseEntity.ACLs, nil
+		ch = mongodoc.UnpublishedChannel
 	}
+	return baseEntity.ChannelACLs[ch], nil
 }
 
 func (h *ReqHandler) authorizeWithPerms(req *http.Request, read, write []string, entityId *router.ResolvedURL) error {

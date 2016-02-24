@@ -128,7 +128,7 @@ func (s *StatsSuite) TestServerStatsUpdate(c *gc.C) {
 	rurl := newResolvedURL("~charmers/precise/wordpress-23", 23)
 	err := s.store.AddCharmWithArchive(rurl, ch)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	err = s.store.SetPerms(&rurl.URL, "unpublished.read", params.Everyone, rurl.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	var countsBefore, countsAfter charmstore.AggregatedCounts
@@ -168,7 +168,7 @@ func (s *StatsSuite) TestServerStatsArchiveDownloadOnPromulgatedEntity(c *gc.C) 
 	rurl := newResolvedURL("~charmers/precise/wordpress-23", 23)
 	err := s.store.AddCharmWithArchive(rurl, ch)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	err = s.store.SetPerms(&rurl.URL, "unpublished.read", params.Everyone, rurl.URL.User)
 	c.Assert(err, gc.IsNil)
 	s.store.SetPromulgated(rurl, true)
 
@@ -243,7 +243,7 @@ func (s *StatsSuite) TestServerStatsUpdateErrors(c *gc.C) {
 	rurl := newResolvedURL("~charmers/precise/wordpress-23", 23)
 	err := s.store.AddCharmWithArchive(rurl, ch)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	err = s.store.SetPerms(&rurl.URL, "unpublished.read", params.Everyone, rurl.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	for i, test := range tests {

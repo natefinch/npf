@@ -58,7 +58,7 @@ func (s *ArchiveSuite) TestGetCharmWithTerms(c *gc.C) {
 
 	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
 	s.assertUploadCharm(c, "POST", id, "terms")
-	err := s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+	err := s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	archiveUrl := storeURL("~charmers/precise/terms-0/archive")
@@ -73,7 +73,7 @@ func (s *ArchiveSuite) TestGetCharmWithTerms(c *gc.C) {
 func (s *ArchiveSuite) TestGet(c *gc.C) {
 	id := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
 	wordpress := s.assertUploadCharm(c, "POST", id, "wordpress")
-	err := s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+	err := s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
@@ -110,7 +110,7 @@ func (s *ArchiveSuite) TestGetWithPartialId(c *gc.C) {
 		id,
 		storetesting.Charms.CharmArchive(c.MkDir(), "wordpress"))
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+	err = s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	rec := s.assertArchiveDownload(
@@ -129,7 +129,7 @@ func (s *ArchiveSuite) TestGetPromulgatedWithPartialId(c *gc.C) {
 		id,
 		storetesting.Charms.CharmArchive(c.MkDir(), "wordpress"))
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+	err = s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
 	c.Assert(err, gc.IsNil)
 	rec := s.assertArchiveDownload(
 		c,
@@ -153,7 +153,7 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 		// Add a charm to the database (including the archive).
 		err := s.store.AddCharmWithArchive(id, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
 		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+		err = s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
 		c.Assert(err, gc.IsNil)
 
 		// Download the charm archive using the API.
@@ -178,7 +178,7 @@ func (s *ArchiveSuite) TestGetCountersDisabled(c *gc.C) {
 	// Add a charm to the database (including the archive).
 	err := s.store.AddCharmWithArchive(url, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+	err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	// Download the charm archive using the API, passing stats=0.
@@ -426,7 +426,7 @@ func (s *ArchiveSuite) TestPostCharm(c *gc.C) {
 	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/precise/wordpress-2", -1), "wordpress")
 
 	// Retrieving the published version returns the latest charm.
-	err := s.store.SetPerms(charm.MustParseURL("~charmers/wordpress"), "read", params.Everyone)
+	err := s.store.SetPerms(charm.MustParseURL("~charmers/wordpress"), "unpublished.read", params.Everyone)
 	c.Assert(err, gc.IsNil)
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
@@ -571,7 +571,7 @@ func (s *ArchiveSuite) TestPostBundle(c *gc.C) {
 	} {
 		err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmArchive(c.MkDir(), rurl.URL.Name))
 		c.Assert(err, gc.IsNil)
-		err = s.store.Publish(rurl, charmstore.StableChannel)
+		err = s.store.Publish(rurl, mongodoc.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 
@@ -1051,7 +1051,7 @@ func (s *ArchiveSuite) TestArchiveFileErrors(c *gc.C) {
 	url := newResolvedURL("cs:~charmers/utopic/wordpress-0", 0)
 	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+	err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
 	c.Assert(err, gc.IsNil)
 	for i, test := range archiveFileErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
@@ -1073,7 +1073,7 @@ func (s *ArchiveSuite) TestArchiveFileGet(c *gc.C) {
 	id := newResolvedURL("cs:~charmers/utopic/all-hooks-0", 0)
 	err := s.store.AddCharmWithArchive(id, ch)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+	err = s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
 	c.Assert(err, gc.IsNil)
 	zipFile, err := zip.OpenReader(ch.Path)
 	c.Assert(err, gc.IsNil)
@@ -1486,11 +1486,11 @@ func (s *ArchiveSearchSuite) TestGetSearchUpdate(c *gc.C) {
 		// Add a charm to the database (including the archive).
 		err := s.store.AddCharmWithArchive(url, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
 		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+		err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&url.URL, "stable.read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
-		err = s.store.Publish(url, charmstore.StableChannel)
+		err = s.store.Publish(url, mongodoc.StableChannel)
 		c.Assert(err, gc.IsNil)
 
 		// Download the charm archive using the API.
@@ -1541,12 +1541,12 @@ func (s *ArchiveSuiteWithTerms) TestGetUserHasAgreedToTermsAndConditions(c *gc.C
 
 	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
 	s.assertUploadCharm(c, "POST", id, "terms")
-	err := s.store.SetPerms(&id.URL, "read", "bob")
+	err := s.store.SetPerms(&id.URL, "unpublished.read", "bob")
 	c.Assert(err, jc.ErrorIsNil)
 
 	id1 := newResolvedURL("cs:~charmers/precise/terms1-0", -1)
 	s.assertUploadCharm(c, "POST", id1, "terms1")
-	err = s.store.SetPerms(&id1.URL, "read", "bob")
+	err = s.store.SetPerms(&id1.URL, "unpublished.read", "bob")
 	c.Assert(err, jc.ErrorIsNil)
 
 	s.assertArchiveDownload(
@@ -1584,7 +1584,7 @@ func (s *ArchiveSuiteWithTerms) TestGetArchiveWithBlankMacaroon(c *gc.C) {
 
 	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
 	s.assertUploadCharm(c, "POST", id, "terms")
-	err := s.store.SetPerms(&id.URL, "read", "bob")
+	err := s.store.SetPerms(&id.URL, "unpublished.read", "bob")
 	c.Assert(err, jc.ErrorIsNil)
 
 	archiveUrl := storeURL("~charmers/precise/terms-0/archive")
@@ -1631,7 +1631,7 @@ func (s *ArchiveSuiteWithTerms) TestGetUserHasNotAgreedToTerms(c *gc.C) {
 
 	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
 	s.assertUploadCharm(c, "POST", id, "terms")
-	err := s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+	err := s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	archiveUrl := storeURL("~charmers/precise/terms-0/archive")
@@ -1650,7 +1650,7 @@ func (s *ArchiveSuiteWithTerms) TestGetIgnorningTermsWithBasicAuth(c *gc.C) {
 
 	id := newResolvedURL("cs:~charmers/precise/terms-0", -1)
 	terms := s.assertUploadCharm(c, "POST", id, "terms")
-	err := s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
+	err := s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	archiveBytes, err := ioutil.ReadFile(terms.Path)

@@ -89,7 +89,7 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 	s.addRequiredCharms(c, bundle)
 	err := s.store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+	err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -152,7 +152,7 @@ func (s *APISuite) TestServeDiagramNoPosition(c *gc.C) {
 	s.addRequiredCharms(c, bundle)
 	err := s.store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+	err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -210,7 +210,7 @@ func (s *APISuite) TestServeReadMe(c *gc.C) {
 		url.URL.Revision = i
 		err := s.store.AddCharmWithArchive(url, wordpress)
 		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+		err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
 
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -246,7 +246,7 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 	url := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
 	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+	err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -309,7 +309,7 @@ func (s *APISuite) TestServeDefaultIcon(c *gc.C) {
 	url := newResolvedURL("cs:~charmers/precise/wordpress-0", 0)
 	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+	err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
 	c.Assert(err, gc.IsNil)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -337,7 +337,7 @@ func (s *APISuite) TestServeDefaultIconForBadXML(c *gc.C) {
 		url.URL.Revision = i
 		err := s.store.AddCharmWithArchive(url, wordpress)
 		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+		err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
 
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{

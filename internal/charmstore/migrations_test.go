@@ -407,47 +407,56 @@ func (s *migrationsSuite) TestMigrateAddDevelopment(c *gc.C) {
 	}
 }
 
-func (s *migrationsSuite) TestMigrateAddDevelopmentACLs(c *gc.C) {
-	s.patchMigrations(c, getMigrations(migrationAddDevelopmentACLs))
-
-	// Populate the database with some base entities.
-	entities := []*mongodoc.BaseEntity{{
-		URL:  charm.MustParseURL("~charmers/django"),
-		Name: "django",
-		ACLs: mongodoc.ACL{
-			Read:  []string{"user", "group"},
-			Write: []string{"user"},
-		},
-	}, {
-		URL:  charm.MustParseURL("~who/rails"),
-		Name: "rails",
-		ACLs: mongodoc.ACL{
-			Read:  []string{"everyone"},
-			Write: []string{},
-		},
-	}, {
-		URL:  charm.MustParseURL("~who/mediawiki-scalable"),
-		Name: "mediawiki-scalable",
-		ACLs: mongodoc.ACL{
-			Read:  []string{"who"},
-			Write: []string{"dalek"},
-		},
-	}}
-	for _, e := range entities {
-		s.insertBaseEntity(c, e, migrationAddDevelopmentACLs)
-	}
-
-	// Start the server.
-	err := s.newServer(c)
-	c.Assert(err, gc.IsNil)
-
-	// Ensure base entities have been updated correctly.
-	s.checkCount(c, s.db.BaseEntities(), len(entities))
-	for _, e := range entities {
-		e.DevelopmentACLs = e.ACLs
-		s.checkBaseEntity(c, e, migrationAddDevelopmentACLs)
-	}
-}
+// This test is commented out because mongodoc.BaseEntity no longer has a DevelopmentACLs
+// field.
+// TODO reenable (or delete) when new-channels-model migrations are implemented.
+//func (s *migrationsSuite) TestMigrateAddDevelopmentACLs(c *gc.C) {
+//	s.patchMigrations(c, getMigrations(migrationAddDevelopmentACLs))
+//
+//	// Populate the database with some base entities.
+//	entities := []*mongodoc.BaseEntity{{
+//		URL:  charm.MustParseURL("~charmers/django"),
+//		Name: "django",
+//		ChannelACLs: map[mongodoc.Channel] mongodoc.ACL{
+//			mongodoc.UnpublishedChannel: {
+//				Read:  []string{"user", "group"},
+//				Write: []string{"user"},
+//			},
+//		},
+//	}, {
+//		URL:  charm.MustParseURL("~who/rails"),
+//		Name: "rails",
+//		ChannelACLs: map[mongodoc.Channel] mongodoc.ACL{
+//			mongodoc.UnpublishedChannel: {
+//				Read:  []string{"everyone"},
+//				Write: []string{},
+//			},
+//		},
+//	}, {
+//		URL:  charm.MustParseURL("~who/mediawiki-scalable"),
+//		Name: "mediawiki-scalable",
+//		ChannelACLs: map[mongodoc.Channel] mongodoc.ACL{
+//			mongodoc.UnpublishedChannel: {
+//				Read:  []string{"who"},
+//				Write: []string{"dalek"},
+//			},
+//		},
+//	}}
+//	for _, e := range entities {
+//		s.insertBaseEntity(c, e, migrationAddDevelopmentACLs)
+//	}
+//
+//	// Start the server.
+//	err := s.newServer(c)
+//	c.Assert(err, gc.IsNil)
+//
+//	// Ensure base entities have been updated correctly.
+//	s.checkCount(c, s.db.BaseEntities(), len(entities))
+//	for _, e := range entities {
+//		e.DevelopmentACLs = e.ACLs
+//		s.checkBaseEntity(c, e, migrationAddDevelopmentACLs)
+//	}
+//}
 
 func (s *migrationsSuite) TestFixBogusPromulgatedURL(c *gc.C) {
 	s.patchMigrations(c, getMigrations(migrationFixBogusPromulgatedURL))
@@ -500,7 +509,7 @@ func (s *migrationsSuite) TestAddPreV5CompatBlob(c *gc.C) {
 	} {
 		err := store.AddCharmWithArchive(rurl, ch)
 		c.Assert(err, gc.IsNil)
-		err = store.Publish(rurl, StableChannel)
+		err = store.Publish(rurl, mongodoc.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 	err = store.AddBundleWithArchive(MustParseResolvedURL("~charmers/bundle/of-fun-1"), storetesting.NewBundle(&charm.BundleData{

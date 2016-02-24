@@ -25,6 +25,7 @@ import (
 	"gopkg.in/macaroon-bakery.v1/httpbakery"
 	"gopkg.in/macaroon.v1"
 
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 )
@@ -320,7 +321,7 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 
 		// Change the ACLs for the testing charm.
-		err = s.store.SetPerms(&rurl.URL, "read", test.readPerm...)
+		err = s.store.SetPerms(&rurl.URL, "unpublished.read", test.readPerm...)
 		c.Assert(err, gc.IsNil)
 
 		// Define an helper function used to send requests and check responses.
@@ -344,7 +345,7 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		makeRequest("~charmers/wordpress/expand-id", test.expectStatus, test.expectBody)
 
 		// Remove permissions for the published charm.
-		err = s.store.SetPerms(&rurl.URL, "read")
+		err = s.store.SetPerms(&rurl.URL, "unpublished.read")
 		c.Assert(err, gc.IsNil)
 
 		// Check that now accessing the published charm is not allowed.
@@ -367,6 +368,12 @@ var writeAuthorizationTests = []struct {
 	groups []string
 	// writePerm stores a list of users with write permissions.
 	writePerm []string
+	// developmentWritePerm stores a list of users with write permissions on the development channel.
+	developmentWritePerm []string
+	// stableWritePerm stores a list of users with write permissions on the stable channel.
+	stableWritePerm []string
+	// channels contains a list of channels, to which the entity belongs.
+	channels []mongodoc.Channel
 	// expectStatus is the expected HTTP response status.
 	// Defaults to 200 status OK.
 	expectStatus int
@@ -435,6 +442,90 @@ var writeAuthorizationTests = []struct {
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
+}, {
+	about:                "access provided through development channel",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	writePerm:            []string{"picard", "sisko", "group42", "group47"},
+	developmentWritePerm: []string{"group1"},
+	channels:             []mongodoc.Channel{mongodoc.DevelopmentChannel},
+}, {
+	about:                "access provided through development channel, but charm not published",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	writePerm:            []string{"picard", "sisko", "group42", "group47"},
+	developmentWritePerm: []string{"group1"},
+	expectStatus:         http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:                "access provided through stable channel",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	writePerm:            []string{"picard", "sisko", "group42", "group47"},
+	developmentWritePerm: []string{"group12"},
+	stableWritePerm:      []string{"group2"},
+	channels:             []mongodoc.Channel{mongodoc.DevelopmentChannel, mongodoc.StableChannel},
+}, {
+	about:                "access provided through stable channel, but charm not published",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	writePerm:            []string{"picard", "sisko", "group42", "group47"},
+	developmentWritePerm: []string{"group12"},
+	stableWritePerm:      []string{"group2"},
+	channels:             []mongodoc.Channel{mongodoc.DevelopmentChannel},
+	expectStatus:         http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:                "access provided through development channel, but charm on stable channel",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	writePerm:            []string{"picard", "sisko", "group42", "group47"},
+	developmentWritePerm: []string{"group1"},
+	stableWritePerm:      []string{"group11"},
+	channels: []mongodoc.Channel{
+		mongodoc.DevelopmentChannel,
+		mongodoc.StableChannel,
+	},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:           "access provided through unpublished ACL, but charm on stable channel",
+	username:        "kirk",
+	groups:          []string{"group1", "group2", "group3"},
+	writePerm:       []string{"picard", "sisko", "group42", "group1"},
+	stableWritePerm: []string{"group11"},
+	channels: []mongodoc.Channel{
+		mongodoc.DevelopmentChannel,
+		mongodoc.StableChannel,
+	},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:                "access provided through unpublished ACL, but charm on development channel",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	writePerm:            []string{"picard", "sisko", "group42", "group1"},
+	developmentWritePerm: []string{"group11"},
+	channels: []mongodoc.Channel{
+		mongodoc.DevelopmentChannel,
+	},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
 }}
 
 func (s *authSuite) TestWriteAuthorization(c *gc.C) {
@@ -451,8 +542,18 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 		err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
 
+		// publish the charm on any required channels.
+		if len(test.channels) > 0 {
+			err := s.store.Publish(rurl, test.channels...)
+			c.Assert(err, gc.IsNil)
+		}
+
 		// Change the ACLs for the testing charm.
-		err = s.store.SetPerms(&rurl.URL, "write", test.writePerm...)
+		err = s.store.SetPerms(&rurl.URL, "unpublished.write", test.writePerm...)
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&rurl.URL, "development.write", test.developmentWritePerm...)
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&rurl.URL, "stable.write", test.stableWritePerm...)
 		c.Assert(err, gc.IsNil)
 
 		makeRequest := func(path string, expectStatus int, expectBody interface{}) {
@@ -476,13 +577,6 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 
 		// Perform a meta PUT request to the URL.
 		makeRequest("~charmers/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
-
-		// Remove permissions to write on the published entity.
-		err = s.store.SetPerms(&rurl.URL, "write")
-		c.Assert(err, gc.IsNil)
-
-		// Check that now writing to the published charm is not allowed.
-		makeRequest("~charmers/wordpress/meta/extra-info/key", http.StatusUnauthorized, nil)
 
 		// Remove all entities from the store.
 		_, err = s.store.DB.Entities().RemoveAll(nil)
@@ -628,7 +722,7 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 			rurl := newResolvedURL(id.String(), revision)
 			s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
 			if len(test.writeAcls) != 0 {
-				s.store.SetPerms(&rurl.URL, "write", test.writeAcls...)
+				s.store.SetPerms(&rurl.URL, "unpublished.write", test.writeAcls...)
 			}
 		}
 
@@ -728,7 +822,7 @@ func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
 	// Change the ACLs for the testing charm.
-	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "read", "bob")
+	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "unpublished.read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	for i, test := range isEntityCaveatTests {
@@ -818,7 +912,7 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
 	// Change the ACLs for the testing charm.
-	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "read", "bob")
+	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "unpublished.read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	// First check that we require authorization to access the charm.

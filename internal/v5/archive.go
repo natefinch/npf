@@ -72,14 +72,15 @@ func (h *ReqHandler) authorizeUpload(id *charm.URL, req *http.Request) error {
 	if id.User == "" {
 		return badRequestf(nil, "user not specified in entity upload URL %q", id)
 	}
-	baseEntity, err := h.Store.FindBaseEntity(id, charmstore.FieldSelector("acls"))
+	baseEntity, err := h.Store.FindBaseEntity(id, charmstore.FieldSelector("channelacls"))
 	// Note that we pass a nil entity URL to authorizeWithPerms, because
 	// we haven't got a resolved URL at this point. At some
 	// point in the future, we may want to be able to allow
 	// is-entity first-party caveats to be allowed when uploading
 	// at which point we will need to rethink this a little.
 	if err == nil {
-		if err := h.authorizeWithPerms(req, baseEntity.ACLs.Read, baseEntity.ACLs.Write, nil); err != nil {
+		acls := baseEntity.ChannelACLs[mongodoc.UnpublishedChannel]
+		if err := h.authorizeWithPerms(req, acls.Read, acls.Write, nil); err != nil {
 			return errgo.Mask(err, errgo.Any)
 		}
 		return nil
@@ -311,9 +312,10 @@ func (h *ReqHandler) ServeBlobFile(w http.ResponseWriter, req *http.Request, id 
 }
 
 func (h *ReqHandler) isPublic(id *router.ResolvedURL) bool {
-	baseEntity, err := h.Cache.BaseEntity(&id.URL, charmstore.FieldSelector("acls"))
+	baseEntity, err := h.Cache.BaseEntity(&id.URL, charmstore.FieldSelector("channelacls"))
 	if err == nil {
-		for _, p := range baseEntity.ACLs.Read {
+		// TODO use entityACLs.
+		for _, p := range baseEntity.ChannelACLs[mongodoc.UnpublishedChannel].Read {
 			if p == params.Everyone {
 				return true
 			}

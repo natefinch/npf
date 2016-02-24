@@ -587,7 +587,7 @@ func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 		s.addRequiredCharms(c, b)
 		err := s.store.AddBundleWithArchive(url, b)
 		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+		err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
 	}
 	for i, test := range metaBundlesContainingTests {
@@ -619,11 +619,11 @@ func (s *RelationsSuite) TestMetaBundlesContainingBundleACL(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 		if url.URL.Name == "useless" {
 			// The useless bundle is not available for "everyone".
-			err = s.store.SetPerms(&url.URL, "read", url.URL.User)
+			err = s.store.SetPerms(&url.URL, "unpublished.read", url.URL.User)
 			c.Assert(err, gc.IsNil)
 			continue
 		}
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
+		err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
 		c.Assert(err, gc.IsNil)
 	}
 

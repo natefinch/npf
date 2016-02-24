@@ -513,11 +513,12 @@ func (s *Store) addEntity(entity *mongodoc.Entity) (err error) {
 		Write: perms,
 	}
 	baseEntity := &mongodoc.BaseEntity{
-		URL:         entity.BaseURL,
-		User:        entity.User,
-		Name:        entity.Name,
-		Public:      false,
-		ACLs:        acls,
+		URL:  entity.BaseURL,
+		User: entity.User,
+		Name: entity.Name,
+		ChannelACLs: map[mongodoc.Channel]mongodoc.ACL{
+			mongodoc.UnpublishedChannel: acls,
+		},
 		Promulgated: entity.PromulgatedURL != nil,
 	}
 	err = s.DB.BaseEntities().Insert(baseEntity)
@@ -599,7 +600,7 @@ func (s *Store) bundleCharms(ids []string) (map[string]charm.Charm, error) {
 			// be returned to the user along with other bundle errors.
 			continue
 		}
-		e, err := s.FindBestEntity(url, StableChannel, map[string]int{})
+		e, err := s.FindBestEntity(url, mongodoc.NoChannel, map[string]int{})
 		if err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				// Ignore this error too, for the same reasons
