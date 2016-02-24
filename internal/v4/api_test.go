@@ -2530,7 +2530,7 @@ var promulgateTests = []struct {
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
 	},
 	expectBaseEntities: []*mongodoc.BaseEntity{
-		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(mongodoc.ACL{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithStableACLs(mongodoc.ACL{
 			Write: []string{v4.PromulgatorsGroup},
 		}).WithPromulgated(true).Build(),
 	},
@@ -2668,7 +2668,7 @@ var promulgateTests = []struct {
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
 	},
 	expectBaseEntities: []*mongodoc.BaseEntity{
-		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(mongodoc.ACL{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithStableACLs(mongodoc.ACL{
 			Write: []string{v4.PromulgatorsGroup},
 		}).WithPromulgated(true).Build(),
 	},
@@ -2695,7 +2695,7 @@ var promulgateTests = []struct {
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
 	},
 	expectBaseEntities: []*mongodoc.BaseEntity{
-		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(mongodoc.ACL{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithStableACLs(mongodoc.ACL{
 			Write: []string{v4.PromulgatorsGroup},
 		}).WithPromulgated(true).Build(),
 	},

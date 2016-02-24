@@ -117,6 +117,13 @@ func (b BaseEntityBuilder) WithACLs(acls mongodoc.ACL) BaseEntityBuilder {
 	return b
 }
 
+// WithStableACLs sets the StableACLs field on the BaseEntity.
+func (b BaseEntityBuilder) WithStableACLs(acls mongodoc.ACL) BaseEntityBuilder {
+	b = b.copy()
+	b.baseEntity.StableACLs = acls
+	return b
+}
+
 // Build creates a mongodoc.BaseEntity from the BaseEntityBuilder.
 func (b BaseEntityBuilder) Build() *mongodoc.BaseEntity {
 	return b.copy().baseEntity
