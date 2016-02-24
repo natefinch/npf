@@ -1292,7 +1292,7 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 		// responsible of reviewing and publishing subsequent
 		// revisions of this entity.
 		if err := h.updateBaseEntity(id, map[string]interface{}{
-			"acls.write": []string{PromulgatorsGroup},
+			"stableacls.write": []string{PromulgatorsGroup},
 		}, nil); err != nil {
 			return errgo.Notef(err, "cannot set permissions for %q", id)
 		}
