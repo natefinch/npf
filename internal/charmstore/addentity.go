@@ -518,6 +518,8 @@ func (s *Store) addEntity(entity *mongodoc.Entity) (err error) {
 		Name: entity.Name,
 		ChannelACLs: map[mongodoc.Channel]mongodoc.ACL{
 			mongodoc.UnpublishedChannel: acls,
+			mongodoc.DevelopmentChannel: acls,
+			mongodoc.StableChannel:      acls,
 		},
 		Promulgated: entity.PromulgatedURL != nil,
 	}

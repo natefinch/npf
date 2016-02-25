@@ -482,11 +482,14 @@ func assertBlobFields(c *gc.C, doc *mongodoc.Entity, url *router.ResolvedURL, ha
 func assertBaseEntity(c *gc.C, store *Store, url *charm.URL, promulgated bool) {
 	baseEntity, err := store.FindBaseEntity(url, nil)
 	c.Assert(err, gc.IsNil)
+	acls := mongodoc.ACL{
+		Read:  []string{url.User},
+		Write: []string{url.User},
+	}
 	expectACLs := map[mongodoc.Channel]mongodoc.ACL{
-		mongodoc.UnpublishedChannel: {
-			Read:  []string{url.User},
-			Write: []string{url.User},
-		},
+		mongodoc.StableChannel:      acls,
+		mongodoc.DevelopmentChannel: acls,
+		mongodoc.UnpublishedChannel: acls,
 	}
 	c.Assert(storetesting.NormalizeBaseEntity(baseEntity), jc.DeepEquals, storetesting.NormalizeBaseEntity(&mongodoc.BaseEntity{
 		URL:         url,

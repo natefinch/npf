@@ -355,6 +355,14 @@ var findBaseEntityTests = []struct {
 				Read:  []string{"charmers"},
 				Write: []string{"charmers"},
 			},
+			mongodoc.DevelopmentChannel: {
+				Read:  []string{"charmers"},
+				Write: []string{"charmers"},
+			},
+			mongodoc.StableChannel: {
+				Read:  []string{"charmers"},
+				Write: []string{"charmers"},
+			},
 		},
 	}),
 }, {
@@ -375,6 +383,14 @@ var findBaseEntityTests = []struct {
 		URL: charm.MustParseURL("~who/mysql"),
 		ChannelACLs: map[mongodoc.Channel]mongodoc.ACL{
 			mongodoc.UnpublishedChannel: {
+				Read:  []string{"who"},
+				Write: []string{"who"},
+			},
+			mongodoc.DevelopmentChannel: {
+				Read:  []string{"who"},
+				Write: []string{"who"},
+			},
+			mongodoc.StableChannel: {
 				Read:  []string{"who"},
 				Write: []string{"who"},
 			},

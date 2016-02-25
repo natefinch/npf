@@ -994,9 +994,11 @@ func checkExtraInfoKey(key string, field string) error {
 // GET id/meta/perm
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaperm
 func (h *ReqHandler) metaPerm(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	// TODO: choose appropriate ACLs based on currently appropriate channel
-	// for chosen entity or "channel" form value if specified.
-	acls := entity.ChannelACLs[mongodoc.UnpublishedChannel]
+	ch, err := h.entityChannel(id)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	acls := entity.ChannelACLs[ch]
 	return params.PermResponse{
 		Read:  acls.Read,
 		Write: acls.Write,
@@ -1010,15 +1012,19 @@ func (h *ReqHandler) putMetaPerm(id *router.ResolvedURL, path string, val *json.
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
 	}
-	// TODO update ACLs in appropriate channel.
-	updater.UpdateField("channelacls.unpublished.read", perms.Read, &audit.Entry{
+	ch, err := h.entityChannel(id)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	// TODO use only one UpdateField operation?
+	updater.UpdateField(string("channelacls."+ch+".read"), perms.Read, &audit.Entry{
 		Op:     audit.OpSetPerm,
 		Entity: &id.URL,
 		ACL: &audit.ACL{
 			Read: perms.Read,
 		},
 	})
-	updater.UpdateField("channelacls.unpublished.write", perms.Write, &audit.Entry{
+	updater.UpdateField(string("channelacls."+ch+".write"), perms.Write, &audit.Entry{
 		Op:     audit.OpSetPerm,
 		Entity: &id.URL,
 		ACL: &audit.ACL{
@@ -1040,8 +1046,11 @@ func (h *ReqHandler) metaPromulgated(entity *mongodoc.BaseEntity, id *router.Res
 // GET id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapermkey
 func (h *ReqHandler) metaPermWithKey(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	// TODO use appropriate ACLs.
-	acls := entity.ChannelACLs[mongodoc.UnpublishedChannel]
+	ch, err := h.entityChannel(id)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	acls := entity.ChannelACLs[ch]
 	switch path {
 	case "/read":
 		return acls.Read, nil
@@ -1054,13 +1063,17 @@ func (h *ReqHandler) metaPermWithKey(entity *mongodoc.BaseEntity, id *router.Res
 // PUT id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetapermkey
 func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+	ch, err := h.entityChannel(id)
+	if err != nil {
+		return errgo.Mask(err)
+	}
 	var perms []string
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
 	}
 	switch path {
 	case "/read":
-		updater.UpdateField("channelacls.unpublished.read", perms, &audit.Entry{
+		updater.UpdateField(string("channelacls."+ch+".read"), perms, &audit.Entry{
 			Op:     audit.OpSetPerm,
 			Entity: &id.URL,
 			ACL: &audit.ACL{
@@ -1070,7 +1083,7 @@ func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val
 		updater.UpdateSearch()
 		return nil
 	case "/write":
-		updater.UpdateField("channelacls.unpublished.write", perms, &audit.Entry{
+		updater.UpdateField(string("channelacls."+ch+".write"), perms, &audit.Entry{
 			Op:     audit.OpSetPerm,
 			Entity: &id.URL,
 			ACL: &audit.ACL{
