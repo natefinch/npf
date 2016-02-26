@@ -124,17 +124,13 @@ func (s *StatsSuite) TestServerStatsUpdate(c *gc.C) {
 		previousMonth: true,
 	}}
 
-	ch := storetesting.Charms.CharmDir("wordpress")
-	rurl := newResolvedURL("~charmers/precise/wordpress-23", 23)
-	err := s.store.AddCharmWithArchive(rurl, ch)
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&rurl.URL, "unpublished.read", params.Everyone, rurl.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.addPublicCharm(c, storetesting.Charms.CharmDir("wordpress"), newResolvedURL("~charmers/precise/wordpress-23", 23))
 
 	var countsBefore, countsAfter charmstore.AggregatedCounts
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.path)
 
+		var err error
 		_, countsBefore, err = s.store.ArchiveDownloadCounts(ref, true)
 		c.Assert(err, gc.IsNil)
 
@@ -164,12 +160,8 @@ func (s *StatsSuite) TestServerStatsArchiveDownloadOnPromulgatedEntity(c *gc.C) 
 	ref := charm.MustParseURL("~charmers/precise/wordpress-23")
 	path := "/stats/counter/archive-download:*"
 
-	ch := storetesting.Charms.CharmDir("wordpress")
 	rurl := newResolvedURL("~charmers/precise/wordpress-23", 23)
-	err := s.store.AddCharmWithArchive(rurl, ch)
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&rurl.URL, "unpublished.read", params.Everyone, rurl.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.addPublicCharm(c, storetesting.Charms.CharmDir("wordpress"), rurl)
 	s.store.SetPromulgated(rurl, true)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -239,17 +231,13 @@ func (s *StatsSuite) TestServerStatsUpdateErrors(c *gc.C) {
 		partialUpdate: true,
 	}}
 
-	ch := storetesting.Charms.CharmDir("wordpress")
-	rurl := newResolvedURL("~charmers/precise/wordpress-23", 23)
-	err := s.store.AddCharmWithArchive(rurl, ch)
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&rurl.URL, "unpublished.read", params.Everyone, rurl.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.addPublicCharm(c, storetesting.Charms.CharmDir("wordpress"), newResolvedURL("~charmers/precise/wordpress-23", 23))
 
 	for i, test := range tests {
 		c.Logf("test %d. %s", i, test.path)
-		var countsBefore, countsAfter charmstore.AggregatedCounts
+		var countsBefore charmstore.AggregatedCounts
 		if test.partialUpdate {
+			var err error
 			_, countsBefore, err = s.store.ArchiveDownloadCounts(ref, true)
 			c.Assert(err, gc.IsNil)
 		}
@@ -267,7 +255,7 @@ func (s *StatsSuite) TestServerStatsUpdateErrors(c *gc.C) {
 			},
 		})
 		if test.partialUpdate {
-			_, countsAfter, err = s.store.ArchiveDownloadCounts(ref, true)
+			_, countsAfter, err := s.store.ArchiveDownloadCounts(ref, true)
 			c.Assert(err, gc.IsNil)
 			c.Assert(countsAfter.Total-countsBefore.Total, gc.Equals, int64(1))
 			c.Assert(countsAfter.LastDay-countsBefore.LastDay, gc.Equals, int64(1))
