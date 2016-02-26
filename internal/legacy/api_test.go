@@ -26,6 +26,7 @@ import (
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/legacy"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting/stats"
@@ -300,7 +301,7 @@ func (s *APISuite) TestCharmInfoCounters(c *gc.C) {
 
 func (s *APISuite) TestAPIInfoWithGatedCharm(c *gc.C) {
 	wordpressURL, _ := s.addPublicCharm(c, "wordpress", "cs:precise/wordpress-0")
-	s.store.SetPerms(&wordpressURL.URL, "unpublished.read", "bob")
+	s.store.SetPerms(&wordpressURL.URL, "stable.read", "bob")
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          "/charm-info?charms=" + wordpressURL.URL.String(),
@@ -402,9 +403,15 @@ func (s *APISuite) addPublicCharm(c *gc.C, charmName, curl string) (*router.Reso
 	archive := storetesting.Charms.CharmArchive(c.MkDir(), charmName)
 	err := s.store.AddCharmWithArchive(rurl, archive)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&rurl.URL, "unpublished.read", params.Everyone, rurl.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.setPublic(c, rurl)
 	return rurl, archive
+}
+
+func (s *APISuite) setPublic(c *gc.C, rurl *router.ResolvedURL) {
+	err := s.store.SetPerms(&rurl.URL, "stable.read", params.Everyone)
+	c.Assert(err, gc.IsNil)
+	err = s.store.Publish(rurl, mongodoc.StableChannel)
+	c.Assert(err, gc.IsNil)
 }
 
 var serveCharmEventErrorsTests = []struct {

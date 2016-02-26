@@ -213,8 +213,15 @@ var readAuthorizationTests = []struct {
 	// groups holds group names the user is member of, as returned by the
 	// discharger.
 	groups []string
-	// readPerm stores a list of users with read permissions.
-	readPerm []string
+	// unpublishedReadPerm stores a list of users with read permissions on
+	// on the unpublished entities.
+	unpublishedReadPerm []string
+	// developmentReadPerm stores a list of users with read permissions on the development channel.
+	developmentReadPerm []string
+	// stableReadPerm stores a list of users with read permissions on the stable channel.
+	stableReadPerm []string
+	// channels contains a list of channels, to which the entity belongs.
+	channels []mongodoc.Channel
 	// expectStatus is the expected HTTP response status.
 	// Defaults to 200 status OK.
 	expectStatus int
@@ -222,24 +229,24 @@ var readAuthorizationTests = []struct {
 	// the body is not checked and the response is assumed to be ok.
 	expectBody interface{}
 }{{
-	about:    "anonymous users are authorized",
-	readPerm: []string{params.Everyone},
+	about:               "anonymous users are authorized",
+	unpublishedReadPerm: []string{params.Everyone},
 }, {
-	about:    "everyone is authorized",
-	username: "dalek",
-	readPerm: []string{params.Everyone},
+	about:               "everyone is authorized",
+	username:            "dalek",
+	unpublishedReadPerm: []string{params.Everyone},
 }, {
-	about:    "everyone and a specific user",
-	username: "dalek",
-	readPerm: []string{params.Everyone, "janeway"},
+	about:               "everyone and a specific user",
+	username:            "dalek",
+	unpublishedReadPerm: []string{params.Everyone, "janeway"},
 }, {
-	about:    "specific user authorized",
-	username: "who",
-	readPerm: []string{"who"},
+	about:               "specific user authorized",
+	username:            "who",
+	unpublishedReadPerm: []string{"who"},
 }, {
-	about:    "multiple specific users authorized",
-	username: "picard",
-	readPerm: []string{"kirk", "picard", "sisko"},
+	about:               "multiple specific users authorized",
+	username:            "picard",
+	unpublishedReadPerm: []string{"kirk", "picard", "sisko"},
 }, {
 	about:        "nobody authorized",
 	username:     "picard",
@@ -249,34 +256,34 @@ var readAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "picard"`,
 	},
 }, {
-	about:        "access denied for user",
-	username:     "kirk",
-	readPerm:     []string{"picard", "sisko"},
-	expectStatus: http.StatusUnauthorized,
+	about:               "access denied for user",
+	username:            "kirk",
+	unpublishedReadPerm: []string{"picard", "sisko"},
+	expectStatus:        http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
 }, {
-	about:    "everyone is authorized (user is member of groups)",
-	username: "dalek",
-	groups:   []string{"group1", "group2"},
-	readPerm: []string{params.Everyone},
+	about:               "everyone is authorized (user is member of groups)",
+	username:            "dalek",
+	groups:              []string{"group1", "group2"},
+	unpublishedReadPerm: []string{params.Everyone},
 }, {
-	about:    "everyone and a specific group",
-	username: "dalek",
-	groups:   []string{"group2", "group3"},
-	readPerm: []string{params.Everyone, "group1"},
+	about:               "everyone and a specific group",
+	username:            "dalek",
+	groups:              []string{"group2", "group3"},
+	unpublishedReadPerm: []string{params.Everyone, "group1"},
 }, {
-	about:    "specific group authorized",
-	username: "who",
-	groups:   []string{"group1", "group42", "group2"},
-	readPerm: []string{"group42"},
+	about:               "specific group authorized",
+	username:            "who",
+	groups:              []string{"group1", "group42", "group2"},
+	unpublishedReadPerm: []string{"group42"},
 }, {
-	about:    "multiple specific groups authorized",
-	username: "picard",
-	groups:   []string{"group2"},
-	readPerm: []string{"kirk", "group0", "group2"},
+	about:               "multiple specific groups authorized",
+	username:            "picard",
+	groups:              []string{"group2"},
+	unpublishedReadPerm: []string{"kirk", "group0", "group2"},
 }, {
 	about:        "no group authorized",
 	username:     "picard",
@@ -287,10 +294,94 @@ var readAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "picard"`,
 	},
 }, {
-	about:        "access denied for group",
-	username:     "kirk",
-	groups:       []string{"group1", "group2", "group3"},
-	readPerm:     []string{"picard", "sisko", "group42", "group47"},
+	about:               "access denied for group",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group47"},
+	expectStatus:        http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:               "access provided through development channel",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group1"},
+	channels:            []mongodoc.Channel{mongodoc.DevelopmentChannel},
+}, {
+	about:               "access provided through development channel, but charm not published",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group1"},
+	expectStatus:        http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:               "access provided through stable channel",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group12"},
+	stableReadPerm:      []string{"group2"},
+	channels:            []mongodoc.Channel{mongodoc.DevelopmentChannel, mongodoc.StableChannel},
+}, {
+	about:               "access provided through stable channel, but charm not published",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group12"},
+	stableReadPerm:      []string{"group2"},
+	channels:            []mongodoc.Channel{mongodoc.DevelopmentChannel},
+	expectStatus:        http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:               "access provided through development channel, but charm on stable channel",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group1"},
+	stableReadPerm:      []string{"group11"},
+	channels: []mongodoc.Channel{
+		mongodoc.DevelopmentChannel,
+		mongodoc.StableChannel,
+	},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:               "access provided through unpublished ACL, but charm on stable channel",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group1"},
+	stableReadPerm:      []string{"group11"},
+	channels: []mongodoc.Channel{
+		mongodoc.DevelopmentChannel,
+		mongodoc.StableChannel,
+	},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:               "access provided through unpublished ACL, but charm on development channel",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group1"},
+	developmentReadPerm: []string{"group11"},
+	channels: []mongodoc.Channel{
+		mongodoc.DevelopmentChannel,
+	},
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
@@ -320,12 +411,22 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
 
+		// publish the charm on any required channels.
+		if len(test.channels) > 0 {
+			err := s.store.Publish(rurl, test.channels...)
+			c.Assert(err, gc.IsNil)
+		}
+
 		// Change the ACLs for the testing charm.
-		err = s.store.SetPerms(&rurl.URL, "unpublished.read", test.readPerm...)
+		err = s.store.SetPerms(&rurl.URL, "unpublished.read", test.unpublishedReadPerm...)
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&rurl.URL, "development.read", test.developmentReadPerm...)
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&rurl.URL, "stable.read", test.stableReadPerm...)
 		c.Assert(err, gc.IsNil)
 
 		// Define an helper function used to send requests and check responses.
-		makeRequest := func(path string, expectStatus int, expectBody interface{}) {
+		doRequest := func(path string, expectStatus int, expectBody interface{}) {
 			rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 				Handler: s.srv,
 				Do:      bakeryDo(nil),
@@ -341,15 +442,10 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		}
 
 		// Perform meta and id requests.
-		makeRequest("~charmers/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
-		makeRequest("~charmers/wordpress/expand-id", test.expectStatus, test.expectBody)
-
-		// Remove permissions for the published charm.
-		err = s.store.SetPerms(&rurl.URL, "unpublished.read")
-		c.Assert(err, gc.IsNil)
-
-		// Check that now accessing the published charm is not allowed.
-		makeRequest("~charmers/wordpress/meta/archive-size", http.StatusUnauthorized, nil)
+		// Note that we use the full URL so that we test authorization specifically
+		// on that entity without trying to look up the entity in the stable channel.
+		doRequest("~charmers/utopic/wordpress-42/meta/archive-size", test.expectStatus, test.expectBody)
+		doRequest("~charmers/utopic/wordpress-42/expand-id", test.expectStatus, test.expectBody)
 
 		// Remove all entities from the store.
 		_, err = s.store.DB.Entities().RemoveAll(nil)
@@ -367,7 +463,7 @@ var writeAuthorizationTests = []struct {
 	// discharger.
 	groups []string
 	// writePerm stores a list of users with write permissions.
-	writePerm []string
+	unpublishedWritePerm []string
 	// developmentWritePerm stores a list of users with write permissions on the development channel.
 	developmentWritePerm []string
 	// stableWritePerm stores a list of users with write permissions on the stable channel.
@@ -381,21 +477,21 @@ var writeAuthorizationTests = []struct {
 	// the body is not checked and the response is assumed to be ok.
 	expectBody interface{}
 }{{
-	about:        "anonymous users are not authorized",
-	writePerm:    []string{"who"},
-	expectStatus: http.StatusUnauthorized,
+	about:                "anonymous users are not authorized",
+	unpublishedWritePerm: []string{"who"},
+	expectStatus:         http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: "unauthorized: no username declared",
 	},
 }, {
-	about:     "specific user authorized to write",
-	username:  "dalek",
-	writePerm: []string{"dalek"},
+	about:                "specific user authorized to write",
+	username:             "dalek",
+	unpublishedWritePerm: []string{"dalek"},
 }, {
-	about:     "multiple users authorized",
-	username:  "sisko",
-	writePerm: []string{"kirk", "picard", "sisko"},
+	about:                "multiple users authorized",
+	username:             "sisko",
+	unpublishedWritePerm: []string{"kirk", "picard", "sisko"},
 }, {
 	about:        "no users authorized",
 	username:     "who",
@@ -405,24 +501,24 @@ var writeAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "who"`,
 	},
 }, {
-	about:        "specific user unauthorized",
-	username:     "kirk",
-	writePerm:    []string{"picard", "sisko", "janeway"},
-	expectStatus: http.StatusUnauthorized,
+	about:                "specific user unauthorized",
+	username:             "kirk",
+	unpublishedWritePerm: []string{"picard", "sisko", "janeway"},
+	expectStatus:         http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
 }, {
-	about:     "access granted for group",
-	username:  "picard",
-	groups:    []string{"group1", "group2"},
-	writePerm: []string{"group2"},
+	about:                "access granted for group",
+	username:             "picard",
+	groups:               []string{"group1", "group2"},
+	unpublishedWritePerm: []string{"group2"},
 }, {
-	about:     "multiple groups authorized",
-	username:  "picard",
-	groups:    []string{"group1", "group2"},
-	writePerm: []string{"kirk", "group0", "group1", "group2"},
+	about:                "multiple groups authorized",
+	username:             "picard",
+	groups:               []string{"group1", "group2"},
+	unpublishedWritePerm: []string{"kirk", "group0", "group1", "group2"},
 }, {
 	about:        "no group authorized",
 	username:     "picard",
@@ -433,11 +529,11 @@ var writeAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "picard"`,
 	},
 }, {
-	about:        "access denied for group",
-	username:     "kirk",
-	groups:       []string{"group1", "group2", "group3"},
-	writePerm:    []string{"picard", "sisko", "group42", "group47"},
-	expectStatus: http.StatusUnauthorized,
+	about:                "access denied for group",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group47"},
+	expectStatus:         http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "kirk"`,
@@ -446,14 +542,14 @@ var writeAuthorizationTests = []struct {
 	about:                "access provided through development channel",
 	username:             "kirk",
 	groups:               []string{"group1", "group2", "group3"},
-	writePerm:            []string{"picard", "sisko", "group42", "group47"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group47"},
 	developmentWritePerm: []string{"group1"},
 	channels:             []mongodoc.Channel{mongodoc.DevelopmentChannel},
 }, {
 	about:                "access provided through development channel, but charm not published",
 	username:             "kirk",
 	groups:               []string{"group1", "group2", "group3"},
-	writePerm:            []string{"picard", "sisko", "group42", "group47"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group47"},
 	developmentWritePerm: []string{"group1"},
 	expectStatus:         http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -464,7 +560,7 @@ var writeAuthorizationTests = []struct {
 	about:                "access provided through stable channel",
 	username:             "kirk",
 	groups:               []string{"group1", "group2", "group3"},
-	writePerm:            []string{"picard", "sisko", "group42", "group47"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group47"},
 	developmentWritePerm: []string{"group12"},
 	stableWritePerm:      []string{"group2"},
 	channels:             []mongodoc.Channel{mongodoc.DevelopmentChannel, mongodoc.StableChannel},
@@ -472,7 +568,7 @@ var writeAuthorizationTests = []struct {
 	about:                "access provided through stable channel, but charm not published",
 	username:             "kirk",
 	groups:               []string{"group1", "group2", "group3"},
-	writePerm:            []string{"picard", "sisko", "group42", "group47"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group47"},
 	developmentWritePerm: []string{"group12"},
 	stableWritePerm:      []string{"group2"},
 	channels:             []mongodoc.Channel{mongodoc.DevelopmentChannel},
@@ -485,7 +581,7 @@ var writeAuthorizationTests = []struct {
 	about:                "access provided through development channel, but charm on stable channel",
 	username:             "kirk",
 	groups:               []string{"group1", "group2", "group3"},
-	writePerm:            []string{"picard", "sisko", "group42", "group47"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group47"},
 	developmentWritePerm: []string{"group1"},
 	stableWritePerm:      []string{"group11"},
 	channels: []mongodoc.Channel{
@@ -498,11 +594,11 @@ var writeAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
 }, {
-	about:           "access provided through unpublished ACL, but charm on stable channel",
-	username:        "kirk",
-	groups:          []string{"group1", "group2", "group3"},
-	writePerm:       []string{"picard", "sisko", "group42", "group1"},
-	stableWritePerm: []string{"group11"},
+	about:                "access provided through unpublished ACL, but charm on stable channel",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group1"},
+	stableWritePerm:      []string{"group11"},
 	channels: []mongodoc.Channel{
 		mongodoc.DevelopmentChannel,
 		mongodoc.StableChannel,
@@ -516,7 +612,7 @@ var writeAuthorizationTests = []struct {
 	about:                "access provided through unpublished ACL, but charm on development channel",
 	username:             "kirk",
 	groups:               []string{"group1", "group2", "group3"},
-	writePerm:            []string{"picard", "sisko", "group42", "group1"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group1"},
 	developmentWritePerm: []string{"group11"},
 	channels: []mongodoc.Channel{
 		mongodoc.DevelopmentChannel,
@@ -549,7 +645,7 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 		}
 
 		// Change the ACLs for the testing charm.
-		err = s.store.SetPerms(&rurl.URL, "unpublished.write", test.writePerm...)
+		err = s.store.SetPerms(&rurl.URL, "unpublished.write", test.unpublishedWritePerm...)
 		c.Assert(err, gc.IsNil)
 		err = s.store.SetPerms(&rurl.URL, "development.write", test.developmentWritePerm...)
 		c.Assert(err, gc.IsNil)
@@ -575,8 +671,10 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 			}
 		}
 
-		// Perform a meta PUT request to the URL.
-		makeRequest("~charmers/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
+		// Perform a meta PUT request to the URLs.
+		// Note that we use the full URL so that we test authorization specifically
+		// on that entity without trying to look up the entity in the stable channel.
+		makeRequest("~charmers/utopic/wordpress-42/meta/extra-info/key", test.expectStatus, test.expectBody)
 
 		// Remove all entities from the store.
 		_, err = s.store.DB.Entities().RemoveAll(nil)
@@ -813,16 +911,11 @@ func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
 	}
 
 	// Add a charm to the store, used for testing.
-	err := s.store.AddCharmWithArchive(
-		newResolvedURL("~charmers/utopic/wordpress-41", 9),
-		storetesting.Charms.CharmDir("wordpress"))
-	c.Assert(err, gc.IsNil)
-	err = s.store.AddCharmWithArchive(
-		newResolvedURL("~charmers/utopic/wordpress-42", 10),
-		storetesting.Charms.CharmDir("wordpress"))
-	c.Assert(err, gc.IsNil)
-	// Change the ACLs for the testing charm.
-	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "unpublished.read", "bob")
+	s.addPublicCharm(c, storetesting.NewCharm(nil), newResolvedURL("~charmers/utopic/wordpress-41", 9))
+	s.addPublicCharm(c, storetesting.NewCharm(nil), newResolvedURL("~charmers/utopic/wordpress-42", 10))
+	// Change the ACLs for charms we've just uploaded, otherwise
+	// no authorization checking will take place.
+	err := s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "stable.read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	for i, test := range isEntityCaveatTests {
@@ -907,12 +1000,15 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 	// Now check that we can use the obtained macaroon to do stuff
 	// as the declared user.
 
+	rurl := newResolvedURL("~charmers/utopic/wordpress-41", 9)
 	err = s.store.AddCharmWithArchive(
-		newResolvedURL("~charmers/utopic/wordpress-41", 9),
+		rurl,
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
+	err = s.store.Publish(rurl, mongodoc.StableChannel)
+	c.Assert(err, gc.IsNil)
 	// Change the ACLs for the testing charm.
-	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "unpublished.read", "bob")
+	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "stable.read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	// First check that we require authorization to access the charm.

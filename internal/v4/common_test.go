@@ -189,8 +189,11 @@ func (s *commonSuite) startServer(c *gc.C) {
 	s.store = s.srv.Pool().Store()
 }
 
-func (s *commonSuite) addPublicCharm(c *gc.C, charmName string, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Charm) {
-	ch := storetesting.Charms.CharmDir(charmName)
+func (s *commonSuite) addPublicCharmFromRepo(c *gc.C, charmName string, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Charm) {
+	return s.addPublicCharm(c, storetesting.Charms.CharmDir(charmName), rurl)
+}
+
+func (s *commonSuite) addPublicCharm(c *gc.C, ch charm.Charm, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Charm) {
 	err := s.store.AddCharmWithArchive(rurl, ch)
 	c.Assert(err, gc.IsNil)
 	s.setPublic(c, rurl)
@@ -204,8 +207,11 @@ func (s *commonSuite) setPublic(c *gc.C, rurl *router.ResolvedURL) {
 	c.Assert(err, gc.IsNil)
 }
 
-func (s *commonSuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.ResolvedURL, addRequiredCharms bool) (*router.ResolvedURL, charm.Bundle) {
-	bundle := storetesting.Charms.BundleDir(bundleName)
+func (s *commonSuite) addPublicBundleFromRepo(c *gc.C, bundleName string, rurl *router.ResolvedURL, addRequiredCharms bool) (*router.ResolvedURL, charm.Bundle) {
+	return s.addPublicBundle(c, storetesting.Charms.BundleDir(bundleName), rurl, addRequiredCharms)
+}
+
+func (s *commonSuite) addPublicBundle(c *gc.C, bundle charm.Bundle, rurl *router.ResolvedURL, addRequiredCharms bool) (*router.ResolvedURL, charm.Bundle) {
 	if addRequiredCharms {
 		s.addRequiredCharms(c, bundle)
 	}
@@ -219,20 +225,16 @@ func (s *commonSuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.R
 // map key is the id of the charm.
 func (s *commonSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
 	for id, ch := range charms {
-		url := mustParseResolvedURL(id)
-		err := s.store.AddCharmWithArchive(url, storetesting.NewCharm(ch.Meta()))
-		c.Assert(err, gc.IsNil, gc.Commentf("id %q", id))
-		err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
+		s.addPublicCharm(c, storetesting.NewCharm(ch.Meta()), mustParseResolvedURL(id))
 	}
 }
 
-// setPerms sets the read permissions of a set of entities.
-// The map key is the is the id of each entity; its
-// associated value is its read ACL.
+// setPerms sets the stable channel read permissions of a set of
+// entities. The map key is the is the id of each entity; its associated
+// value is its read ACL.
 func (s *commonSuite) setPerms(c *gc.C, readACLs map[string][]string) {
 	for url, acl := range readACLs {
-		err := s.store.SetPerms(charm.MustParseURL(url), "unpublished.read", acl...)
+		err := s.store.SetPerms(charm.MustParseURL(url), "stable.read", acl...)
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -243,7 +245,7 @@ func (s *commonSuite) setPerms(c *gc.C, readACLs map[string][]string) {
 func (s *commonSuite) handler(c *gc.C) v4.ReqHandler {
 	h := v4.New(s.store.Pool(), s.srvParams, "")
 	defer h.Close()
-	rh, err := h.NewReqHandler()
+	rh, err := h.NewReqHandler(new(http.Request))
 	c.Assert(err, gc.IsNil)
 	// It would be nice if we could call s.AddCleanup here
 	// to call rh.Put when the test has completed, but
@@ -285,9 +287,7 @@ func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
 			rurl.PromulgatedRevision = -1
 		}
 		c.Logf("adding charm %v %d required by bundle to fulfil %v", &rurl.URL, rurl.PromulgatedRevision, svc.Charm)
-		err = s.store.AddCharmWithArchive(&rurl, ch)
-		c.Assert(err, gc.IsNil, gc.Commentf("url: %#v", &rurl))
-		s.setPublic(c, &rurl)
+		s.addPublicCharm(c, ch, &rurl)
 	}
 }
 

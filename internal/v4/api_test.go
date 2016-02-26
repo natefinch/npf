@@ -518,7 +518,7 @@ func (s *APISuite) TestEndpointGet(c *gc.C) {
 func (s *APISuite) TestAllMetaEndpointsTested(c *gc.C) {
 	// Make sure that we're testing all the metadata
 	// endpoints that we need to.
-	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-23", 23))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-23", 23))
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("precise/wordpress-23/meta"),
@@ -563,9 +563,9 @@ var testEntities = []*router.ResolvedURL{
 func (s *APISuite) addTestEntities(c *gc.C) []*router.ResolvedURL {
 	for _, e := range testEntities {
 		if e.URL.Series == "bundle" {
-			s.addPublicBundle(c, e.URL.Name, e, true)
+			s.addPublicBundleFromRepo(c, e.URL.Name, e, true)
 		} else {
-			s.addPublicCharm(c, e.URL.Name, e)
+			s.addPublicCharmFromRepo(c, e.URL.Name, e)
 		}
 		// Associate some extra-info data with the entity.
 		key := e.URL.Path() + "/meta/extra-info/key"
@@ -620,7 +620,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		err := s.store.AddCharmWithArchive(u, storetesting.NewCharm(nil))
 		c.Assert(err, gc.IsNil)
 	}
-	s.assertGet(c, "wordpress/meta/perm", params.PermResponse{
+	s.assertGet(c, "wordpress/meta/perm?channel=unpublished", params.PermResponse{
 		Read:  []string{"charmers"},
 		Write: []string{"charmers"},
 	})
@@ -889,7 +889,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 
 func (s *APISuite) TestMetaPermPutUnauthorized(c *gc.C) {
 	id := "precise/wordpress-23"
-	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/"+id, 23))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("~charmers/"+id, 23))
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: s.noMacaroonSrv,
 		URL:     storeURL("~charmers/" + id + "/meta/perm/read"),
@@ -908,7 +908,7 @@ func (s *APISuite) TestMetaPermPutUnauthorized(c *gc.C) {
 
 func (s *APISuite) TestExtraInfo(c *gc.C) {
 	id := "precise/wordpress-23"
-	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/"+id, 23))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("~charmers/"+id, 23))
 	s.checkInfo(c, "extra-info", id)
 	s.checkInfo(c, "common-info", id)
 }
@@ -1058,7 +1058,7 @@ var extraInfoBadPutRequestsTests = []struct {
 }}
 
 func (s *APISuite) TestExtraInfoBadPutRequests(c *gc.C) {
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-23", 23))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-23", 23))
 	path := "precise/wordpress-23/meta/"
 	for i, test := range extraInfoBadPutRequestsTests {
 		c.Logf("test %d: %s", i, test.about)
@@ -1100,7 +1100,7 @@ func (s *APISuite) TestExtraInfoBadPutRequests(c *gc.C) {
 }
 
 func (s *APISuite) TestExtraInfoPutUnauthorized(c *gc.C) {
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-23", 23))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-23", 23))
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler: s.srv,
 		URL:     storeURL("precise/wordpress-23/meta/extra-info"),
@@ -1164,9 +1164,9 @@ func (s *APISuite) TestExtraInfoPutUnauthorized(c *gc.C) {
 }
 
 func (s *APISuite) TestCommonInfo(c *gc.C) {
-	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-23", 23))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-24", 24))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/trusty/wordpress-1", 1))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-23", 23))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-24", 24))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("~charmers/trusty/wordpress-1", 1))
 
 	s.assertPut(c, "wordpress/meta/common-info/key", "something")
 
@@ -1232,7 +1232,7 @@ func (s *APISuite) TestMetaEndpointsAny(c *gc.C) {
 }
 
 func (s *APISuite) TestMetaAnyWithNoIncludesAndNoEntity(c *gc.C) {
-	wordpressURL, _ := s.addPublicCharm(
+	wordpressURL, _ := s.addPublicCharmFromRepo(
 		c,
 		"wordpress",
 		newResolvedURL("cs:~charmers/precise/wordpress-23", 23),
@@ -1269,7 +1269,7 @@ func (s *APISuite) TestMetaAnyWithNoIncludesAndNoEntity(c *gc.C) {
 // In this test we rely on the charm.v2 testing repo package and
 // dummy charm that has actions included.
 func (s *APISuite) TestMetaCharmActions(c *gc.C) {
-	url, dummy := s.addPublicCharm(c, "dummy", newResolvedURL("cs:~charmers/precise/dummy-10", 10))
+	url, dummy := s.addPublicCharmFromRepo(c, "dummy", newResolvedURL("cs:~charmers/precise/dummy-10", 10))
 	s.assertGet(c, "precise/dummy-10/meta/charm-actions", dummy.Actions())
 	s.assertGet(c, "precise/dummy-10/meta/any?include=charm-actions",
 		params.MetaAnyResponse{
@@ -1281,8 +1281,9 @@ func (s *APISuite) TestMetaCharmActions(c *gc.C) {
 	)
 }
 
+// V4 SPECIFIC
 func (s *APISuite) TestMetaCharmMetadataElidesSeriesFromMultiSeriesCharm(c *gc.C) {
-	_, ch := s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-10", 10))
+	_, ch := s.addPublicCharmFromRepo(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-10", 10))
 	expectMeta := *ch.Meta()
 	c.Assert(expectMeta.Series, gc.Not(gc.HasLen), 0)
 	expectMeta.Series = nil
@@ -1294,8 +1295,8 @@ func (s *APISuite) TestBulkMeta(c *gc.C) {
 	// whether the meta/any logic is hooked up correctly.
 	// Detailed tests for this feature are in the router package.
 
-	_, wordpress := s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-23", 23))
-	_, mysql := s.addPublicCharm(c, "mysql", newResolvedURL("cs:~charmers/precise/mysql-10", 10))
+	_, wordpress := s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-23", 23))
+	_, mysql := s.addPublicCharmFromRepo(c, "mysql", newResolvedURL("cs:~charmers/precise/mysql-10", 10))
 	s.assertGet(c,
 		"meta/charm-metadata?id=precise/wordpress-23&id=precise/mysql-10",
 		map[string]*charm.Meta{
@@ -1310,8 +1311,8 @@ func (s *APISuite) TestBulkMetaAny(c *gc.C) {
 	// whether the meta/any logic is hooked up correctly.
 	// Detailed tests for this feature are in the router package.
 
-	wordpressURL, wordpress := s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-23", 23))
-	mysqlURL, mysql := s.addPublicCharm(c, "mysql", newResolvedURL("cs:~charmers/precise/mysql-10", 10))
+	wordpressURL, wordpress := s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-23", 23))
+	mysqlURL, mysql := s.addPublicCharmFromRepo(c, "mysql", newResolvedURL("cs:~charmers/precise/mysql-10", 10))
 	s.assertGet(c,
 		"meta/any?include=charm-metadata&include=charm-config&id=precise/wordpress-23&id=precise/mysql-10",
 		map[string]params.MetaAnyResponse{
@@ -1359,14 +1360,11 @@ func (s *APISuite) TestMetaCharmTags(c *gc.C) {
 	url := newResolvedURL("~charmers/precise/wordpress-0", -1)
 	for i, test := range metaCharmTagsTests {
 		c.Logf("%d: %s", i, test.about)
-		wordpress := storetesting.Charms.CharmDir("wordpress")
-		meta := wordpress.Meta()
-		meta.Tags, meta.Categories = test.tags, test.categories
 		url.URL.Revision = i
-		err := s.store.AddCharmWithArchive(url, storetesting.NewCharm(meta))
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
+		s.addPublicCharm(c, storetesting.NewCharm(&charm.Meta{
+			Tags:       test.tags,
+			Categories: test.categories,
+		}), url)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL(url.URL.Path() + "/meta/tags"),
@@ -1380,18 +1378,15 @@ func (s *APISuite) TestPromulgatedMetaCharmTags(c *gc.C) {
 	url := newResolvedURL("~charmers/precise/wordpress-0", 0)
 	for i, test := range metaCharmTagsTests {
 		c.Logf("%d: %s", i, test.about)
-		wordpress := storetesting.Charms.CharmDir("wordpress")
-		meta := wordpress.Meta()
-		meta.Tags, meta.Categories = test.tags, test.categories
 		url.URL.Revision = i
 		url.PromulgatedRevision = i
-		err := s.store.AddCharmWithArchive(url, storetesting.NewCharm(meta))
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
+		s.addPublicCharm(c, storetesting.NewCharm(&charm.Meta{
+			Tags:       test.tags,
+			Categories: test.categories,
+		}), url)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
-			URL:          storeURL(url.PromulgatedURL().Path() + "/meta/tags"),
+			URL:          storeURL(url.URL.Path() + "/meta/tags"),
 			ExpectStatus: http.StatusOK,
 			ExpectBody:   params.TagsResponse{test.expectTags},
 		})
@@ -1399,15 +1394,15 @@ func (s *APISuite) TestPromulgatedMetaCharmTags(c *gc.C) {
 }
 
 func (s *APISuite) TestBundleTags(c *gc.C) {
-	b := storetesting.Charms.BundleDir("wordpress-simple")
-	s.addRequiredCharms(c, b)
 	url := newResolvedURL("~charmers/bundle/wordpress-simple-2", -1)
-	data := b.Data()
-	data.Tags = []string{"foo", "bar"}
-	err := s.store.AddBundleWithArchive(url, storetesting.NewBundle(data))
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.addPublicBundle(c, storetesting.NewBundle(&charm.BundleData{
+		Tags: []string{"foo", "bar"},
+		Services: map[string]*charm.ServiceSpec{
+			"wordpress": {
+				Charm: "wordpress",
+			},
+		},
+	}), url, true)
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
 		URL:          storeURL(url.URL.Path() + "/meta/tags"),
@@ -1417,18 +1412,18 @@ func (s *APISuite) TestBundleTags(c *gc.C) {
 }
 
 func (s *APISuite) TestPromulgatedBundleTags(c *gc.C) {
-	b := storetesting.Charms.BundleDir("wordpress-simple")
-	s.addRequiredCharms(c, b)
 	url := newResolvedURL("~charmers/bundle/wordpress-simple-2", 2)
-	data := b.Data()
-	data.Tags = []string{"foo", "bar"}
-	err := s.store.AddBundleWithArchive(url, storetesting.NewBundle(data))
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.addPublicBundle(c, storetesting.NewBundle(&charm.BundleData{
+		Tags: []string{"foo", "bar"},
+		Services: map[string]*charm.ServiceSpec{
+			"wordpress": {
+				Charm: "wordpress",
+			},
+		},
+	}), url, true)
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
-		URL:          storeURL(url.PromulgatedURL().Path() + "/meta/tags"),
+		URL:          storeURL(url.URL.Path() + "/meta/tags"),
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   params.TagsResponse{[]string{"foo", "bar"}},
 	})
@@ -1448,7 +1443,7 @@ func (s *APISuite) TestIdsAreResolved(c *gc.C) {
 	// passed to the router. Given how Router is
 	// defined, and the ResolveURL tests, this should
 	// be sufficient to "join the dots".
-	_, wordpress := s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-23", 23))
+	_, wordpress := s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-23", 23))
 	s.assertGet(c, "wordpress/meta/charm-metadata", wordpress.Meta())
 }
 
@@ -1559,27 +1554,27 @@ var resolveURLTests = []struct {
 }}
 
 func (s *APISuite) TestResolveURL(c *gc.C) {
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-23", 23))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-24", 24))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-24", 24))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-25", 25))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/utopic/wordpress-10", 10))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/saucy/bigdata-99", 99))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/utopic/bigdata-10", 10))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/trusty/wordpress-1", -1))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/precise/wordpress-2", -1))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/precise/other-2", -1))
-	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/bundlelovin-10", 10), true)
-	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/wordpress-simple-10", 10), true)
-	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~bob/multi-series-0", -1))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-23", 23))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-24", 24))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-24", 24))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-25", 25))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/utopic/wordpress-10", 10))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/saucy/bigdata-99", 99))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/utopic/bigdata-10", 10))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~bob/trusty/wordpress-1", -1))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~bob/precise/wordpress-2", -1))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~bob/precise/other-2", -1))
+	s.addPublicBundleFromRepo(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/bundlelovin-10", 10), true)
+	s.addPublicBundleFromRepo(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/wordpress-simple-10", 10), true)
+	s.addPublicCharmFromRepo(c, "multi-series", newResolvedURL("cs:~bob/multi-series-0", -1))
 
-	cache := entitycache.New(v5.ChannelStore{Store: s.store, Channel: mongodoc.UnpublishedChannel})
-	cache.AddEntityFields(map[string]int{"supportedseries": 1})
-	cache.AddEntityFields(v5.RequiredEntityFields)
 	for i, test := range resolveURLTests {
 		c.Logf("test %d: %s", i, test.url)
 		url := charm.MustParseURL(test.url)
-		rurl, err := v4.ResolveURL(cache, url)
+		rurl, err := v4.ResolveURL(entitycache.New(&v5.StoreWithChannel{
+			Store:   s.store,
+			Channel: mongodoc.UnpublishedChannel,
+		}), url)
 		if test.notFound {
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 			c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for ".*"`)
@@ -1659,17 +1654,17 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 	// Add a bunch of entities in the database.
 	// Note that expand-id only cares about entity identifiers,
 	// so it is ok to reuse the same charm for all the entities.
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/utopic/wordpress-42", 42))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-47", 47))
-	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/wordpress-5", 49))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/utopic/wordpress-42", 42))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-47", 47))
+	s.addPublicCharmFromRepo(c, "multi-series", newResolvedURL("cs:~charmers/wordpress-5", 49))
 
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/precise/haproxy-1", 1))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/haproxy-1", 1))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/precise/haproxy-1", 1))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/haproxy-1", 1))
 
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~bob/precise/builder-5", -1))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~bob/precise/builder-5", -1))
 
-	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/mongo-0", 0), true)
-	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/wordpress-simple-0", 0), true)
+	s.addPublicBundleFromRepo(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/mongo-0", 0), true)
+	s.addPublicBundleFromRepo(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/wordpress-simple-0", 0), true)
 
 	for i, test := range serveExpandIdTests {
 		c.Logf("test %d: %s", i, test.about)
@@ -1829,33 +1824,33 @@ var serveMetaRevisionInfoTests = []struct {
 }}
 
 func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mysql-41", 41))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mysql-42", 42))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mysql-41", 41))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mysql-42", 42))
 
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-9", 9))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-41", 41))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-42", 42))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-43", 43))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-9", 9))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-41", 41))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/precise/wordpress-42", 42))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-43", 43))
 
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-42", 42))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-42", 42))
 
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-0", -1))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-1", -1))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-2", 0))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-3", 1))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~openstack-charmers/trusty/cinder-0", 2))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~openstack-charmers/trusty/cinder-1", 3))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-4", -1))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-5", 4))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-6", 5))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-0", -1))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-1", -1))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-2", 0))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-3", 1))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~openstack-charmers/trusty/cinder-0", 2))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~openstack-charmers/trusty/cinder-1", 3))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-4", -1))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-5", 4))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/cinder-6", 5))
 
-	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-1", 40))
-	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-2", 41))
+	s.addPublicCharmFromRepo(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-1", 40))
+	s.addPublicCharmFromRepo(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-2", 41))
 
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mixed-1", 40))
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mixed-2", 41))
-	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/mixed-3", 42))
-	s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/mixed-4", 43))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mixed-1", 40))
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/mixed-2", 41))
+	s.addPublicCharmFromRepo(c, "multi-series", newResolvedURL("cs:~charmers/mixed-3", 42))
+	s.addPublicCharmFromRepo(c, "multi-series", newResolvedURL("cs:~charmers/mixed-4", 43))
 
 	for i, test := range serveMetaRevisionInfoTests {
 		c.Logf("test %d: %s", i, test.about)
@@ -2125,9 +2120,9 @@ func (s *APISuite) TestMetaStats(c *gc.C) {
 
 			// Add the required entities to the database.
 			if url.URL.Series == "bundle" {
-				s.addPublicBundle(c, "wordpress-simple", url, true)
+				s.addPublicBundleFromRepo(c, "wordpress-simple", url, true)
 			} else {
-				s.addPublicCharm(c, "wordpress", url)
+				s.addPublicCharmFromRepo(c, "wordpress", url)
 			}
 
 			// Simulate the entity was downloaded at the specified dates.
@@ -2183,7 +2178,7 @@ var metaStatsWithLegacyDownloadCountsTests = []struct {
 // logic.
 func (s *APISuite) TestMetaStatsWithLegacyDownloadCounts(c *gc.C) {
 	patchLegacyDownloadCountsEnabled(s.AddCleanup, true)
-	id, _ := s.addPublicCharm(c, "wordpress", newResolvedURL("~charmers/utopic/wordpress-42", 42))
+	id, _ := s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("~charmers/utopic/wordpress-42", 42))
 	url := storeURL("utopic/wordpress-42/meta/stats")
 
 	for i, test := range metaStatsWithLegacyDownloadCountsTests {
@@ -2390,7 +2385,7 @@ func (s *APISuite) TestChangesPublishedErrors(c *gc.C) {
 // a range of charms with known time stamps.
 func (s *APISuite) publishCharmsAtKnownTimes(c *gc.C, charms []publishSpec) {
 	for _, ch := range publishedCharms {
-		id, _ := s.addPublicCharm(c, "wordpress", ch.id)
+		id, _ := s.addPublicCharmFromRepo(c, "wordpress", ch.id)
 		t := ch.published().PublishTime
 		err := s.store.UpdateEntity(id, bson.D{{"$set", bson.D{{"uploadtime", t}}}})
 		c.Assert(err, gc.IsNil)
@@ -2447,12 +2442,108 @@ func (s *APISuite) TestHash256Laziness(c *gc.C) {
 	// TODO frankban: remove this test after updating entities in the
 	// production db with their SHA256 hash value. Entities are updated by
 	// running the cshash256 command.
-	id, _ := s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~who/precise/wordpress-0", -1))
+	id, _ := s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~who/precise/wordpress-0", -1))
 
 	// Retrieve the SHA256 hash.
 	entity, err := s.store.FindEntity(id, charmstore.FieldSelector("blobhash256"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(entity.BlobHash256, gc.Not(gc.Equals), "")
+}
+
+var urlChannelResolvingEntities = []struct {
+	id      *router.ResolvedURL
+	channel mongodoc.Channel
+}{{
+	id:      newResolvedURL("~charmers/precise/wordpress-0", 0),
+	channel: mongodoc.StableChannel,
+}, {
+	id:      newResolvedURL("~charmers/precise/wordpress-1", 1),
+	channel: mongodoc.DevelopmentChannel,
+}, {
+	id:      newResolvedURL("~charmers/precise/wordpress-2", 2),
+	channel: mongodoc.UnpublishedChannel,
+}, {
+	id:      newResolvedURL("~charmers/trusty/mysql-0", 0),
+	channel: mongodoc.UnpublishedChannel,
+}}
+
+var urlChannelResolvingTests = []struct {
+	url          string
+	channel      mongodoc.Channel
+	expectURL    string
+	expectStatus int
+	expectError  params.Error
+}{{
+	url:       "wordpress",
+	expectURL: "cs:precise/wordpress-0",
+}, {
+	url:       "wordpress",
+	channel:   mongodoc.StableChannel,
+	expectURL: "cs:precise/wordpress-0",
+}, {
+	url:       "wordpress",
+	channel:   mongodoc.DevelopmentChannel,
+	expectURL: "cs:precise/wordpress-1",
+}, {
+	url:       "wordpress",
+	channel:   mongodoc.UnpublishedChannel,
+	expectURL: "cs:precise/wordpress-2",
+}, {
+	url:       "~charmers/precise/wordpress",
+	channel:   mongodoc.StableChannel,
+	expectURL: "cs:~charmers/precise/wordpress-0",
+}, {
+	url:          "mysql",
+	expectStatus: http.StatusNotFound,
+	expectError: params.Error{
+		Message: `no matching charm or bundle for "cs:mysql"`,
+		Code:    params.ErrNotFound,
+	},
+}, {
+	url:          "mysql",
+	channel:      "unknown",
+	expectStatus: http.StatusBadRequest,
+	expectError: params.Error{
+		Message: `invalid channel "unknown" specified in request`,
+		Code:    params.ErrBadRequest,
+	},
+}}
+
+func (s *APISuite) TestURLChannelResolving(c *gc.C) {
+	s.discharge = dischargeForUser("charmers")
+	for _, add := range urlChannelResolvingEntities {
+		err := s.store.AddCharmWithArchive(add.id, storetesting.NewCharm(nil))
+		c.Assert(err, gc.IsNil)
+		if add.channel != mongodoc.UnpublishedChannel {
+			err = s.store.Publish(add.id, add.channel)
+			c.Assert(err, gc.IsNil)
+		}
+	}
+	for i, test := range urlChannelResolvingTests {
+		path := test.url + "/meta/any"
+		if test.channel != "" {
+			path += "?channel=" + string(test.channel)
+		}
+		c.Logf("test %d: %v", i, test.url)
+		if test.expectError.Message != "" {
+			httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+				Handler:      s.srv,
+				Do:           bakeryDo(nil),
+				URL:          storeURL(path),
+				ExpectStatus: test.expectStatus,
+				ExpectBody:   test.expectError,
+			})
+		} else {
+			httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+				Handler: s.srv,
+				Do:      bakeryDo(nil),
+				URL:     storeURL(path),
+				ExpectBody: params.MetaAnyResponse{
+					Id: charm.MustParseURL(test.expectURL),
+				},
+			})
+		}
+	}
 }
 
 func basicAuthHeader(username, password string) http.Header {
@@ -2944,8 +3035,9 @@ func (s *APISuite) TestPromulgate(c *gc.C) {
 		}
 		s.idM.groups = test.groups
 		p := httptesting.JSONCallParams{
-			Handler:      s.srv,
-			URL:          storeURL(test.id + "/promulgate"),
+			Handler: s.srv,
+			// TODO avoid using channel=unpublished here
+			URL:          storeURL(test.id + "/promulgate?channel=unpublished"),
 			Method:       test.method,
 			Body:         test.body,
 			Header:       http.Header{"Content-Type": {"application/json"}},
@@ -2976,7 +3068,7 @@ func (s *APISuite) TestPromulgate(c *gc.C) {
 func (s *APISuite) TestEndpointRequiringBaseEntityWithPromulgatedId(c *gc.C) {
 	// Add a promulgated charm.
 	url := newResolvedURL("~charmers/precise/wordpress-23", 23)
-	s.addPublicCharm(c, "wordpress", url)
+	s.addPublicCharmFromRepo(c, "wordpress", url)
 
 	// Unpromulgate the base entity
 	err := s.store.SetPromulgated(url, false)
@@ -3118,5 +3210,3 @@ func entityACLs(store *charmstore.Store, url *router.ResolvedURL) (mongodoc.ACL,
 	}
 	return be.ChannelACLs[ch], nil
 }
-
-var _ entitycache.Store = v5.ChannelStore{}

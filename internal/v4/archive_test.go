@@ -43,23 +43,22 @@ type ArchiveSuite struct {
 
 var _ = gc.Suite(&ArchiveSuite{})
 
+func (s *ArchiveSuite) SetUpSuite(c *gc.C) {
+	s.enableIdentity = true
+	s.commonSuite.SetUpSuite(c)
+}
+
 func (s *ArchiveSuite) TestGet(c *gc.C) {
 	id := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
-	wordpress := s.assertUploadCharm(c, "POST", id, "wordpress")
-	err := s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
-	c.Assert(err, gc.IsNil)
+	ch := storetesting.NewCharm(nil)
+	s.addPublicCharm(c, ch, id)
 
-	archiveBytes, err := ioutil.ReadFile(wordpress.Path)
-	c.Assert(err, gc.IsNil)
-
-	archiveUrl := storeURL("~charmers/precise/wordpress-0/archive")
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     archiveUrl,
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
+	rec := s.assertArchiveDownload(
+		c,
+		"~charmers/precise/wordpress-0",
+		nil,
+		ch.Bytes(),
+	)
 	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/wordpress-0")
 	assertCacheControl(c, rec.Header(), true)
 
@@ -68,47 +67,49 @@ func (s *ArchiveSuite) TestGet(c *gc.C) {
 	// as net/http is well-tested.
 	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
-		URL:     archiveUrl,
+		URL:     storeURL("~charmers/precise/wordpress-0/archive"),
 		Header:  http.Header{"Range": {"bytes=10-100"}},
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusPartialContent, gc.Commentf("body: %q", rec.Body.Bytes()))
 	c.Assert(rec.Body.Bytes(), gc.HasLen, 100-10+1)
-	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes[10:101])
-	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
+	c.Assert(rec.Body.Bytes(), gc.DeepEquals, ch.Bytes()[10:101])
+	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(ch.Bytes()))
 	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/wordpress-0")
 	assertCacheControl(c, rec.Header(), true)
 }
 
 func (s *ArchiveSuite) TestGetWithPartialId(c *gc.C) {
-	s.addPublicCharm(c, "wordpress", newResolvedURL("cs:~charmers/utopic/wordpress-42", -1))
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL("~charmers/wordpress/archive"),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	id := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
+	ch := storetesting.NewCharm(nil)
+	s.addPublicCharm(c, ch, id)
+
+	rec := s.assertArchiveDownload(
+		c,
+		"~charmers/wordpress",
+		nil,
+		ch.Bytes(),
+	)
 	// The complete entity id can be retrieved from the response header.
-	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/utopic/wordpress-42")
+	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, id.URL.String())
 }
 
 func (s *ArchiveSuite) TestGetPromulgatedWithPartialId(c *gc.C) {
 	id := newResolvedURL("cs:~charmers/utopic/wordpress-42", 42)
-	err := s.store.AddCharmWithArchive(
-		id,
-		storetesting.Charms.CharmArchive(c.MkDir(), "wordpress"))
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
-	c.Assert(err, gc.IsNil)
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL("wordpress/archive"),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
-	// The complete entity id can be retrieved from the response header.
+	ch := storetesting.NewCharm(nil)
+	s.addPublicCharm(c, ch, id)
+
+	rec := s.assertArchiveDownload(
+		c,
+		"wordpress",
+		nil,
+		ch.Bytes(),
+	)
 	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, id.PromulgatedURL().String())
 }
 
+// V4 SPECIFIC
 func (s *ArchiveSuite) TestGetElidesSeriesFromMultiSeriesCharmMetadata(c *gc.C) {
-	_, ch := s.addPublicCharm(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-0", -1))
+	_, ch := s.addPublicCharmFromRepo(c, "multi-series", newResolvedURL("cs:~charmers/multi-series-0", -1))
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
 		URL:     storeURL("~charmers/multi-series/archive"),
@@ -148,18 +149,17 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 	} {
 		c.Logf("test %d: %s", i, id)
 
-		// Add a charm to the database (including the archive).
-		err := s.store.AddCharmWithArchive(id, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
-		c.Assert(err, gc.IsNil)
+		ch := storetesting.NewCharm(nil)
+		s.addPublicCharm(c, ch, id)
 
-		// Download the charm archive using the API.
-		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-			Handler: s.srv,
-			URL:     storeURL(id.URL.Path() + "/archive"),
-		})
-		c.Assert(rec.Code, gc.Equals, http.StatusOK)
+		// Download the charm archive using the API, which should increment
+		// the download counts.
+		s.assertArchiveDownload(
+			c,
+			id.URL.Path(),
+			nil,
+			ch.Bytes(),
+		)
 
 		// Check that the downloads count for the entity has been updated.
 		key := []string{params.StatsArchiveDownload, "utopic", "mysql", id.URL.User, "42"}
@@ -171,19 +171,17 @@ func (s *ArchiveSuite) TestGetCounters(c *gc.C) {
 }
 
 func (s *ArchiveSuite) TestGetCountersDisabled(c *gc.C) {
-	url := newResolvedURL("~charmers/utopic/mysql-42", 42)
-	// Add a charm to the database (including the archive).
-	err := s.store.AddCharmWithArchive(url, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
-	c.Assert(err, gc.IsNil)
+	id := newResolvedURL("~charmers/utopic/mysql-42", 42)
+	ch := storetesting.NewCharm(nil)
+	s.addPublicCharm(c, ch, id)
 
 	// Download the charm archive using the API, passing stats=0.
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL(url.URL.Path() + "/archive?stats=0"),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+	s.assertArchiveDownload(
+		c,
+		"",
+		&httptesting.DoRequestParams{URL: storeURL("~charmers/utopic/mysql-42/archive?stats=0")},
+		ch.Bytes(),
+	)
 
 	// Check that the downloads count for the entity has not been updated.
 	key := []string{params.StatsArchiveDownload, "utopic", "mysql", "", "42"}
@@ -412,18 +410,19 @@ loop:
 }
 
 func (s *ArchiveSuite) TestPostCharm(c *gc.C) {
+	s.discharge = dischargeForUser("charmers")
+
 	// A charm that did not exist before should get revision 0.
 	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/precise/wordpress-0", -1), "wordpress")
 
 	// Subsequent charm uploads should increment the revision by 1.
 	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/precise/wordpress-1", -1), "mysql")
 
-	// Retrieving the published version returns the latest charm.
-	err := s.store.SetPerms(charm.MustParseURL("~charmers/wordpress"), "unpublished.read", params.Everyone)
-	c.Assert(err, gc.IsNil)
+	// Retrieving the unpublished version returns the latest charm.
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
-		URL:     storeURL("~charmers/wordpress/archive"),
+		URL:     storeURL("~charmers/wordpress/archive?channel=unpublished"),
+		Do:      bakeryDo(nil),
 	})
 	c.Assert(rec.Code, gc.Equals, http.StatusOK)
 	c.Assert(rec.Header().Get(params.EntityIdHeader), gc.Equals, "cs:~charmers/precise/wordpress-1")
@@ -770,34 +769,6 @@ func (s *ArchiveSuite) TestPostFailureCounters(c *gc.C) {
 	stats.CheckCounterSum(c, s.store, key, false, 3)
 }
 
-func (s *ArchiveSuite) TestPostErrorReadsFully(c *gc.C) {
-	h := s.handler(c)
-	defer h.Close()
-
-	b := bytes.NewBuffer([]byte("test body"))
-	r, err := http.NewRequest("POST", "/~charmers/trusty/wordpress/archive", b)
-	c.Assert(err, gc.IsNil)
-	r.Header.Set("Content-Type", "application/zip")
-	r.SetBasicAuth(testUsername, testPassword)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, r)
-	c.Assert(rec.Code, gc.Equals, http.StatusBadRequest)
-	c.Assert(b.Len(), gc.Equals, 0)
-}
-
-func (s *ArchiveSuite) TestPostAuthErrorReadsFully(c *gc.C) {
-	h := s.handler(c)
-	defer h.Close()
-	b := bytes.NewBuffer([]byte("test body"))
-	r, err := http.NewRequest("POST", "/~charmers/trusty/wordpress/archive", b)
-	c.Assert(err, gc.IsNil)
-	r.Header.Set("Content-Type", "application/zip")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, r)
-	c.Assert(rec.Code, gc.Equals, http.StatusUnauthorized)
-	c.Assert(b.Len(), gc.Equals, 0)
-}
-
 func (s *ArchiveSuite) TestUploadOfCurrentCharmReadsFully(c *gc.C) {
 	s.assertUploadCharm(c, "POST", newResolvedURL("~charmers/precise/wordpress-0", -1), "wordpress")
 
@@ -1044,12 +1015,7 @@ var archiveFileErrorsTests = []struct {
 }}
 
 func (s *ArchiveSuite) TestArchiveFileErrors(c *gc.C) {
-	wordpress := storetesting.Charms.CharmArchive(c.MkDir(), "wordpress")
-	url := newResolvedURL("cs:~charmers/utopic/wordpress-0", 0)
-	err := s.store.AddCharmWithArchive(url, wordpress)
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/utopic/wordpress-0", 0))
 	for i, test := range archiveFileErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
@@ -1068,10 +1034,7 @@ func (s *ArchiveSuite) TestArchiveFileErrors(c *gc.C) {
 func (s *ArchiveSuite) TestArchiveFileGet(c *gc.C) {
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "all-hooks")
 	id := newResolvedURL("cs:~charmers/utopic/all-hooks-0", 0)
-	err := s.store.AddCharmWithArchive(id, ch)
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone, id.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.addPublicCharm(c, ch, id)
 	zipFile, err := zip.OpenReader(ch.Path)
 	c.Assert(err, gc.IsNil)
 	defer zipFile.Close()
@@ -1273,17 +1236,51 @@ func (s *ArchiveSuite) TestDeleteCounters(c *gc.C) {
 	stats.CheckCounterSum(c, s.store, key, false, 1)
 }
 
-func (s *ArchiveSuite) TestPostAuthErrors(c *gc.C) {
-	checkAuthErrors(c, s.srv, "POST", "~charmers/utopic/django/archive")
+type basicAuthArchiveSuite struct {
+	commonSuite
 }
 
-func (s *ArchiveSuite) TestDeleteAuthErrors(c *gc.C) {
+var _ = gc.Suite(&basicAuthArchiveSuite{})
+
+func (s *basicAuthArchiveSuite) TestPostAuthErrors(c *gc.C) {
+	s.checkAuthErrors(c, "POST", "~charmers/utopic/django/archive")
+}
+
+func (s *basicAuthArchiveSuite) TestDeleteAuthErrors(c *gc.C) {
 	err := s.store.AddCharmWithArchive(
 		newResolvedURL("~charmers/utopic/django-42", 42),
 		storetesting.Charms.CharmArchive(c.MkDir(), "wordpress"),
 	)
 	c.Assert(err, gc.IsNil)
-	checkAuthErrors(c, s.srv, "DELETE", "utopic/django-42/archive")
+	s.checkAuthErrors(c, "DELETE", "utopic/django-42/archive")
+}
+
+func (s *basicAuthArchiveSuite) TestPostErrorReadsFully(c *gc.C) {
+	h := s.handler(c)
+	defer h.Close()
+
+	b := strings.NewReader("test body")
+	r, err := http.NewRequest("POST", "/~charmers/trusty/wordpress/archive", b)
+	c.Assert(err, gc.IsNil)
+	r.Header.Set("Content-Type", "application/zip")
+	r.SetBasicAuth(testUsername, testPassword)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, r)
+	c.Assert(rec.Code, gc.Equals, http.StatusBadRequest)
+	c.Assert(b.Len(), gc.Equals, 0)
+}
+
+func (s *basicAuthArchiveSuite) TestPostAuthErrorReadsFully(c *gc.C) {
+	h := s.handler(c)
+	defer h.Close()
+	b := strings.NewReader("test body")
+	r, err := http.NewRequest("POST", "/~charmers/trusty/wordpress/archive", b)
+	c.Assert(err, gc.IsNil)
+	r.Header.Set("Content-Type", "application/zip")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, r)
+	c.Assert(rec.Code, gc.Equals, http.StatusUnauthorized)
+	c.Assert(b.Len(), gc.Equals, 0)
 }
 
 var archiveAuthErrorsTests = []struct {
@@ -1314,8 +1311,7 @@ var archiveAuthErrorsTests = []struct {
 	expectMessage: "invalid user name or password",
 }}
 
-func checkAuthErrors(c *gc.C, handler http.Handler, method, url string) {
-	archiveURL := storeURL(url)
+func (s *basicAuthArchiveSuite) checkAuthErrors(c *gc.C, method, url string) {
 	for i, test := range archiveAuthErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
 		if test.header == nil {
@@ -1325,8 +1321,8 @@ func checkAuthErrors(c *gc.C, handler http.Handler, method, url string) {
 			test.header.Add("Content-Type", "application/zip")
 		}
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-			Handler:      handler,
-			URL:          archiveURL,
+			Handler:      s.srv,
+			URL:          storeURL(url),
 			Method:       method,
 			Header:       test.header,
 			Username:     test.username,
@@ -1440,15 +1436,8 @@ func (s *ArchiveSearchSuite) TestGetSearchUpdate(c *gc.C) {
 		c.Logf("test %d: %s", i, id)
 		url := newResolvedURL(id, -1)
 
-		// Add a charm to the database (including the archive).
-		err := s.store.AddCharmWithArchive(url, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "unpublished.read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "stable.read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
-		err = s.store.Publish(url, mongodoc.StableChannel)
-		c.Assert(err, gc.IsNil)
+		// Add a charm to the database.
+		s.addPublicCharm(c, storetesting.NewCharm(nil), url)
 
 		// Download the charm archive using the API.
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -1460,4 +1449,21 @@ func (s *ArchiveSearchSuite) TestGetSearchUpdate(c *gc.C) {
 		// Check that the search record for the entity has been updated.
 		stats.CheckSearchTotalDownloads(c, s.store, &url.URL, 1)
 	}
+}
+
+func (s *commonSuite) assertArchiveDownload(c *gc.C, id string, extraParams *httptesting.DoRequestParams, archiveBytes []byte) *httptest.ResponseRecorder {
+	doParams := httptesting.DoRequestParams{}
+	if extraParams != nil {
+		doParams = *extraParams
+	}
+	doParams.Handler = s.srv
+	if doParams.URL == "" {
+		doParams.URL = storeURL(id + "/archive")
+	}
+	rec := httptesting.DoRequest(c, doParams)
+	c.Assert(rec.Code, gc.Equals, http.StatusOK)
+
+	c.Assert(rec.Body.Bytes(), gc.DeepEquals, archiveBytes)
+	c.Assert(rec.Header().Get(params.ContentHashHeader), gc.Equals, hashOfBytes(archiveBytes))
+	return rec
 }

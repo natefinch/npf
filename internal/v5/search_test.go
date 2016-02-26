@@ -19,7 +19,6 @@ import (
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
@@ -61,20 +60,10 @@ func (s *SearchSuite) SetUpTest(c *gc.C) {
 
 func (s *SearchSuite) addCharmsToStore(c *gc.C) {
 	for name, id := range exportTestCharms {
-		err := s.store.AddCharmWithArchive(id, getSearchCharm(name))
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&id.URL, "stable.read", params.Everyone, id.URL.User)
-		c.Assert(err, gc.IsNil)
-		err = s.store.Publish(id, mongodoc.StableChannel)
-		c.Assert(err, gc.IsNil)
+		s.addPublicCharm(c, getSearchCharm(name), id)
 	}
 	for name, id := range exportTestBundles {
-		err := s.store.AddBundleWithArchive(id, getSearchBundle(name))
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&id.URL, "stable.read", params.Everyone, id.URL.User)
-		c.Assert(err, gc.IsNil)
-		err = s.store.Publish(id, mongodoc.StableChannel)
-		c.Assert(err, gc.IsNil)
+		s.addPublicBundle(c, getSearchBundle(name), id, false)
 	}
 }
 
@@ -714,16 +703,11 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 	for n, cnt := range charmDownloads {
 		url := newResolvedURL("cs:~downloads-test/trusty/x-1", -1)
 		url.URL.Name = n
-		err := s.store.AddCharmWithArchive(url, getSearchCharm(n))
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "stable.read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
+		s.addPublicCharm(c, getSearchCharm(n), url)
 		for i := 0; i < cnt; i++ {
 			err := s.store.IncrementDownloadCounts(url)
 			c.Assert(err, gc.IsNil)
 		}
-		err = s.store.Publish(url, mongodoc.StableChannel)
-		c.Assert(err, gc.IsNil)
 	}
 	err := s.esSuite.ES.RefreshIndex(s.esSuite.TestIndex)
 	c.Assert(err, gc.IsNil)

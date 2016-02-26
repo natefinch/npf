@@ -77,8 +77,9 @@ type ReqHandler struct {
 	Handler *Handler
 
 	// Store holds the charmstore Store instance
-	// for the request.
-	Store *charmstore.Store
+	// for the request, associated with the channel specified
+	// in the request.
+	Store *StoreWithChannel
 
 	// auth holds the results of any authorization that
 	// has been done on this request.
@@ -133,30 +134,41 @@ var (
 	)
 )
 
-// ChannelStore is a wrapper around Store for use with the entity cache.
-// Channel specifies the channel to use when resolving entities. It is
-// expected this will be used as a temporary workaround until channels
-// are fully integrated.
-type ChannelStore struct {
-	Store   *charmstore.Store
+// StoreWithChannel associates a Store with a channel that will be used
+// to resolve any channel-ambiguous requests.
+type StoreWithChannel struct {
+	*charmstore.Store
 	Channel mongodoc.Channel
 }
 
-func (s ChannelStore) FindBestEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
+func (s *StoreWithChannel) FindBestEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
 	return s.Store.FindBestEntity(url, s.Channel, fields)
 }
 
-func (s ChannelStore) FindBaseEntity(url *charm.URL, fields map[string]int) (*mongodoc.BaseEntity, error) {
+func (s *StoreWithChannel) FindBaseEntity(url *charm.URL, fields map[string]int) (*mongodoc.BaseEntity, error) {
 	return s.Store.FindBaseEntity(url, fields)
 }
 
+// ValidChannels holds the set of all allowed channels.
+var ValidChannels = map[mongodoc.Channel]bool{
+	mongodoc.UnpublishedChannel: true,
+	mongodoc.DevelopmentChannel: true,
+	mongodoc.StableChannel:      true,
+	mongodoc.NoChannel:          true,
+}
+
 // NewReqHandler returns an instance of a *ReqHandler
-// suitable for handling an HTTP request. After use, the ReqHandler.Close
+// suitable for handling the given HTTP request. After use, the ReqHandler.Close
 // method should be called to close it.
 //
 // If no handlers are available, it returns an error with
 // a charmstore.ErrTooManySessions cause.
-func (h *Handler) NewReqHandler() (*ReqHandler, error) {
+func (h *Handler) NewReqHandler(req *http.Request) (*ReqHandler, error) {
+	req.ParseForm()
+	ch := mongodoc.Channel(req.Form.Get("channel"))
+	if !ValidChannels[ch] {
+		return nil, badRequestf(nil, "invalid channel %q specified in request", ch)
+	}
 	store, err := h.Pool.RequestStore()
 	if err != nil {
 		if errgo.Cause(err) == charmstore.ErrTooManySessions {
@@ -166,8 +178,11 @@ func (h *Handler) NewReqHandler() (*ReqHandler, error) {
 	}
 	rh := reqHandlerPool.Get().(*ReqHandler)
 	rh.Handler = h
-	rh.Store = store
-	rh.Cache = entitycache.New(ChannelStore{Store: store, Channel: mongodoc.UnpublishedChannel})
+	rh.Store = &StoreWithChannel{
+		Store:   store,
+		Channel: ch,
+	}
+	rh.Cache = entitycache.New(rh.Store)
 	rh.Cache.AddEntityFields(RequiredEntityFields)
 	rh.Cache.AddBaseEntityFields(RequiredBaseEntityFields)
 	return rh, nil
@@ -274,7 +289,7 @@ func newReqHandler() *ReqHandler {
 // request-specific instance of ReqHandler and
 // calling ServeHTTP on that.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	rh, err := h.NewReqHandler()
+	rh, err := h.NewReqHandler(req)
 	if err != nil {
 		router.WriteError(w, err)
 		return
@@ -994,6 +1009,7 @@ func checkExtraInfoKey(key string, field string) error {
 // GET id/meta/perm
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaperm
 func (h *ReqHandler) metaPerm(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	// TODO select channel based on channel parameter if specified.
 	ch, err := h.entityChannel(id)
 	if err != nil {
 		return nil, errgo.Mask(err)
@@ -1008,6 +1024,7 @@ func (h *ReqHandler) metaPerm(entity *mongodoc.BaseEntity, id *router.ResolvedUR
 // PUT id/meta/perm
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmeta
 func (h *ReqHandler) putMetaPerm(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+	// TODO select channel based on channel parameter if specified.
 	var perms params.PermRequest
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
@@ -1046,6 +1063,7 @@ func (h *ReqHandler) metaPromulgated(entity *mongodoc.BaseEntity, id *router.Res
 // GET id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapermkey
 func (h *ReqHandler) metaPermWithKey(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	// TODO select channel based on channel parameter if specified.
 	ch, err := h.entityChannel(id)
 	if err != nil {
 		return nil, errgo.Mask(err)
@@ -1063,6 +1081,7 @@ func (h *ReqHandler) metaPermWithKey(entity *mongodoc.BaseEntity, id *router.Res
 // PUT id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetapermkey
 func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+	// TODO select channel based on channel parameter if specified.
 	ch, err := h.entityChannel(id)
 	if err != nil {
 		return errgo.Mask(err)

@@ -57,7 +57,7 @@ func New(pool *charmstore.Pool, config charmstore.ServerParams, rootPath string)
 }
 
 func (h Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	rh, err := h.NewReqHandler()
+	rh, err := h.NewReqHandler(req)
 	if err != nil {
 		router.WriteError(w, err)
 		return
@@ -80,10 +80,18 @@ var requiredEntityFields = func() map[string]int {
 	return fields
 }()
 
-// NewReqHandler fetchs a new instance of ReqHandler
-// from h.Pool and returns it. The ReqHandler must
-// be closed when finished with.
-func (h *Handler) NewReqHandler() (ReqHandler, error) {
+// NewReqHandler returns an instance of a *ReqHandler
+// suitable for handling the given HTTP request. After use, the ReqHandler.Close
+// method should be called to close it.
+//
+// If no handlers are available, it returns an error with
+// a charmstore.ErrTooManySessions cause.
+func (h *Handler) NewReqHandler(req *http.Request) (ReqHandler, error) {
+	req.ParseForm()
+	ch := mongodoc.Channel(req.Form.Get("channel"))
+	if !v5.ValidChannels[ch] {
+		return ReqHandler{}, badRequestf(nil, "invalid channel %q specified in request", ch)
+	}
 	store, err := h.Pool.RequestStore()
 	if err != nil {
 		if errgo.Cause(err) == charmstore.ErrTooManySessions {
@@ -93,8 +101,11 @@ func (h *Handler) NewReqHandler() (ReqHandler, error) {
 	}
 	rh := reqHandlerPool.Get().(ReqHandler)
 	rh.Handler = h.Handler
-	rh.Store = store
-	rh.Cache = entitycache.New(v5.ChannelStore{Store: store, Channel: mongodoc.UnpublishedChannel})
+	rh.Store = &v5.StoreWithChannel{
+		Store:   store,
+		Channel: ch,
+	}
+	rh.Cache = entitycache.New(rh.Store)
 	rh.Cache.AddEntityFields(requiredEntityFields)
 	rh.Cache.AddBaseEntityFields(v5.RequiredBaseEntityFields)
 	return rh, nil
@@ -145,7 +156,7 @@ func (h ReqHandler) ResolveURLs(urls []*charm.URL) ([]*router.ResolvedURL, error
 // It's defined as a separate function so it can be more
 // easily unit-tested.
 func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, error) {
-	entity, err := cache.Entity(url, nil)
+	entity, err := cache.Entity(url, charmstore.FieldSelector("supportedseries"))
 	if err != nil && errgo.Cause(err) != params.ErrNotFound {
 		return nil, errgo.Mask(err)
 	}
@@ -327,4 +338,10 @@ func expandMultiSeries(entities []*mongodoc.Entity, append func(series string, d
 		}
 	}
 	return nil
+}
+
+func badRequestf(underlying error, f string, a ...interface{}) error {
+	err := errgo.WithCausef(underlying, params.ErrBadRequest, f, a...)
+	err.(*errgo.Err).SetLocation(1)
+	return err
 }

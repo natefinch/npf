@@ -123,13 +123,13 @@ func (h *Handler) Close() {
 }
 
 func (h *Handler) newReqHandler() (*reqHandler, error) {
-	v4h, err := h.v4.NewReqHandler()
+	v4h, err := h.v4.NewReqHandler(new(http.Request))
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Is(charmstore.ErrTooManySessions))
 	}
 	rh := reqHandlerPool.Get().(*reqHandler)
 	rh.v4 = v4h
-	rh.store = v4h.Store
+	rh.store = v4h.Store.Store
 	return rh, nil
 }
 
