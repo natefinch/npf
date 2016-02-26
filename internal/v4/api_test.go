@@ -2493,6 +2493,10 @@ var urlChannelResolvingTests = []struct {
 	channel:   mongodoc.StableChannel,
 	expectURL: "cs:~charmers/precise/wordpress-0",
 }, {
+	url:       "~charmers/precise/wordpress-2",
+	channel:   mongodoc.StableChannel,
+	expectURL: "cs:~charmers/precise/wordpress-2",
+}, {
 	url:          "mysql",
 	expectStatus: http.StatusNotFound,
 	expectError: params.Error{
