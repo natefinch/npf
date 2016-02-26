@@ -466,16 +466,16 @@ func (s *Store) FindEntities(url *charm.URL, fields map[string]int) ([]*mongodoc
 }
 
 // FindBestEntity finds the entity that provides the preferred match to
-// the given URL, on the given channel. If the given URL has no user then
-// only promulgated entities will be queried. If fields is not nil, only
-// those fields will be populated in the returned entities.
+// the given URL, on the given channel. If the given URL has no user
+// then only promulgated entities will be queried. If fields is not nil,
+// only those fields will be populated in the returned entities.
 //
 // If the URL contains a revision then it is assumed to be fully formed
-// and refer to a single entity, that entity is retrieved and verified
-// against the requested channel, for this purpose an NoChannel
-// is treated as mongodoc.UnpublishedChannel. If the URL does not contain a
-// revision then channel is searched for the best match, here
-// NoChannel will be treated as mongodoc.StableChannel.
+// and refer to a single entity; the channel is ignored.
+//
+// If the URL does not contain a revision then the channel is searched
+// for the best match, here NoChannel will be treated as
+// mongodoc.StableChannel.
 func (s *Store) FindBestEntity(url *charm.URL, channel mongodoc.Channel, fields map[string]int) (*mongodoc.Entity, error) {
 	if fields != nil {
 		// Make sure we have all the fields we need to make a decision.
@@ -501,13 +501,6 @@ func (s *Store) FindBestEntity(url *charm.URL, channel mongodoc.Channel, fields 
 			return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
 		} else if err != nil {
 			return nil, errgo.Mask(err)
-		}
-		// If a channel was spedified make sure the entity is in that channel.
-		if channel == mongodoc.StableChannel && !entity.Stable {
-			return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
-		}
-		if channel == mongodoc.DevelopmentChannel && !entity.Development {
-			return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
 		}
 		return entity, nil
 	}
