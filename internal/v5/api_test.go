@@ -1766,6 +1766,10 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 	// so it is ok to reuse the same charm for all the entities.
 	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/utopic/wordpress-42", 42))
 	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-47", 47))
+	err := s.store.AddCharmWithArchive(newResolvedURL("cs:~charmers/trusty/wordpress-48", 48), storetesting.NewCharm(nil))
+	c.Assert(err, gc.IsNil)
+	err = s.store.Publish(newResolvedURL("cs:~charmers/trusty/wordpress-48", 48), mongodoc.DevelopmentChannel)
+	c.Assert(err, gc.IsNil)
 	s.addPublicCharmFromRepo(c, "multi-series", newResolvedURL("cs:~charmers/wordpress-5", 49))
 
 	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/precise/haproxy-1", 1))
