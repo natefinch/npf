@@ -377,11 +377,11 @@ func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, 
 	// We've added promulgated-url as a required field, so
 	// we'll always get it from the Entity result.
 	entity, err := cache.Entity(url, nil)
-	if err != nil && errgo.Cause(err) != params.ErrNotFound {
+	if err != nil {
+		if errgo.Cause(err) == params.ErrNotFound {
+			return nil, noMatchingURLError(url)
+		}
 		return nil, errgo.Mask(err)
-	}
-	if errgo.Cause(err) == params.ErrNotFound {
-		return nil, noMatchingURLError(url)
 	}
 	rurl := &router.ResolvedURL{
 		URL:                 *entity.URL,
@@ -1009,7 +1009,6 @@ func checkExtraInfoKey(key string, field string) error {
 // GET id/meta/perm
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaperm
 func (h *ReqHandler) metaPerm(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	// TODO select channel based on channel parameter if specified.
 	ch, err := h.entityChannel(id)
 	if err != nil {
 		return nil, errgo.Mask(err)
@@ -1024,7 +1023,6 @@ func (h *ReqHandler) metaPerm(entity *mongodoc.BaseEntity, id *router.ResolvedUR
 // PUT id/meta/perm
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmeta
 func (h *ReqHandler) putMetaPerm(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
-	// TODO select channel based on channel parameter if specified.
 	var perms params.PermRequest
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
@@ -1063,7 +1061,6 @@ func (h *ReqHandler) metaPromulgated(entity *mongodoc.BaseEntity, id *router.Res
 // GET id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapermkey
 func (h *ReqHandler) metaPermWithKey(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	// TODO select channel based on channel parameter if specified.
 	ch, err := h.entityChannel(id)
 	if err != nil {
 		return nil, errgo.Mask(err)
@@ -1081,7 +1078,6 @@ func (h *ReqHandler) metaPermWithKey(entity *mongodoc.BaseEntity, id *router.Res
 // PUT id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetapermkey
 func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
-	// TODO select channel based on channel parameter if specified.
 	ch, err := h.entityChannel(id)
 	if err != nil {
 		return errgo.Mask(err)

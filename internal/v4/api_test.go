@@ -2497,9 +2497,13 @@ var urlChannelResolvingTests = []struct {
 	channel:   mongodoc.StableChannel,
 	expectURL: "cs:~charmers/precise/wordpress-0",
 }, {
-	url:       "~charmers/precise/wordpress-2",
-	channel:   mongodoc.StableChannel,
-	expectURL: "cs:~charmers/precise/wordpress-2",
+	url:          "~charmers/precise/wordpress-2",
+	channel:      mongodoc.StableChannel,
+	expectStatus: http.StatusNotFound,
+	expectError: params.Error{
+		Message: `no matching charm or bundle for "cs:~charmers/precise/wordpress-2"`,
+		Code:    params.ErrNotFound,
+	},
 }, {
 	url:          "mysql",
 	expectStatus: http.StatusNotFound,

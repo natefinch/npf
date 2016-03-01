@@ -1537,13 +1537,15 @@ var findBestEntityTests = []struct {
 	channel:  mongodoc.UnpublishedChannel,
 	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-3", 3),
 }, {
-	url:      "~charmers/trusty/wordpress-3",
-	channel:  mongodoc.DevelopmentChannel,
-	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-3", 3),
+	url:              "~charmers/trusty/wordpress-3",
+	channel:          mongodoc.DevelopmentChannel,
+	expectError:      "cs:~charmers/trusty/wordpress-3 not found in development channel",
+	expectErrorCause: params.ErrNotFound,
 }, {
-	url:      "~charmers/trusty/wordpress-2",
-	channel:  mongodoc.StableChannel,
-	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-2", 2),
+	url:              "~charmers/trusty/wordpress-2",
+	channel:          mongodoc.StableChannel,
+	expectError:      "cs:~charmers/trusty/wordpress-2 not found in stable channel",
+	expectErrorCause: params.ErrNotFound,
 }, {
 	url:      "trusty/wordpress-0",
 	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-0", 0),
@@ -1567,13 +1569,15 @@ var findBestEntityTests = []struct {
 	channel:  mongodoc.UnpublishedChannel,
 	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-3", 3),
 }, {
-	url:      "trusty/wordpress-3",
-	channel:  mongodoc.DevelopmentChannel,
-	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-3", 3),
+	url:              "trusty/wordpress-3",
+	channel:          mongodoc.DevelopmentChannel,
+	expectError:      "cs:trusty/wordpress-3 not found in development channel",
+	expectErrorCause: params.ErrNotFound,
 }, {
-	url:      "trusty/wordpress-2",
-	channel:  mongodoc.StableChannel,
-	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-2", 2),
+	url:              "trusty/wordpress-2",
+	channel:          mongodoc.StableChannel,
+	expectError:      "cs:trusty/wordpress-2 not found in stable channel",
+	expectErrorCause: params.ErrNotFound,
 }, {
 	url:      "~charmers/trusty/wordpress",
 	expectID: router.MustNewResolvedURL("~charmers/trusty/wordpress-1", 1),
@@ -1691,13 +1695,15 @@ var findBestEntityTests = []struct {
 	channel:  mongodoc.UnpublishedChannel,
 	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
 }, {
-	url:      "~charmers/mysql-3",
-	channel:  mongodoc.DevelopmentChannel,
-	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
+	url:              "~charmers/mysql-3",
+	channel:          mongodoc.DevelopmentChannel,
+	expectError:      "cs:~charmers/mysql-3 not found in development channel",
+	expectErrorCause: params.ErrNotFound,
 }, {
-	url:      "~charmers/mysql-2",
-	channel:  mongodoc.StableChannel,
-	expectID: router.MustNewResolvedURL("~charmers/mysql-2", 2),
+	url:              "~charmers/mysql-2",
+	channel:          mongodoc.StableChannel,
+	expectError:      "cs:~charmers/mysql-2 not found in stable channel",
+	expectErrorCause: params.ErrNotFound,
 }, {
 	url:      "mysql-0",
 	expectID: findBestEntityCharms[8].id,
@@ -1721,13 +1727,15 @@ var findBestEntityTests = []struct {
 	channel:  mongodoc.UnpublishedChannel,
 	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
 }, {
-	url:      "mysql-3",
-	channel:  mongodoc.DevelopmentChannel,
-	expectID: router.MustNewResolvedURL("~charmers/mysql-3", 3),
+	url:              "mysql-3",
+	channel:          mongodoc.DevelopmentChannel,
+	expectError:      "cs:mysql-3 not found in development channel",
+	expectErrorCause: params.ErrNotFound,
 }, {
-	url:      "mysql-2",
-	channel:  mongodoc.StableChannel,
-	expectID: router.MustNewResolvedURL("~charmers/mysql-2", 2),
+	url:              "mysql-2",
+	channel:          mongodoc.StableChannel,
+	expectError:      "cs:mysql-2 not found in stable channel",
+	expectErrorCause: params.ErrNotFound,
 }, {
 	url:      "~charmers/mysql",
 	expectID: router.MustNewResolvedURL("~charmers/mysql-1", 1),
@@ -1841,13 +1849,15 @@ var findBestEntityTests = []struct {
 	channel:  mongodoc.UnpublishedChannel,
 	expectID: router.MustNewResolvedURL("~charmers/trusty/mongodb-3", -1),
 }, {
-	url:      "~charmers/trusty/mongodb-3",
-	channel:  mongodoc.DevelopmentChannel,
-	expectID: router.MustNewResolvedURL("~charmers/trusty/mongodb-3", -1),
+	url:              "~charmers/trusty/mongodb-3",
+	channel:          mongodoc.DevelopmentChannel,
+	expectError:      "cs:~charmers/trusty/mongodb-3 not found in development channel",
+	expectErrorCause: params.ErrNotFound,
 }, {
-	url:      "~charmers/trusty/mongodb-2",
-	channel:  mongodoc.StableChannel,
-	expectID: router.MustNewResolvedURL("~charmers/trusty/mongodb-2", -1),
+	url:              "~charmers/trusty/mongodb-2",
+	channel:          mongodoc.StableChannel,
+	expectError:      "cs:~charmers/trusty/mongodb-2 not found in stable channel",
+	expectErrorCause: params.ErrNotFound,
 }, {
 	url:              "trusty/mongodb-0",
 	expectError:      "no matching charm or bundle for cs:trusty/mongodb-0",
@@ -1941,9 +1951,9 @@ var findBestEntityTests = []struct {
 	url:      "~charmers/trusty/apache-0",
 	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
 }, {
-	url:      "~charmers/trusty/apache-0",
-	channel:  mongodoc.StableChannel,
-	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
+	url:         "~charmers/trusty/apache-0",
+	channel:     mongodoc.StableChannel,
+	expectError: "cs:~charmers/trusty/apache-0 not found in stable channel",
 }, {
 	url:      "~charmers/trusty/apache-0",
 	channel:  mongodoc.DevelopmentChannel,
@@ -1973,9 +1983,9 @@ var findBestEntityTests = []struct {
 	url:      "trusty/apache-0",
 	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
 }, {
-	url:      "trusty/apache-0",
-	channel:  mongodoc.StableChannel,
-	expectID: router.MustNewResolvedURL("~charmers/trusty/apache-0", 0),
+	url:         "trusty/apache-0",
+	channel:     mongodoc.StableChannel,
+	expectError: "cs:trusty/apache-0 not found in stable channel",
 }, {
 	url:      "trusty/apache-0",
 	channel:  mongodoc.DevelopmentChannel,
@@ -2006,13 +2016,13 @@ var findBestEntityTests = []struct {
 	url:      "~charmers/trusty/nginx-0",
 	expectID: router.MustNewResolvedURL("~charmers/trusty/nginx-0", 0),
 }, {
-	url:      "~charmers/trusty/nginx-0",
-	channel:  mongodoc.StableChannel,
-	expectID: router.MustNewResolvedURL("~charmers/trusty/nginx-0", 0),
+	url:         "~charmers/trusty/nginx-0",
+	channel:     mongodoc.StableChannel,
+	expectError: "cs:~charmers/trusty/nginx-0 not found in stable channel",
 }, {
-	url:      "~charmers/trusty/nginx-0",
-	channel:  mongodoc.DevelopmentChannel,
-	expectID: router.MustNewResolvedURL("~charmers/trusty/nginx-0", 0),
+	url:         "~charmers/trusty/nginx-0",
+	channel:     mongodoc.DevelopmentChannel,
+	expectError: "cs:~charmers/trusty/nginx-0 not found in development channel",
 }, {
 	url:      "~charmers/trusty/nginx-0",
 	channel:  mongodoc.UnpublishedChannel,
@@ -2039,13 +2049,13 @@ var findBestEntityTests = []struct {
 	url:      "trusty/nginx-0",
 	expectID: router.MustNewResolvedURL("~charmers/trusty/nginx-0", 0),
 }, {
-	url:      "trusty/nginx-0",
-	channel:  mongodoc.StableChannel,
-	expectID: router.MustNewResolvedURL("~charmers/trusty/nginx-0", 0),
+	url:         "trusty/nginx-0",
+	channel:     mongodoc.StableChannel,
+	expectError: "cs:trusty/nginx-0 not found in stable channel",
 }, {
-	url:      "trusty/nginx-0",
-	channel:  mongodoc.DevelopmentChannel,
-	expectID: router.MustNewResolvedURL("~charmers/trusty/nginx-0", 0),
+	url:         "trusty/nginx-0",
+	channel:     mongodoc.DevelopmentChannel,
+	expectError: "cs:trusty/nginx-0 not found in development channel",
 }, {
 	url:      "trusty/nginx-0",
 	channel:  mongodoc.UnpublishedChannel,
@@ -2073,13 +2083,13 @@ var findBestEntityTests = []struct {
 	channel:  mongodoc.UnpublishedChannel,
 	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-3", 3),
 }, {
-	url:      "~charmers/bundle/wordpress-simple-3",
-	channel:  mongodoc.DevelopmentChannel,
-	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-3", 3),
+	url:         "~charmers/bundle/wordpress-simple-3",
+	channel:     mongodoc.DevelopmentChannel,
+	expectError: "cs:~charmers/bundle/wordpress-simple-3 not found in development channel",
 }, {
-	url:      "~charmers/bundle/wordpress-simple-2",
-	channel:  mongodoc.StableChannel,
-	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-2", 2),
+	url:         "~charmers/bundle/wordpress-simple-3",
+	channel:     mongodoc.StableChannel,
+	expectError: "cs:~charmers/bundle/wordpress-simple-3 not found in stable channel",
 }, {
 	url:      "bundle/wordpress-simple-0",
 	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-0", 0),
@@ -2103,13 +2113,13 @@ var findBestEntityTests = []struct {
 	channel:  mongodoc.UnpublishedChannel,
 	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-3", 3),
 }, {
-	url:      "bundle/wordpress-simple-3",
-	channel:  mongodoc.DevelopmentChannel,
-	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-3", 3),
+	url:         "bundle/wordpress-simple-3",
+	channel:     mongodoc.DevelopmentChannel,
+	expectError: "cs:bundle/wordpress-simple-3 not found in development channel",
 }, {
-	url:      "bundle/wordpress-simple-2",
-	channel:  mongodoc.StableChannel,
-	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-2", 2),
+	url:         "bundle/wordpress-simple-2",
+	channel:     mongodoc.StableChannel,
+	expectError: "cs:bundle/wordpress-simple-2 not found in stable channel",
 }, {
 	url:      "~charmers/bundle/wordpress-simple",
 	expectID: router.MustNewResolvedURL("~charmers/bundle/wordpress-simple-1", 1),
@@ -2393,9 +2403,9 @@ var findBestEntityTests = []struct {
 	url:      "~openstack-charmers/trusty/ceph-0",
 	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
 }, {
-	url:      "~openstack-charmers/trusty/ceph-0",
-	channel:  mongodoc.StableChannel,
-	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+	url:         "~openstack-charmers/trusty/ceph-0",
+	channel:     mongodoc.StableChannel,
+	expectError: "cs:~openstack-charmers/trusty/ceph-0 not found in stable channel",
 }, {
 	url:      "~openstack-charmers/trusty/ceph-0",
 	channel:  mongodoc.DevelopmentChannel,
@@ -2440,9 +2450,9 @@ var findBestEntityTests = []struct {
 	url:      "trusty/ceph-1",
 	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
 }, {
-	url:      "trusty/ceph-1",
-	channel:  mongodoc.StableChannel,
-	expectID: router.MustNewResolvedURL("~openstack-charmers/trusty/ceph-0", 1),
+	url:         "trusty/ceph-1",
+	channel:     mongodoc.StableChannel,
+	expectError: "cs:trusty/ceph-1 not found in stable channel",
 }, {
 	url:      "trusty/ceph-1",
 	channel:  mongodoc.DevelopmentChannel,
