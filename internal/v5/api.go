@@ -579,9 +579,6 @@ func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter
 	// to return entities that match appropriately.
 
 	// Retrieve all the entities with the same base URL.
-	// Note that we don't do any permission checking of the returned URLs.
-	// This is because we know that the user is allowed to read at
-	// least the resolved URL passed into serveExpandId.
 	q := h.Store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}})
 	if id.PromulgatedRevision != -1 {
 		q = q.Sort("-series", "-promulgated-revision")
@@ -597,6 +594,9 @@ func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter
 	// Collect all the expanded identifiers for each entity.
 	response := make([]params.ExpandedId, 0, len(docs))
 	for _, doc := range docs {
+		if err := h.AuthorizeEntity(charmstore.EntityResolvedURL(doc), req); err != nil {
+			continue
+		}
 		url := doc.PreferredURL(id.PromulgatedRevision != -1)
 		response = append(response, params.ExpandedId{Id: url.String()})
 	}
