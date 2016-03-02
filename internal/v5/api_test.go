@@ -24,6 +24,7 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charm.v6-unstable/resource"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
@@ -112,6 +113,17 @@ const (
 	charmOnly = iota + 1
 	bundleOnly
 )
+
+func (ep metaEndpoint) isExcluded(url *router.ResolvedURL) bool {
+	switch ep.exclusive {
+	case bundleOnly:
+		return url.URL.Series != "bundle"
+	case charmOnly:
+		return url.URL.Series == "bundle"
+	default:
+		return false
+	}
+}
 
 var metaEndpoints = []metaEndpoint{{
 	name:      "charm-config",
@@ -515,7 +527,76 @@ var metaEndpoints = []metaEndpoint{{
 	assertCheckData: func(c *gc.C, data interface{}) {
 		c.Assert(data, gc.DeepEquals, []string{"terms-1/1", "terms-2/5"})
 	},
+}, {
+	name: "resources",
+	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
+		entity, err := store.FindEntity(url, nil)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(ericsnow) Switch to store.ListResources() once it exists.
+		results, err := basicListResources(entity)
+		if err != nil {
+			return results, err
+		}
+		// Apparently the router's "isNull" check treats empty slices
+		// as nil...
+		if len(results) == 0 {
+			return nil, nil
+		}
+		return results, nil
+	},
+	exclusive: charmOnly,
+	checkURL:  newResolvedURL("cs:~charmers/utopic/starsay-17", 17),
+	assertCheckData: func(c *gc.C, data interface{}) {
+		resources := data.([]resource.Resource)
+		resource.Sort(resources)
+		c.Assert(data, jc.DeepEquals, []resource.Resource{{
+			Meta: resource.Meta{
+				Name:        "for-install",
+				Type:        resource.TypeFile,
+				Path:        "initial.tgz",
+				Description: "get things started",
+			},
+			Origin: resource.OriginUpload,
+		}, {
+			Meta: resource.Meta{
+				Name:        "for-store",
+				Type:        resource.TypeFile,
+				Path:        "dummy.tgz",
+				Description: "One line that is useful when operators need to push it.",
+			},
+			Origin: resource.OriginUpload,
+		}, {
+			Meta: resource.Meta{
+				Name:        "for-upload",
+				Type:        resource.TypeFile,
+				Path:        "config.xml",
+				Description: "Who uses xml anymore?",
+			},
+			Origin: resource.OriginUpload,
+		}})
+	},
 }}
+
+func basicListResources(entity *mongodoc.Entity) ([]resource.Resource, error) {
+	if entity.URL.Series == "bundle" {
+		return nil, errgo.Newf("bundles do not have resources")
+	}
+	var resources []resource.Resource
+	for _, meta := range entity.CharmMeta.Resources {
+		// We use an origin of "upload" since charms cannot be uploaded yet.
+		resOrigin := resource.OriginUpload
+		res := resource.Resource{
+			Meta:   meta,
+			Origin: resOrigin,
+			// Revision, Fingerprint, and Size are not set.
+		}
+		resources = append(resources, res)
+	}
+	resource.Sort(resources)
+	return resources, nil
+}
 
 // TestEndpointGet tries to ensure that the endpoint
 // test data getters correspond with reality.
@@ -524,6 +605,10 @@ func (s *APISuite) TestEndpointGet(c *gc.C) {
 	for i, ep := range metaEndpoints {
 		c.Logf("test %d: %s\n", i, ep.name)
 		data, err := ep.get(s.store, ep.checkURL)
+		if err != nil && ep.isExcluded(ep.checkURL) {
+			// endpoint not relevant.
+			continue
+		}
 		c.Assert(err, gc.IsNil)
 		ep.assertCheckData(c, data)
 	}
@@ -573,6 +658,8 @@ var testEntities = []*router.ResolvedURL{
 	newResolvedURL("cs:~bob/utopic/wordpress-2", -1),
 	// A charms, which requires agreement to terms
 	newResolvedURL("cs:~charmers/precise/terms-42", 42),
+	// A charm with resources.
+	newResolvedURL("cs:~charmers/utopic/starsay-17", 17),
 }
 
 func (s *APISuite) addTestEntities(c *gc.C) []*router.ResolvedURL {
@@ -600,6 +687,10 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 			charmId := strings.TrimPrefix(url.String(), "cs:")
 			path := charmId + "/meta/" + ep.name
 			expectData, err := ep.get(s.store, url)
+			if err != nil && ep.isExcluded(url) {
+				// endpoint not relevant.
+				continue
+			}
 			c.Assert(err, gc.IsNil)
 			c.Logf("	expected data for %q: %#v", url, expectData)
 			if isNull(expectData) {
@@ -1465,13 +1556,16 @@ func (s *APISuite) TestMetaEndpointsAny(c *gc.C) {
 			Meta: make(map[string]interface{}),
 		}
 		for _, ep := range metaEndpoints {
-			flags = append(flags, "include="+ep.name)
-			isBundle := url.URL.Series == "bundle"
-			if ep.exclusive != 0 && isBundle != (ep.exclusive == bundleOnly) {
+			if ep.isExcluded(url) {
 				// endpoint not relevant.
 				continue
 			}
+			flags = append(flags, "include="+ep.name)
 			val, err := ep.get(s.store, url)
+			if err != nil && ep.isExcluded(url) {
+				// endpoint not relevant.
+				continue
+			}
 			c.Assert(err, gc.IsNil)
 			if val != nil {
 				expectData.Meta[ep.name] = val

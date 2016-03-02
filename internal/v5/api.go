@@ -19,6 +19,7 @@ import (
 	"github.com/juju/mempool"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charm.v6-unstable/resource"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
@@ -267,6 +268,7 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "channelacls"),
 			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "channelacls"),
 			"promulgated":      h.baseEntityHandler(h.metaPromulgated, "promulgated"),
+			"resources":        h.EntityHandler(h.metaResources, "_id", "charmmeta"),
 			"revision-info":    router.SingleIncludeHandler(h.metaRevisionInfo),
 			"stats":            h.EntityHandler(h.metaStats),
 			"supported-series": h.EntityHandler(h.metaSupportedSeries, "supportedseries"),
@@ -604,6 +606,37 @@ func badRequestf(underlying error, f string, a ...interface{}) error {
 	err := errgo.WithCausef(underlying, params.ErrBadRequest, f, a...)
 	err.(*errgo.Err).SetLocation(1)
 	return err
+}
+
+// GET id/meta/charm-resources
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacharm-resources
+func (h *ReqHandler) metaResources(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	// TODO(ericsnow) Handle flags.
+	// TODO(ericsnow) Use h.Store.ListResources() once that exists.
+	return basicListResources(entity)
+}
+
+func basicListResources(entity *mongodoc.Entity) ([]resource.Resource, error) {
+	if entity.URL.Series == "bundle" {
+		return nil, errgo.Newf("bundles do not have resources")
+	}
+	if entity.CharmMeta == nil {
+		return nil, errgo.Newf("entity missing charm metadata")
+	}
+
+	var resources []resource.Resource
+	for _, meta := range entity.CharmMeta.Resources {
+		// We use an origin of "upload" since charms cannot be uploaded yet.
+		resOrigin := resource.OriginUpload
+		res := resource.Resource{
+			Meta:   meta,
+			Origin: resOrigin,
+			// Revision, Fingerprint, and Size are not set.
+		}
+		resources = append(resources, res)
+	}
+	resource.Sort(resources)
+	return resources, nil
 }
 
 // GET id/meta/charm-metadata
