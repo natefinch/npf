@@ -502,6 +502,19 @@ func (s *Store) FindBestEntity(url *charm.URL, channel mongodoc.Channel, fields 
 		} else if err != nil {
 			return nil, errgo.Mask(err)
 		}
+		// If a channel was specified make sure the entity is in that channel.
+		// This is crucial because if we don't do this, then the user could choose
+		// to use any chosen set of ACLs against any entity.
+		switch channel {
+		case mongodoc.StableChannel:
+			if !entity.Stable {
+				return nil, errgo.WithCausef(nil, params.ErrNotFound, "%s not found in stable channel", url)
+			}
+		case mongodoc.DevelopmentChannel:
+			if !entity.Development {
+				return nil, errgo.WithCausef(nil, params.ErrNotFound, "%s not found in development channel", url)
+			}
+		}
 		return entity, nil
 	}
 

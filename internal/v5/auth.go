@@ -303,6 +303,9 @@ func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) 
 }
 
 func (h *ReqHandler) entityChannel(id *router.ResolvedURL) (mongodoc.Channel, error) {
+	if h.Store.Channel != mongodoc.NoChannel {
+		return h.Store.Channel, nil
+	}
 	entity, err := h.Cache.Entity(&id.URL, charmstore.FieldSelector("development", "stable"))
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
