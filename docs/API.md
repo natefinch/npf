@@ -32,7 +32,6 @@ their result. These will be described in terms of the Go types that produce and
 consume the format, along with an example. A charm id is represented as a
 `charm.URL type`.
 
-
 ### Errors
 
 If any request returns an error, it will produce it in the following form:
@@ -94,6 +93,24 @@ interested in public data only can include a `ignore-auth=1` query so that only
 public information is returned. In this case, results requiring authorization
 (if any) will be omitted.
 
+### Channels
+
+Any entity in the charm store is considered to be part of one or more "channels"
+(think "distribution channels"). Currently supported channels are "unpublished",
+"development" and "stable". All entities are initially (and always) part
+of the "unpublished" channel; subsequent operations on the publish
+endpoint can make entities available in other channels.
+
+All requests that take one or more entity ids as parameters
+accept a "channel" query parameter that influences what channel
+is chosen to resolve the ids. The default channel is "stable".
+
+For example, if wordpress-3 has just been published to the stable
+channel, and wordpress-4 has been published to the development
+ then a GET of wordpress/meta/id-revision?channel=development
+will return {"Revision": 4} and a GET of wordpress/wordpress/meta/id-revision
+will return {"Revision": 3} because the default channel is "stable".
+
 ### Versioning
 
 The version of the API is indicated by an initial "vN" prefix to the path.
@@ -102,7 +119,6 @@ serve backwardly compatible paths to juju-core. All paths in this document
 should be read as if they had a "v4" prefix. For example, the
 `wordpress/meta/charm-metadata` path is actually at
 `v4/wordpress/meta/charm-metadata`.
-
 
 ### Boolean values
 
@@ -282,52 +298,35 @@ Request body:
 
 #### PUT *id*/publish
 
-A PUT to ~*user*/*anyseries*/*name*-*anyrevision* sets whether the
-corresponding charm or bundle is published and can be accessed through a URL
-with no channel. If the revision number is not specified, the id is resolved to
-the charm or bundle with the latest development revision number when
-publishing, and to the charm or bundle with the latest non-development revision
-number when unpublishing. The id must not include the development channel.
+A PUT to the publish endpoint publishes the entity with the given id
+on the channels provided in the request body. It reports an error if
+there are no channels specified or if one of the channels is invalid
+(the "unpublished" channel is special and is also considered invalid in
+a publish request).
+
+See the section on Channels in the introduction for how the published
+channels affects id resolving.
 
 ```go
 type PublishRequest struct {
-    Published bool
+    Channels []string
 }
 ```
 
-If Published is true, the charm or bundle is made available at the
-non-development URL with the same revision number. If Published is false, the
-id is unpublished.
-
-The response includes the id and promulgated id of the entity after the action
-is performed:
-
-```go
-type PublishResponse struct {
-    Id            *charm.URL
-    PromulgatedId *charm.URL `json:",omitempty"`
-}
-```
-
-If the charm or bundle have been unpublished, the identifiers in the response
-will represent the corresponding development charm or bundle.
+On success, the response body will be empty.
 
 Example: `PUT ~charmers/trusty/django-42/publish`
 
 Request body:
 ```json
 {
-    "Published" : true,
+    "Channels" : ["stable"],
 }
 ```
 
-Response body:
-```json
-{
-    "Id" : "cs:~charmers/trusty/django-42",
-    "PromulgatedId": "cs:trusty/django-10",
-}
-```
+After the above request, ~charmers/trusty/django will
+resolve to ~charmers/trusty/django-42 unless a different
+channel is specified in the request.
 
 ### Stats
 
