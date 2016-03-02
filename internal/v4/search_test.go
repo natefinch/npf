@@ -4,7 +4,6 @@
 package v4_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"sort"
@@ -629,28 +628,10 @@ func (s *SearchSuite) TestLegacyStatsUpdatesSearch(c *gc.C) {
 	doc, err := s.store.ES.GetSearchDocument(charm.MustParseURL("~openstack-charmers/trusty/mysql-7"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(doc.TotalDownloads, gc.Equals, int64(0))
-	s.assertPut(c, "~openstack-charmers/trusty/mysql-7/meta/extra-info/"+params.LegacyDownloadStats, 57)
+	s.assertPutAsAdmin(c, "~openstack-charmers/trusty/mysql-7/meta/extra-info/"+params.LegacyDownloadStats, 57)
 	doc, err = s.store.ES.GetSearchDocument(charm.MustParseURL("~openstack-charmers/trusty/mysql-7"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(doc.TotalDownloads, gc.Equals, int64(57))
-}
-
-func (s *SearchSuite) assertPut(c *gc.C, url string, val interface{}) {
-	body, err := json.Marshal(val)
-	c.Assert(err, gc.IsNil)
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL(url),
-		Method:  "PUT",
-		Header: http.Header{
-			"Content-Type": {"application/json"},
-		},
-		Username: testUsername,
-		Password: testPassword,
-		Body:     bytes.NewReader(body),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("headers: %v, body: %s", rec.HeaderMap, rec.Body.String()))
-	c.Assert(rec.Body.String(), gc.HasLen, 0)
 }
 
 func (s *SearchSuite) TestSearchWithAdminCredentials(c *gc.C) {

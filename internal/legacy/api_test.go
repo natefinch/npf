@@ -138,7 +138,7 @@ func (s *APISuite) TestCharmArchiveUnresolvedURL(c *gc.C) {
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
 			Code:    params.ErrNotFound,
-			Message: `no matching charm or bundle for "cs:wordpress"`,
+			Message: `no matching charm or bundle for cs:wordpress`,
 		},
 	})
 }

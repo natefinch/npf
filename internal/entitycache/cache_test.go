@@ -326,13 +326,13 @@ func (*suite) TestGetEntityNotFound(c *gc.C) {
 	defer cache.Close()
 	e, err := cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 	c.Assert(e, gc.IsNil)
-	c.Assert(err, gc.ErrorMatches, "not found")
+	c.Assert(err, gc.ErrorMatches, "entity: not found")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 
 	// Make sure that the not-found result has been cached.
 	e, err = cache.Entity(charm.MustParseURL("~bob/wordpress-1"), nil)
 	c.Assert(e, gc.IsNil)
-	c.Assert(err, gc.ErrorMatches, "not found")
+	c.Assert(err, gc.ErrorMatches, "entity: not found")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 
 	c.Assert(entityFetchCount, gc.Equals, 1)
@@ -340,12 +340,12 @@ func (*suite) TestGetEntityNotFound(c *gc.C) {
 	// Make sure fetching the base entity works the same way.
 	be, err := cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), nil)
 	c.Assert(be, gc.IsNil)
-	c.Assert(err, gc.ErrorMatches, "not found")
+	c.Assert(err, gc.ErrorMatches, "base entity: not found")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 
 	be, err = cache.BaseEntity(charm.MustParseURL("~bob/wordpress"), nil)
 	c.Assert(be, gc.IsNil)
-	c.Assert(err, gc.ErrorMatches, "not found")
+	c.Assert(err, gc.ErrorMatches, "base entity: not found")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 
 	c.Assert(baseEntityFetchCount, gc.Equals, 1)

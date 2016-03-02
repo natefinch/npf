@@ -214,7 +214,7 @@ func (s *StatsSuite) TestServerStatsUpdateErrors(c *gc.C) {
 				CharmReference: charm.MustParseURL("~charmers/precise/unknown-23"),
 			}},
 		},
-		expectMessage: `cannot find entity for url cs:~charmers/precise/unknown-23: no matching charm or bundle for "cs:~charmers/precise/unknown-23"`,
+		expectMessage: `cannot find entity for url cs:~charmers/precise/unknown-23: no matching charm or bundle for cs:~charmers/precise/unknown-23`,
 	}, {
 		path:   "stats/update",
 		status: http.StatusInternalServerError,
@@ -227,7 +227,7 @@ func (s *StatsSuite) TestServerStatsUpdateErrors(c *gc.C) {
 				CharmReference: charm.MustParseURL("~charmers/precise/wordpress-23"),
 			}},
 		},
-		expectMessage: `cannot find entity for url cs:~charmers/precise/unknown-23: no matching charm or bundle for "cs:~charmers/precise/unknown-23"`,
+		expectMessage: `cannot find entity for url cs:~charmers/precise/unknown-23: no matching charm or bundle for cs:~charmers/precise/unknown-23`,
 		partialUpdate: true,
 	}}
 

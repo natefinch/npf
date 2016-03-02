@@ -378,10 +378,7 @@ func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, 
 	// we'll always get it from the Entity result.
 	entity, err := cache.Entity(url, nil)
 	if err != nil {
-		if errgo.Cause(err) == params.ErrNotFound {
-			return nil, noMatchingURLError(url)
-		}
-		return nil, errgo.Mask(err)
+		return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	rurl := &router.ResolvedURL{
 		URL:                 *entity.URL,
@@ -398,10 +395,6 @@ func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, 
 	// the result.
 	cache.BaseEntity(entity.BaseURL, nil)
 	return rurl, nil
-}
-
-func noMatchingURLError(url *charm.URL) error {
-	return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
 }
 
 type EntityHandlerFunc func(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error)
