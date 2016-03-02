@@ -585,8 +585,8 @@ func (s *APISuite) addTestEntities(c *gc.C) []*router.ResolvedURL {
 		// Associate some extra-info data with the entity.
 		key := e.URL.Path() + "/meta/extra-info/key"
 		commonkey := e.URL.Path() + "/meta/common-info/key"
-		s.assertPut(c, key, "value "+e.URL.String())
-		s.assertPut(c, commonkey, "value "+e.URL.String())
+		s.assertPutAsAdmin(c, key, "value "+e.URL.String())
+		s.assertPutAsAdmin(c, commonkey, "value "+e.URL.String())
 	}
 	return testEntities
 }
@@ -633,7 +633,7 @@ func (s *APISuite) TestMetaPermAudit(c *gc.C) {
 
 	url := newResolvedURL("~bob/precise/wordpress-23", 23)
 	s.addPublicCharmFromRepo(c, "wordpress", url)
-	s.assertPutNonAdmin(c, "precise/wordpress-23/meta/perm/read", []string{"charlie"})
+	s.assertPut(c, "precise/wordpress-23/meta/perm/read", []string{"charlie"})
 	c.Assert(calledEntities, jc.DeepEquals, []audit.Entry{{
 		User: "bob",
 		Op:   audit.OpSetPerm,
@@ -644,7 +644,7 @@ func (s *APISuite) TestMetaPermAudit(c *gc.C) {
 	}})
 	calledEntities = []audit.Entry{}
 
-	s.assertPut(c, "precise/wordpress-23/meta/perm/write", []string{"bob", "foo"})
+	s.assertPutAsAdmin(c, "precise/wordpress-23/meta/perm/write", []string{"bob", "foo"})
 	c.Assert(calledEntities, jc.DeepEquals, []audit.Entry{{
 		User: "admin",
 		Op:   audit.OpSetPerm,
@@ -655,7 +655,7 @@ func (s *APISuite) TestMetaPermAudit(c *gc.C) {
 	}})
 	calledEntities = []audit.Entry{}
 
-	s.assertPutNonAdmin(c, "precise/wordpress-23/meta/perm", params.PermRequest{
+	s.assertPut(c, "precise/wordpress-23/meta/perm", params.PermRequest{
 		Read:  []string{"a"},
 		Write: []string{"b", "c"},
 	})
@@ -679,7 +679,7 @@ func (s *APISuite) TestMetaPermAudit(c *gc.C) {
 func (s *APISuite) TestMetaPermPublicWrite(c *gc.C) {
 	url := newResolvedURL("~bob/precise/wordpress-23", 23)
 	s.addPublicCharmFromRepo(c, "wordpress", url)
-	s.assertPut(c, "precise/wordpress-23/meta/perm/write", []string{"everyone"})
+	s.assertPutAsAdmin(c, "precise/wordpress-23/meta/perm/write", []string{"everyone"})
 
 	// Even though the endpoint has write permissions open to anyone,
 	// we still require authentication so that we can make an entry in
@@ -696,12 +696,10 @@ func (s *APISuite) TestMetaPermPublicWrite(c *gc.C) {
 		ExpectBody:   dischargeRequiredBody,
 	})
 	s.discharge = dischargeForUser("bob")
-	s.assertPutNonAdmin(c, "precise/wordpress-23/meta/perm/read", []string{"alice"})
+	s.assertPut(c, "precise/wordpress-23/meta/perm/read", []string{"alice"})
 }
 
 func (s *APISuite) TestMetaPerm(c *gc.C) {
-	s.discharge = dischargeForUser("charmers")
-
 	for _, u := range []*router.ResolvedURL{
 		newResolvedURL("~charmers/precise/wordpress-23", 23),
 		newResolvedURL("~charmers/precise/wordpress-24", 24),
@@ -710,13 +708,13 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		err := s.store.AddCharmWithArchive(u, storetesting.NewCharm(nil))
 		c.Assert(err, gc.IsNil)
 	}
-	s.assertGet(c, "wordpress/meta/perm?channel=unpublished", params.PermResponse{
-		Read:  []string{"charmers"},
-		Write: []string{"charmers"},
+	s.doAsUser("charmers", func() {
+		s.assertGet(c, "wordpress/meta/perm?channel=unpublished", params.PermResponse{
+			Read:  []string{"charmers"},
+			Write: []string{"charmers"},
+		})
 	})
-	e, err := s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"), nil)
-	c.Assert(err, gc.IsNil)
-	c.Assert(e.ChannelACLs, gc.DeepEquals, map[mongodoc.Channel]mongodoc.ACL{
+	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
 		mongodoc.UnpublishedChannel: {
 			Read:  []string{"charmers"},
 			Write: []string{"charmers"},
@@ -731,76 +729,87 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		},
 	})
 
-	// Change the read perms to only include a specific user and the
-	// published write perms to include an "admin" user.
-	// Because the entity isn't published yet, the unpublished channel ACLs
-	// will be changed.
-	s.assertPut(c, "precise/wordpress-23/meta/perm/read", []string{"bob"})
-	s.assertPut(c, "precise/wordpress-23/meta/perm/write", []string{"admin"})
+	s.doAsUser("charmers", func() {
+		// Change the read perms to only include a specific user and the
+		// published write perms to include an "admin" user.
+		// Because the entity isn't published yet, the unpublished channel ACLs
+		// will be changed.
+		s.assertPut(c, "precise/wordpress-23/meta/perm/read", []string{"bob"})
+		s.assertPut(c, "precise/wordpress-23/meta/perm/write", []string{"admin"})
+		// charmers no longer has permission.
+		s.assertGetIsUnauthorized(c, "precise/wordpress-23/meta/perm", `unauthorized: access denied for user "charmers"`)
+	})
 
 	// The permissions are only for bob now, so act as bob.
-	s.discharge = dischargeForUser("bob")
+	s.doAsUser("bob", func() {
+		// Check that the perms have changed for all revisions and series.
+		for i, u := range []string{"precise/wordpress-23", "precise/wordpress-24", "trusty/wordpress-1"} {
+			c.Logf("id %d: %q", i, u)
+			httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+				Handler: s.srv,
+				Do:      bakeryDo(nil),
+				URL:     storeURL(u + "/meta/perm"),
+				ExpectBody: params.PermResponse{
+					Read:  []string{"bob"},
+					Write: []string{"admin"},
+				},
+			})
+		}
+	})
+	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
+		mongodoc.UnpublishedChannel: {
+			Read:  []string{"bob"},
+			Write: []string{"admin"},
+		},
+		mongodoc.DevelopmentChannel: {
+			Read:  []string{"charmers"},
+			Write: []string{"charmers"},
+		},
+		mongodoc.StableChannel: {
+			Read:  []string{"charmers"},
+			Write: []string{"charmers"},
+		},
+	})
 
-	// Check that the perms have changed for all revisions and series.
-	for i, u := range []string{"precise/wordpress-23", "precise/wordpress-24", "trusty/wordpress-1"} {
-		c.Logf("id %d: %q", i, u)
+	// Publish one of the revisions to development, then PUT to meta/perm
+	// and check that the development ACLs have changed.
+	err := s.store.Publish(newResolvedURL("~charmers/precise/wordpress-23", 23), mongodoc.DevelopmentChannel)
+	c.Assert(err, gc.IsNil)
+
+	s.doAsUser("bob", func() {
+		// Check that we aren't allowed to put to the newly published entity as bob.
+		s.assertPutIsUnauthorized(c, "~charmers/precise/wordpress/meta/perm/read?channel=development", []string{}, `unauthorized: access denied for user "bob"`)
+	})
+
+	s.doAsUser("charmers", func() {
+		s.discharge = dischargeForUser("charmers")
+		s.assertPut(c, "precise/wordpress-23/meta/perm/read", []string{"bob", "charlie"})
+		s.assertGetIsUnauthorized(c, "~charmers/precise/wordpress/meta/perm/read?channel=development", `unauthorized: access denied for user "charmers"`)
+	})
+
+	s.doAsUser("bob", func() {
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: s.srv,
 			Do:      bakeryDo(nil),
-			URL:     storeURL(u + "/meta/perm"),
+			URL:     storeURL("precise/wordpress-23/meta/perm"),
+			ExpectBody: params.PermResponse{
+				Read:  []string{"bob", "charlie"},
+				Write: []string{"charmers"},
+			},
+		})
+		// The other revisions should still see the old ACLs.
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler: s.srv,
+			Do:      bakeryDo(nil),
+			URL:     storeURL("precise/wordpress-24/meta/perm"),
 			ExpectBody: params.PermResponse{
 				Read:  []string{"bob"},
 				Write: []string{"admin"},
 			},
 		})
-	}
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"), nil)
-	c.Assert(err, gc.IsNil)
-	c.Assert(e.ChannelACLs, gc.DeepEquals, map[mongodoc.Channel]mongodoc.ACL{
-		mongodoc.UnpublishedChannel: {
-			Read:  []string{"bob"},
-			Write: []string{"admin"},
-		},
-		mongodoc.DevelopmentChannel: {
-			Read:  []string{"charmers"},
-			Write: []string{"charmers"},
-		},
-		mongodoc.StableChannel: {
-			Read:  []string{"charmers"},
-			Write: []string{"charmers"},
-		},
 	})
 
-	// Publish one of the revisions to development and check that the development ACLs
-	// have changed.
-	err = s.store.Publish(newResolvedURL("~charmers/precise/wordpress-23", 23), mongodoc.DevelopmentChannel)
-	c.Assert(err, gc.IsNil)
-	s.assertPut(c, "precise/wordpress-23/meta/perm/read", []string{"bob", "charlie"})
-
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler: s.srv,
-		Do:      bakeryDo(nil),
-		URL:     storeURL("precise/wordpress-23/meta/perm"),
-		ExpectBody: params.PermResponse{
-			Read:  []string{"bob", "charlie"},
-			Write: []string{"charmers"},
-		},
-	})
-
-	// The other revisions should still see the old ACLs.
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler: s.srv,
-		Do:      bakeryDo(nil),
-		URL:     storeURL("precise/wordpress-24/meta/perm"),
-		ExpectBody: params.PermResponse{
-			Read:  []string{"bob"},
-			Write: []string{"admin"},
-		},
-	})
-
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("precise/wordpress-23"), nil)
-	c.Assert(err, gc.IsNil)
-	c.Assert(e.ChannelACLs, gc.DeepEquals, map[mongodoc.Channel]mongodoc.ACL{
+	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
 		mongodoc.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
@@ -814,53 +823,51 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 			Write: []string{"charmers"},
 		},
 	})
-
-	// The stable permissions only allow charmers currently, so act as
-	// charmers again.
-	s.discharge = dischargeForUser("charmers")
-
-	// Publish one of the revisions to stable and check that the stable ACLs
+	// Publish wordpress-1 to stable and check that the stable ACLs
 	// have changed.
 	err = s.store.Publish(newResolvedURL("~charmers/trusty/wordpress-1", 1), mongodoc.StableChannel)
 	c.Assert(err, gc.IsNil)
-	s.assertPut(c, "trusty/wordpress-1/meta/perm/write", []string{"doris"})
 
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler: s.srv,
-		Do:      bakeryDo(nil),
-		URL:     storeURL("~charmers/trusty/wordpress-1/meta/perm"),
-		ExpectBody: params.PermResponse{
-			Read:  []string{"charmers"},
-			Write: []string{"doris"},
-		},
+	// The stable permissions only allow charmers currently, so act as
+	// charmers again.
+	s.doAsUser("charmers", func() {
+		s.assertPut(c, "trusty/wordpress-1/meta/perm/write", []string{"doris"})
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler: s.srv,
+			Do:      bakeryDo(nil),
+			URL:     storeURL("~charmers/trusty/wordpress-1/meta/perm"),
+			ExpectBody: params.PermResponse{
+				Read:  []string{"charmers"},
+				Write: []string{"doris"},
+			},
+		})
 	})
 
 	// The other revisions should still see the old ACLs.
-	s.discharge = dischargeForUser("bob")
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler: s.srv,
-		Do:      bakeryDo(nil),
-		URL:     storeURL("precise/wordpress-24/meta/perm"),
-		ExpectBody: params.PermResponse{
-			Read:  []string{"bob"},
-			Write: []string{"admin"},
-		},
+	s.doAsUser("bob", func() {
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler: s.srv,
+			Do:      bakeryDo(nil),
+			URL:     storeURL("precise/wordpress-24/meta/perm"),
+			ExpectBody: params.PermResponse{
+				Read:  []string{"bob"},
+				Write: []string{"admin"},
+			},
+		})
+
+		// The development-channel entity should still see the development ACLS.
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler: s.srv,
+			Do:      bakeryDo(nil),
+			URL:     storeURL("precise/wordpress-23/meta/perm"),
+			ExpectBody: params.PermResponse{
+				Read:  []string{"bob", "charlie"},
+				Write: []string{"charmers"},
+			},
+		})
 	})
 
-	// The development-channel entity should still see the development ACLS.
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler: s.srv,
-		Do:      bakeryDo(nil),
-		URL:     storeURL("precise/wordpress-23/meta/perm"),
-		ExpectBody: params.PermResponse{
-			Read:  []string{"bob", "charlie"},
-			Write: []string{"charmers"},
-		},
-	})
-
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("trusty/wordpress-1"), nil)
-	c.Assert(err, gc.IsNil)
-	c.Assert(e.ChannelACLs, jc.DeepEquals, map[mongodoc.Channel]mongodoc.ACL{
+	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
 		mongodoc.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
@@ -875,18 +882,36 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		},
 	})
 
-	// Try restoring everyone's read permission on the charm.
-	// Note: wordpress resolves to trusty/wordpress-1 here because
-	// trusty is a later LTS series than precise.
-	s.assertPut(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
-	s.assertGet(c, "wordpress/meta/perm", params.PermResponse{
-		Read:  []string{"bob", params.Everyone},
-		Write: []string{"doris"},
+	s.doAsUser("doris", func() {
+		// Try restoring everyone's read permission on the charm.
+		// Note: wordpress resolves to trusty/wordpress-1 here because
+		// trusty is a later LTS series than precise.
+		s.assertPut(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
 	})
-	s.assertGet(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("trusty/wordpress-1"), nil)
-	c.Assert(err, gc.IsNil)
-	c.Assert(e.ChannelACLs, jc.DeepEquals, map[mongodoc.Channel]mongodoc.ACL{
+
+	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
+		mongodoc.UnpublishedChannel: {
+			Read:  []string{"bob"},
+			Write: []string{"admin"},
+		},
+		mongodoc.DevelopmentChannel: {
+			Read:  []string{"bob", "charlie"},
+			Write: []string{"charmers"},
+		},
+		mongodoc.StableChannel: {
+			Read:  []string{"bob", params.Everyone},
+			Write: []string{"doris"},
+		},
+	})
+
+	s.doAsUser("bob", func() {
+		s.assertGet(c, "wordpress/meta/perm", params.PermResponse{
+			Read:  []string{"bob", params.Everyone},
+			Write: []string{"doris"},
+		})
+		s.assertGet(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
+	})
+	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
 		mongodoc.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
@@ -902,22 +927,29 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	})
 
 	// Try deleting all permissions.
-	s.assertPut(c, "wordpress/meta/perm/read", []string{})
-	s.assertPut(c, "wordpress/meta/perm/write", []string{})
-
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:      s.srv,
-		Do:           bakeryDo(nil),
-		URL:          storeURL("wordpress/meta/perm"),
-		ExpectStatus: http.StatusUnauthorized,
-		ExpectBody: params.Error{
-			Code:    params.ErrUnauthorized,
-			Message: `unauthorized: access denied for user "bob"`,
-		},
+	s.doAsUser("doris", func() {
+		s.assertPut(c, "wordpress/meta/perm/read", []string{})
+		s.assertPut(c, "wordpress/meta/perm/write", []string{})
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler:      s.srv,
+			Do:           bakeryDo(nil),
+			URL:          storeURL("wordpress/meta/perm"),
+			ExpectStatus: http.StatusUnauthorized,
+			ExpectBody: params.Error{
+				Code:    params.ErrUnauthorized,
+				Message: `unauthorized: access denied for user "doris"`,
+			},
+		})
 	})
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("trusty/wordpress-1"), nil)
-	c.Assert(err, gc.IsNil)
-	c.Assert(e.ChannelACLs, gc.DeepEquals, map[mongodoc.Channel]mongodoc.ACL{
+	// Now no-one except admin can do anything with trusty/wordpress-1.
+	for _, user := range []string{"charmers", "bob", "charlie", "doris", "admin"} {
+		s.doAsUser(user, func() {
+			s.assertGetIsUnauthorized(c, "wordpress/meta/perm", fmt.Sprintf("unauthorized: access denied for user %q", user))
+			s.assertPutIsUnauthorized(c, "wordpress/meta/perm", []string{}, fmt.Sprintf("unauthorized: access denied for user %q", user))
+		})
+	}
+
+	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
 		mongodoc.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
@@ -932,14 +964,12 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		},
 	})
 
-	// Try setting all permissions in one request.
-	s.assertPut(c, "wordpress/meta/perm", params.PermRequest{
+	// Try setting all permissions in one request. We need to be admin here.
+	s.assertPutAsAdmin(c, "wordpress/meta/perm", params.PermRequest{
 		Read:  []string{"bob"},
 		Write: []string{"admin"},
 	})
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("trusty/wordpress-1"), nil)
-	c.Assert(err, gc.IsNil)
-	c.Assert(e.ChannelACLs, jc.DeepEquals, map[mongodoc.Channel]mongodoc.ACL{
+	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
 		mongodoc.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
@@ -955,13 +985,13 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 	})
 
 	// Try putting only read permissions.
-	readRequest := struct {
-		Read []string
-	}{Read: []string{"joe"}}
-	s.assertPut(c, "wordpress/meta/perm", readRequest)
-	e, err = s.store.FindBaseEntity(charm.MustParseURL("trusty/wordpress-1"), nil)
-	c.Assert(err, gc.IsNil)
-	c.Assert(e.ChannelACLs, jc.DeepEquals, map[mongodoc.Channel]mongodoc.ACL{
+	s.doAsUser("admin", func() {
+		readRequest := struct {
+			Read []string
+		}{Read: []string{"joe"}}
+		s.assertPut(c, "wordpress/meta/perm", readRequest)
+	})
+	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
 		mongodoc.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
@@ -975,6 +1005,85 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 			Write: []string{},
 		},
 	})
+
+	// Restore some write rights to the stable channel.
+	s.assertPutAsAdmin(c, "trusty/wordpress-1/meta/perm/write", []string{"bob"})
+
+	// ~charmers/trusty/wordpress-1 has been published only to the
+	// stable channel. If we specify a different channel in a perm PUT
+	// request, we'll get an error because the channel isn't valid for
+	// that entity.
+	s.doAsUser("charmers", func() {
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler: s.srv,
+			Do:      bakeryDo(nil),
+			Method:  "PUT",
+			JSONBody: params.PermRequest{
+				Read:  []string{"foo"},
+				Write: []string{"bar"},
+			},
+			URL:          storeURL("trusty/wordpress-1/meta/perm?channel=development"),
+			ExpectStatus: http.StatusNotFound,
+			ExpectBody: params.Error{
+				Code:    params.ErrNotFound,
+				Message: `cs:trusty/wordpress-1 not found in development channel`,
+			},
+		})
+	})
+
+	// Similarly, we should be able to specify a channel on read
+	// to read a different channel.
+	s.doAsUser("bob", func() {
+		s.assertGet(c, "trusty/wordpress/meta/perm?channel=unpublished", params.PermResponse{
+			Read:  []string{"bob"},
+			Write: []string{"admin"},
+		})
+		s.assertGet(c, "wordpress/meta/perm?channel=development", params.PermResponse{
+			Read:  []string{"bob", "charlie"},
+			Write: []string{"charmers"},
+		})
+	})
+
+	// We can't write to a channel that the charm's not in.
+	s.doAsUser("charmers", func() {
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler:      s.srv,
+			Do:           bakeryDo(nil),
+			Method:       "PUT",
+			JSONBody:     []string{"arble"},
+			URL:          storeURL("trusty/wordpress-1/meta/perm/read?channel=development"),
+			ExpectStatus: http.StatusNotFound,
+			ExpectBody: params.Error{
+				Code:    params.ErrNotFound,
+				Message: `cs:trusty/wordpress-1 not found in development channel`,
+			},
+		})
+	})
+	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
+		mongodoc.UnpublishedChannel: {
+			Read:  []string{"bob"},
+			Write: []string{"admin"},
+		},
+		mongodoc.DevelopmentChannel: {
+			Read:  []string{"bob", "charlie"},
+			Write: []string{"charmers"},
+		},
+		mongodoc.StableChannel: {
+			Read:  []string{"joe"},
+			Write: []string{"bob"},
+		},
+	})
+	s.doAsUser("bob", func() {
+		s.assertGet(c, "trusty/wordpress/meta/perm/read?channel=unpublished", []string{"bob"})
+	})
+}
+
+// assertChannelACLs asserts that the ChannelACLs field of the base entity with the
+// given URL are as given.
+func (s *APISuite) assertChannelACLs(c *gc.C, url string, acls map[mongodoc.Channel]mongodoc.ACL) {
+	e, err := s.store.FindBaseEntity(charm.MustParseURL(url), nil)
+	c.Assert(err, gc.IsNil)
+	c.Assert(e.ChannelACLs, jc.DeepEquals, acls)
 }
 
 func (s *APISuite) TestMetaPermPutUnauthorized(c *gc.C) {
@@ -1056,14 +1165,14 @@ func (s *APISuite) TestExtraInfo(c *gc.C) {
 
 func (s *APISuite) checkInfo(c *gc.C, path string, id string) {
 	// Add one value and check that it's there.
-	s.assertPut(c, id+"/meta/"+path+"/foo", "fooval")
+	s.assertPutAsAdmin(c, id+"/meta/"+path+"/foo", "fooval")
 	s.assertGet(c, id+"/meta/"+path+"/foo", "fooval")
 	s.assertGet(c, id+"/meta/"+path, map[string]string{
 		"foo": "fooval",
 	})
 
 	// Add another value and check that both values are there.
-	s.assertPut(c, id+"/meta/"+path+"/bar", "barval")
+	s.assertPutAsAdmin(c, id+"/meta/"+path+"/bar", "barval")
 	s.assertGet(c, id+"/meta/"+path+"/bar", "barval")
 	s.assertGet(c, id+"/meta/"+path, map[string]string{
 		"foo": "fooval",
@@ -1071,7 +1180,7 @@ func (s *APISuite) checkInfo(c *gc.C, path string, id string) {
 	})
 
 	// Overwrite a value and check that it's changed.
-	s.assertPut(c, id+"/meta/"+path+"/foo", "fooval2")
+	s.assertPutAsAdmin(c, id+"/meta/"+path+"/foo", "fooval2")
 	s.assertGet(c, id+"/meta/"+path+"/foo", "fooval2")
 	s.assertGet(c, id+"/meta/"+path+"", map[string]string{
 		"foo": "fooval2",
@@ -1079,7 +1188,7 @@ func (s *APISuite) checkInfo(c *gc.C, path string, id string) {
 	})
 
 	// Write several values at once.
-	s.assertPut(c, id+"/meta/any", params.MetaAnyResponse{
+	s.assertPutAsAdmin(c, id+"/meta/any", params.MetaAnyResponse{
 		Meta: map[string]interface{}{
 			path: map[string]string{
 				"foo": "fooval3",
@@ -1096,7 +1205,7 @@ func (s *APISuite) checkInfo(c *gc.C, path string, id string) {
 	})
 
 	// Delete a single value.
-	s.assertPut(c, id+"/meta/"+path+"/foo", nil)
+	s.assertPutAsAdmin(c, id+"/meta/"+path+"/foo", nil)
 	s.assertGet(c, id+"/meta/"+path, map[string]interface{}{
 		"baz":  "bazval",
 		"bar":  "barval",
@@ -1104,7 +1213,7 @@ func (s *APISuite) checkInfo(c *gc.C, path string, id string) {
 	})
 
 	// Delete a value and add some values at the same time.
-	s.assertPut(c, id+"/meta/any", params.MetaAnyResponse{
+	s.assertPutAsAdmin(c, id+"/meta/any", params.MetaAnyResponse{
 		Meta: map[string]interface{}{
 			path: map[string]interface{}{
 				"baz":    nil,
@@ -1309,7 +1418,7 @@ func (s *APISuite) TestCommonInfo(c *gc.C) {
 	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("~charmers/precise/wordpress-24", 24))
 	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("~charmers/trusty/wordpress-1", 1))
 
-	s.assertPut(c, "wordpress/meta/common-info/key", "something")
+	s.assertPutAsAdmin(c, "wordpress/meta/common-info/key", "something")
 
 	s.assertGet(c, "wordpress/meta/common-info", map[string]string{
 		"key": "something",
@@ -1384,7 +1493,7 @@ func (s *APISuite) TestMetaAnyWithNoIncludesAndNoEntity(c *gc.C) {
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody: params.Error{
 			Code:    params.ErrNotFound,
-			Message: `no matching charm or bundle for "cs:precise/wordpress-1"`,
+			Message: `no matching charm or bundle for cs:precise/wordpress-1`,
 		},
 	})
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
@@ -1583,7 +1692,7 @@ func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
 	for i, ep := range metaEndpoints {
 		c.Logf("test %d: %s", i, ep.name)
 		expected := params.Error{
-			Message: `no matching charm or bundle for "cs:precise/wordpress-23"`,
+			Message: `no matching charm or bundle for cs:precise/wordpress-23`,
 			Code:    params.ErrNotFound,
 		}
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
@@ -1592,7 +1701,7 @@ func (s *APISuite) TestMetaCharmNotFound(c *gc.C) {
 			ExpectStatus: http.StatusNotFound,
 			ExpectBody:   expected,
 		})
-		expected.Message = `no matching charm or bundle for "cs:wordpress"`
+		expected.Message = `no matching charm or bundle for cs:wordpress`
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL("wordpress/meta/" + ep.name),
@@ -1695,7 +1804,7 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 		}), url)
 		if test.notFound {
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
-			c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for ".*"`)
+			c.Assert(err, gc.ErrorMatches, `no matching charm or bundle for .*`)
 			c.Assert(rurl, gc.IsNil)
 			continue
 		}
@@ -1753,11 +1862,11 @@ var serveExpandIdTests = []struct {
 }, {
 	about: "fully qualified URL with no entities found",
 	url:   "~charmers/precise/no-such-42",
-	err:   `no matching charm or bundle for "cs:~charmers/precise/no-such-42"`,
+	err:   `no matching charm or bundle for cs:~charmers/precise/no-such-42`,
 }, {
 	about: "partial URL with no entities found",
 	url:   "no-such",
-	err:   `no matching charm or bundle for "cs:no-such"`,
+	err:   `no matching charm or bundle for cs:no-such`,
 }}
 
 func (s *APISuite) TestServeExpandId(c *gc.C) {
@@ -1929,7 +2038,7 @@ var serveMetaRevisionInfoTests = []struct {
 }, {
 	about: "no entities found",
 	url:   "precise/no-such-33",
-	err:   `no matching charm or bundle for "cs:precise/no-such-33"`,
+	err:   `no matching charm or bundle for cs:precise/no-such-33`,
 }}
 
 func (s *APISuite) TestServeMetaRevisionInfo(c *gc.C) {
@@ -2611,14 +2720,14 @@ var urlChannelResolvingTests = []struct {
 	channel:      mongodoc.StableChannel,
 	expectStatus: http.StatusNotFound,
 	expectError: params.Error{
-		Message: `no matching charm or bundle for "cs:~charmers/precise/wordpress-2"`,
+		Message: `cs:~charmers/precise/wordpress-2 not found in stable channel`,
 		Code:    params.ErrNotFound,
 	},
 }, {
 	url:          "mysql",
 	expectStatus: http.StatusNotFound,
 	expectError: params.Error{
-		Message: `no matching charm or bundle for "cs:mysql"`,
+		Message: `no matching charm or bundle for cs:mysql`,
 		Code:    params.ErrNotFound,
 	},
 }, {
@@ -2723,43 +2832,6 @@ func zipGetter(get func(*zip.Reader) interface{}) metaEndpointExpectedValueGette
 func entitySizeChecker(c *gc.C, data interface{}) {
 	response := data.(*params.ArchiveSizeResponse)
 	c.Assert(response.Size, gc.Not(gc.Equals), int64(0))
-}
-
-func (s *APISuite) assertPutNonAdmin(c *gc.C, url string, val interface{}) {
-	s.assertPut0(c, url, val, false)
-}
-
-func (s *APISuite) assertPut(c *gc.C, url string, val interface{}) {
-	s.assertPut0(c, url, val, true)
-}
-
-func (s *APISuite) assertPut0(c *gc.C, url string, val interface{}, asAdmin bool) {
-	body, err := json.Marshal(val)
-	c.Assert(err, gc.IsNil)
-	p := httptesting.JSONCallParams{
-		Handler: s.srv,
-		URL:     storeURL(url),
-		Method:  "PUT",
-		Do:      bakeryDo(nil),
-		Header: http.Header{
-			"Content-Type": {"application/json"},
-		},
-		Body: bytes.NewReader(body),
-	}
-	if asAdmin {
-		p.Username = testUsername
-		p.Password = testPassword
-	}
-	httptesting.AssertJSONCall(c, p)
-}
-
-func (s *APISuite) assertGet(c *gc.C, url string, expectVal interface{}) {
-	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
-		Handler:    s.srv,
-		Do:         bakeryDo(nil),
-		URL:        storeURL(url),
-		ExpectBody: expectVal,
-	})
 }
 
 func (s *APISuite) addLog(c *gc.C, log *mongodoc.Log) {
@@ -2932,7 +3004,7 @@ var promulgateTests = []struct {
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
-		Message: `no matching charm or bundle for "cs:~charmers/mysql"`,
+		Message: `no matching charm or bundle for cs:~charmers/mysql`,
 	},
 	expectEntities: []*mongodoc.Entity{
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
@@ -2955,7 +3027,7 @@ var promulgateTests = []struct {
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
-		Message: `no matching charm or bundle for "cs:~charmers/mysql"`,
+		Message: `no matching charm or bundle for cs:~charmers/mysql`,
 	},
 	expectEntities: []*mongodoc.Entity{
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").Build(),

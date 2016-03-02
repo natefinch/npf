@@ -35,7 +35,7 @@ var serveDiagramErrorsTests = []struct {
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
-		Message: `no matching charm or bundle for "cs:~charmers/bundle/foo-23"`,
+		Message: `no matching charm or bundle for cs:~charmers/bundle/foo-23`,
 	},
 }, {
 	about:        "diagram for a charm",

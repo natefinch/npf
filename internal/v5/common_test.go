@@ -1,6 +1,7 @@
 package v5_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/juju/loggo"
 	jujutesting "github.com/juju/testing"
+	"github.com/juju/testing/httptesting"
 	"github.com/julienschmidt/httprouter"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
@@ -329,6 +331,93 @@ func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
 		c.Logf("adding charm %v %d required by bundle to fulfil %v", &rurl.URL, rurl.PromulgatedRevision, svc.Charm)
 		s.addPublicCharm(c, ch, &rurl)
 	}
+}
+
+func (s *commonSuite) assertPut(c *gc.C, url string, val interface{}) {
+	s.assertPut0(c, url, val, false)
+}
+
+func (s *commonSuite) assertPutAsAdmin(c *gc.C, url string, val interface{}) {
+	s.assertPut0(c, url, val, true)
+}
+
+func (s *commonSuite) assertPut0(c *gc.C, url string, val interface{}, asAdmin bool) {
+	body, err := json.Marshal(val)
+	c.Assert(err, gc.IsNil)
+	p := httptesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL(url),
+		Method:  "PUT",
+		Do:      bakeryDo(nil),
+		Header: http.Header{
+			"Content-Type": {"application/json"},
+		},
+		Body: bytes.NewReader(body),
+	}
+	if asAdmin {
+		p.Username = testUsername
+		p.Password = testPassword
+	}
+	httptesting.AssertJSONCall(c, p)
+}
+
+func (s *commonSuite) assertGet(c *gc.C, url string, expectVal interface{}) {
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:    s.srv,
+		Do:         bakeryDo(nil),
+		URL:        storeURL(url),
+		ExpectBody: expectVal,
+	})
+}
+
+// assertGetIsUnauthorized asserts that a GET to the given URL results
+// in an ErrUnauthorized response with the given error message.
+func (s *commonSuite) assertGetIsUnauthorized(c *gc.C, url, expectMessage string) {
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		Do:           bakeryDo(nil),
+		Method:       "GET",
+		URL:          storeURL(url),
+		ExpectStatus: http.StatusUnauthorized,
+		ExpectBody: params.Error{
+			Code:    params.ErrUnauthorized,
+			Message: expectMessage,
+		},
+	})
+}
+
+// assertGetIsUnauthorized asserts that a PUT to the given URL with the
+// given body value results in an ErrUnauthorized response with the given
+// error message.
+func (s *commonSuite) assertPutIsUnauthorized(c *gc.C, url string, val interface{}, expectMessage string) {
+	body, err := json.Marshal(val)
+	c.Assert(err, gc.IsNil)
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL(url),
+		Method:  "PUT",
+		Do:      bakeryDo(nil),
+		Header: http.Header{
+			"Content-Type": {"application/json"},
+		},
+		Body:         bytes.NewReader(body),
+		ExpectStatus: http.StatusUnauthorized,
+		ExpectBody: params.Error{
+			Code:    params.ErrUnauthorized,
+			Message: expectMessage,
+		},
+	})
+}
+
+// doAsUser calls the given function, discharging any authorization
+// request as the given user name.
+func (s *commonSuite) doAsUser(user string, f func()) {
+	old := s.discharge
+	s.discharge = dischargeForUser(user)
+	defer func() {
+		s.discharge = old
+	}()
+	f()
 }
 
 func bakeryDo(client *http.Client) func(*http.Request) (*http.Response, error) {

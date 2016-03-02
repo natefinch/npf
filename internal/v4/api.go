@@ -157,11 +157,8 @@ func (h ReqHandler) ResolveURLs(urls []*charm.URL) ([]*router.ResolvedURL, error
 // easily unit-tested.
 func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, error) {
 	entity, err := cache.Entity(url, charmstore.FieldSelector("supportedseries"))
-	if err != nil && errgo.Cause(err) != params.ErrNotFound {
-		return nil, errgo.Mask(err)
-	}
-	if errgo.Cause(err) == params.ErrNotFound {
-		return nil, noMatchingURLError(url)
+	if err != nil {
+		return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	rurl := &router.ResolvedURL{
 		URL:                 *entity.URL,
@@ -197,10 +194,6 @@ func (h ReqHandler) Close() {
 // the given HTTP request.
 func StatsEnabled(req *http.Request) bool {
 	return v5.StatsEnabled(req)
-}
-
-func noMatchingURLError(url *charm.URL) error {
-	return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
 }
 
 // GET id/meta/charm-metadata
