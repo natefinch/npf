@@ -219,6 +219,7 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"diagram.svg": resolveId(authId(h.serveDiagram), "bundledata"),
 			"expand-id":   resolveId(authId(h.serveExpandId)),
 			"icon.svg":    resolveId(authId(h.serveIcon), "contents", "blobname"),
+			"publish":     resolveId(h.servePublish),
 			"promulgate":  resolveId(h.serveAdminPromulgate),
 			"readme":      resolveId(authId(h.serveReadMe), "contents", "blobname"),
 			"resources":   resolveId(authId(h.serveResources)),
@@ -1316,6 +1317,59 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 	}
 	h.addAudit(e)
 
+	return nil
+}
+
+// validPublishChannels holds the set of channels that can
+// be the target of a publish request.
+var validPublishChannels = map[params.Channel]bool{
+	params.DevelopmentChannel: true,
+	params.StableChannel:      true,
+}
+
+// PUT id/publish
+// See https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idpublish
+func (h *ReqHandler) servePublish(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
+	// Perform basic validation of the request.
+	if req.Method != "PUT" {
+		return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)
+	}
+
+	// Retrieve the requested action from the request body.
+	var publish struct {
+		params.PublishRequest `httprequest:",body"`
+	}
+	if err := httprequest.Unmarshal(httprequest.Params{Request: req}, &publish); err != nil {
+		return badRequestf(err, "cannot unmarshal publish request body")
+	}
+	chans := publish.Channels
+	if len(chans) == 0 {
+		return badRequestf(nil, "no channels provided")
+	}
+	for _, c := range chans {
+		if !validPublishChannels[c] {
+			return badRequestf(nil, "cannot publish to %q", c)
+		}
+	}
+
+	// Retrieve the base entity so that we can check permissions.
+	baseEntity, err := h.Cache.BaseEntity(&id.URL, charmstore.FieldSelector("channelacls"))
+	if err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+
+	// Authorize the operation. Users must have write permissions on the ACLs
+	// on the channel being published to.
+	for _, c := range chans {
+		if _, err := h.authorize(req, baseEntity.ChannelACLs[c].Write, true, id); err != nil {
+			return errgo.Mask(err, errgo.Any)
+		}
+	}
+
+	if err := h.Store.Publish(id, chans...); err != nil {
+		return errgo.NoteMask(err, "cannot publish charm or bundle", errgo.Is(params.ErrNotFound))
+	}
+	// TODO add publish audit
 	return nil
 }
 

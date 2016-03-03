@@ -2604,6 +2604,326 @@ func (s *APISuite) TestChangesPublishedErrors(c *gc.C) {
 	}
 }
 
+var publishErrorsTests = []struct {
+	about        string
+	method       string
+	id           string
+	contentType  string
+	body         string
+	expectStatus int
+	expectBody   params.Error
+}{{
+	about:        "get method not allowed",
+	method:       "GET",
+	id:           "~who/trusty/wordpress-0",
+	expectStatus: http.StatusMethodNotAllowed,
+	expectBody: params.Error{
+		Code:    params.ErrMethodNotAllowed,
+		Message: "GET not allowed",
+	},
+}, {
+	about:        "post method not allowed",
+	method:       "POST",
+	id:           "~who/trusty/wordpress-0",
+	expectStatus: http.StatusMethodNotAllowed,
+	expectBody: params.Error{
+		Code:    params.ErrMethodNotAllowed,
+		Message: "POST not allowed",
+	},
+}, {
+	about:        "unexpected content type",
+	method:       "PUT",
+	id:           "~who/trusty/wordpress-0",
+	contentType:  "text/invalid",
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: `cannot unmarshal publish request body: cannot unmarshal into field: unexpected content type text/invalid; want application/json; content: "{\"Channels\":[\"development\"],\"Published\":false}"`,
+	},
+}, {
+	about:        "invalid body",
+	method:       "PUT",
+	id:           "~who/trusty/wordpress-0",
+	body:         "bad wolf",
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Code:    params.ErrBadRequest,
+		Message: "cannot unmarshal publish request body: cannot unmarshal into field: cannot unmarshal request body: invalid character 'b' looking for beginning of value",
+	},
+}, {
+	about:        "entity to be published not found",
+	method:       "PUT",
+	id:           "~who/wily/django-42",
+	expectStatus: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: `no matching charm or bundle for cs:~who/wily/django-42`,
+	},
+}, {
+	about:        "no channels provided",
+	method:       "PUT",
+	id:           "~who/trusty/wordpress-0",
+	body:         mustMarshalJSON(params.PublishRequest{}),
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Message: `no channels provided`,
+		Code:    params.ErrBadRequest,
+	},
+}, {
+	about:  "invalid channel specified",
+	method: "PUT",
+	id:     "~who/trusty/wordpress-0",
+	body: mustMarshalJSON(params.PublishRequest{
+		Channels: []params.Channel{"bad"},
+	}),
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Message: `cannot publish to "bad"`,
+		Code:    params.ErrBadRequest,
+	},
+}, {
+	about:  "empty channel specified",
+	method: "PUT",
+	id:     "~who/trusty/wordpress-0",
+	body: mustMarshalJSON(params.PublishRequest{
+		Channels: []params.Channel{""},
+	}),
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Message: `cannot publish to ""`,
+		Code:    params.ErrBadRequest,
+	},
+}, {
+	about:  "unpublished channel specified",
+	method: "PUT",
+	id:     "~who/trusty/wordpress-0",
+	body: mustMarshalJSON(params.PublishRequest{
+		Channels: []params.Channel{params.UnpublishedChannel},
+	}),
+	expectStatus: http.StatusBadRequest,
+	expectBody: params.Error{
+		Message: `cannot publish to "unpublished"`,
+		Code:    params.ErrBadRequest,
+	},
+}}
+
+func (s *APISuite) TestPublishErrors(c *gc.C) {
+	s.addPublicCharm(c, storetesting.NewCharm(nil), newResolvedURL("~who/trusty/wordpress-0", -1))
+	for i, test := range publishErrorsTests {
+		c.Logf("test %d: %s", i, test.about)
+		contentType := test.contentType
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		body := test.body
+		if body == "" {
+			body = mustMarshalJSON(params.PublishRequest{
+				Channels: []params.Channel{params.DevelopmentChannel},
+			})
+		}
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler:      s.srv,
+			URL:          storeURL(test.id + "/publish"),
+			Method:       test.method,
+			Header:       http.Header{"Content-Type": {contentType}},
+			Username:     testUsername,
+			Password:     testPassword,
+			Body:         strings.NewReader(body),
+			ExpectStatus: test.expectStatus,
+			ExpectBody:   test.expectBody,
+		})
+	}
+}
+
+var publishAuthorizationTests = []struct {
+	about string
+	// acls holds the ACLs that will be associated with the
+	// entity we're publishing. Note: we'll always publish
+	// as the same user ("bob").
+	acls map[params.Channel]mongodoc.ACL
+	// channels holds the channels we'll try to publish to.
+	channels []params.Channel
+	// expectError is true if we expect the authorization
+	// to fail.
+	expectError bool
+}{{
+	about: "all perms allow bob; publish to single channel",
+	acls: map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {
+			Read:  []string{"bob"},
+			Write: []string{"bob"},
+		},
+		params.DevelopmentChannel: {
+			Read:  []string{"bob"},
+			Write: []string{"bob"},
+		},
+		params.StableChannel: {
+			Read:  []string{"bob"},
+			Write: []string{"bob"},
+		},
+	},
+	channels: []params.Channel{"development"},
+}, {
+	about: "all perms allow bob; publish to several channels",
+	acls: map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {
+			Read:  []string{"bob"},
+			Write: []string{"bob"},
+		},
+		params.DevelopmentChannel: {
+			Read:  []string{"bob"},
+			Write: []string{"bob"},
+		},
+		params.StableChannel: {
+			Read:  []string{"bob"},
+			Write: []string{"bob"},
+		},
+	},
+	channels: []params.Channel{"development", "stable"},
+}, {
+	about: "publish on an entity without perms on its current channel",
+	acls: map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {},
+		params.DevelopmentChannel: {
+			Read:  []string{"bob"},
+			Write: []string{"bob"},
+		},
+		params.StableChannel: {
+			Read:  []string{"bob"},
+			Write: []string{"bob"},
+		},
+	},
+	channels: []params.Channel{"development"},
+}, {
+	about: "publish on channels without access",
+	acls: map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {
+			Read:  []string{"everyone"},
+			Write: []string{"everyone"},
+		},
+		params.DevelopmentChannel: {
+			Read:  []string{"alice"},
+			Write: []string{"alice"},
+		},
+		params.StableChannel: {
+			Read:  []string{"everyone"},
+			Write: []string{"everyone"},
+		},
+	},
+	channels:    []params.Channel{"development"},
+	expectError: true,
+}, {
+	about: "publish on several channels without access to all",
+	acls: map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {},
+		params.DevelopmentChannel: {
+			Read:  []string{"bob"},
+			Write: []string{"bob"},
+		},
+		params.StableChannel: {
+			Read:  []string{"alice"},
+			Write: []string{"alice"},
+		},
+	},
+	channels:    []params.Channel{"development", "stable"},
+	expectError: true,
+}}
+
+func (s *APISuite) TestPublishAuthorization(c *gc.C) {
+	s.discharge = dischargeForUser("bob")
+	for i, test := range publishAuthorizationTests {
+		c.Logf("test %d: %v", i, test.about)
+		id := newResolvedURL(fmt.Sprintf("cs:~who/precise/wordpress%d-0", i), -1)
+		err := s.store.AddCharmWithArchive(id, storetesting.NewCharm(nil))
+		c.Assert(err, gc.IsNil)
+		for ch, acl := range test.acls {
+			err := s.store.SetPerms(&id.URL, string(ch)+".read", acl.Read...)
+			c.Assert(err, gc.IsNil)
+			err = s.store.SetPerms(&id.URL, string(ch)+".write", acl.Write...)
+			c.Assert(err, gc.IsNil)
+		}
+		if test.expectError {
+			httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+				Handler: s.srv,
+				Method:  "PUT",
+				URL:     storeURL(id.URL.Path() + "/publish"),
+				Do:      bakeryDo(nil),
+				JSONBody: params.PublishRequest{
+					Channels: test.channels,
+				},
+				ExpectStatus: http.StatusUnauthorized,
+				ExpectBody: params.Error{
+					Code:    params.ErrUnauthorized,
+					Message: `unauthorized: access denied for user "bob"`,
+				},
+			})
+			continue
+		}
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler: s.srv,
+			Method:  "PUT",
+			URL:     storeURL(id.URL.Path() + "/publish"),
+			Do:      bakeryDo(nil),
+			JSONBody: params.PublishRequest{
+				Channels: test.channels,
+			},
+		})
+		// Check that the entity really has been published to all the given channels.
+		for _, ch := range test.channels {
+			httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+				Handler: s.srv,
+				URL:     storeURL(fmt.Sprintf("%s/meta/id-revision?channel=%s", mongodoc.BaseURL(&id.URL).Path(), ch)),
+				Do:      bakeryDo(nil),
+				ExpectBody: params.IdRevisionResponse{
+					Revision: 0,
+				},
+			})
+		}
+	}
+}
+
+func (s *APISuite) TestPublishSuccess(c *gc.C) {
+	s.discharge = dischargeForUser("bob")
+
+	// Publish an entity to all channels (don't use publish endpoint
+	// 'cos that's what we're trying to test).
+	id0 := newResolvedURL("cs:~bob/precise/wordpress-0", -1)
+	err := s.store.AddCharmWithArchive(id0, storetesting.NewCharm(nil))
+	c.Assert(err, gc.IsNil)
+	err = s.store.Publish(id0, params.DevelopmentChannel, params.StableChannel)
+	c.Assert(err, gc.IsNil)
+
+	// Add an unpublished entity.
+	err = s.store.AddCharmWithArchive(newResolvedURL("cs:~bob/precise/wordpress-1", -1), storetesting.NewCharm(nil))
+	c.Assert(err, gc.IsNil)
+
+	// Publish it to the development channel.
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: s.srv,
+		Method:  "PUT",
+		URL:     storeURL("~bob/precise/wordpress-1/publish"),
+		Do:      bakeryDo(nil),
+		JSONBody: params.PublishRequest{
+			Channels: []params.Channel{params.DevelopmentChannel},
+		},
+	})
+
+	assertResolvesTo := func(ch params.Channel, rev int) {
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler: s.srv,
+			URL:     storeURL(fmt.Sprintf("~bob/precise/wordpress/meta/id-revision?channel=%s", ch)),
+			Do:      bakeryDo(nil),
+			ExpectBody: params.IdRevisionResponse{
+				Revision: rev,
+			},
+		})
+	}
+	assertResolvesTo(params.UnpublishedChannel, 1)
+	assertResolvesTo(params.DevelopmentChannel, 1)
+	assertResolvesTo(params.StableChannel, 0)
+	assertResolvesTo(params.NoChannel, 0)
+}
+
 // publishCharmsAtKnownTimes populates the store with
 // a range of charms with known time stamps.
 func (s *APISuite) publishCharmsAtKnownTimes(c *gc.C, charms []publishSpec) {

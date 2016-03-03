@@ -128,6 +128,8 @@ func newReqHandler() ReqHandler {
 	handlers.Id["expand-id"] = resolveId(authId(h.serveExpandId))
 	handlers.Id["archive"] = h.serveArchive(handlers.Id["archive"])
 	handlers.Id["archive/"] = resolveId(h.serveArchiveFile)
+	// Publish is a new endpoint; don't provide it in v4.
+	delete(handlers.Id, "publish")
 	h.Router = router.New(handlers, h)
 	return h
 }

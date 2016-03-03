@@ -2496,6 +2496,22 @@ func (s *APISuite) TestChangesPublishedErrors(c *gc.C) {
 	}
 }
 
+func (s *APISuite) TestPublish(c *gc.C) {
+	// V4 SPECIFIC
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		Method:       "PUT",
+		URL:          storeURL("wordpress/publish"),
+		Do:           bakeryDo(nil),
+		JSONBody:     params.PublishRequest{},
+		ExpectStatus: http.StatusNotFound,
+		ExpectBody: params.Error{
+			Code:    params.ErrNotFound,
+			Message: `not found`,
+		},
+	})
+}
+
 // publishCharmsAtKnownTimes populates the store with
 // a range of charms with known time stamps.
 func (s *APISuite) publishCharmsAtKnownTimes(c *gc.C, charms []publishSpec) {
