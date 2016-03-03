@@ -88,7 +88,7 @@ var requiredEntityFields = func() map[string]int {
 // a charmstore.ErrTooManySessions cause.
 func (h *Handler) NewReqHandler(req *http.Request) (ReqHandler, error) {
 	req.ParseForm()
-	ch := mongodoc.Channel(req.Form.Get("channel"))
+	ch := params.Channel(req.Form.Get("channel"))
 	if !v5.ValidChannels[ch] {
 		return ReqHandler{}, badRequestf(nil, "invalid channel %q specified in request", ch)
 	}

@@ -980,14 +980,14 @@ func (s *StoreSearchSuite) TestOnlyIndexStableCharms(c *gc.C) {
 	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(&id.URL), &actual)
 	c.Assert(err, gc.ErrorMatches, "elasticsearch document not found")
 
-	err = s.store.Publish(id, mongodoc.DevelopmentChannel)
+	err = s.store.Publish(id, params.DevelopmentChannel)
 	c.Assert(err, gc.IsNil)
 	err = s.store.UpdateSearch(id)
 	c.Assert(err, gc.IsNil)
 	err = s.store.ES.GetDocument(s.TestIndex, typeName, s.store.ES.getID(&id.URL), &actual)
 	c.Assert(err, gc.ErrorMatches, "elasticsearch document not found")
 
-	err = s.store.Publish(id, mongodoc.StableChannel)
+	err = s.store.Publish(id, params.StableChannel)
 	c.Assert(err, gc.IsNil)
 	err = s.store.UpdateSearch(id)
 	c.Assert(err, gc.IsNil)
@@ -1018,7 +1018,7 @@ func addCharmForSearch(c *gc.C, s *Store, id *router.ResolvedURL, ch charm.Charm
 	}
 	err = s.SetPerms(&id.URL, "stable.read", acl...)
 	c.Assert(err, gc.IsNil)
-	err = s.Publish(id, mongodoc.StableChannel)
+	err = s.Publish(id, params.StableChannel)
 	c.Assert(err, gc.IsNil)
 }
 
@@ -1034,6 +1034,6 @@ func addBundleForSearch(c *gc.C, s *Store, id *router.ResolvedURL, b charm.Bundl
 	}
 	err = s.SetPerms(&id.URL, "stable.read", acl...)
 	c.Assert(err, gc.IsNil)
-	err = s.Publish(id, mongodoc.StableChannel)
+	err = s.Publish(id, params.StableChannel)
 	c.Assert(err, gc.IsNil)
 }

@@ -79,7 +79,7 @@ func (h *ReqHandler) authorizeUpload(id *charm.URL, req *http.Request) error {
 	// is-entity first-party caveats to be allowed when uploading
 	// at which point we will need to rethink this a little.
 	if err == nil {
-		acls := baseEntity.ChannelACLs[mongodoc.UnpublishedChannel]
+		acls := baseEntity.ChannelACLs[params.UnpublishedChannel]
 		if err := h.authorizeWithPerms(req, acls.Read, acls.Write, nil); err != nil {
 			return errgo.Mask(err, errgo.Any)
 		}

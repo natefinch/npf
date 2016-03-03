@@ -138,7 +138,7 @@ var (
 // to resolve any channel-ambiguous requests.
 type StoreWithChannel struct {
 	*charmstore.Store
-	Channel mongodoc.Channel
+	Channel params.Channel
 }
 
 func (s *StoreWithChannel) FindBestEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
@@ -150,11 +150,11 @@ func (s *StoreWithChannel) FindBaseEntity(url *charm.URL, fields map[string]int)
 }
 
 // ValidChannels holds the set of all allowed channels.
-var ValidChannels = map[mongodoc.Channel]bool{
-	mongodoc.UnpublishedChannel: true,
-	mongodoc.DevelopmentChannel: true,
-	mongodoc.StableChannel:      true,
-	mongodoc.NoChannel:          true,
+var ValidChannels = map[params.Channel]bool{
+	params.UnpublishedChannel: true,
+	params.DevelopmentChannel: true,
+	params.StableChannel:      true,
+	params.NoChannel:          true,
 }
 
 // NewReqHandler returns an instance of a *ReqHandler
@@ -165,7 +165,7 @@ var ValidChannels = map[mongodoc.Channel]bool{
 // a charmstore.ErrTooManySessions cause.
 func (h *Handler) NewReqHandler(req *http.Request) (*ReqHandler, error) {
 	req.ParseForm()
-	ch := mongodoc.Channel(req.Form.Get("channel"))
+	ch := params.Channel(req.Form.Get("channel"))
 	if !ValidChannels[ch] {
 		return nil, badRequestf(nil, "invalid channel %q specified in request", ch)
 	}

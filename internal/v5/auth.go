@@ -302,25 +302,25 @@ func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) 
 	return h.authorizeWithPerms(req, acls.Read, acls.Write, id)
 }
 
-func (h *ReqHandler) entityChannel(id *router.ResolvedURL) (mongodoc.Channel, error) {
-	if h.Store.Channel != mongodoc.NoChannel {
+func (h *ReqHandler) entityChannel(id *router.ResolvedURL) (params.Channel, error) {
+	if h.Store.Channel != params.NoChannel {
 		return h.Store.Channel, nil
 	}
 	entity, err := h.Cache.Entity(&id.URL, charmstore.FieldSelector("development", "stable"))
 	if err != nil {
 		if errgo.Cause(err) == params.ErrNotFound {
-			return mongodoc.NoChannel, errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
+			return params.NoChannel, errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
 		}
-		return mongodoc.NoChannel, errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
+		return params.NoChannel, errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
 	}
-	var ch mongodoc.Channel
+	var ch params.Channel
 	switch {
 	case entity.Stable:
-		ch = mongodoc.StableChannel
+		ch = params.StableChannel
 	case entity.Development:
-		ch = mongodoc.DevelopmentChannel
+		ch = params.DevelopmentChannel
 	default:
-		ch = mongodoc.UnpublishedChannel
+		ch = params.UnpublishedChannel
 	}
 	return ch, nil
 }

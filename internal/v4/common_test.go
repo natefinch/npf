@@ -23,7 +23,6 @@ import (
 	"gopkg.in/mgo.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v4"
@@ -205,7 +204,7 @@ func (s *commonSuite) addPublicCharm(c *gc.C, ch charm.Charm, rurl *router.Resol
 func (s *commonSuite) setPublic(c *gc.C, rurl *router.ResolvedURL) {
 	err := s.store.SetPerms(&rurl.URL, "stable.read", params.Everyone)
 	c.Assert(err, gc.IsNil)
-	err = s.store.Publish(rurl, mongodoc.StableChannel)
+	err = s.store.Publish(rurl, params.StableChannel)
 	c.Assert(err, gc.IsNil)
 }
 
@@ -265,7 +264,7 @@ func storeURL(path string) string {
 func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
 	for _, svc := range bundle.Data().Services {
 		u := charm.MustParseURL(svc.Charm)
-		if _, err := s.store.FindBestEntity(u, mongodoc.StableChannel, nil); err == nil {
+		if _, err := s.store.FindBestEntity(u, params.StableChannel, nil); err == nil {
 			continue
 		}
 		if u.Revision == -1 {

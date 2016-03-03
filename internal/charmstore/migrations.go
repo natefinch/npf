@@ -5,6 +5,7 @@ package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/char
 
 import (
 	"gopkg.in/errgo.v1"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -180,7 +181,7 @@ func addDevelopmentACLs(db StoreDatabase) error {
 	defer iter.Close()
 	for iter.Next(&baseEntity) {
 		if err := baseEntities.UpdateId(baseEntity.URL, bson.D{{
-			"$set", bson.D{{"channelacls.development", baseEntity.ChannelACLs[mongodoc.DevelopmentChannel]}},
+			"$set", bson.D{{"channelacls.development", baseEntity.ChannelACLs[params.DevelopmentChannel]}},
 		}}); err != nil {
 			return errgo.Notef(err, "cannot add development ACLs to base entity id %s", baseEntity.URL)
 		}

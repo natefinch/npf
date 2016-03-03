@@ -626,16 +626,16 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 			Write: []string{"charmers"},
 		})
 	})
-	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
-		mongodoc.UnpublishedChannel: {
+	s.assertChannelACLs(c, "precise/wordpress-23", map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {
 			Read:  []string{"charmers"},
 			Write: []string{"charmers"},
 		},
-		mongodoc.DevelopmentChannel: {
+		params.DevelopmentChannel: {
 			Read:  []string{"charmers"},
 			Write: []string{"charmers"},
 		},
-		mongodoc.StableChannel: {
+		params.StableChannel: {
 			Read:  []string{"charmers"},
 			Write: []string{"charmers"},
 		},
@@ -668,16 +668,16 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 			})
 		}
 	})
-	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
-		mongodoc.UnpublishedChannel: {
+	s.assertChannelACLs(c, "precise/wordpress-23", map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
 		},
-		mongodoc.DevelopmentChannel: {
+		params.DevelopmentChannel: {
 			Read:  []string{"charmers"},
 			Write: []string{"charmers"},
 		},
-		mongodoc.StableChannel: {
+		params.StableChannel: {
 			Read:  []string{"charmers"},
 			Write: []string{"charmers"},
 		},
@@ -685,7 +685,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 
 	// Publish one of the revisions to development, then PUT to meta/perm
 	// and check that the development ACLs have changed.
-	err := s.store.Publish(newResolvedURL("~charmers/precise/wordpress-23", 23), mongodoc.DevelopmentChannel)
+	err := s.store.Publish(newResolvedURL("~charmers/precise/wordpress-23", 23), params.DevelopmentChannel)
 	c.Assert(err, gc.IsNil)
 
 	s.doAsUser("bob", func() {
@@ -721,23 +721,23 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		})
 	})
 
-	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
-		mongodoc.UnpublishedChannel: {
+	s.assertChannelACLs(c, "precise/wordpress-23", map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
 		},
-		mongodoc.DevelopmentChannel: {
+		params.DevelopmentChannel: {
 			Read:  []string{"bob", "charlie"},
 			Write: []string{"charmers"},
 		},
-		mongodoc.StableChannel: {
+		params.StableChannel: {
 			Read:  []string{"charmers"},
 			Write: []string{"charmers"},
 		},
 	})
 	// Publish wordpress-1 to stable and check that the stable ACLs
 	// have changed.
-	err = s.store.Publish(newResolvedURL("~charmers/trusty/wordpress-1", 1), mongodoc.StableChannel)
+	err = s.store.Publish(newResolvedURL("~charmers/trusty/wordpress-1", 1), params.StableChannel)
 	c.Assert(err, gc.IsNil)
 
 	// The stable permissions only allow charmers currently, so act as
@@ -779,16 +779,16 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		})
 	})
 
-	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
-		mongodoc.UnpublishedChannel: {
+	s.assertChannelACLs(c, "precise/wordpress-23", map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
 		},
-		mongodoc.DevelopmentChannel: {
+		params.DevelopmentChannel: {
 			Read:  []string{"bob", "charlie"},
 			Write: []string{"charmers"},
 		},
-		mongodoc.StableChannel: {
+		params.StableChannel: {
 			Read:  []string{"charmers"},
 			Write: []string{"doris"},
 		},
@@ -801,16 +801,16 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		s.assertPut(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
 	})
 
-	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
-		mongodoc.UnpublishedChannel: {
+	s.assertChannelACLs(c, "precise/wordpress-23", map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
 		},
-		mongodoc.DevelopmentChannel: {
+		params.DevelopmentChannel: {
 			Read:  []string{"bob", "charlie"},
 			Write: []string{"charmers"},
 		},
-		mongodoc.StableChannel: {
+		params.StableChannel: {
 			Read:  []string{"bob", params.Everyone},
 			Write: []string{"doris"},
 		},
@@ -823,16 +823,16 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		})
 		s.assertGet(c, "wordpress/meta/perm/read", []string{"bob", params.Everyone})
 	})
-	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
-		mongodoc.UnpublishedChannel: {
+	s.assertChannelACLs(c, "precise/wordpress-23", map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
 		},
-		mongodoc.DevelopmentChannel: {
+		params.DevelopmentChannel: {
 			Read:  []string{"bob", "charlie"},
 			Write: []string{"charmers"},
 		},
-		mongodoc.StableChannel: {
+		params.StableChannel: {
 			Read:  []string{"bob", params.Everyone},
 			Write: []string{"doris"},
 		},
@@ -861,16 +861,16 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		})
 	}
 
-	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
-		mongodoc.UnpublishedChannel: {
+	s.assertChannelACLs(c, "precise/wordpress-23", map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
 		},
-		mongodoc.DevelopmentChannel: {
+		params.DevelopmentChannel: {
 			Read:  []string{"bob", "charlie"},
 			Write: []string{"charmers"},
 		},
-		mongodoc.StableChannel: {
+		params.StableChannel: {
 			Read:  []string{},
 			Write: []string{},
 		},
@@ -881,16 +881,16 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		Read:  []string{"bob"},
 		Write: []string{"admin"},
 	})
-	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
-		mongodoc.UnpublishedChannel: {
+	s.assertChannelACLs(c, "precise/wordpress-23", map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
 		},
-		mongodoc.DevelopmentChannel: {
+		params.DevelopmentChannel: {
 			Read:  []string{"bob", "charlie"},
 			Write: []string{"charmers"},
 		},
-		mongodoc.StableChannel: {
+		params.StableChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
 		},
@@ -903,16 +903,16 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 		}{Read: []string{"joe"}}
 		s.assertPut(c, "wordpress/meta/perm", readRequest)
 	})
-	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
-		mongodoc.UnpublishedChannel: {
+	s.assertChannelACLs(c, "precise/wordpress-23", map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
 		},
-		mongodoc.DevelopmentChannel: {
+		params.DevelopmentChannel: {
 			Read:  []string{"bob", "charlie"},
 			Write: []string{"charmers"},
 		},
-		mongodoc.StableChannel: {
+		params.StableChannel: {
 			Read:  []string{"joe"},
 			Write: []string{},
 		},
@@ -971,16 +971,16 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 			},
 		})
 	})
-	s.assertChannelACLs(c, "precise/wordpress-23", map[mongodoc.Channel]mongodoc.ACL{
-		mongodoc.UnpublishedChannel: {
+	s.assertChannelACLs(c, "precise/wordpress-23", map[params.Channel]mongodoc.ACL{
+		params.UnpublishedChannel: {
 			Read:  []string{"bob"},
 			Write: []string{"admin"},
 		},
-		mongodoc.DevelopmentChannel: {
+		params.DevelopmentChannel: {
 			Read:  []string{"bob", "charlie"},
 			Write: []string{"charmers"},
 		},
-		mongodoc.StableChannel: {
+		params.StableChannel: {
 			Read:  []string{"joe"},
 			Write: []string{"bob"},
 		},
@@ -992,7 +992,7 @@ func (s *APISuite) TestMetaPerm(c *gc.C) {
 
 // assertChannelACLs asserts that the ChannelACLs field of the base entity with the
 // given URL are as given.
-func (s *APISuite) assertChannelACLs(c *gc.C, url string, acls map[mongodoc.Channel]mongodoc.ACL) {
+func (s *APISuite) assertChannelACLs(c *gc.C, url string, acls map[params.Channel]mongodoc.ACL) {
 	e, err := s.store.FindBaseEntity(charm.MustParseURL(url), nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.ChannelACLs, jc.DeepEquals, acls)
@@ -1684,7 +1684,7 @@ func (s *APISuite) TestResolveURL(c *gc.C) {
 		url := charm.MustParseURL(test.url)
 		rurl, err := v4.ResolveURL(entitycache.New(&v5.StoreWithChannel{
 			Store:   s.store,
-			Channel: mongodoc.UnpublishedChannel,
+			Channel: params.UnpublishedChannel,
 		}), url)
 		if test.notFound {
 			c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
@@ -1769,7 +1769,7 @@ func (s *APISuite) TestServeExpandId(c *gc.C) {
 	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/trusty/wordpress-47", 47))
 	err := s.store.AddCharmWithArchive(newResolvedURL("cs:~charmers/trusty/wordpress-48", 48), storetesting.NewCharm(nil))
 	c.Assert(err, gc.IsNil)
-	err = s.store.Publish(newResolvedURL("cs:~charmers/trusty/wordpress-48", 48), mongodoc.DevelopmentChannel)
+	err = s.store.Publish(newResolvedURL("cs:~charmers/trusty/wordpress-48", 48), params.DevelopmentChannel)
 	c.Assert(err, gc.IsNil)
 	s.addPublicCharmFromRepo(c, "multi-series", newResolvedURL("cs:~charmers/wordpress-5", 49))
 
@@ -2567,24 +2567,24 @@ func (s *APISuite) TestHash256Laziness(c *gc.C) {
 
 var urlChannelResolvingEntities = []struct {
 	id      *router.ResolvedURL
-	channel mongodoc.Channel
+	channel params.Channel
 }{{
 	id:      newResolvedURL("~charmers/precise/wordpress-0", 0),
-	channel: mongodoc.StableChannel,
+	channel: params.StableChannel,
 }, {
 	id:      newResolvedURL("~charmers/precise/wordpress-1", 1),
-	channel: mongodoc.DevelopmentChannel,
+	channel: params.DevelopmentChannel,
 }, {
 	id:      newResolvedURL("~charmers/precise/wordpress-2", 2),
-	channel: mongodoc.UnpublishedChannel,
+	channel: params.UnpublishedChannel,
 }, {
 	id:      newResolvedURL("~charmers/trusty/mysql-0", 0),
-	channel: mongodoc.UnpublishedChannel,
+	channel: params.UnpublishedChannel,
 }}
 
 var urlChannelResolvingTests = []struct {
 	url          string
-	channel      mongodoc.Channel
+	channel      params.Channel
 	expectURL    string
 	expectStatus int
 	expectError  params.Error
@@ -2593,23 +2593,23 @@ var urlChannelResolvingTests = []struct {
 	expectURL: "cs:precise/wordpress-0",
 }, {
 	url:       "wordpress",
-	channel:   mongodoc.StableChannel,
+	channel:   params.StableChannel,
 	expectURL: "cs:precise/wordpress-0",
 }, {
 	url:       "wordpress",
-	channel:   mongodoc.DevelopmentChannel,
+	channel:   params.DevelopmentChannel,
 	expectURL: "cs:precise/wordpress-1",
 }, {
 	url:       "wordpress",
-	channel:   mongodoc.UnpublishedChannel,
+	channel:   params.UnpublishedChannel,
 	expectURL: "cs:precise/wordpress-2",
 }, {
 	url:       "~charmers/precise/wordpress",
-	channel:   mongodoc.StableChannel,
+	channel:   params.StableChannel,
 	expectURL: "cs:~charmers/precise/wordpress-0",
 }, {
 	url:          "~charmers/precise/wordpress-2",
-	channel:      mongodoc.StableChannel,
+	channel:      params.StableChannel,
 	expectStatus: http.StatusNotFound,
 	expectError: params.Error{
 		Message: `cs:~charmers/precise/wordpress-2 not found in stable channel`,
@@ -2637,7 +2637,7 @@ func (s *APISuite) TestURLChannelResolving(c *gc.C) {
 	for _, add := range urlChannelResolvingEntities {
 		err := s.store.AddCharmWithArchive(add.id, storetesting.NewCharm(nil))
 		c.Assert(err, gc.IsNil)
-		if add.channel != mongodoc.UnpublishedChannel {
+		if add.channel != params.UnpublishedChannel {
 			err = s.store.Publish(add.id, add.channel)
 			c.Assert(err, gc.IsNil)
 		}
@@ -2914,7 +2914,7 @@ var promulgateTests = []struct {
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
 	},
 	expectBaseEntities: []*mongodoc.BaseEntity{
-		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(mongodoc.StableChannel, mongodoc.ACL{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(params.StableChannel, mongodoc.ACL{
 			Write: []string{v4.PromulgatorsGroup},
 		}).WithPromulgated(true).Build(),
 	},
@@ -3052,7 +3052,7 @@ var promulgateTests = []struct {
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
 	},
 	expectBaseEntities: []*mongodoc.BaseEntity{
-		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(mongodoc.StableChannel, mongodoc.ACL{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(params.StableChannel, mongodoc.ACL{
 			Write: []string{v4.PromulgatorsGroup},
 		}).WithPromulgated(true).Build(),
 	},
@@ -3079,7 +3079,7 @@ var promulgateTests = []struct {
 		storetesting.NewEntity("~charmers/trusty/wordpress-0").WithPromulgatedURL("trusty/wordpress-0").Build(),
 	},
 	expectBaseEntities: []*mongodoc.BaseEntity{
-		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(mongodoc.StableChannel, mongodoc.ACL{
+		storetesting.NewBaseEntity("~charmers/wordpress").WithACLs(params.StableChannel, mongodoc.ACL{
 			Write: []string{v4.PromulgatorsGroup},
 		}).WithPromulgated(true).Build(),
 	},
@@ -3325,11 +3325,11 @@ func entityACLs(store *charmstore.Store, url *router.ResolvedURL) (mongodoc.ACL,
 	if err != nil {
 		return mongodoc.ACL{}, err
 	}
-	ch := mongodoc.UnpublishedChannel
+	ch := params.UnpublishedChannel
 	if e.Stable {
-		ch = mongodoc.StableChannel
+		ch = params.StableChannel
 	} else if e.Development {
-		ch = mongodoc.DevelopmentChannel
+		ch = params.DevelopmentChannel
 	}
 	return be.ChannelACLs[ch], nil
 }
