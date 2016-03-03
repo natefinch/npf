@@ -15,6 +15,7 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -417,8 +418,8 @@ func (s *migrationsSuite) TestMigrateAddDevelopment(c *gc.C) {
 //	entities := []*mongodoc.BaseEntity{{
 //		URL:  charm.MustParseURL("~charmers/django"),
 //		Name: "django",
-//		ChannelACLs: map[mongodoc.Channel] mongodoc.ACL{
-//			mongodoc.UnpublishedChannel: {
+//		ChannelACLs: map[params.Channel] mongodoc.ACL{
+//			params.UnpublishedChannel: {
 //				Read:  []string{"user", "group"},
 //				Write: []string{"user"},
 //			},
@@ -426,8 +427,8 @@ func (s *migrationsSuite) TestMigrateAddDevelopment(c *gc.C) {
 //	}, {
 //		URL:  charm.MustParseURL("~who/rails"),
 //		Name: "rails",
-//		ChannelACLs: map[mongodoc.Channel] mongodoc.ACL{
-//			mongodoc.UnpublishedChannel: {
+//		ChannelACLs: map[params.Channel] mongodoc.ACL{
+//			params.UnpublishedChannel: {
 //				Read:  []string{"everyone"},
 //				Write: []string{},
 //			},
@@ -435,8 +436,8 @@ func (s *migrationsSuite) TestMigrateAddDevelopment(c *gc.C) {
 //	}, {
 //		URL:  charm.MustParseURL("~who/mediawiki-scalable"),
 //		Name: "mediawiki-scalable",
-//		ChannelACLs: map[mongodoc.Channel] mongodoc.ACL{
-//			mongodoc.UnpublishedChannel: {
+//		ChannelACLs: map[params.Channel] mongodoc.ACL{
+//			params.UnpublishedChannel: {
 //				Read:  []string{"who"},
 //				Write: []string{"dalek"},
 //			},
@@ -509,7 +510,7 @@ func (s *migrationsSuite) TestAddPreV5CompatBlob(c *gc.C) {
 	} {
 		err := store.AddCharmWithArchive(rurl, ch)
 		c.Assert(err, gc.IsNil)
-		err = store.Publish(rurl, mongodoc.StableChannel)
+		err = store.Publish(rurl, params.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 	err = store.AddBundleWithArchive(MustParseResolvedURL("~charmers/bundle/of-fun-1"), storetesting.NewBundle(&charm.BundleData{

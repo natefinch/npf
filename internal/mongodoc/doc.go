@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2/bson"
 )
 
@@ -185,12 +186,12 @@ type BaseEntity struct {
 	// ChannelACLs holds a map from an entity channel to the ACLs
 	// that apply to entities that use this base entity that are associated
 	// with the given channel.
-	ChannelACLs map[Channel]ACL
+	ChannelACLs map[params.Channel]ACL
 
 	// ChannelEntities holds a set of channels, each containing a set
 	// of series holding the currently published entity revision for
 	// that channel and series.
-	ChannelEntities map[Channel]map[string]*charm.URL
+	ChannelEntities map[params.Channel]map[string]*charm.URL
 }
 
 // ACL holds lists of users and groups that are
@@ -314,23 +315,6 @@ func (b *IntBool) SetBSON(raw bson.Raw) error {
 	}
 	return nil
 }
-
-// Channel is the name of a channel in which an entity may be published.
-type Channel string
-
-const (
-	// DevelopmentChannel is the channel used for charms or bundles under development.
-	DevelopmentChannel Channel = "development"
-
-	// StableChannel is the channel used for stable charms or bundles.
-	StableChannel Channel = "stable"
-
-	// UnpublishedChannel is the default channel to which charms are uploaded.
-	UnpublishedChannel Channel = "unpublished"
-
-	// NoChannel represents where no channel has been specifically requested.
-	NoChannel Channel = ""
-)
 
 // BaseURL returns the "base" version of url. If
 // url represents an entity, then the returned URL

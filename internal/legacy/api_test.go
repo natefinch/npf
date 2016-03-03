@@ -26,7 +26,6 @@ import (
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/legacy"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting/stats"
@@ -410,7 +409,7 @@ func (s *APISuite) addPublicCharm(c *gc.C, charmName, curl string) (*router.Reso
 func (s *APISuite) setPublic(c *gc.C, rurl *router.ResolvedURL) {
 	err := s.store.SetPerms(&rurl.URL, "stable.read", params.Everyone)
 	c.Assert(err, gc.IsNil)
-	err = s.store.Publish(rurl, mongodoc.StableChannel)
+	err = s.store.Publish(rurl, params.StableChannel)
 	c.Assert(err, gc.IsNil)
 }
 

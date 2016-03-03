@@ -7,6 +7,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
@@ -111,10 +112,10 @@ func (b BaseEntityBuilder) WithPromulgated(promulgated bool) BaseEntityBuilder {
 }
 
 // WithACLs sets the ACLs field on the BaseEntity.
-func (b BaseEntityBuilder) WithACLs(channel mongodoc.Channel, acls mongodoc.ACL) BaseEntityBuilder {
+func (b BaseEntityBuilder) WithACLs(channel params.Channel, acls mongodoc.ACL) BaseEntityBuilder {
 	b = b.copy()
 	if b.baseEntity.ChannelACLs == nil {
-		b.baseEntity.ChannelACLs = make(map[mongodoc.Channel]mongodoc.ACL)
+		b.baseEntity.ChannelACLs = make(map[params.Channel]mongodoc.ACL)
 	}
 	b.baseEntity.ChannelACLs[channel] = acls
 	return b

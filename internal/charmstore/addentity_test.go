@@ -103,16 +103,16 @@ func (s *AddEntitySuite) TestAddCharmWithMultiSeries(c *gc.C) {
 	ch := storetesting.Charms.CharmArchive(c.MkDir(), "multi-series")
 	s.checkAddCharm(c, ch, router.MustNewResolvedURL("~charmers/multi-series-1", 1))
 	// Make sure it can be accessed with a number of names
-	e, err := store.FindBestEntity(charm.MustParseURL("~charmers/multi-series-1"), mongodoc.UnpublishedChannel, nil)
+	e, err := store.FindBestEntity(charm.MustParseURL("~charmers/multi-series-1"), params.UnpublishedChannel, nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/trusty/multi-series-1"), mongodoc.UnpublishedChannel, nil)
+	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/trusty/multi-series-1"), params.UnpublishedChannel, nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/wily/multi-series-1"), mongodoc.UnpublishedChannel, nil)
+	e, err = store.FindBestEntity(charm.MustParseURL("~charmers/wily/multi-series-1"), params.UnpublishedChannel, nil)
 	c.Assert(err, gc.IsNil)
 	c.Assert(e.URL.String(), gc.Equals, "cs:~charmers/multi-series-1")
-	_, err = store.FindBestEntity(charm.MustParseURL("~charmers/precise/multi-series-1"), mongodoc.UnpublishedChannel, nil)
+	_, err = store.FindBestEntity(charm.MustParseURL("~charmers/precise/multi-series-1"), params.UnpublishedChannel, nil)
 	c.Assert(err, gc.ErrorMatches, "no matching charm or bundle for cs:~charmers/precise/multi-series-1")
 	c.Assert(errgo.Cause(err), gc.Equals, params.ErrNotFound)
 }
@@ -486,10 +486,10 @@ func assertBaseEntity(c *gc.C, store *Store, url *charm.URL, promulgated bool) {
 		Read:  []string{url.User},
 		Write: []string{url.User},
 	}
-	expectACLs := map[mongodoc.Channel]mongodoc.ACL{
-		mongodoc.StableChannel:      acls,
-		mongodoc.DevelopmentChannel: acls,
-		mongodoc.UnpublishedChannel: acls,
+	expectACLs := map[params.Channel]mongodoc.ACL{
+		params.StableChannel:      acls,
+		params.DevelopmentChannel: acls,
+		params.UnpublishedChannel: acls,
 	}
 	c.Assert(storetesting.NormalizeBaseEntity(baseEntity), jc.DeepEquals, storetesting.NormalizeBaseEntity(&mongodoc.BaseEntity{
 		URL:         url,

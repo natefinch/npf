@@ -475,8 +475,8 @@ func (s *Store) FindEntities(url *charm.URL, fields map[string]int) ([]*mongodoc
 //
 // If the URL does not contain a revision then the channel is searched
 // for the best match, here NoChannel will be treated as
-// mongodoc.StableChannel.
-func (s *Store) FindBestEntity(url *charm.URL, channel mongodoc.Channel, fields map[string]int) (*mongodoc.Entity, error) {
+// params.StableChannel.
+func (s *Store) FindBestEntity(url *charm.URL, channel params.Channel, fields map[string]int) (*mongodoc.Entity, error) {
 	if fields != nil {
 		// Make sure we have all the fields we need to make a decision.
 		// TODO this would be more efficient if we used bitmasks for field selection.
@@ -506,11 +506,11 @@ func (s *Store) FindBestEntity(url *charm.URL, channel mongodoc.Channel, fields 
 		// This is crucial because if we don't do this, then the user could choose
 		// to use any chosen set of ACLs against any entity.
 		switch channel {
-		case mongodoc.StableChannel:
+		case params.StableChannel:
 			if !entity.Stable {
 				return nil, errgo.WithCausef(nil, params.ErrNotFound, "%s not found in stable channel", url)
 			}
-		case mongodoc.DevelopmentChannel:
+		case params.DevelopmentChannel:
 			if !entity.Development {
 				return nil, errgo.WithCausef(nil, params.ErrNotFound, "%s not found in development channel", url)
 			}
@@ -519,10 +519,10 @@ func (s *Store) FindBestEntity(url *charm.URL, channel mongodoc.Channel, fields 
 	}
 
 	switch channel {
-	case mongodoc.UnpublishedChannel:
+	case params.UnpublishedChannel:
 		return s.findUnpublishedEntity(url, fields)
-	case mongodoc.NoChannel:
-		channel = mongodoc.StableChannel
+	case params.NoChannel:
+		channel = params.StableChannel
 		fallthrough
 	default:
 		return s.findEntityInChannel(url, channel, fields)
@@ -551,7 +551,7 @@ func (s *Store) findSingleEntity(url *charm.URL, fields map[string]int) (*mongod
 // findEntityInChannel attempts to find an entity on the given channel. The
 // base entity for URL is retrieved and the series with the best match to
 // URL.Series is used as the resolved entity.
-func (s *Store) findEntityInChannel(url *charm.URL, ch mongodoc.Channel, fields map[string]int) (*mongodoc.Entity, error) {
+func (s *Store) findEntityInChannel(url *charm.URL, ch params.Channel, fields map[string]int) (*mongodoc.Entity, error) {
 	baseEntity, err := s.FindBaseEntity(url, map[string]int{
 		"_id":             1,
 		"channelentities": 1,
@@ -729,16 +729,16 @@ func (s *Store) UpdateBaseEntity(url *router.ResolvedURL, update interface{}) er
 // Publish assigns channels to the entity corresponding to the given URL.
 // An error is returned if no channels are provided. For the time being,
 // the only supported channels are "development" and "stable".
-func (s *Store) Publish(url *router.ResolvedURL, channels ...mongodoc.Channel) error {
+func (s *Store) Publish(url *router.ResolvedURL, channels ...params.Channel) error {
 	var updateSearch bool
 	// Validate channels.
-	actual := make([]mongodoc.Channel, 0, len(channels))
+	actual := make([]params.Channel, 0, len(channels))
 	for _, c := range channels {
 		switch c {
-		case mongodoc.StableChannel:
+		case params.StableChannel:
 			updateSearch = true
 			fallthrough
-		case mongodoc.DevelopmentChannel:
+		case params.DevelopmentChannel:
 			actual = append(actual, c)
 		}
 	}
