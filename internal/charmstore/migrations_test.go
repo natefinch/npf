@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"sync"
 
 	jujutesting "github.com/juju/testing"
@@ -154,11 +155,7 @@ func (s *migrationsSuite) newServer(c *gc.C) error {
 
 // patchMigrations patches the charm store migration list with the given migrations.
 func (s *migrationsSuite) patchMigrations(c *gc.C, ms []migration) {
-	original := migrations
-	s.AddCleanup(func(*gc.C) {
-		migrations = original
-	})
-	migrations = ms
+	s.PatchValue(&migrations, ms)
 }
 
 // makeMigrations generates default migrations using the given names, and then
@@ -493,11 +490,12 @@ func (s *migrationsSuite) TestFixBogusPromulgatedURL(c *gc.C) {
 }
 
 func (s *migrationsSuite) TestAddPreV5CompatBlob(c *gc.C) {
+	neededMigrations := getMigrations(migrationAddPreV5CompatBlob)
 	// Remove all migrations and add some entities.
 	// Then remove all the pre-v5-related stuff from the database,
 	// add the preV5CompatBlob migration and check that it works.
 	s.patchMigrations(c, nil)
-	p, err := NewPool(s.Session.DB("juju_test"), nil, &bakery.NewServiceParams{}, ServerParams{})
+	p, err := NewPool(s.db.Database, nil, &bakery.NewServiceParams{}, ServerParams{})
 	c.Assert(err, gc.IsNil)
 	store := p.Store()
 	p.Close()
@@ -524,7 +522,9 @@ func (s *migrationsSuite) TestAddPreV5CompatBlob(c *gc.C) {
 
 	iter := s.db.Entities().Find(nil).Iter()
 	var entity mongodoc.Entity
+	count := 0
 	for iter.Next(&entity) {
+		count++
 		if entity.PreV5BlobHash != entity.BlobHash {
 			err := store.BlobStore.Remove(preV5CompatibilityBlobName(entity.BlobName))
 			c.Assert(err, gc.IsNil)
@@ -541,8 +541,9 @@ func (s *migrationsSuite) TestAddPreV5CompatBlob(c *gc.C) {
 		c.Assert(err, gc.IsNil)
 	}
 	c.Assert(iter.Err(), gc.IsNil)
+	c.Assert(count, gc.Equals, 4) // sanity check!
 
-	s.patchMigrations(c, getMigrations(migrationAddPreV5CompatBlob))
+	s.patchMigrations(c, neededMigrations)
 
 	err = s.newServer(c)
 	c.Assert(err, gc.IsNil)
@@ -563,6 +564,11 @@ func (s *migrationsSuite) TestAddPreV5CompatBlob(c *gc.C) {
 		if url.URL.Series == "bundle" {
 			continue
 		}
+		if strings.Contains(urlStr, "multi") {
+			entity, err := store.FindEntity(url, nil)
+			c.Assert(err, gc.IsNil)
+			c.Check(entity.BlobHash, gc.Not(gc.Equals), entity.PreV5BlobHash)
+		}
 		ch, err := charm.ReadCharmArchiveBytes(data)
 		c.Assert(err, gc.IsNil)
 		c.Assert(ch.Meta().Series, gc.HasLen, 0)
@@ -581,10 +587,15 @@ func (s *migrationsSuite) checkExecuted(c *gc.C, expected ...mongodoc.MigrationN
 
 func getMigrations(names ...mongodoc.MigrationName) (ms []migration) {
 	for _, name := range names {
+		found := false
 		for _, m := range migrations {
 			if m.name == name {
 				ms = append(ms, m)
+				found = true
 			}
+		}
+		if !found {
+			panic("no migrations found for " + string(name))
 		}
 	}
 	return ms

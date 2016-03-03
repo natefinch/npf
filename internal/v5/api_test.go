@@ -3728,6 +3728,39 @@ func (s *APISuite) TestSetAuthCookieMethodError(c *gc.C) {
 	})
 }
 
+func (s *APISuite) TestLogout(c *gc.C) {
+	m, err := macaroon.New([]byte("key"), "id", "location")
+	c.Assert(err, jc.ErrorIsNil)
+	ms := macaroon.Slice{m}
+	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
+		Handler: s.srv,
+		URL:     storeURL("logout"),
+		Method:  "GET",
+		Cookies: []*http.Cookie{{
+			Name:  "macaroon-1234567890",
+			Value: "test value",
+		}, {
+			Name:  "test cookie",
+			Value: "test value also",
+		}},
+		JSONBody: params.SetAuthCookie{
+			Macaroons: ms,
+		},
+	})
+
+	// The response includes the macaroons cookie.
+	resp := http.Response{Header: rec.Header()}
+	cookies := resp.Cookies()
+	c.Assert(len(cookies), gc.Equals, 1)
+	c.Assert(cookies[0], jc.DeepEquals, &http.Cookie{
+		Name:   "macaroon-1234567890",
+		Value:  "",
+		Path:   "/",
+		MaxAge: -1,
+		Raw:    "macaroon-1234567890=; Path=/; Max-Age=0",
+	})
+}
+
 // entityACLs returns the ACLs that apply to the entity with the given URL.
 func entityACLs(store *charmstore.Store, url *router.ResolvedURL) (mongodoc.ACL, error) {
 	e, err := store.FindEntity(url, nil)

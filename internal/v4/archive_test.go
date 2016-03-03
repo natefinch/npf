@@ -1012,15 +1012,26 @@ var archiveFileErrorsTests = []struct {
 	expectStatus:  http.StatusNotFound,
 	expectMessage: `file "no-such" not found in the archive`,
 	expectCode:    params.ErrNotFound,
+}, {
+	about:         "no permissions",
+	path:          "~charmers/utopic/mysql-0/archive/metadata.yaml",
+	expectStatus:  http.StatusUnauthorized,
+	expectMessage: `unauthorized: access denied for user "bob"`,
+	expectCode:    params.ErrUnauthorized,
 }}
 
 func (s *ArchiveSuite) TestArchiveFileErrors(c *gc.C) {
 	s.addPublicCharmFromRepo(c, "wordpress", newResolvedURL("cs:~charmers/utopic/wordpress-0", 0))
+	id, _ := s.addPublicCharmFromRepo(c, "mysql", newResolvedURL("cs:~charmers/utopic/mysql-0", 0))
+	err := s.store.SetPerms(&id.URL, "stable.read", "no-one")
+	c.Assert(err, gc.IsNil)
+	s.discharge = dischargeForUser("bob")
 	for i, test := range archiveFileErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler:      s.srv,
 			URL:          storeURL(test.path),
+			Do:           bakeryDo(nil),
 			Method:       "GET",
 			ExpectStatus: test.expectStatus,
 			ExpectBody: params.Error{

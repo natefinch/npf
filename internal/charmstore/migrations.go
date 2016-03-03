@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	migrationAddSupportedSeries     mongodoc.MigrationName = "add supported series"
-	migrationAddDevelopment         mongodoc.MigrationName = "add development"
-	migrationAddDevelopmentACLs     mongodoc.MigrationName = "add development acls"
-	migrationFixBogusPromulgatedURL mongodoc.MigrationName = "fix promulgate url"
-	migrationAddPreV5CompatBlob     mongodoc.MigrationName = "add pre-v5 compatibility blobs"
+	migrationAddSupportedSeries      mongodoc.MigrationName = "add supported series"
+	migrationAddDevelopment          mongodoc.MigrationName = "add development"
+	migrationAddDevelopmentACLs      mongodoc.MigrationName = "add development acls"
+	migrationFixBogusPromulgatedURL  mongodoc.MigrationName = "fix promulgate url"
+	migrationAddPreV5CompatBlobBogus mongodoc.MigrationName = "add pre-v5 compatibility blobs"
+	migrationAddPreV5CompatBlob      mongodoc.MigrationName = "add pre-v5 compatibility blobs; second try"
 )
 
 // migrations holds all the migration functions that are executed in the order
@@ -54,6 +55,11 @@ var migrations = []migration{{
 }, {
 	name:    migrationFixBogusPromulgatedURL,
 	migrate: fixBogusPromulgatedURL,
+}, {
+	// The original migration that attempted to do this actually did
+	// nothing, so leave it here but use a new name for the
+	// fixed version.
+	name: migrationAddPreV5CompatBlobBogus,
 }, {
 	name:    migrationAddPreV5CompatBlob,
 	migrate: addPreV5CompatBlob,
@@ -222,11 +228,11 @@ func addPreV5CompatBlob(db StoreDatabase) error {
 	iter := entities.Find(bson.D{{
 		"prev5blobhash", bson.D{{"$exists", false}},
 	}}).Select(map[string]int{
-		"size":                  1,
-		"blobhash":              1,
-		"blobname":              1,
-		"blobhash256":           1,
-		"charm-metadata.series": 1,
+		"size":             1,
+		"blobhash":         1,
+		"blobname":         1,
+		"blobhash256":      1,
+		"charmmeta.series": 1,
 	}).Iter()
 	var entity mongodoc.Entity
 	for iter.Next(&entity) {
