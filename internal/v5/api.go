@@ -562,14 +562,21 @@ func (h *ReqHandler) serveResources(id *router.ResolvedURL, w http.ResponseWrite
 	// TODO(ericsnow) Support DELETE to remove a resource?
 	// (like serveArchive() does)
 	switch req.Method {
-	case "GET": // download
-		return errNotImplemented
-	case "POST": // upload
-		return errNotImplemented
+	case "GET":
+		return h.serveDownloadResource(id, w, req)
+	case "POST":
+		return h.serveUploadResource(id, w, req)
 	default:
 		return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)
 	}
-	return nil
+}
+
+func (h *ReqHandler) serveDownloadResource(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
+	return errNotImplemented
+}
+
+func (h *ReqHandler) serveUploadResource(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
+	return errNotImplemented
 }
 
 // GET id/expand-id
