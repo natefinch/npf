@@ -19,7 +19,6 @@ import (
 	"github.com/juju/mempool"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
-	"gopkg.in/juju/charm.v6-unstable/resource"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/macaroon-bakery.v1/bakery/checkers"
@@ -551,34 +550,6 @@ func (h *ReqHandler) serveDebug(w http.ResponseWriter, req *http.Request) {
 	router.WriteError(w, errNotImplemented)
 }
 
-// POST id/resources/name
-// https://github.com/juju/charmstore/blob/v5/docs/API.md#post-idresourcesname
-//
-// GET  id/resources/name[/revision]
-// https://github.com/juju/charmstore/blob/v5/docs/API.md#get-idresourcesnamerevision
-func (h *ReqHandler) serveResources(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-	// Resources are "published" using "PUT id/publish" so we don't
-	// support PUT here.
-	// TODO(ericsnow) Support DELETE to remove a resource?
-	// (like serveArchive() does)
-	switch req.Method {
-	case "GET":
-		return h.serveDownloadResource(id, w, req)
-	case "POST":
-		return h.serveUploadResource(id, w, req)
-	default:
-		return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)
-	}
-}
-
-func (h *ReqHandler) serveDownloadResource(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-	return errNotImplemented
-}
-
-func (h *ReqHandler) serveUploadResource(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-	return errNotImplemented
-}
-
 // GET id/expand-id
 // https://docs.google.com/a/canonical.com/document/d/1TgRA7jW_mmXoKH3JiwBbtPvQu7WiM6XMrz1wSrhTMXw/edit#bookmark=id.4xdnvxphb2si
 func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
@@ -622,37 +593,6 @@ func badRequestf(underlying error, f string, a ...interface{}) error {
 	err := errgo.WithCausef(underlying, params.ErrBadRequest, f, a...)
 	err.(*errgo.Err).SetLocation(1)
 	return err
-}
-
-// GET id/meta/charm-resources
-// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacharm-resources
-func (h *ReqHandler) metaResources(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	// TODO(ericsnow) Handle flags.
-	// TODO(ericsnow) Use h.Store.ListResources() once that exists.
-	return basicListResources(entity)
-}
-
-func basicListResources(entity *mongodoc.Entity) ([]resource.Resource, error) {
-	if entity.URL.Series == "bundle" {
-		return nil, errgo.Newf("bundles do not have resources")
-	}
-	if entity.CharmMeta == nil {
-		return nil, errgo.Newf("entity missing charm metadata")
-	}
-
-	var resources []resource.Resource
-	for _, meta := range entity.CharmMeta.Resources {
-		// We use an origin of "upload" since charms cannot be uploaded yet.
-		resOrigin := resource.OriginUpload
-		res := resource.Resource{
-			Meta:   meta,
-			Origin: resOrigin,
-			// Revision, Fingerprint, and Size are not set.
-		}
-		resources = append(resources, res)
-	}
-	resource.Sort(resources)
-	return resources, nil
 }
 
 // GET id/meta/charm-metadata
