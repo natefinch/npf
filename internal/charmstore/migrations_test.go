@@ -46,10 +46,7 @@ const (
 var (
 	// migrationEntityFields holds the fields added to mongodoc.Entity,
 	// keyed by the migration step that added them.
-	migrationEntityFields = map[mongodoc.MigrationName][]string{
-		migrationAddSupportedSeries: {"supportedseries"},
-		migrationAddDevelopment:     {"development"},
-	}
+	migrationEntityFields = map[mongodoc.MigrationName][]string{}
 
 	// migrationBaseEntityFields holds the fields added to mongodoc.BaseEntity,
 	// keyed by the migration step that added them.
@@ -337,147 +334,6 @@ func (s *migrationsSuite) TestMigrateParallelMigration(c *gc.C) {
 	s.checkEntity(c, e2, afterAllMigrations)
 }
 
-func (s *migrationsSuite) TestMigrateAddSupportedSeries(c *gc.C) {
-	s.patchMigrations(c, getMigrations(migrationAddSupportedSeries))
-
-	entities := []*mongodoc.Entity{{
-		URL:            charm.MustParseURL("~charmers/trusty/django-42"),
-		PromulgatedURL: charm.MustParseURL("trusty/django-3"),
-		Size:           12,
-	}, {
-		URL:  charm.MustParseURL("~who/utopic/rails-47"),
-		Size: 13,
-	}, {
-		URL:  charm.MustParseURL("~who/bundle/something-47"),
-		Size: 13,
-	}}
-	for _, e := range entities {
-		denormalizeEntity(e)
-		s.insertEntity(c, e, migrationAddSupportedSeries)
-	}
-
-	// Start the server.
-	err := s.newServer(c)
-	c.Assert(err, gc.IsNil)
-
-	// Ensure entities have been updated correctly.
-	s.checkCount(c, s.db.Entities(), len(entities))
-	for _, e := range entities {
-		s.checkEntity(c, e, migrationAddSupportedSeries)
-	}
-}
-
-func (s *migrationsSuite) TestMigrateAddDevelopment(c *gc.C) {
-	s.patchMigrations(c, getMigrations(migrationAddDevelopment))
-
-	// Populate the database with some entities.
-	entities := []*mongodoc.Entity{{
-		URL:            charm.MustParseURL("~charmers/trusty/django-42"),
-		PromulgatedURL: charm.MustParseURL("trusty/django-3"),
-		Size:           47,
-	}, {
-		URL:  charm.MustParseURL("~who/utopic/rails-47"),
-		Size: 48,
-	}, {
-		URL:  charm.MustParseURL("~who/bundle/solution-0"),
-		Size: 1,
-	}}
-	for _, e := range entities {
-		denormalizeEntity(e)
-		s.insertEntity(c, e, migrationAddDevelopment)
-	}
-
-	// Start the server.
-	err := s.newServer(c)
-	c.Assert(err, gc.IsNil)
-
-	// Ensure entities have been updated correctly.
-	s.checkCount(c, s.db.Entities(), len(entities))
-	for _, e := range entities {
-		var rawEntity map[string]interface{}
-		err := s.db.Entities().FindId(e.URL).One(&rawEntity)
-		c.Assert(err, gc.IsNil)
-		v, ok := rawEntity["development"]
-		c.Assert(ok, jc.IsTrue, gc.Commentf("development field not present in entity %s", rawEntity["_id"]))
-		c.Assert(v, jc.IsFalse, gc.Commentf("development field unexpectedly not false in entity %s", rawEntity["_id"]))
-	}
-}
-
-func (s *migrationsSuite) TestMigrateAddDevelopmentACLs(c *gc.C) {
-	s.patchMigrations(c, getMigrations(migrationAddDevelopmentACLs))
-
-	// Populate the database with some base entities.
-	entities := []*mongodoc.BaseEntity{{
-		URL:  charm.MustParseURL("~charmers/django"),
-		Name: "django",
-		ACLs: mongodoc.ACL{
-			Read:  []string{"user", "group"},
-			Write: []string{"user"},
-		},
-	}, {
-		URL:  charm.MustParseURL("~who/rails"),
-		Name: "rails",
-		ACLs: mongodoc.ACL{
-			Read:  []string{"everyone"},
-			Write: []string{},
-		},
-	}, {
-		URL:  charm.MustParseURL("~who/mediawiki-scalable"),
-		Name: "mediawiki-scalable",
-		ACLs: mongodoc.ACL{
-			Read:  []string{"who"},
-			Write: []string{"dalek"},
-		},
-	}}
-	for _, e := range entities {
-		s.insertBaseEntity(c, e, migrationAddDevelopmentACLs)
-	}
-
-	// Start the server.
-	err := s.newServer(c)
-	c.Assert(err, gc.IsNil)
-
-	// Ensure base entities have been updated correctly.
-	s.checkCount(c, s.db.BaseEntities(), len(entities))
-	for _, e := range entities {
-		e.DevelopmentACLs = e.ACLs
-		s.checkBaseEntity(c, e, migrationAddDevelopmentACLs)
-	}
-}
-
-func (s *migrationsSuite) TestFixBogusPromulgatedURL(c *gc.C) {
-	s.patchMigrations(c, getMigrations(migrationFixBogusPromulgatedURL))
-	// Populate the database with some entities.
-	entities := []*mongodoc.Entity{{
-		URL:            charm.MustParseURL("~charmers/trusty/django-42"),
-		PromulgatedURL: charm.MustParseURL("development/trusty/django-3"),
-	}, {
-		URL:            charm.MustParseURL("~who/utopic/rails-47"),
-		PromulgatedURL: charm.MustParseURL("utopic/rails-3"),
-	}, {
-		URL:            charm.MustParseURL("~who/bundle/solution-0"),
-		PromulgatedURL: charm.MustParseURL("development/bundle/solution-0"),
-	}}
-	for _, e := range entities {
-		denormalizeEntity(e)
-		s.insertEntity(c, e, migrationFixBogusPromulgatedURL)
-	}
-	// Start the server.
-	err := s.newServer(c)
-	c.Assert(err, gc.IsNil)
-
-	// Ensure entities have been updated correctly.
-	s.checkCount(c, s.db.Entities(), len(entities))
-	for _, e := range entities {
-		var entity mongodoc.Entity
-		err := s.db.Entities().FindId(e.URL).One(&entity)
-		c.Assert(err, gc.IsNil)
-		expect := *e.PromulgatedURL
-		expect.Channel = ""
-		c.Assert(entity.PromulgatedURL, jc.DeepEquals, &expect)
-	}
-}
-
 func (s *migrationsSuite) TestAddPreV5CompatBlob(c *gc.C) {
 	neededMigrations := getMigrations(migrationAddPreV5CompatBlob)
 	// Remove all migrations and add some entities.
@@ -506,8 +362,12 @@ func (s *migrationsSuite) TestAddPreV5CompatBlob(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 
 	iter := s.db.Entities().Find(nil).Iter()
+	// The previous migration set all PreV5 fields for all entities
+	// to the same as their v5 equivalents, so set them up that
+	// way now.
 	var entity mongodoc.Entity
 	count := 0
+
 	for iter.Next(&entity) {
 		count++
 		if entity.PreV5BlobHash != entity.BlobHash {
@@ -515,12 +375,12 @@ func (s *migrationsSuite) TestAddPreV5CompatBlob(c *gc.C) {
 			c.Assert(err, gc.IsNil)
 		}
 		err := s.db.Entities().UpdateId(entity.URL, bson.D{{
-			"$unset", bson.D{{
-				"prev5blobhash", nil,
+			"$set", bson.D{{
+				"prev5blobhash", entity.BlobHash,
 			}, {
-				"prev5blobhash256", nil,
+				"prev5blobhash256", entity.BlobHash256,
 			}, {
-				"prev5blobsize", nil,
+				"prev5blobsize", entity.Size,
 			}},
 		}})
 		c.Assert(err, gc.IsNil)
