@@ -551,16 +551,25 @@ func (h *ReqHandler) serveDebug(w http.ResponseWriter, req *http.Request) {
 	router.WriteError(w, errNotImplemented)
 }
 
-// POST id/resources/name.stream
-// https://github.com/juju/charmstore/blob/v4/docs/API.md#post-idresourcesnamestream
+// POST id/resources/name
+// https://github.com/juju/charmstore/blob/v5/docs/API.md#post-idresourcesname
 //
-// GET  id/resources/name.stream[-revision]/arch/filename
-// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idresourcesnamestream-revisionarchfilename
-//
-// PUT id/resources/[~user/]series/name.stream-revision/arch?sha256=hash
-// https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idresourcesuserseriesnamestream-revisionarchsha256hash
+// GET  id/resources/name[/revision]
+// https://github.com/juju/charmstore/blob/v5/docs/API.md#get-idresourcesnamerevision
 func (h *ReqHandler) serveResources(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-	return errNotImplemented
+	// Resources are "published" using "PUT id/publish" so we don't
+	// support PUT here.
+	// TODO(ericsnow) Support DELETE to remove a resource?
+	// (like serveArchive() does)
+	switch req.Method {
+	case "GET": // download
+		return errNotImplemented
+	case "POST": // upload
+		return errNotImplemented
+	default:
+		return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)
+	}
+	return nil
 }
 
 // GET id/expand-id
