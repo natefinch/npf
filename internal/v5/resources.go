@@ -20,7 +20,16 @@ import (
 func (h *ReqHandler) metaResources(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	// TODO(ericsnow) Handle flags.
 	// TODO(ericsnow) Use h.Store.ListResources() once that exists.
-	return basicListResources(entity)
+	resources, err := basicListResources(entity)
+	if err != nil {
+		return nil, err
+	}
+	var results []params.Resource
+	for _, res := range resources {
+		result := params.Resource2API(res)
+		results = append(results, result)
+	}
+	return results, nil
 }
 
 func basicListResources(entity *mongodoc.Entity) ([]resource.Resource, error) {

@@ -535,46 +535,45 @@ var metaEndpoints = []metaEndpoint{{
 			return nil, err
 		}
 		// TODO(ericsnow) Switch to store.ListResources() once it exists.
-		results, err := basicListResources(entity)
+		resources, err := basicListResources(entity)
 		if err != nil {
-			return results, err
+			return resources, err
 		}
 		// Apparently the router's "isNull" check treats empty slices
 		// as nil...
-		if len(results) == 0 {
+		if len(resources) == 0 {
 			return nil, nil
+		}
+		var results []params.Resource
+		for _, res := range resources {
+			result := params.Resource2API(res)
+			results = append(results, result)
 		}
 		return results, nil
 	},
 	exclusive: charmOnly,
 	checkURL:  newResolvedURL("cs:~charmers/utopic/starsay-17", 17),
 	assertCheckData: func(c *gc.C, data interface{}) {
-		resources := data.([]resource.Resource)
-		resource.Sort(resources)
-		c.Assert(data, jc.DeepEquals, []resource.Resource{{
-			Meta: resource.Meta{
-				Name:        "for-install",
-				Type:        resource.TypeFile,
-				Path:        "initial.tgz",
-				Description: "get things started",
-			},
-			Origin: resource.OriginUpload,
+		//resources := data.([]params.Resource)
+		//resource.Sort(resources)
+		c.Assert(data, jc.DeepEquals, []params.Resource{{
+			Name:        "for-install",
+			Type:        "file",
+			Path:        "initial.tgz",
+			Description: "get things started",
+			Origin:      "upload",
 		}, {
-			Meta: resource.Meta{
-				Name:        "for-store",
-				Type:        resource.TypeFile,
-				Path:        "dummy.tgz",
-				Description: "One line that is useful when operators need to push it.",
-			},
-			Origin: resource.OriginUpload,
+			Name:        "for-store",
+			Type:        "file",
+			Path:        "dummy.tgz",
+			Description: "One line that is useful when operators need to push it.",
+			Origin:      "upload",
 		}, {
-			Meta: resource.Meta{
-				Name:        "for-upload",
-				Type:        resource.TypeFile,
-				Path:        "config.xml",
-				Description: "Who uses xml anymore?",
-			},
-			Origin: resource.OriginUpload,
+			Name:        "for-upload",
+			Type:        "file",
+			Path:        "config.xml",
+			Description: "Who uses xml anymore?",
+			Origin:      "upload",
 		}})
 	},
 }}
