@@ -42,7 +42,7 @@ func basicListResources(entity *mongodoc.Entity) ([]resource.Resource, error) {
 
 	var resources []resource.Resource
 	for _, meta := range entity.CharmMeta.Resources {
-		// We use an origin of "upload" since charms cannot be uploaded yet.
+		// We use an origin of "upload" since resources cannot be uploaded yet.
 		resOrigin := resource.OriginUpload
 		res := resource.Resource{
 			Meta:   meta,
