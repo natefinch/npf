@@ -6,14 +6,14 @@ tags:
   - application
 resources:
   for-store:
-    Type: file
+    type: file
     filename: dummy.tgz
     description: One line that is useful when operators need to push it.
   for-install:
-    Type: file
+    type: file
     filename: initial.tgz
     description: get things started
   for-upload:
-    Type: file
+    type: file
     filename: config.xml
     description: Who uses xml anymore?
