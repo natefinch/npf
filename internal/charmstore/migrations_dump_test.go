@@ -37,12 +37,12 @@ import (
 // as hard-coded in previous versions of the charm store server.
 const historicalDBName = "juju"
 
-// dumpMigrationDatabase checks out and runs the charmstore version held
+// dumpMigrationHistory checks out and runs the charmstore version held
 // in each element of history in sequence, runs any associated updates,
 // and, if the version is not before earlierDeployedVersion, dumps
 // the database to a file.
 //
-// After dumpMigrationDatabase has been called, createDatabaseAtVersion
+// After dumpMigrationHistory has been called, createDatabaseAtVersion
 // can be used to backtrack the database to any of the dumped versions.
 func dumpMigrationHistory(session *mgo.Session, earliestDeployedVersion string, history []versionSpec) error {
 	db := session.DB(historicalDBName)
