@@ -19,26 +19,27 @@ import (
 
 type Config struct {
 	// TODO(rog) rename this to MongoAddr - it's not a URL.
-	MongoURL          string            `yaml:"mongo-url"`
-	AuditLogFile      string            `yaml:"audit-log-file"`
-	AuditLogMaxSize   int               `yaml:"audit-log-max-size"`
-	AuditLogMaxAge    int               `yaml:"audit-log-max-age"`
-	APIAddr           string            `yaml:"api-addr"`
-	AuthUsername      string            `yaml:"auth-username"`
-	AuthPassword      string            `yaml:"auth-password"`
-	ESAddr            string            `yaml:"elasticsearch-addr"` // elasticsearch is optional
-	IdentityPublicKey *bakery.PublicKey `yaml:"identity-public-key"`
+	MongoURL          string            `yaml:"mongo-url,omitempty"`
+	AuditLogFile      string            `yaml:"audit-log-file,omitempty"`
+	AuditLogMaxSize   int               `yaml:"audit-log-max-size,omitempty"`
+	AuditLogMaxAge    int               `yaml:"audit-log-max-age,omitempty"`
+	APIAddr           string            `yaml:"api-addr,omitempty"`
+	AuthUsername      string            `yaml:"auth-username,omitempty"`
+	AuthPassword      string            `yaml:"auth-password,omitempty"`
+	ESAddr            string            `yaml:"elasticsearch-addr,omitempty"` // elasticsearch is optional
+	IdentityPublicKey *bakery.PublicKey `yaml:"identity-public-key,omitempty"`
 	IdentityLocation  string            `yaml:"identity-location"`
-	TermsPublicKey    *bakery.PublicKey `yaml:"terms-public-key"`
-	TermsLocation     string            `yaml:"terms-location"`
+	TermsPublicKey    *bakery.PublicKey `yaml:"terms-public-key,omitempty"`
+	TermsLocation     string            `yaml:"terms-location,omitempty"`
 	// The identity API is optional
-	IdentityAPIURL    string          `yaml:"identity-api-url"`
-	AgentUsername     string          `yaml:"agent-username"`
-	AgentKey          *bakery.KeyPair `yaml:"agent-key"`
-	MaxMgoSessions    int             `yaml:"max-mgo-sessions"`
-	RequestTimeout    DurationString  `yaml:"request-timeout"`
-	StatsCacheMaxAge  DurationString  `yaml:"stats-cache-max-age"`
-	SearchCacheMaxAge DurationString  `yaml:"search-cache-max-age"`
+	IdentityAPIURL    string          `yaml:"identity-api-url,omitempty"`
+	AgentUsername     string          `yaml:"agent-username,omitempty"`
+	AgentKey          *bakery.KeyPair `yaml:"agent-key,omitempty"`
+	MaxMgoSessions    int             `yaml:"max-mgo-sessions,omitempty"`
+	RequestTimeout    DurationString  `yaml:"request-timeout,omitempty"`
+	StatsCacheMaxAge  DurationString  `yaml:"stats-cache-max-age,omitempty"`
+	SearchCacheMaxAge DurationString  `yaml:"search-cache-max-age,omitempty"`
+	Database          string          `yaml:"database,omitempty"`
 }
 
 func (c *Config) validate() error {

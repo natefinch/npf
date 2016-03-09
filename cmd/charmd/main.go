@@ -63,7 +63,11 @@ func serve(confPath string) error {
 		return errgo.Notef(err, "cannot dial mongo at %q", conf.MongoURL)
 	}
 	defer session.Close()
-	db := session.DB("juju")
+	dbName := "juju"
+	if conf.Database != "" {
+		dbName = conf.Database
+	}
+	db := session.DB(dbName)
 
 	var es *elasticsearch.Database
 	if conf.ESAddr != "" {
