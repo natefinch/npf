@@ -34,7 +34,7 @@ func (h *ReqHandler) metaResources(entity *mongodoc.Entity, id *router.ResolvedU
 
 func basicListResources(entity *mongodoc.Entity) ([]resource.Resource, error) {
 	if entity.URL.Series == "bundle" {
-		return nil, errgo.Newf("bundles do not have resources")
+		return nil, badRequestf(nil, "bundles do not have resources")
 	}
 	if entity.CharmMeta == nil {
 		return nil, errgo.Newf("entity missing charm metadata")
