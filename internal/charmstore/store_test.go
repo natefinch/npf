@@ -1723,20 +1723,46 @@ func (s *StoreSuite) TestFindBestEntityWithMultiSeriesCharms(c *gc.C) {
 }
 
 var updateEntityTests = []struct {
+	about     string
 	url       string
+	update    bson.D
+	check     func(*gc.C, *mongodoc.Entity)
 	expectErr string
 }{{
-	url: "~charmers/trusty/wordpress-10",
+	about:  "successful update",
+	url:    "~charmers/trusty/wordpress-10",
+	update: bson.D{{"$set", bson.D{{"extrainfo.test", []byte("PASS")}}}},
+	check: func(c *gc.C, e *mongodoc.Entity) {
+		c.Assert(string(e.ExtraInfo["test"]), gc.Equals, "PASS")
+	},
 }, {
+	about:     "not found",
 	url:       "~charmers/precise/wordpress-10",
+	update:    bson.D{{"$set", bson.D{{"extrainfo.test", []byte("PASS")}}}},
 	expectErr: `cannot update "cs:precise/wordpress-10": not found`,
+}, {
+	about:  "empty update",
+	url:    "~charmers/trusty/wordpress-10",
+	update: bson.D{},
+	check: func(c *gc.C, e *mongodoc.Entity) {
+		c.Assert(e.PromulgatedURL, gc.Not(gc.IsNil))
+		c.Assert(e.PromulgatedURL.String(), gc.Equals, "cs:trusty/wordpress-4")
+	},
+}, {
+	about:  "nil update",
+	url:    "~charmers/trusty/wordpress-10",
+	update: nil,
+	check: func(c *gc.C, e *mongodoc.Entity) {
+		c.Assert(e.PromulgatedURL, gc.Not(gc.IsNil))
+		c.Assert(e.PromulgatedURL.String(), gc.Equals, "cs:trusty/wordpress-4")
+	},
 }}
 
 func (s *StoreSuite) TestUpdateEntity(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
 	for i, test := range updateEntityTests {
-		c.Logf("test %d. %s", i, test.url)
+		c.Logf("test %d. %s", i, test.about)
 		url := router.MustNewResolvedURL(test.url, 10)
 		_, err := store.DB.Entities().RemoveAll(nil)
 		c.Assert(err, gc.IsNil)
@@ -1745,26 +1771,50 @@ func (s *StoreSuite) TestUpdateEntity(c *gc.C) {
 			PromulgatedURL: charm.MustParseURL("trusty/wordpress-4"),
 		}))
 		c.Assert(err, gc.IsNil)
-		err = store.UpdateEntity(url, bson.D{{"$set", bson.D{{"extrainfo.test", []byte("PASS")}}}})
+		err = store.UpdateEntity(url, test.update)
 		if test.expectErr != "" {
 			c.Assert(err, gc.ErrorMatches, test.expectErr)
 		} else {
 			c.Assert(err, gc.IsNil)
 			entity, err := store.FindEntity(url, nil)
 			c.Assert(err, gc.IsNil)
-			c.Assert(string(entity.ExtraInfo["test"]), gc.Equals, "PASS")
+			test.check(c, entity)
 		}
 	}
 }
 
 var updateBaseEntityTests = []struct {
+	about     string
 	url       string
+	update    bson.D
+	check     func(*gc.C, *mongodoc.BaseEntity)
 	expectErr string
 }{{
-	url: "~charmers/trusty/wordpress-10",
+	about:  "successful update",
+	url:    "~charmers/trusty/wordpress-10",
+	update: bson.D{{"$set", bson.D{{"acls", mongodoc.ACL{Read: []string{"test"}}}}}},
+	check: func(c *gc.C, b *mongodoc.BaseEntity) {
+		c.Assert(b.ACLs.Read, jc.DeepEquals, []string{"test"})
+	},
 }, {
+	about:     "not found",
 	url:       "~charmers/precise/mysql-10",
+	update:    bson.D{{"$set", bson.D{{"extrainfo.test", []byte("PASS")}}}},
 	expectErr: `cannot update base entity for "cs:precise/mysql-10": not found`,
+}, {
+	about:  "empty update",
+	url:    "~charmers/trusty/wordpress-10",
+	update: bson.D{},
+	check: func(c *gc.C, b *mongodoc.BaseEntity) {
+		c.Assert(b.Name, jc.DeepEquals, "wordpress")
+	},
+}, {
+	about:  "nil update",
+	url:    "~charmers/trusty/wordpress-10",
+	update: nil,
+	check: func(c *gc.C, b *mongodoc.BaseEntity) {
+		c.Assert(b.Name, jc.DeepEquals, "wordpress")
+	},
 }}
 
 func (s *StoreSuite) TestUpdateBaseEntity(c *gc.C) {
@@ -1782,16 +1832,14 @@ func (s *StoreSuite) TestUpdateBaseEntity(c *gc.C) {
 			Promulgated: true,
 		})
 		c.Assert(err, gc.IsNil)
-		err = store.UpdateBaseEntity(url, bson.D{{"$set", bson.D{{"acls", mongodoc.ACL{
-			Read: []string{"test"},
-		}}}}})
+		err = store.UpdateBaseEntity(url, test.update)
 		if test.expectErr != "" {
 			c.Assert(err, gc.ErrorMatches, test.expectErr)
 		} else {
 			c.Assert(err, gc.IsNil)
 			baseEntity, err := store.FindBaseEntity(&url.URL, nil)
 			c.Assert(err, gc.IsNil)
-			c.Assert(baseEntity.ACLs.Read, jc.DeepEquals, []string{"test"})
+			test.check(c, baseEntity)
 		}
 	}
 }
