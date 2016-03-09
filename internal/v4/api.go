@@ -130,6 +130,9 @@ func newReqHandler() ReqHandler {
 	handlers.Id["archive/"] = resolveId(authId(h.serveArchiveFile))
 	// Publish is a new endpoint; don't provide it in v4.
 	delete(handlers.Id, "publish")
+	// Resources is a new endpoint; don't provide it in v4.
+	delete(handlers.Id, "resources")
+	delete(handlers.Meta, "resources")
 	h.Router = router.New(handlers, h)
 	return h
 }
