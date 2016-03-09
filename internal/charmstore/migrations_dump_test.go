@@ -73,14 +73,8 @@ func dumpMigrationHistory(session *mgo.Session, earliestDeployedVersion string, 
 	return nil
 }
 
-// createDatabaseAtVersion changes the state of the
-// database to be as it is after running the database
-// migrations from all the versions up to and including
-// the given version, which must be a version in the
-// dumped history not before the earliest deployed version.
-//
-// It finds the database snapshot from the appropriate
-// dump file (see dumpMigrationHistory).
+// createDatabaseAtVersion loads the database from the
+// dump file for the given version (see dumpMigrationHistory).
 func createDatabaseAtVersion(db *mgo.Database, version string) error {
 	vcsStatus, err := restoreDBFromFile(db, migrationDumpFileName(version))
 	if err != nil {
@@ -397,8 +391,8 @@ type charmStoreVersion struct {
 }
 
 // runCharmStoreVersion runs the given charm store version
-// from the given repository Go path and using the
-// given configuration to start it with.
+// from the given repository Go path and starting it with
+// the given configuration.
 func runCharmStoreVersion(csRepo, version string, cfg *config.Config) (_ *charmStoreVersion, err error) {
 	dir, err := ioutil.TempDir("", "charmstore-test")
 	if err != nil {
