@@ -938,6 +938,9 @@ func MustParseResolvedURL(urlStr string) *router.ResolvedURL {
 	case 1:
 	}
 	url := charm.MustParseURL(s[len(s)-1])
+	if url.Revision == -1 {
+		panic(fmt.Errorf("resolved URL %q does not have revision"))
+	}
 	return &router.ResolvedURL{
 		URL:                 *url.WithChannel(""),
 		PromulgatedRevision: promRev,
