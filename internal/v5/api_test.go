@@ -554,8 +554,6 @@ var metaEndpoints = []metaEndpoint{{
 	exclusive: charmOnly,
 	checkURL:  newResolvedURL("cs:~charmers/utopic/starsay-17", 17),
 	assertCheckData: func(c *gc.C, data interface{}) {
-		//resources := data.([]params.Resource)
-		//resource.Sort(resources)
 		c.Assert(data, jc.DeepEquals, []params.Resource{{
 			Name:        "for-install",
 			Type:        "file",
