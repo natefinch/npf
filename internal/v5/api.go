@@ -267,6 +267,7 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "channelacls"),
 			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "channelacls"),
 			"promulgated":      h.baseEntityHandler(h.metaPromulgated, "promulgated"),
+			"resources":        h.EntityHandler(h.metaResources, "charmmeta"),
 			"revision-info":    router.SingleIncludeHandler(h.metaRevisionInfo),
 			"stats":            h.EntityHandler(h.metaStats),
 			"supported-series": h.EntityHandler(h.metaSupportedSeries, "supportedseries"),
@@ -547,18 +548,6 @@ var errNotImplemented = errgo.Newf("method not implemented")
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-debug
 func (h *ReqHandler) serveDebug(w http.ResponseWriter, req *http.Request) {
 	router.WriteError(w, errNotImplemented)
-}
-
-// POST id/resources/name.stream
-// https://github.com/juju/charmstore/blob/v4/docs/API.md#post-idresourcesnamestream
-//
-// GET  id/resources/name.stream[-revision]/arch/filename
-// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idresourcesnamestream-revisionarchfilename
-//
-// PUT id/resources/[~user/]series/name.stream-revision/arch?sha256=hash
-// https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idresourcesuserseriesnamestream-revisionarchsha256hash
-func (h *ReqHandler) serveResources(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-	return errNotImplemented
 }
 
 // GET id/expand-id
@@ -1365,6 +1354,11 @@ func (h *ReqHandler) servePublish(id *router.ResolvedURL, w http.ResponseWriter,
 		if _, err := h.authorize(req, baseEntity.ChannelACLs[c].Write, true, id); err != nil {
 			return errgo.Mask(err, errgo.Any)
 		}
+	}
+
+	// TODO(ericsnow) Actually handle the resources.
+	if len(publish.Resources) > 0 {
+		return errNotImplemented
 	}
 
 	if err := h.Store.Publish(id, chans...); err != nil {
