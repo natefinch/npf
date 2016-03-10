@@ -902,6 +902,12 @@ func MustParseResolvedURL(urlStr string) *router.ResolvedURL {
 	case 1:
 	}
 	url := charm.MustParseURL(s[len(s)-1])
+	if url.User == "" {
+		panic("resolved URL with no user")
+	}
+	if url.Revision == -1 {
+		panic("resolved URL with no revision")
+	}
 	return &router.ResolvedURL{
 		URL:                 *url.WithChannel(""),
 		PromulgatedRevision: promRev,

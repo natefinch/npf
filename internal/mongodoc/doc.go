@@ -135,6 +135,9 @@ type Entity struct {
 	// If the entity is not promulgated this should be set to -1.
 	PromulgatedRevision int `bson:"promulgated-revision"`
 
+	// TODO we could potentially use map[params.Channel] bool
+	// instead of having a separate field for each channel.
+
 	// Development holds whether the entity has been published in the
 	// "development" channel.
 	Development bool
