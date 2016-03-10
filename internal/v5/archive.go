@@ -43,8 +43,7 @@ import (
 func (h *ReqHandler) serveArchive(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
 	resolveId := h.ResolvedIdHandler
 	switch req.Method {
-	case "DELETE":
-		return resolveId(h.AuthIdHandler(h.serveDeleteArchive))(id, w, req)
+	// TODO: support DELETE when it is understood how that interacts with channels.
 	case "GET":
 		return resolveId(h.serveGetArchive)(id, w, req)
 	case "POST", "PUT":
