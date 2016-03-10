@@ -488,6 +488,7 @@ Example: `GET /meta`
     "id-user",
     "manifest",
     "promulgated",
+    "published",
     "revision-info",
     "stats",
     "supported-series",
@@ -1069,6 +1070,33 @@ Example: `GET trusty/juju-gui-3/meta/charm-config`
             "Default": false
         }
     }
+}
+```
+
+#### GET *id*/meta/published
+
+The `meta/published` path returns a list of the channels that
+the entity has been published to.
+
+```go
+type PublishedResponse struct {
+	// Info holds an entry for each channel that the
+	// entity has been published to.
+	Info []PublishedInfo
+}
+
+// PublishedInfo holds information on a channel that an entity
+// has been published to.
+type PublishedInfo struct {
+	// Channel holds the value of the channel that
+	// the entity has been published to.
+	// This will never be "unpublished" as entities
+	// cannot be published to that channel.
+	Channel Channel
+
+	// Current holds whether the entity is the most
+	// recently published member of the channel.
+	Current bool
 }
 ```
 

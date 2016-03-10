@@ -232,20 +232,11 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"bundle-metadata":      h.EntityHandler(h.metaBundleMetadata, "bundledata"),
 			"bundles-containing":   h.EntityHandler(h.metaBundlesContaining),
 			"bundle-unit-count":    h.EntityHandler(h.metaBundleUnitCount, "bundleunitcount"),
+			"published":            h.EntityHandler(h.metaPublished, "development", "stable"),
 			"charm-actions":        h.EntityHandler(h.metaCharmActions, "charmactions"),
 			"charm-config":         h.EntityHandler(h.metaCharmConfig, "charmconfig"),
 			"charm-metadata":       h.EntityHandler(h.metaCharmMetadata, "charmmeta"),
 			"charm-related":        h.EntityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces"),
-			"extra-info": h.puttableEntityHandler(
-				h.metaExtraInfo,
-				h.putMetaExtraInfo,
-				"extrainfo",
-			),
-			"extra-info/": h.puttableEntityHandler(
-				h.metaExtraInfoWithKey,
-				h.putMetaExtraInfoWithKey,
-				"extrainfo",
-			),
 			"common-info": h.puttableBaseEntityHandler(
 				h.metaCommonInfo,
 				h.putMetaCommonInfo,
@@ -255,6 +246,16 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 				h.metaCommonInfoWithKey,
 				h.putMetaCommonInfoWithKey,
 				"commoninfo",
+			),
+			"extra-info": h.puttableEntityHandler(
+				h.metaExtraInfo,
+				h.putMetaExtraInfo,
+				"extrainfo",
+			),
+			"extra-info/": h.puttableEntityHandler(
+				h.metaExtraInfoWithKey,
+				h.putMetaExtraInfoWithKey,
+				"extrainfo",
 			),
 			"hash":             h.EntityHandler(h.metaHash, "blobhash"),
 			"hash256":          h.EntityHandler(h.metaHash256, "blobhash256"),
@@ -1092,6 +1093,38 @@ func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val
 		return nil
 	}
 	return errgo.WithCausef(nil, params.ErrNotFound, "unknown permission")
+}
+
+// GET id/meta/published
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapublished
+func (h *ReqHandler) metaPublished(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	baseEntity, err := h.Cache.BaseEntity(entity.URL, charmstore.FieldSelector("channelentities"))
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	info := make([]params.PublishedInfo, 0, 2)
+	if entity.Development {
+		info = append(info, params.PublishedInfo{
+			Channel: params.DevelopmentChannel,
+		})
+	}
+	if entity.Stable {
+		info = append(info, params.PublishedInfo{
+			Channel: params.StableChannel,
+		})
+	}
+	for i, pinfo := range info {
+		// The entity is current for a channel if any series within
+		// a channel refers to the entity.
+		for _, url := range baseEntity.ChannelEntities[pinfo.Channel] {
+			if *url == *entity.URL {
+				info[i].Current = true
+			}
+		}
+	}
+	return &params.PublishedResponse{
+		Info: info,
+	}, nil
 }
 
 // GET id/meta/archive-upload-time

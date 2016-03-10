@@ -68,7 +68,7 @@ type addParams struct {
 //
 // This method is provided for testing purposes only.
 func (s *Store) AddCharmWithArchive(url *router.ResolvedURL, ch charm.Charm) error {
-	return s.addEntityWithArchive(url, ch)
+	return s.AddEntityWithArchive(url, ch)
 }
 
 // AddBundleWithArchive adds the given bundle, which must
@@ -77,12 +77,15 @@ func (s *Store) AddCharmWithArchive(url *router.ResolvedURL, ch charm.Charm) err
 //
 // This method is provided for testing purposes only.
 func (s *Store) AddBundleWithArchive(url *router.ResolvedURL, b charm.Bundle) error {
-	return s.addEntityWithArchive(url, b)
+	return s.AddEntityWithArchive(url, b)
 }
 
-// addEntityWithArchive provides the implementation for
+// AddEntityWithArchive provides the implementation for
 // both AddCharmWithArchive and AddBundleWithArchive.
-func (s *Store) addEntityWithArchive(url *router.ResolvedURL, archive interface{}) error {
+// It accepts charm.Charm or charm.Bundle implementations
+// defined in the charm package, and any that implement
+// ArchiverTo.
+func (s *Store) AddEntityWithArchive(url *router.ResolvedURL, archive interface{}) error {
 	blob, err := getArchive(archive)
 	if err != nil {
 		return errgo.Notef(err, "cannot get archive")
