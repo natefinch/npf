@@ -312,7 +312,7 @@ func (s *AddEntitySuite) TestUploadEntityErrors(c *gc.C) {
 		url := &router.ResolvedURL{
 			URL: *charm.MustParseURL(test.url),
 		}
-		err = store.UploadEntity(url, &buf, test.blobHash, test.blobSize)
+		err = store.UploadEntity(url, &buf, test.blobHash, test.blobSize, nil)
 		c.Assert(err, gc.ErrorMatches, test.expectError)
 		if test.expectCause != nil {
 			c.Assert(errgo.Cause(err), gc.Equals, test.expectCause)

@@ -60,6 +60,9 @@ type addParams struct {
 
 	// bobSize holds the size of the entity's archive blob.
 	blobSize int64
+
+	// chans holds the channels to associate with the entity.
+	chans []params.Channel
 }
 
 // AddCharmWithArchive adds the given charm, which must
@@ -99,19 +102,21 @@ func (s *Store) AddEntityWithArchive(url *router.ResolvedURL, archive interface{
 	if _, err := blob.Seek(0, 0); err != nil {
 		return errgo.Notef(err, "cannot seek to start of archive")
 	}
-	if err := s.UploadEntity(url, blob, fmt.Sprintf("%x", hash.Sum(nil)), size); err != nil {
+	if err := s.UploadEntity(url, blob, fmt.Sprintf("%x", hash.Sum(nil)), size, nil); err != nil {
 		return errgo.Mask(err, errgo.Any)
 	}
 	return nil
 }
 
 // UploadEntity reads the given blob, which should have the given hash
-// and size, and uploads it to the charm store. The following error
-// causes may be returned:
+// and size, and uploads it to the charm store, associating it with
+// the given channels (without actually making it current in any of them).
+//
+// The following error causes may be returned:
 //	params.ErrDuplicateUpload if the URL duplicates an existing entity.
 //	params.ErrEntityIdNotAllowed if the id may not be created.
 //	params.ErrInvalidEntity if the provided blob is invalid.
-func (s *Store) UploadEntity(url *router.ResolvedURL, blob io.Reader, blobHash string, size int64) error {
+func (s *Store) UploadEntity(url *router.ResolvedURL, blob io.Reader, blobHash string, size int64, chans []params.Channel) error {
 	// Strictly speaking these tests are redundant, because a ResolvedURL should
 	// always be canonical, but check just in case anyway, as this is
 	// final gateway before a potentially invalid url might be stored
@@ -131,7 +136,7 @@ func (s *Store) UploadEntity(url *router.ResolvedURL, blob io.Reader, blobHash s
 		return errgo.Notef(err, "cannot open newly created blob")
 	}
 	defer r.Close()
-	if err := s.addEntityFromReader(url, r, blobName, blobHash, blobHash256, size); err != nil {
+	if err := s.addEntityFromReader(url, r, blobName, blobHash, blobHash256, size, chans); err != nil {
 		if err1 := s.BlobStore.Remove(blobName); err1 != nil {
 			logger.Errorf("cannot remove blob %s after error: %v", blobName, err1)
 		}
@@ -167,7 +172,7 @@ func (s *Store) putArchive(blob io.Reader, blobSize int64, hash string) (blobNam
 
 // addEntityFromReader adds the entity represented by the contents
 // of the given reader, associating it with the given id.
-func (s *Store) addEntityFromReader(id *router.ResolvedURL, r io.ReadSeeker, blobName, hash, hash256 string, blobSize int64) error {
+func (s *Store) addEntityFromReader(id *router.ResolvedURL, r io.ReadSeeker, blobName, hash, hash256 string, blobSize int64, chans []params.Channel) error {
 	p := addParams{
 		url:              id,
 		blobName:         blobName,
@@ -177,6 +182,7 @@ func (s *Store) addEntityFromReader(id *router.ResolvedURL, r io.ReadSeeker, blo
 		preV5BlobHash:    hash,
 		preV5BlobHash256: hash256,
 		preV5BlobSize:    blobSize,
+		chans:            chans,
 	}
 	if id.URL.Series == "bundle" {
 		b, err := s.newBundle(id, r, blobSize)
@@ -435,6 +441,7 @@ func (s *Store) addCharm(c charm.Charm, p addParams) (err error) {
 		SupportedSeries:         c.Meta().Series,
 	}
 	denormalizeEntity(entity)
+	setEntityChannels(entity, p.chans)
 
 	// Check that we're not going to create a charm that duplicates
 	// the name of a bundle. This is racy, but it's the best we can
@@ -456,6 +463,19 @@ func (s *Store) addCharm(c charm.Charm, p addParams) (err error) {
 		return errgo.Mask(err, errgo.Is(params.ErrDuplicateUpload))
 	}
 	return nil
+}
+
+// setEntityChannels associates the entity with the given channels, ignoring
+// unknown channels.
+func setEntityChannels(entity *mongodoc.Entity, chans []params.Channel) {
+	for _, c := range chans {
+		switch c {
+		case params.DevelopmentChannel:
+			entity.Development = true
+		case params.StableChannel:
+			entity.Stable = true
+		}
+	}
 }
 
 // addBundle adds a bundle to the entities collection with the given
@@ -487,6 +507,7 @@ func (s *Store) addBundle(b charm.Bundle, p addParams) error {
 		PromulgatedURL:     p.url.PromulgatedURL(),
 	}
 	denormalizeEntity(entity)
+	setEntityChannels(entity, p.chans)
 
 	// Check that we're not going to create a bundle that duplicates
 	// the name of a charm. This is racy, but it's the best we can do.
