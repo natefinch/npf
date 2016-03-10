@@ -704,8 +704,13 @@ func FieldSelector(fields ...string) map[string]int {
 	return sel
 }
 
-// UpdateEntity applies the provided update to the entity described by url.
-func (s *Store) UpdateEntity(url *router.ResolvedURL, update interface{}) error {
+// UpdateEntity applies the provided update to the entity described by
+// url. If there are no entries in update then no update is performed,
+// and no error is returned.
+func (s *Store) UpdateEntity(url *router.ResolvedURL, update bson.D) error {
+	if len(update) == 0 {
+		return nil
+	}
 	if err := s.DB.Entities().Update(bson.D{{"_id", &url.URL}}, update); err != nil {
 		if err == mgo.ErrNotFound {
 			return errgo.WithCausef(err, params.ErrNotFound, "cannot update %q", url)
@@ -715,8 +720,13 @@ func (s *Store) UpdateEntity(url *router.ResolvedURL, update interface{}) error 
 	return nil
 }
 
-// UpdateBaseEntity applies the provided update to the base entity of url.
-func (s *Store) UpdateBaseEntity(url *router.ResolvedURL, update interface{}) error {
+// UpdateBaseEntity applies the provided update to the base entity of
+// url. If there are no entries in update then no update is performed,
+// and no error is returned.
+func (s *Store) UpdateBaseEntity(url *router.ResolvedURL, update bson.D) error {
+	if len(update) == 0 {
+		return nil
+	}
 	if err := s.DB.BaseEntities().Update(bson.D{{"_id", mongodoc.BaseURL(&url.URL)}}, update); err != nil {
 		if err == mgo.ErrNotFound {
 			return errgo.WithCausef(err, params.ErrNotFound, "cannot update base entity for %q", url)

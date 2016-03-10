@@ -5,7 +5,6 @@ package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/char
 
 import (
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -44,17 +43,13 @@ var migrations = []migration{{
 }, {
 	name: "write acl creation",
 }, {
-	name:    migrationAddSupportedSeries,
-	migrate: addSupportedSeries,
+	name: migrationAddSupportedSeries,
 }, {
-	name:    migrationAddDevelopment,
-	migrate: addDevelopment,
+	name: migrationAddDevelopment,
 }, {
-	name:    migrationAddDevelopmentACLs,
-	migrate: addDevelopmentACLs,
+	name: migrationAddDevelopmentACLs,
 }, {
-	name:    migrationFixBogusPromulgatedURL,
-	migrate: fixBogusPromulgatedURL,
+	name: migrationFixBogusPromulgatedURL,
 }, {
 	// The original migration that attempted to do this actually did
 	// nothing, so leave it here but use a new name for the
@@ -131,103 +126,10 @@ func getExecuted(db StoreDatabase) (map[mongodoc.MigrationName]bool, error) {
 	return executed, nil
 }
 
-// addSupportedSeries adds the supported-series field
-// to entities that don't have it. Note that it does not
-// need to work for multi-series charms because support
-// for those has not been implemented before this migration.
-func addSupportedSeries(db StoreDatabase) error {
-	entities := db.Entities()
-	var entity mongodoc.Entity
-	iter := entities.Find(bson.D{{
-		// Use the supportedseries field to collect not migrated entities.
-		"supportedseries", bson.D{{"$exists", false}},
-	}, {
-		"series", bson.D{{"$ne", "bundle"}},
-	}}).Select(bson.D{{"_id", 1}}).Iter()
-	defer iter.Close()
-
-	for iter.Next(&entity) {
-		logger.Infof("updating %s", entity.URL)
-		if err := entities.UpdateId(entity.URL, bson.D{{
-			"$set", bson.D{
-				{"supportedseries", []string{entity.URL.Series}},
-			},
-		}}); err != nil {
-			return errgo.Notef(err, "cannot denormalize entity id %s", entity.URL)
-		}
-	}
-	if err := iter.Close(); err != nil {
-		return errgo.Notef(err, "cannot iterate entities")
-	}
-	return nil
-}
-
-// addDevelopment adds the Development field to all entities on which that
-// field is not present.
-func addDevelopment(db StoreDatabase) error {
-	logger.Infof("adding development field to all entities")
-	if _, err := db.Entities().UpdateAll(bson.D{{
-		"development", bson.D{{"$exists", false}},
-	}}, bson.D{{
-		"$set", bson.D{{"development", false}},
-	}}); err != nil {
-		return errgo.Notef(err, "cannot add development field to all entities")
-	}
-	return nil
-}
-
-// addDevelopmentACLs sets up ACLs on base entities for development revisions.
-func addDevelopmentACLs(db StoreDatabase) error {
-	logger.Infof("adding development ACLs to all base entities")
-	baseEntities := db.BaseEntities()
-	var baseEntity mongodoc.BaseEntity
-	iter := baseEntities.Find(bson.D{{
-		"channelacls.development", bson.D{{"$exists", false}},
-	}}).Select(bson.D{{"_id", 1}, {"channelacls", 1}}).Iter()
-	defer iter.Close()
-	for iter.Next(&baseEntity) {
-		if err := baseEntities.UpdateId(baseEntity.URL, bson.D{{
-			"$set", bson.D{{"channelacls.development", baseEntity.ChannelACLs[params.DevelopmentChannel]}},
-		}}); err != nil {
-			return errgo.Notef(err, "cannot add development ACLs to base entity id %s", baseEntity.URL)
-		}
-	}
-	if err := iter.Close(); err != nil {
-		return errgo.Notef(err, "cannot iterate base entities")
-	}
-	return nil
-}
-
-func fixBogusPromulgatedURL(db StoreDatabase) error {
-	var entity mongodoc.Entity
-	iter := db.Entities().Find(bson.D{{
-		"promulgated-url", bson.D{{"$regex", "^cs:development/"}},
-	}}).Select(map[string]int{
-		"promulgated-url": 1,
-	}).Iter()
-	for iter.Next(&entity) {
-		if entity.PromulgatedURL.Channel == "" {
-			continue
-		}
-		entity.PromulgatedURL.Channel = ""
-		if err := db.Entities().UpdateId(entity.URL, bson.D{{
-			"$set", bson.D{{"promulgated-url", entity.PromulgatedURL}},
-		}}); err != nil {
-			return errgo.Notef(err, "cannot fix bogus promulgated URL for entity %v", entity.URL)
-		}
-	}
-	if err := iter.Err(); err != nil {
-		return errgo.Notef(err, "cannot iterate through entities")
-	}
-	return nil
-}
-
 func addPreV5CompatBlob(db StoreDatabase) error {
 	blobStore := blobstore.New(db.Database, "entitystore")
 	entities := db.Entities()
-	iter := entities.Find(bson.D{{
-		"prev5blobhash", bson.D{{"$exists", false}},
-	}}).Select(map[string]int{
+	iter := entities.Find(nil).Select(map[string]int{
 		"size":             1,
 		"blobhash":         1,
 		"blobname":         1,
