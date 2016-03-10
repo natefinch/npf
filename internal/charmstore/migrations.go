@@ -21,7 +21,7 @@ const (
 	migrationFixBogusPromulgatedURL  mongodoc.MigrationName = "fix promulgate url"
 	migrationAddPreV5CompatBlobBogus mongodoc.MigrationName = "add pre-v5 compatibility blobs"
 	migrationAddPreV5CompatBlob      mongodoc.MigrationName = "add pre-v5 compatibility blobs; second try"
-	migrationNewChannelsModel mongodoc.MigrationName = "new channels model"
+	migrationNewChannelsModel        mongodoc.MigrationName = "new channels model"
 )
 
 // migrations holds all the migration functions that are executed in the order

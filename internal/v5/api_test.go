@@ -574,6 +574,27 @@ var metaEndpoints = []metaEndpoint{{
 			Origin:      "upload",
 		}})
 	},
+}, {
+	name: "published",
+	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
+		// All the entities published are in stable, not development,
+		// and there's only one for each base entity.
+		return &params.PublishedResponse{
+			Info: []params.PublishedInfo{{
+				Channel: params.StableChannel,
+				Current: true,
+			}},
+		}, nil
+	},
+	checkURL: newResolvedURL("cs:~charmers/precise/wordpress-23", 23),
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, jc.DeepEquals, &params.PublishedResponse{
+			Info: []params.PublishedInfo{{
+				Channel: params.StableChannel,
+				Current: true,
+			}},
+		})
+	},
 }}
 
 func basicListResources(entity *mongodoc.Entity) ([]resource.Resource, error) {
@@ -709,6 +730,136 @@ func (s *APISuite) TestMetaEndpointsSingle(c *gc.C) {
 		if !tested {
 			c.Errorf("endpoint %q is null for all endpoints, so is not properly tested", ep.name)
 		}
+	}
+}
+
+type publishedEntity struct {
+	rev      int
+	channels []params.Channel
+}
+
+// Note that, unusually, all the entities in all the tests
+// are added before any of the "expect" values are
+// determined because we know that we want
+// exactly one test for each entity.
+var metaPublishedTests = []struct {
+	id       string
+	entity   charmstore.ArchiverTo
+	channels []params.Channel
+	expect   params.PublishedResponse
+}{{
+	id:     "~charmers/precise/wordpress-0",
+	entity: storetesting.NewCharm(nil),
+	expect: params.PublishedResponse{
+		[]params.PublishedInfo{},
+	},
+}, {
+	id:       "~charmers/precise/wordpress-1",
+	entity:   storetesting.NewCharm(nil),
+	channels: []params.Channel{params.DevelopmentChannel, params.StableChannel},
+	expect: params.PublishedResponse{
+		Info: []params.PublishedInfo{{
+			Channel: params.DevelopmentChannel,
+		}, {
+			Channel: params.StableChannel,
+		}},
+	},
+}, {
+	id:       "~charmers/precise/wordpress-3",
+	entity:   storetesting.NewCharm(nil),
+	channels: []params.Channel{params.DevelopmentChannel},
+	expect: params.PublishedResponse{
+		Info: []params.PublishedInfo{{
+			Channel: params.DevelopmentChannel,
+		}},
+	},
+}, {
+	id:     "~charmers/precise/wordpress-4",
+	entity: storetesting.NewCharm(nil),
+	expect: params.PublishedResponse{
+		[]params.PublishedInfo{},
+	},
+}, {
+	id:       "~charmers/precise/wordpress-5",
+	entity:   storetesting.NewCharm(nil),
+	channels: []params.Channel{params.DevelopmentChannel},
+	expect: params.PublishedResponse{
+		Info: []params.PublishedInfo{{
+			Channel: params.DevelopmentChannel,
+			Current: true,
+		}},
+	},
+}, {
+	id:       "~charmers/trusty/wordpress-0",
+	entity:   storetesting.NewCharm(nil),
+	channels: []params.Channel{params.DevelopmentChannel},
+	expect: params.PublishedResponse{
+		Info: []params.PublishedInfo{{
+			Channel: params.DevelopmentChannel,
+			Current: true,
+		}},
+	},
+}, {
+	id:       "~charmers/precise/wordpress-6",
+	entity:   storetesting.NewCharm(nil),
+	channels: []params.Channel{params.StableChannel},
+	expect: params.PublishedResponse{
+		Info: []params.PublishedInfo{{
+			Channel: params.StableChannel,
+			Current: true,
+		}},
+	},
+}, {
+	id: "~charmers/wordpress-7",
+	entity: storetesting.NewCharm(&charm.Meta{
+		Series: []string{"wily"},
+	}),
+	channels: []params.Channel{params.StableChannel},
+	expect: params.PublishedResponse{
+		Info: []params.PublishedInfo{{
+			Channel: params.StableChannel,
+			Current: true,
+		}},
+	},
+}, {
+	id: "~bob/bundle/mybundle-2",
+	entity: storetesting.NewBundle(&charm.BundleData{
+		Services: map[string]*charm.ServiceSpec{
+			"wordpress": {
+				Charm: "~charmers/precise/wordpress",
+			},
+		},
+	}),
+	channels: []params.Channel{params.StableChannel},
+	expect: params.PublishedResponse{
+		Info: []params.PublishedInfo{{
+			Channel: params.StableChannel,
+			Current: true,
+		}},
+	},
+}}
+
+func (s *APISuite) TestMetaPublished(c *gc.C) {
+	// First add all the entities
+	for _, test := range metaPublishedTests {
+		id := mustParseResolvedURL(test.id)
+		err := s.store.AddEntityWithArchive(id, test.entity)
+		c.Assert(err, gc.IsNil)
+		if len(test.channels) > 0 {
+			err = s.store.Publish(id, test.channels...)
+			c.Assert(err, gc.IsNil)
+		}
+		err = s.store.SetPerms(&id.URL, "unpublished.read", params.Everyone)
+		c.Assert(err, gc.IsNil)
+	}
+	// Then run the checks.
+	for i, test := range metaPublishedTests {
+		c.Logf("test %d: %v", i, test.id)
+		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+			Handler:    s.srv,
+			URL:        storeURL(test.id + "/meta/published?channel=unpublished"),
+			ExpectBody: test.expect,
+		})
 	}
 }
 

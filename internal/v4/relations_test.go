@@ -226,6 +226,7 @@ var metaCharmRelatedTests = []struct {
 				Meta: map[string]interface{}{
 					"id-name": params.IdNameResponse{"wordpress"},
 					"charm-metadata": &charm.Meta{
+						Format: 1,
 						Provides: map[string]charm.Relation{
 							"website": {
 								Name:      "website",
