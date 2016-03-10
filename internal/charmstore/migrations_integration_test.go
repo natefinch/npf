@@ -4,14 +4,16 @@ import (
 	"flag"
 	"net/http"
 
+	jujutesting "github.com/juju/testing"
+	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
-	jujutesting "github.com/juju/testing"
 
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 )
 
@@ -75,35 +77,19 @@ var migrationHistory = []versionSpec{{
 		if err != nil {
 			return errgo.Mask(err)
 		}
-		if err := csv.Put("/v4/promulgated/meta/perm", params.PermRequest{
+		if err := csv.Put("/v4/~charmers/precise/promulgated/meta/perm", params.PermRequest{
 			Read:  []string{"everyone"},
 			Write: []string{"alice", "bob", "charmers"},
 		}); err != nil {
 			return errgo.Mask(err)
 		}
-		if err := csv.Put("/v4/~bob/nonpromulgated/meta/perm", params.PermRequest{
+		if err := csv.Put("/v4/~bob/trusty/nonpromulgated/meta/perm", params.PermRequest{
 			Read:  []string{"bobgroup"},
 			Write: []string{"bob", "someoneelse"},
 		}); err != nil {
 			return errgo.Mask(err)
 		}
-		// Expected contents:
-		//	~charmers/precise/promulgated-0 (precise/promulgated-0)
-		//		ACLs:
-		//			read: everyone
-		//			write: alice, bob, charmers
-		//	~bob/trusty/nonpromulgated-0
-		//		ACLs:
-		//			read: bob
-		//			write: bob, someoneelse
-		//	~charmers/bundle/promulgatedbundle-0 (bundle/promulgatedbundle-0)
-		//		ACLs:
-		//			read: charmers
-		//			write: charmers
-		//	~charmers/bundle/nonpromulgatedbundle-0
-		//		ACLs:
-		//			read: charmers
-		//			write: charmers
+
 		return nil
 	},
 }, {
@@ -112,6 +98,7 @@ var migrationHistory = []versionSpec{{
 	version: "4.3.0",
 	update: func(db *mgo.Database, csv *charmStoreVersion) error {
 		err := csv.Upload("v4", []uploadSpec{{
+			// Uploads to ~charmers/multiseries-0
 			id:      "~charmers/multiseries",
 			usePost: true, // Note: PUT doesn't work on multi-series.
 			entity: storetesting.NewCharm(&charm.Meta{
@@ -120,6 +107,7 @@ var migrationHistory = []versionSpec{{
 		}, {
 			// This triggers the bug where we created a base
 			// entity with a bogus "development" channel in the URL.
+			// Uploads to ~charmers/precise/promulgated-1
 			id:      "~charmers/development/precise/promulgated",
 			usePost: true,
 			entity: storetesting.NewCharm(&charm.Meta{
@@ -144,62 +132,6 @@ var migrationHistory = []versionSpec{{
 		}); err != nil {
 			return errgo.Mask(err)
 		}
-		// Expected contents:
-		//
-		// From previous version:
-		//
-		//	~charmers/precise/promulgated-0 (precise/promulgated-0)
-		//		development: false
-		//		ACLs:
-		//			read: everyone
-		//			write: alice, bob, charmers
-		//		DevelopmentACLs:
-		//			read: charmers
-		//			write: charmers
-		//	~bob/trusty/nonpromulgated-0
-		//		development: false
-		//		ACLs:
-		//			read: bobgroup
-		//			write: bob, someoneelse
-		//		DevelopmentACLs:
-		//			read: bob
-		//			write: bob, someoneelse
-		//	~charmers/bundle/promulgatedbundle-0 (bundle/promulgatedbundle-0)
-		//		development: false
-		//		ACLs:
-		//			read: charmers
-		//			write: charmers
-		//		DevelopmentACLs:
-		//			read: charmers
-		//			write: charmers
-		//	~charmers/bundle/nonpromulgatedbundle-0
-		//		development: false
-		//		ACLs:
-		//			read: charmers
-		//			write: charmers
-		//		DevelopmentACLs:
-		//			read: charmers
-		//			write: charmers
-		//
-		// Added in this update:
-		//
-		//	~charmers/multiseries-0
-		//		development: true
-		//		ACLs:
-		//			read: charmers
-		//			write: charmers
-		//		DevelopmentACLs:
-		//			read: charmers
-		//			write: charmers
-		//	~charmers/precise/promulgated-1 (cs:development/precise/promulgated-1)
-		//		development: true
-		//		ACLs:
-		//			read: charmers
-		//			write: charmers
-		//		DevelopmentACLs:
-		//			read: charmers
-		//			write: charmers
-		//
 		return nil
 	},
 }, {
@@ -209,6 +141,7 @@ var migrationHistory = []versionSpec{{
 	version: "4.4.3",
 	update: func(db *mgo.Database, csv *charmStoreVersion) error {
 		err := csv.Upload("v5", []uploadSpec{{
+			// Uploads to ~charmers/multiseries-1
 			id:      "~charmers/multiseries",
 			usePost: true,
 			entity: storetesting.NewCharm(&charm.Meta{
@@ -218,77 +151,110 @@ var migrationHistory = []versionSpec{{
 		if err != nil {
 			return errgo.Mask(err)
 		}
-		// Expected contents:
-		//
-		// From previous version:
-		//
-		//	~charmers/precise/promulgated-0 (precise/promulgated-0)
-		//		development: false
-		//		has compatibility blob: false
-		//		ACLs:
-		//			read: everyone
-		//			write: alice, bob, charmers
-		//		DevelopmentACLs:
-		//			read: charmers
-		//			write: charmers
-		//	~bob/trusty/nonpromulgated-0
-		//		development: false
-		//		has compatibility blob: false
-		//		ACLs:
-		//			read: bobgroup
-		//			write: bob, someoneelse
-		//		DevelopmentACLs:
-		//			read: bob
-		//			write: bob, someoneelse
-		//	~charmers/bundle/promulgatedbundle-0 (bundle/promulgatedbundle-0)
-		//		development: false
-		//		has compatibility blob: false
-		//		ACLs:
-		//			read: charmers
-		//			write: charmers
-		//		DevelopmentACLs:
-		//			read: charmers
-		//			write: charmers
-		//	~charmers/bundle/nonpromulgatedbundle-0
-		//		development: false
-		//		has compatibility blob: false
-		//		ACLs:
-		//			read: charmers
-		//			write: charmers
-		//		DevelopmentACLs:
-		//			read: charmers
-		//			write: charmers
-		//	~charmers/multiseries-0
-		//		development: true
-		//		has compatibility blob: false
-		//		ACLs:
-		//			read: charmers
-		//			write: charmers
-		//		DevelopmentACLs:
-		//			read: charmers
-		//			write: charmers
-		//	~charmers/precise/promulgated-1 (cs:precise/promulgated-1)
-		//		development: true
-		//		has compatibility blob: false
-		//		ACLs:
-		//			read: charmers
-		//			write: charmers
-		//		DevelopmentACLs:
-		//			read: charmers
-		//			write: charmers
-		//
-		// Added in this update:
-		//
-		//	~charmers/multiseries-1
-		//		development: true
-		//		has compatibility blob: true
-		//		ACLs:
-		//			read: charmers
-		//			write: charmers
-		//		DevelopmentACLs:
-		//			read: charmers
-		//			write: charmers
 		return nil
+	},
+}}
+
+var migrationFromDumpEntityTests = []struct {
+	id       string
+	checkers []entityChecker
+}{{
+	id: "~charmers/precise/promulgated-0",
+	checkers: []entityChecker{
+		hasPromulgatedRevision(0),
+		hasCompatibilityBlob(false),
+		isDevelopment(false),
+	},
+}, {
+	id: "~bob/trusty/nonpromulgated-0",
+	checkers: []entityChecker{
+		hasPromulgatedRevision(-1),
+		hasCompatibilityBlob(false),
+		isDevelopment(false),
+	},
+}, {
+	id: "~charmers/bundle/promulgatedbundle-0",
+	checkers: []entityChecker{
+		hasPromulgatedRevision(0),
+		hasCompatibilityBlob(false),
+		isDevelopment(false),
+	},
+}, {
+	id: "~charmers/bundle/nonpromulgatedbundle-0",
+	checkers: []entityChecker{
+		hasPromulgatedRevision(-1),
+		hasCompatibilityBlob(false),
+		isDevelopment(false),
+	},
+}, {
+	id: "~charmers/multiseries-0",
+	checkers: []entityChecker{
+		hasPromulgatedRevision(-1),
+		hasCompatibilityBlob(true),
+		isDevelopment(false),
+	},
+}, {
+	id: "~charmers/precise/promulgated-1",
+	checkers: []entityChecker{
+		hasPromulgatedRevision(1),
+		hasCompatibilityBlob(false),
+		isDevelopment(true),
+	},
+}, {
+	id: "~charmers/multiseries-1",
+	checkers: []entityChecker{
+		hasPromulgatedRevision(-1),
+		hasCompatibilityBlob(true),
+		isDevelopment(false),
+	},
+}}
+
+var migrationFromDumpBaseEntityTests = []struct {
+	id       string
+	checkers []baseEntityChecker
+}{{
+	id: "cs:~charmers/promulgated",
+	checkers: []baseEntityChecker{
+		isPromulgated(true),
+		hasACLs(mongodoc.ACL{
+			Read:  []string{"everyone"},
+			Write: []string{"alice", "bob", "charmers"},
+		}),
+		hasDevelopmentACLs(mongodoc.ACL{
+			Read:  []string{"charmers"},
+			Write: []string{"charmers"},
+		}),
+	},
+}, {
+	id: "cs:~bob/nonpromulgated",
+	checkers: []baseEntityChecker{
+		isPromulgated(false),
+		hasACLs(mongodoc.ACL{
+			Read:  []string{"bobgroup"},
+			Write: []string{"bob", "someoneelse"},
+		}),
+		hasDevelopmentACLs(mongodoc.ACL{
+			Read:  []string{"bobgroup"},
+			Write: []string{"bob", "someoneelse"},
+		}),
+	},
+}, {
+	id: "~charmers/promulgatedbundle",
+	checkers: []baseEntityChecker{
+		isPromulgated(true),
+		hasAllACLs("charmers"),
+	},
+}, {
+	id: "cs:~charmers/nonpromulgatedbundle",
+	checkers: []baseEntityChecker{
+		isPromulgated(false),
+		hasAllACLs("charmers"),
+	},
+}, {
+	id: "cs:~charmers/multiseries",
+	checkers: []baseEntityChecker{
+		isPromulgated(false),
+		hasAllACLs("charmers"),
 	},
 }}
 
@@ -302,11 +268,129 @@ func (s *migrationsIntegrationSuite) TestMigrationFromDump(c *gc.C) {
 	store := s.newStore(c, false)
 	defer store.Close()
 
-	// TODO: lots more checks for all the properties we expect. This is
-	// just an initial smoke test.
-	entity, err := store.FindBestEntity(charm.MustParseURL("development/precise/promulgated"), nil)
+	checkAllEntityInvariants(c, store)
+
+	for i, test := range migrationFromDumpEntityTests {
+		c.Logf("test %d: entity %v", i, test.id)
+
+		e, err := store.FindEntity(MustParseResolvedURL(test.id), nil)
+		c.Assert(err, gc.IsNil)
+		for j, check := range test.checkers {
+			c.Logf("test %d: entity %v; check %d", i, test.id, j)
+			check(c, e)
+		}
+	}
+
+	for i, test := range migrationFromDumpBaseEntityTests {
+		c.Logf("test %d: base entity %v", i, test.id)
+
+		e, err := store.FindBaseEntity(charm.MustParseURL(test.id), nil)
+		c.Assert(err, gc.IsNil)
+		for j, check := range test.checkers {
+			c.Logf("test %d: base entity %v; check %d", i, test.id, j)
+			check(c, e)
+		}
+	}
+}
+
+func checkAllEntityInvariants(c *gc.C, store *Store) {
+	var entities []*mongodoc.Entity
+
+	err := store.DB.Entities().Find(nil).All(&entities)
 	c.Assert(err, gc.IsNil)
-	c.Assert(entity.PromulgatedURL.String(), gc.Equals, "cs:precise/promulgated-1")
+	for _, e := range entities {
+		c.Logf("check entity invariants %v", e.URL)
+		checkEntityInvariants(c, e, store)
+	}
+
+	var baseEntities []*mongodoc.BaseEntity
+	err = store.DB.BaseEntities().Find(nil).All(&baseEntities)
+	c.Assert(err, gc.IsNil)
+	for _, e := range baseEntities {
+		c.Logf("check base entity invariants %v", e.URL)
+		checkBaseEntityInvariants(c, e, store)
+	}
+}
+
+func checkEntityInvariants(c *gc.C, e *mongodoc.Entity, store *Store) {
+	// Basic "this must have some non-zero value" checks.
+	c.Assert(e.URL.Name, gc.Not(gc.Equals), "")
+	c.Assert(e.URL.Revision, gc.Not(gc.Equals), -1)
+	c.Assert(e.URL.User, gc.Not(gc.Equals), "")
+
+	c.Assert(e.PreV5BlobHash, gc.Not(gc.Equals), "")
+	c.Assert(e.PreV5BlobHash256, gc.Not(gc.Equals), "")
+	c.Assert(e.BlobHash, gc.Not(gc.Equals), "")
+	c.Assert(e.BlobHash256, gc.Not(gc.Equals), "")
+	c.Assert(e.Size, gc.Not(gc.Equals), 0)
+	c.Assert(e.BlobName, gc.Not(gc.Equals), "")
+
+	if e.UploadTime.IsZero() {
+		c.Fatalf("zero upload time")
+	}
+
+	// URL denormalization checks.
+	c.Assert(e.BaseURL, jc.DeepEquals, mongodoc.BaseURL(e.URL))
+	c.Assert(e.URL.Name, gc.Equals, e.Name)
+	c.Assert(e.URL.User, gc.Equals, e.User)
+	c.Assert(e.URL.Revision, gc.Equals, e.Revision)
+	c.Assert(e.URL.Series, gc.Equals, e.Series)
+
+	if e.PromulgatedRevision != -1 {
+		expect := *e.URL
+		expect.User = ""
+		expect.Revision = e.PromulgatedRevision
+		c.Assert(e.PromulgatedURL, jc.DeepEquals, &expect)
+	} else {
+		c.Assert(e.PromulgatedURL, gc.IsNil)
+	}
+
+	// Multi-series vs single-series vs bundle checks.
+	if e.URL.Series == "bundle" {
+		c.Assert(e.BundleData, gc.NotNil)
+		c.Assert(e.BundleCharms, gc.NotNil)
+		c.Assert(e.BundleMachineCount, gc.NotNil)
+		c.Assert(e.BundleUnitCount, gc.NotNil)
+
+		c.Assert(e.SupportedSeries, gc.HasLen, 0)
+		c.Assert(e.BlobHash, gc.Equals, e.PreV5BlobHash)
+		c.Assert(e.Size, gc.Equals, e.PreV5BlobSize)
+		c.Assert(e.BlobHash256, gc.Equals, e.PreV5BlobHash256)
+	} else {
+		c.Assert(e.CharmMeta, gc.NotNil)
+		if e.URL.Series == "" {
+			c.Assert(e.SupportedSeries, jc.DeepEquals, e.CharmMeta.Series)
+			c.Assert(e.BlobHash, gc.Not(gc.Equals), e.PreV5BlobHash)
+			c.Assert(e.Size, gc.Not(gc.Equals), e.PreV5BlobSize)
+			c.Assert(e.BlobHash256, gc.Not(gc.Equals), e.PreV5BlobHash256)
+		} else {
+			c.Assert(e.SupportedSeries, jc.DeepEquals, []string{e.URL.Series})
+			c.Assert(e.BlobHash, gc.Equals, e.PreV5BlobHash)
+			c.Assert(e.Size, gc.Equals, e.PreV5BlobSize)
+			c.Assert(e.BlobHash256, gc.Equals, e.PreV5BlobHash256)
+		}
+	}
+
+	// Check that the blobs exist.
+	r, err := store.OpenBlob(EntityResolvedURL(e))
+	c.Assert(err, gc.IsNil)
+	r.Close()
+	r, err = store.OpenBlobPreV5(EntityResolvedURL(e))
+	c.Assert(err, gc.IsNil)
+	r.Close()
+
+	// Check that the base entity exists.
+	_, err = store.FindBaseEntity(e.URL, nil)
+	c.Assert(err, gc.IsNil)
+}
+
+func checkBaseEntityInvariants(c *gc.C, e *mongodoc.BaseEntity, store *Store) {
+	c.Assert(e.URL.Name, gc.Not(gc.Equals), "")
+	c.Assert(e.URL.User, gc.Not(gc.Equals), "")
+
+	c.Assert(e.URL, jc.DeepEquals, mongodoc.BaseURL(e.URL))
+	c.Assert(e.User, gc.Equals, e.URL.User)
+	c.Assert(e.Name, gc.Equals, e.URL.Name)
 }
 
 // runMigrations starts a new server which will cause all migrations
@@ -322,4 +406,55 @@ func (s *migrationsIntegrationSuite) runMigrations(db *mgo.Database) error {
 		srv.Close()
 	}
 	return err
+}
+
+type entityChecker func(c *gc.C, entity *mongodoc.Entity)
+
+func hasPromulgatedRevision(rev int) entityChecker {
+	return func(c *gc.C, entity *mongodoc.Entity) {
+		c.Assert(entity.PromulgatedRevision, gc.Equals, rev)
+	}
+}
+
+func hasCompatibilityBlob(hasBlob bool) entityChecker {
+	return func(c *gc.C, entity *mongodoc.Entity) {
+		if hasBlob {
+			c.Assert(entity.PreV5BlobHash, gc.Not(gc.Equals), entity.BlobHash)
+		} else {
+			c.Assert(entity.PreV5BlobHash, gc.Equals, entity.BlobHash)
+		}
+	}
+}
+
+func isDevelopment(isDev bool) entityChecker {
+	return func(c *gc.C, entity *mongodoc.Entity) {
+		c.Assert(entity.Development, gc.Equals, isDev)
+	}
+}
+
+type baseEntityChecker func(c *gc.C, entity *mongodoc.BaseEntity)
+
+func isPromulgated(isProm bool) baseEntityChecker {
+	return func(c *gc.C, entity *mongodoc.BaseEntity) {
+		c.Assert(entity.Promulgated, gc.Equals, mongodoc.IntBool(isProm))
+	}
+}
+
+func hasACLs(acls mongodoc.ACL) baseEntityChecker {
+	return func(c *gc.C, entity *mongodoc.BaseEntity) {
+		c.Assert(entity.ACLs, jc.DeepEquals, acls)
+	}
+}
+
+func hasDevelopmentACLs(acls mongodoc.ACL) baseEntityChecker {
+	return func(c *gc.C, entity *mongodoc.BaseEntity) {
+		c.Assert(entity.DevelopmentACLs, jc.DeepEquals, acls)
+	}
+}
+
+func hasAllACLs(user string) baseEntityChecker {
+	return hasDevelopmentACLs(mongodoc.ACL{
+		Read:  []string{user},
+		Write: []string{user},
+	})
 }
