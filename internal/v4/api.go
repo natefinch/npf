@@ -88,9 +88,15 @@ var requiredEntityFields = func() map[string]int {
 // a charmstore.ErrTooManySessions cause.
 func (h *Handler) NewReqHandler(req *http.Request) (ReqHandler, error) {
 	req.ParseForm()
-	ch := params.Channel(req.Form.Get("channel"))
-	if !v5.ValidChannels[ch] {
-		return ReqHandler{}, badRequestf(nil, "invalid channel %q specified in request", ch)
+	// Validate all the values for channel, even though
+	// most endpoints will only ever use the first one.
+	// PUT to an archive is the notable exception.
+	// TODO Why is the v4 API accepting a channel parameter anyway? We
+	// should probably always use "stable".
+	for _, ch := range req.Form["channel"] {
+		if !v5.ValidChannels[params.Channel(ch)] {
+			return ReqHandler{}, badRequestf(nil, "invalid channel %q specified in request", ch)
+		}
 	}
 	store, err := h.Pool.RequestStore()
 	if err != nil {
@@ -103,7 +109,7 @@ func (h *Handler) NewReqHandler(req *http.Request) (ReqHandler, error) {
 	rh.Handler = h.Handler
 	rh.Store = &v5.StoreWithChannel{
 		Store:   store,
-		Channel: ch,
+		Channel: params.Channel(req.Form.Get("channel")),
 	}
 	rh.Cache = entitycache.New(rh.Store)
 	rh.Cache.AddEntityFields(requiredEntityFields)

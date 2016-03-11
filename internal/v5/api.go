@@ -149,12 +149,12 @@ func (s *StoreWithChannel) FindBaseEntity(url *charm.URL, fields map[string]int)
 	return s.Store.FindBaseEntity(url, fields)
 }
 
-// ValidChannels holds the set of all allowed channels.
+// ValidChannels holds the set of all allowed channels
+// that can be passed as a "?channel=" parameter.
 var ValidChannels = map[params.Channel]bool{
 	params.UnpublishedChannel: true,
 	params.DevelopmentChannel: true,
 	params.StableChannel:      true,
-	params.NoChannel:          true,
 }
 
 // NewReqHandler returns an instance of a *ReqHandler
@@ -165,9 +165,13 @@ var ValidChannels = map[params.Channel]bool{
 // a charmstore.ErrTooManySessions cause.
 func (h *Handler) NewReqHandler(req *http.Request) (*ReqHandler, error) {
 	req.ParseForm()
-	ch := params.Channel(req.Form.Get("channel"))
-	if !ValidChannels[ch] {
-		return nil, badRequestf(nil, "invalid channel %q specified in request", ch)
+	// Validate all the values for channel, even though
+	// most endpoints will only ever use the first one.
+	// PUT to an archive is the notable exception.
+	for _, ch := range req.Form["channel"] {
+		if !ValidChannels[params.Channel(ch)] {
+			return nil, badRequestf(nil, "invalid channel %q specified in request", ch)
+		}
 	}
 	store, err := h.Pool.RequestStore()
 	if err != nil {
@@ -180,7 +184,7 @@ func (h *Handler) NewReqHandler(req *http.Request) (*ReqHandler, error) {
 	rh.Handler = h
 	rh.Store = &StoreWithChannel{
 		Store:   store,
-		Channel: ch,
+		Channel: params.Channel(req.Form.Get("channel")),
 	}
 	rh.Cache = entitycache.New(rh.Store)
 	rh.Cache.AddEntityFields(RequiredEntityFields)

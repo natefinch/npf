@@ -187,7 +187,7 @@ func (h *ReqHandler) servePostArchive(id *charm.URL, w http.ResponseWriter, req 
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	if err := h.Store.UploadEntity(rid, req.Body, hash, req.ContentLength); err != nil {
+	if err := h.Store.UploadEntity(rid, req.Body, hash, req.ContentLength, nil); err != nil {
 		return errgo.Mask(err,
 			errgo.Is(params.ErrDuplicateUpload),
 			errgo.Is(params.ErrEntityIdNotAllowed),
@@ -218,6 +218,14 @@ func (h *ReqHandler) servePutArchive(id *charm.URL, w http.ResponseWriter, req *
 	if req.ContentLength == -1 {
 		return badRequestf(nil, "Content-Length not specified")
 	}
+	var chans []params.Channel
+	for _, c := range req.Form["channel"] {
+		c := params.Channel(c)
+		if c != params.DevelopmentChannel && c != params.StableChannel {
+			return badRequestf(nil, "cannot put entity into channel %q", c)
+		}
+		chans = append(chans, c)
+	}
 	rid := &router.ResolvedURL{
 		URL:                 *id.WithChannel(""),
 		PromulgatedRevision: -1,
@@ -247,7 +255,7 @@ func (h *ReqHandler) servePutArchive(id *charm.URL, w http.ResponseWriter, req *
 		}
 		rid.PromulgatedRevision = pid.Revision
 	}
-	if err := h.Store.UploadEntity(rid, req.Body, hash, req.ContentLength); err != nil {
+	if err := h.Store.UploadEntity(rid, req.Body, hash, req.ContentLength, chans); err != nil {
 		return errgo.Mask(err,
 			errgo.Is(params.ErrDuplicateUpload),
 			errgo.Is(params.ErrEntityIdNotAllowed),

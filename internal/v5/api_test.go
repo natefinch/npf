@@ -3151,9 +3151,13 @@ func (s *APISuite) TestPublishSuccess(c *gc.C) {
 	})
 
 	assertResolvesTo := func(ch params.Channel, rev int) {
+		chanParam := ""
+		if ch != params.NoChannel {
+			chanParam = "?channel=" + string(ch)
+		}
 		httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 			Handler: s.srv,
-			URL:     storeURL(fmt.Sprintf("~bob/precise/wordpress/meta/id-revision?channel=%s", ch)),
+			URL:     storeURL(fmt.Sprintf("~bob/precise/wordpress/meta/id-revision" + chanParam)),
 			Do:      bakeryDo(nil),
 			ExpectBody: params.IdRevisionResponse{
 				Revision: rev,
