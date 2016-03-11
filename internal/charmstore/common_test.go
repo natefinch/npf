@@ -6,6 +6,7 @@ package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/char
 import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
@@ -24,7 +25,7 @@ func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
 	defer store.Close()
 	for _, svc := range bundle.Data().Services {
 		u := charm.MustParseURL(svc.Charm)
-		if _, err := store.FindBestEntity(u, nil); err == nil {
+		if _, err := store.FindBestEntity(u, params.NoChannel, nil); err == nil {
 			continue
 		}
 		if u.Revision == -1 {
@@ -43,6 +44,8 @@ func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
 			rurl.PromulgatedRevision = -1
 		}
 		err := store.AddCharmWithArchive(&rurl, ch)
+		c.Assert(err, gc.IsNil)
+		err = store.Publish(&rurl, params.StableChannel)
 		c.Assert(err, gc.IsNil)
 	}
 }

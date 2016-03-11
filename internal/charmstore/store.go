@@ -5,6 +5,7 @@ package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/char
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -357,9 +358,6 @@ func (s *Store) ensureIndexes() error {
 		s.DB.Entities(),
 		mgo.Index{Key: []string{"promulgated-url"}, Unique: true, Sparse: true},
 	}, {
-		s.DB.BaseEntities(),
-		mgo.Index{Key: []string{"public"}},
-	}, {
 		s.DB.Logs(),
 		mgo.Index{Key: []string{"urls"}},
 	}, {
@@ -468,10 +466,17 @@ func (s *Store) FindEntities(url *charm.URL, fields map[string]int) ([]*mongodoc
 }
 
 // FindBestEntity finds the entity that provides the preferred match to
-// the given URL. If the given URL has no user then only promulgated
-// entities will be queried. If fields is not nil, only its fields will
-// be populated in the returned entities.
-func (s *Store) FindBestEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
+// the given URL, on the given channel. If the given URL has no user
+// then only promulgated entities will be queried. If fields is not nil,
+// only those fields will be populated in the returned entities.
+//
+// If the URL contains a revision then it is assumed to be fully formed
+// and refer to a single entity; the channel is ignored.
+//
+// If the URL does not contain a revision then the channel is searched
+// for the best match, here NoChannel will be treated as
+// params.StableChannel.
+func (s *Store) FindBestEntity(url *charm.URL, channel params.Channel, fields map[string]int) (*mongodoc.Entity, error) {
 	if fields != nil {
 		// Make sure we have all the fields we need to make a decision.
 		// TODO this would be more efficient if we used bitmasks for field selection.
@@ -481,19 +486,107 @@ func (s *Store) FindBestEntity(url *charm.URL, fields map[string]int) (*mongodoc
 			"promulgated-revision": 1,
 			"series":               1,
 			"revision":             1,
+			"development":          1,
+			"stable":               1,
 		}
 		for f := range fields {
 			nfields[f] = 1
 		}
 		fields = nfields
 	}
+	if url.Revision != -1 {
+		// If the URL contains a revision, then it refers to a single entity.
+		entity, err := s.findSingleEntity(url, fields)
+		if errgo.Cause(err) == params.ErrNotFound {
+			return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
+		} else if err != nil {
+			return nil, errgo.Mask(err)
+		}
+		// If a channel was specified make sure the entity is in that channel.
+		// This is crucial because if we don't do this, then the user could choose
+		// to use any chosen set of ACLs against any entity.
+		switch channel {
+		case params.StableChannel:
+			if !entity.Stable {
+				return nil, errgo.WithCausef(nil, params.ErrNotFound, "%s not found in stable channel", url)
+			}
+		case params.DevelopmentChannel:
+			if !entity.Development {
+				return nil, errgo.WithCausef(nil, params.ErrNotFound, "%s not found in development channel", url)
+			}
+		}
+		return entity, nil
+	}
 
+	switch channel {
+	case params.UnpublishedChannel:
+		return s.findUnpublishedEntity(url, fields)
+	case params.NoChannel:
+		channel = params.StableChannel
+		fallthrough
+	default:
+		return s.findEntityInChannel(url, channel, fields)
+	}
+}
+
+// findSingleEntity returns the entity referred to by URL. It is expected
+// that the URL refers to only one entity and is fully formed. The url may
+// refer to either a user-owned or promulgated charm name.
+func (s *Store) findSingleEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
+	query := s.EntitiesQuery(url)
+	if fields != nil {
+		query = query.Select(fields)
+	}
+	var entity mongodoc.Entity
+	err := query.One(&entity)
+	if err == nil {
+		return &entity, nil
+	}
+	if err == mgo.ErrNotFound {
+		return nil, errgo.WithCausef(err, params.ErrNotFound, "no matching charm or bundle for %s", url)
+	}
+	return nil, errgo.Notef(err, "cannot find entities matching %s", url)
+}
+
+// findEntityInChannel attempts to find an entity on the given channel. The
+// base entity for URL is retrieved and the series with the best match to
+// URL.Series is used as the resolved entity.
+func (s *Store) findEntityInChannel(url *charm.URL, ch params.Channel, fields map[string]int) (*mongodoc.Entity, error) {
+	baseEntity, err := s.FindBaseEntity(url, map[string]int{
+		"_id":             1,
+		"channelentities": 1,
+	})
+	if errgo.Cause(err) == params.ErrNotFound {
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
+	} else if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	var entityURL *charm.URL
+	if url.Series == "" {
+		for _, u := range baseEntity.ChannelEntities[ch] {
+			if entityURL == nil || seriesScore[u.Series] > seriesScore[entityURL.Series] {
+				entityURL = u
+			}
+		}
+	} else {
+		entityURL = baseEntity.ChannelEntities[ch][url.Series]
+	}
+	if entityURL == nil {
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
+	}
+	return s.findSingleEntity(entityURL, fields)
+}
+
+// findUnpublishedEntity attempts to find an entity on the unpublished
+// channel. This searches all entities in the store for the best match to
+// the URL.
+func (s *Store) findUnpublishedEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
 	entities, err := s.FindEntities(url, fields)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}
 	if len(entities) == 0 {
-		return nil, errgo.WithCausef(nil, params.ErrNotFound, "entity not found")
+		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", url)
 	}
 	best := entities[0]
 	for _, e := range entities {
@@ -547,9 +640,6 @@ func (s *Store) EntitiesQuery(url *charm.URL) *mgo.Query {
 	entities := s.DB.Entities()
 	query := make(bson.D, 1, 5)
 	query[0] = bson.DocElem{"name", url.Name}
-	if url.Channel != charm.DevelopmentChannel {
-		query = append(query, bson.DocElem{"development", false})
-	}
 	if url.User == "" {
 		if url.Revision > -1 {
 			query = append(query, bson.DocElem{"promulgated-revision", url.Revision})
@@ -646,21 +736,64 @@ func (s *Store) UpdateBaseEntity(url *router.ResolvedURL, update bson.D) error {
 	return nil
 }
 
-// SetDevelopment sets whether the entity corresponding to the given URL will
-// be only available in its development version (in essence, not published).
-func (s *Store) SetDevelopment(url *router.ResolvedURL, development bool) error {
-	if err := s.UpdateEntity(url, bson.D{{
-		"$set", bson.D{{"development", development}},
-	}}); err != nil {
+// Publish assigns channels to the entity corresponding to the given URL.
+// An error is returned if no channels are provided. For the time being,
+// the only supported channels are "development" and "stable".
+func (s *Store) Publish(url *router.ResolvedURL, channels ...params.Channel) error {
+	var updateSearch bool
+	// Validate channels.
+	actual := make([]params.Channel, 0, len(channels))
+	for _, c := range channels {
+		switch c {
+		case params.StableChannel:
+			updateSearch = true
+			fallthrough
+		case params.DevelopmentChannel:
+			actual = append(actual, c)
+		}
+	}
+	numChannels := len(actual)
+	if numChannels == 0 {
+		return errgo.Newf("cannot update %q: no channels provided", url)
+	}
+
+	// Update the entity.
+	update := make(bson.D, numChannels)
+	for i, c := range actual {
+		update[i] = bson.DocElem{string(c), true}
+	}
+	if err := s.UpdateEntity(url, bson.D{{"$set", update}}); err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
-	if !development {
-		// If the entity is published, update the search index.
-		rurl := *url
-		rurl.Development = development
-		if err := s.UpdateSearch(&rurl); err != nil {
-			return errgo.Notef(err, "cannot update search entities for %q", rurl)
+
+	// Update the base entity.
+	entity, err := s.FindEntity(url, FieldSelector("series", "supportedseries"))
+	if err != nil {
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	series := entity.SupportedSeries
+	numSeries := len(series)
+	if numSeries == 0 {
+		series = []string{entity.Series}
+		numSeries = 1
+	}
+	update = make(bson.D, 0, numChannels*numSeries)
+	for _, c := range actual {
+		for _, s := range series {
+			update = append(update, bson.DocElem{fmt.Sprintf("channelentities.%s.%s", c, s), entity.URL})
 		}
+	}
+	if err := s.UpdateBaseEntity(url, bson.D{{"$set", update}}); err != nil {
+		return errgo.Mask(err)
+	}
+
+	if !updateSearch {
+		return nil
+	}
+
+	// Add entity to ElasticSearch.
+	if err := s.UpdateSearch(url); err != nil {
+		return errgo.Notef(err, "cannot index %s to ElasticSearch", url)
 	}
 	return nil
 }
@@ -812,16 +945,15 @@ func (s *Store) SetPromulgated(url *router.ResolvedURL, promulgate bool) error {
 	return nil
 }
 
-// SetPerms sets the permissions for the base entity with
-// the given id for "which" operations ("read" or "write")
-// to the given ACL. This is mostly provided for testing.
+// SetPerms sets the ACL specified by which for the base entity with the
+// given id. The which parameter is in the form "[channel].operation",
+// where channel, if specified, is one of "development" or "stable" and
+// operation is one of "read" or "write". If which does not specify a
+// channel then the unpublished ACL is updated. This is only provided for
+// testing.
 func (s *Store) SetPerms(id *charm.URL, which string, acl ...string) error {
-	field := "acls"
-	if id.Channel == charm.DevelopmentChannel {
-		field = "developmentacls"
-	}
 	return s.DB.BaseEntities().UpdateId(mongodoc.BaseURL(id), bson.D{{"$set",
-		bson.D{{field + "." + which, acl}},
+		bson.D{{"channelacls." + which, acl}},
 	}})
 }
 
@@ -829,13 +961,8 @@ func (s *Store) SetPerms(id *charm.URL, which string, acl ...string) error {
 // that will find any charms that require any interfaces
 // in the required slice or provide any interfaces in the
 // provided slice.
-//
-// Development charms are never matched.
-// TODO do we actually want to match dev charms here?
 func (s *Store) MatchingInterfacesQuery(required, provided []string) *mgo.Query {
 	return s.DB.Entities().Find(bson.D{{
-		"development", false,
-	}, {
 		"$or", []bson.D{{{
 			"charmrequiredinterfaces", bson.D{{
 				"$elemMatch", bson.D{{
@@ -1198,14 +1325,12 @@ func (s *Store) SynchroniseElasticsearch() error {
 	return nil
 }
 
-// EntityResolvedURL returns the ResolvedURL for the entity.
-// It requires PromulgatedURL and Development fields to have been
-// filled out in the entity.
+// EntityResolvedURL returns the ResolvedURL for the entity. It requires
+// that the PromulgatedURL field has been filled out in the entity.
 func EntityResolvedURL(e *mongodoc.Entity) *router.ResolvedURL {
 	rurl := &router.ResolvedURL{
 		URL:                 *e.URL,
 		PromulgatedRevision: -1,
-		Development:         e.Development,
 	}
 	if e.PromulgatedURL != nil {
 		rurl.PromulgatedRevision = e.PromulgatedURL.Revision

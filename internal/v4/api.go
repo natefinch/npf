@@ -57,7 +57,7 @@ func New(pool *charmstore.Pool, config charmstore.ServerParams, rootPath string)
 }
 
 func (h Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	rh, err := h.NewReqHandler()
+	rh, err := h.NewReqHandler(req)
 	if err != nil {
 		router.WriteError(w, err)
 		return
@@ -80,10 +80,24 @@ var requiredEntityFields = func() map[string]int {
 	return fields
 }()
 
-// NewReqHandler fetchs a new instance of ReqHandler
-// from h.Pool and returns it. The ReqHandler must
-// be closed when finished with.
-func (h *Handler) NewReqHandler() (ReqHandler, error) {
+// NewReqHandler returns an instance of a *ReqHandler
+// suitable for handling the given HTTP request. After use, the ReqHandler.Close
+// method should be called to close it.
+//
+// If no handlers are available, it returns an error with
+// a charmstore.ErrTooManySessions cause.
+func (h *Handler) NewReqHandler(req *http.Request) (ReqHandler, error) {
+	req.ParseForm()
+	// Validate all the values for channel, even though
+	// most endpoints will only ever use the first one.
+	// PUT to an archive is the notable exception.
+	// TODO Why is the v4 API accepting a channel parameter anyway? We
+	// should probably always use "stable".
+	for _, ch := range req.Form["channel"] {
+		if !v5.ValidChannels[params.Channel(ch)] {
+			return ReqHandler{}, badRequestf(nil, "invalid channel %q specified in request", ch)
+		}
+	}
 	store, err := h.Pool.RequestStore()
 	if err != nil {
 		if errgo.Cause(err) == charmstore.ErrTooManySessions {
@@ -93,8 +107,11 @@ func (h *Handler) NewReqHandler() (ReqHandler, error) {
 	}
 	rh := reqHandlerPool.Get().(ReqHandler)
 	rh.Handler = h.Handler
-	rh.Store = store
-	rh.Cache = entitycache.New(store)
+	rh.Store = &v5.StoreWithChannel{
+		Store:   store,
+		Channel: params.Channel(req.Form.Get("channel")),
+	}
+	rh.Cache = entitycache.New(rh.Store)
 	rh.Cache.AddEntityFields(requiredEntityFields)
 	rh.Cache.AddBaseEntityFields(v5.RequiredBaseEntityFields)
 	return rh, nil
@@ -117,6 +134,13 @@ func newReqHandler() ReqHandler {
 	handlers.Id["expand-id"] = resolveId(authId(h.serveExpandId))
 	handlers.Id["archive"] = h.serveArchive(handlers.Id["archive"])
 	handlers.Id["archive/"] = resolveId(authId(h.serveArchiveFile))
+
+	// Delete new endpoints that we don't want to provide in v4.
+	delete(handlers.Id, "publish")
+	delete(handlers.Meta, "published")
+	delete(handlers.Id, "resources")
+	delete(handlers.Meta, "resources")
+
 	h.Router = router.New(handlers, h)
 	return h
 }
@@ -145,17 +169,13 @@ func (h ReqHandler) ResolveURLs(urls []*charm.URL) ([]*router.ResolvedURL, error
 // It's defined as a separate function so it can be more
 // easily unit-tested.
 func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, error) {
-	entity, err := cache.Entity(url, nil)
-	if err != nil && errgo.Cause(err) != params.ErrNotFound {
-		return nil, errgo.Mask(err)
-	}
-	if errgo.Cause(err) == params.ErrNotFound {
-		return nil, noMatchingURLError(url)
+	entity, err := cache.Entity(url, charmstore.FieldSelector("supportedseries"))
+	if err != nil {
+		return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	rurl := &router.ResolvedURL{
 		URL:                 *entity.URL,
 		PromulgatedRevision: -1,
-		Development:         url.Channel == charm.DevelopmentChannel,
 	}
 	if url.User == "" {
 		rurl.PromulgatedRevision = entity.PromulgatedRevision
@@ -189,10 +209,6 @@ func StatsEnabled(req *http.Request) bool {
 	return v5.StatsEnabled(req)
 }
 
-func noMatchingURLError(url *charm.URL) error {
-	return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
-}
-
 // GET id/meta/charm-metadata
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetacharm-metadata
 func (h ReqHandler) metaCharmMetadata(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
@@ -216,7 +232,7 @@ func (h ReqHandler) metaRevisionInfo(id *router.ResolvedURL, path string, flags 
 		q = q.Sort("-revision")
 	}
 	var docs []*mongodoc.Entity
-	if err := q.Select(bson.D{{"_id", 1}, {"promulgated-url", 1}, {"supportedseries", 1}, {"development", 1}}).All(&docs); err != nil {
+	if err := q.Select(bson.D{{"_id", 1}, {"promulgated-url", 1}, {"supportedseries", 1}}).All(&docs); err != nil {
 		return "", errgo.Notef(err, "cannot get ids")
 	}
 
@@ -277,16 +293,7 @@ func (h ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter,
 	// to return entities that match appropriately.
 
 	// Retrieve all the entities with the same base URL.
-	// Note that we don't do any permission checking of the returned URLs.
-	// This is because we know that the user is allowed to read at
-	// least the resolved URL passed into serveExpandId.
-	// If this does not specify "development", then no development
-	// revisions will be chosen, so the single ACL already checked
-	// is sufficient. If it *does* specify "development", then we assume
-	// that the development ACLs are more restrictive than the
-	// non-development ACLs, and given that, we can allow all
-	// the URLs.
-	q := h.Store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}, {"development", 1}, {"supportedseries", 1}})
+	q := h.Store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}, {"supportedseries", 1}})
 	if id.PromulgatedRevision != -1 {
 		q = q.Sort("-series", "-promulgated-revision")
 	} else {
@@ -301,6 +308,9 @@ func (h ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter,
 	// Collect all the expanded identifiers for each entity.
 	response := make([]params.ExpandedId, 0, len(docs))
 	expandMultiSeries(docs, func(series string, doc *mongodoc.Entity) error {
+		if err := h.AuthorizeEntity(charmstore.EntityResolvedURL(doc), req); err != nil {
+			return nil
+		}
 		url := doc.PreferredURL(id.PromulgatedRevision != -1)
 		url.Series = series
 		response = append(response, params.ExpandedId{Id: url.String()})
@@ -334,4 +344,10 @@ func expandMultiSeries(entities []*mongodoc.Entity, append func(series string, d
 		}
 	}
 	return nil
+}
+
+func badRequestf(underlying error, f string, a ...interface{}) error {
+	err := errgo.WithCausef(underlying, params.ErrBadRequest, f, a...)
+	err.(*errgo.Err).SetLocation(1)
+	return err
 }

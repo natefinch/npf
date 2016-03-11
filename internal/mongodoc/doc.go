@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2/bson"
 )
 
@@ -134,10 +135,16 @@ type Entity struct {
 	// If the entity is not promulgated this should be set to -1.
 	PromulgatedRevision int `bson:"promulgated-revision"`
 
-	// Development holds whether the entity is in development or published.
-	// A development entity can only be referred to using URLs including the
+	// TODO we could potentially use map[params.Channel] bool
+	// instead of having a separate field for each channel.
+
+	// Development holds whether the entity has been published in the
 	// "development" channel.
 	Development bool
+
+	// Stable holds whether the entity has been published in the
+	// "stable" channel.
+	Stable bool
 }
 
 // PreferredURL returns the preferred way to refer to this entity. If
@@ -151,9 +158,6 @@ func (e *Entity) PreferredURL(usePromulgated bool) *charm.URL {
 		u = *e.PromulgatedURL
 	} else {
 		u = *e.URL
-	}
-	if e.Development {
-		u.Channel = charm.DevelopmentChannel
 	}
 	return &u
 }
@@ -173,19 +177,6 @@ type BaseEntity struct {
 	// Name holds the name of the entity (for instance "wordpress").
 	Name string
 
-	// Public specifies whether the charm or bundle
-	// is available to all users. If this is true, the ACLs will
-	// be ignored when reading a charm.
-	Public bool
-
-	// ACLs holds permission information relevant to the base entity.
-	// The permissions apply to all revisions.
-	ACLs ACL
-
-	// DevelopmentACLs is similar to ACLs but applies to all development
-	// revisions.
-	DevelopmentACLs ACL
-
 	// Promulgated specifies whether the charm or bundle should be
 	// promulgated.
 	Promulgated IntBool
@@ -194,6 +185,16 @@ type BaseEntity struct {
 	// the base entity. Thhose data apply to all revisions.
 	// The byte slices hold JSON-encoded data.
 	CommonInfo map[string][]byte `bson:",omitempty" json:",omitempty"`
+
+	// ChannelACLs holds a map from an entity channel to the ACLs
+	// that apply to entities that use this base entity that are associated
+	// with the given channel.
+	ChannelACLs map[params.Channel]ACL
+
+	// ChannelEntities holds a set of channels, each containing a set
+	// of series holding the currently published entity revision for
+	// that channel and series.
+	ChannelEntities map[params.Channel]map[string]*charm.URL
 }
 
 // ACL holds lists of users and groups that are
@@ -325,7 +326,6 @@ func BaseURL(url *charm.URL) *charm.URL {
 	newURL := *url
 	newURL.Revision = -1
 	newURL.Series = ""
-	newURL.Channel = ""
 	return &newURL
 }
 

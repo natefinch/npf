@@ -212,8 +212,15 @@ var readAuthorizationTests = []struct {
 	// groups holds group names the user is member of, as returned by the
 	// discharger.
 	groups []string
-	// readPerm stores a list of users with read permissions.
-	readPerm []string
+	// unpublishedReadPerm stores a list of users with read permissions on
+	// on the unpublished entities.
+	unpublishedReadPerm []string
+	// developmentReadPerm stores a list of users with read permissions on the development channel.
+	developmentReadPerm []string
+	// stableReadPerm stores a list of users with read permissions on the stable channel.
+	stableReadPerm []string
+	// channels contains a list of channels, to which the entity belongs.
+	channels []params.Channel
 	// expectStatus is the expected HTTP response status.
 	// Defaults to 200 status OK.
 	expectStatus int
@@ -221,24 +228,24 @@ var readAuthorizationTests = []struct {
 	// the body is not checked and the response is assumed to be ok.
 	expectBody interface{}
 }{{
-	about:    "anonymous users are authorized",
-	readPerm: []string{params.Everyone},
+	about:               "anonymous users are authorized",
+	unpublishedReadPerm: []string{params.Everyone},
 }, {
-	about:    "everyone is authorized",
-	username: "dalek",
-	readPerm: []string{params.Everyone},
+	about:               "everyone is authorized",
+	username:            "dalek",
+	unpublishedReadPerm: []string{params.Everyone},
 }, {
-	about:    "everyone and a specific user",
-	username: "dalek",
-	readPerm: []string{params.Everyone, "janeway"},
+	about:               "everyone and a specific user",
+	username:            "dalek",
+	unpublishedReadPerm: []string{params.Everyone, "janeway"},
 }, {
-	about:    "specific user authorized",
-	username: "who",
-	readPerm: []string{"who"},
+	about:               "specific user authorized",
+	username:            "who",
+	unpublishedReadPerm: []string{"who"},
 }, {
-	about:    "multiple specific users authorized",
-	username: "picard",
-	readPerm: []string{"kirk", "picard", "sisko"},
+	about:               "multiple specific users authorized",
+	username:            "picard",
+	unpublishedReadPerm: []string{"kirk", "picard", "sisko"},
 }, {
 	about:        "nobody authorized",
 	username:     "picard",
@@ -248,34 +255,34 @@ var readAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "picard"`,
 	},
 }, {
-	about:        "access denied for user",
-	username:     "kirk",
-	readPerm:     []string{"picard", "sisko"},
-	expectStatus: http.StatusUnauthorized,
+	about:               "access denied for user",
+	username:            "kirk",
+	unpublishedReadPerm: []string{"picard", "sisko"},
+	expectStatus:        http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
 }, {
-	about:    "everyone is authorized (user is member of groups)",
-	username: "dalek",
-	groups:   []string{"group1", "group2"},
-	readPerm: []string{params.Everyone},
+	about:               "everyone is authorized (user is member of groups)",
+	username:            "dalek",
+	groups:              []string{"group1", "group2"},
+	unpublishedReadPerm: []string{params.Everyone},
 }, {
-	about:    "everyone and a specific group",
-	username: "dalek",
-	groups:   []string{"group2", "group3"},
-	readPerm: []string{params.Everyone, "group1"},
+	about:               "everyone and a specific group",
+	username:            "dalek",
+	groups:              []string{"group2", "group3"},
+	unpublishedReadPerm: []string{params.Everyone, "group1"},
 }, {
-	about:    "specific group authorized",
-	username: "who",
-	groups:   []string{"group1", "group42", "group2"},
-	readPerm: []string{"group42"},
+	about:               "specific group authorized",
+	username:            "who",
+	groups:              []string{"group1", "group42", "group2"},
+	unpublishedReadPerm: []string{"group42"},
 }, {
-	about:    "multiple specific groups authorized",
-	username: "picard",
-	groups:   []string{"group2"},
-	readPerm: []string{"kirk", "group0", "group2"},
+	about:               "multiple specific groups authorized",
+	username:            "picard",
+	groups:              []string{"group2"},
+	unpublishedReadPerm: []string{"kirk", "group0", "group2"},
 }, {
 	about:        "no group authorized",
 	username:     "picard",
@@ -286,10 +293,94 @@ var readAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "picard"`,
 	},
 }, {
-	about:        "access denied for group",
-	username:     "kirk",
-	groups:       []string{"group1", "group2", "group3"},
-	readPerm:     []string{"picard", "sisko", "group42", "group47"},
+	about:               "access denied for group",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group47"},
+	expectStatus:        http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:               "access provided through development channel",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group1"},
+	channels:            []params.Channel{params.DevelopmentChannel},
+}, {
+	about:               "access provided through development channel, but charm not published",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group1"},
+	expectStatus:        http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:               "access provided through stable channel",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group12"},
+	stableReadPerm:      []string{"group2"},
+	channels:            []params.Channel{params.DevelopmentChannel, params.StableChannel},
+}, {
+	about:               "access provided through stable channel, but charm not published",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group12"},
+	stableReadPerm:      []string{"group2"},
+	channels:            []params.Channel{params.DevelopmentChannel},
+	expectStatus:        http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:               "access provided through development channel, but charm on stable channel",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentReadPerm: []string{"group1"},
+	stableReadPerm:      []string{"group11"},
+	channels: []params.Channel{
+		params.DevelopmentChannel,
+		params.StableChannel,
+	},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:               "access provided through unpublished ACL, but charm on stable channel",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group1"},
+	stableReadPerm:      []string{"group11"},
+	channels: []params.Channel{
+		params.DevelopmentChannel,
+		params.StableChannel,
+	},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:               "access provided through unpublished ACL, but charm on development channel",
+	username:            "kirk",
+	groups:              []string{"group1", "group2", "group3"},
+	unpublishedReadPerm: []string{"picard", "sisko", "group42", "group1"},
+	developmentReadPerm: []string{"group11"},
+	channels: []params.Channel{
+		params.DevelopmentChannel,
+	},
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
@@ -319,15 +410,22 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
 
-		// Change the ACLs for the testing charm
-		// (both published and development versions).
-		err = s.store.SetPerms(&rurl.URL, "read", test.readPerm...)
+		// publish the charm on any required channels.
+		if len(test.channels) > 0 {
+			err := s.store.Publish(rurl, test.channels...)
+			c.Assert(err, gc.IsNil)
+		}
+
+		// Change the ACLs for the testing charm.
+		err = s.store.SetPerms(&rurl.URL, "unpublished.read", test.unpublishedReadPerm...)
 		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", test.readPerm...)
+		err = s.store.SetPerms(&rurl.URL, "development.read", test.developmentReadPerm...)
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&rurl.URL, "stable.read", test.stableReadPerm...)
 		c.Assert(err, gc.IsNil)
 
 		// Define an helper function used to send requests and check responses.
-		makeRequest := func(path string, expectStatus int, expectBody interface{}) {
+		doRequest := func(path string, expectStatus int, expectBody interface{}) {
 			rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 				Handler: s.srv,
 				Do:      bakeryDo(nil),
@@ -343,28 +441,10 @@ func (s *authSuite) TestReadAuthorization(c *gc.C) {
 		}
 
 		// Perform meta and id requests.
-		makeRequest("~charmers/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
-		makeRequest("~charmers/wordpress/expand-id", test.expectStatus, test.expectBody)
-
-		// Perform meta and id requests to the development channel.
-		makeRequest("~charmers/development/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
-		makeRequest("~charmers/development/wordpress/expand-id", test.expectStatus, test.expectBody)
-
-		// Remove permissions for the published charm.
-		err = s.store.SetPerms(&rurl.URL, "read")
-		c.Assert(err, gc.IsNil)
-
-		// Check that now accessing the published charm is not allowed,
-		// but accessing the development charm still works as expected.
-		makeRequest("~charmers/wordpress/meta/archive-size", http.StatusUnauthorized, nil)
-		makeRequest("~charmers/development/wordpress/meta/archive-size", test.expectStatus, test.expectBody)
-
-		// Remove permissions for the development charm as well.
-		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read")
-		c.Assert(err, gc.IsNil)
-
-		// Check that now accessing the development charm is also denied.
-		makeRequest("~charmers/development/wordpress/meta/archive-size", http.StatusUnauthorized, nil)
+		// Note that we use the full URL so that we test authorization specifically
+		// on that entity without trying to look up the entity in the stable channel.
+		doRequest("~charmers/utopic/wordpress-42/meta/archive-size", test.expectStatus, test.expectBody)
+		doRequest("~charmers/utopic/wordpress-42/expand-id", test.expectStatus, test.expectBody)
 
 		// Remove all entities from the store.
 		_, err = s.store.DB.Entities().RemoveAll(nil)
@@ -382,7 +462,13 @@ var writeAuthorizationTests = []struct {
 	// discharger.
 	groups []string
 	// writePerm stores a list of users with write permissions.
-	writePerm []string
+	unpublishedWritePerm []string
+	// developmentWritePerm stores a list of users with write permissions on the development channel.
+	developmentWritePerm []string
+	// stableWritePerm stores a list of users with write permissions on the stable channel.
+	stableWritePerm []string
+	// channels contains a list of channels, to which the entity belongs.
+	channels []params.Channel
 	// expectStatus is the expected HTTP response status.
 	// Defaults to 200 status OK.
 	expectStatus int
@@ -390,21 +476,21 @@ var writeAuthorizationTests = []struct {
 	// the body is not checked and the response is assumed to be ok.
 	expectBody interface{}
 }{{
-	about:        "anonymous users are not authorized",
-	writePerm:    []string{"who"},
-	expectStatus: http.StatusUnauthorized,
+	about:                "anonymous users are not authorized",
+	unpublishedWritePerm: []string{"who"},
+	expectStatus:         http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: "unauthorized: no username declared",
 	},
 }, {
-	about:     "specific user authorized to write",
-	username:  "dalek",
-	writePerm: []string{"dalek"},
+	about:                "specific user authorized to write",
+	username:             "dalek",
+	unpublishedWritePerm: []string{"dalek"},
 }, {
-	about:     "multiple users authorized",
-	username:  "sisko",
-	writePerm: []string{"kirk", "picard", "sisko"},
+	about:                "multiple users authorized",
+	username:             "sisko",
+	unpublishedWritePerm: []string{"kirk", "picard", "sisko"},
 }, {
 	about:        "no users authorized",
 	username:     "who",
@@ -414,24 +500,24 @@ var writeAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "who"`,
 	},
 }, {
-	about:        "specific user unauthorized",
-	username:     "kirk",
-	writePerm:    []string{"picard", "sisko", "janeway"},
-	expectStatus: http.StatusUnauthorized,
+	about:                "specific user unauthorized",
+	username:             "kirk",
+	unpublishedWritePerm: []string{"picard", "sisko", "janeway"},
+	expectStatus:         http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
 }, {
-	about:     "access granted for group",
-	username:  "picard",
-	groups:    []string{"group1", "group2"},
-	writePerm: []string{"group2"},
+	about:                "access granted for group",
+	username:             "picard",
+	groups:               []string{"group1", "group2"},
+	unpublishedWritePerm: []string{"group2"},
 }, {
-	about:     "multiple groups authorized",
-	username:  "picard",
-	groups:    []string{"group1", "group2"},
-	writePerm: []string{"kirk", "group0", "group1", "group2"},
+	about:                "multiple groups authorized",
+	username:             "picard",
+	groups:               []string{"group1", "group2"},
+	unpublishedWritePerm: []string{"kirk", "group0", "group1", "group2"},
 }, {
 	about:        "no group authorized",
 	username:     "picard",
@@ -442,10 +528,94 @@ var writeAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "picard"`,
 	},
 }, {
-	about:        "access denied for group",
-	username:     "kirk",
-	groups:       []string{"group1", "group2", "group3"},
-	writePerm:    []string{"picard", "sisko", "group42", "group47"},
+	about:                "access denied for group",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group47"},
+	expectStatus:         http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:                "access provided through development channel",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentWritePerm: []string{"group1"},
+	channels:             []params.Channel{params.DevelopmentChannel},
+}, {
+	about:                "access provided through development channel, but charm not published",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentWritePerm: []string{"group1"},
+	expectStatus:         http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:                "access provided through stable channel",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentWritePerm: []string{"group12"},
+	stableWritePerm:      []string{"group2"},
+	channels:             []params.Channel{params.DevelopmentChannel, params.StableChannel},
+}, {
+	about:                "access provided through stable channel, but charm not published",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentWritePerm: []string{"group12"},
+	stableWritePerm:      []string{"group2"},
+	channels:             []params.Channel{params.DevelopmentChannel},
+	expectStatus:         http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:                "access provided through development channel, but charm on stable channel",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group47"},
+	developmentWritePerm: []string{"group1"},
+	stableWritePerm:      []string{"group11"},
+	channels: []params.Channel{
+		params.DevelopmentChannel,
+		params.StableChannel,
+	},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:                "access provided through unpublished ACL, but charm on stable channel",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group1"},
+	stableWritePerm:      []string{"group11"},
+	channels: []params.Channel{
+		params.DevelopmentChannel,
+		params.StableChannel,
+	},
+	expectStatus: http.StatusUnauthorized,
+	expectBody: params.Error{
+		Code:    params.ErrUnauthorized,
+		Message: `unauthorized: access denied for user "kirk"`,
+	},
+}, {
+	about:                "access provided through unpublished ACL, but charm on development channel",
+	username:             "kirk",
+	groups:               []string{"group1", "group2", "group3"},
+	unpublishedWritePerm: []string{"picard", "sisko", "group42", "group1"},
+	developmentWritePerm: []string{"group11"},
+	channels: []params.Channel{
+		params.DevelopmentChannel,
+	},
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
@@ -467,11 +637,18 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 		err := s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmDir("wordpress"))
 		c.Assert(err, gc.IsNil)
 
+		// publish the charm on any required channels.
+		if len(test.channels) > 0 {
+			err := s.store.Publish(rurl, test.channels...)
+			c.Assert(err, gc.IsNil)
+		}
+
 		// Change the ACLs for the testing charm.
-		// (both published and development versions).
-		err = s.store.SetPerms(&rurl.URL, "write", test.writePerm...)
+		err = s.store.SetPerms(&rurl.URL, "unpublished.write", test.unpublishedWritePerm...)
 		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "write", test.writePerm...)
+		err = s.store.SetPerms(&rurl.URL, "development.write", test.developmentWritePerm...)
+		c.Assert(err, gc.IsNil)
+		err = s.store.SetPerms(&rurl.URL, "stable.write", test.stableWritePerm...)
 		c.Assert(err, gc.IsNil)
 
 		makeRequest := func(path string, expectStatus int, expectBody interface{}) {
@@ -493,25 +670,10 @@ func (s *authSuite) TestWriteAuthorization(c *gc.C) {
 			}
 		}
 
-		// Perform a meta PUT request to the published and development URLs.
-		makeRequest("~charmers/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
-		makeRequest("~charmers/development/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
-
-		// Remove permissions to write on the published entity.
-		err = s.store.SetPerms(&rurl.URL, "write")
-		c.Assert(err, gc.IsNil)
-
-		// Check that now writing to the published charm is not allowed,
-		// but accessing the development charm still works as expected.
-		makeRequest("~charmers/wordpress/meta/extra-info/key", http.StatusUnauthorized, nil)
-		makeRequest("~charmers/development/wordpress/meta/extra-info/key", test.expectStatus, test.expectBody)
-
-		// Remove write permissions for the development charm as well.
-		err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "write")
-		c.Assert(err, gc.IsNil)
-
-		// Check that now modifying the development charm is also denied.
-		makeRequest("~charmers/development/wordpress/meta/extra-info/key", http.StatusUnauthorized, nil)
+		// Perform a meta PUT request to the URLs.
+		// Note that we use the full URL so that we test authorization specifically
+		// on that entity without trying to look up the entity in the stable channel.
+		makeRequest("~charmers/utopic/wordpress-42/meta/extra-info/key", test.expectStatus, test.expectBody)
 
 		// Remove all entities from the store.
 		_, err = s.store.DB.Entities().RemoveAll(nil)
@@ -533,10 +695,6 @@ var uploadEntityAuthorizationTests = []struct {
 	// promulgated holds whether the corresponding promulgated entity must be
 	// already present in the charm store before performing the upload.
 	promulgated bool
-	// developmentWriteAcls can be used to set customized write ACLs for the
-	// development entity before performing the upload. If empty, default ACLs
-	// are used.
-	developmentWriteAcls []string
 	// writeAcls can be used to set customized write ACLs for the published
 	// entity before performing the upload. If empty, default ACLs are used.
 	writeAcls []string
@@ -551,19 +709,10 @@ var uploadEntityAuthorizationTests = []struct {
 	username: "who",
 	id:       "~who/utopic/django",
 }, {
-	about:    "user owned development entity",
-	username: "who",
-	id:       "~who/development/utopic/django",
-}, {
 	about:    "group owned entity",
 	username: "dalek",
 	groups:   []string{"group1", "group2"},
 	id:       "~group1/utopic/django",
-}, {
-	about:    "group owned development entity",
-	username: "dalek",
-	groups:   []string{"group1", "group2"},
-	id:       "~group1/development/utopic/django",
 }, {
 	about:    "specific group",
 	username: "dalek",
@@ -576,27 +725,10 @@ var uploadEntityAuthorizationTests = []struct {
 	id:          "~charmers/utopic/django",
 	promulgated: true,
 }, {
-	about:       "promulgated entity in development",
-	username:    "sisko",
-	groups:      []string{"group1", "charmers"},
-	id:          "~charmers/development/utopic/django",
-	promulgated: true,
-}, {
 	about:        "unauthorized: promulgated entity",
 	username:     "sisko",
 	groups:       []string{"group1", "group2"},
 	id:           "~charmers/utopic/django",
-	promulgated:  true,
-	expectStatus: http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: `unauthorized: access denied for user "sisko"`,
-	},
-}, {
-	about:        "unauthorized: promulgated entity in development",
-	username:     "sisko",
-	groups:       []string{"group1", "group2"},
-	id:           "~charmers/development/utopic/django",
 	promulgated:  true,
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -612,25 +744,8 @@ var uploadEntityAuthorizationTests = []struct {
 		Message: "unauthorized: no username declared",
 	},
 }, {
-	about:        "unauthorized: anonymous user, development entity",
-	id:           "~who/development/utopic/django",
-	expectStatus: http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: "unauthorized: no username declared",
-	},
-}, {
 	about:        "unauthorized: anonymous user and promulgated entity",
 	id:           "~charmers/utopic/django",
-	promulgated:  true,
-	expectStatus: http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: "unauthorized: no username declared",
-	},
-}, {
-	about:        "unauthorized: anonymous user and promulgated entity in development",
-	id:           "~charmers/development/utopic/django",
 	promulgated:  true,
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
@@ -647,29 +762,10 @@ var uploadEntityAuthorizationTests = []struct {
 		Message: `unauthorized: access denied for user "kirk"`,
 	},
 }, {
-	about:        "unauthorized: user does not match for a development entity",
-	username:     "kirk",
-	id:           "~picard/development/utopic/django",
-	expectStatus: http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: `unauthorized: access denied for user "kirk"`,
-	},
-}, {
 	about:        "unauthorized: group does not match",
 	username:     "kirk",
 	groups:       []string{"group1", "group2", "group3"},
 	id:           "~group0/utopic/django",
-	expectStatus: http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: `unauthorized: access denied for user "kirk"`,
-	},
-}, {
-	about:        "unauthorized: group does not match for a development entity",
-	username:     "kirk",
-	groups:       []string{"group1", "group2", "group3"},
-	id:           "~group0/development/utopic/django",
 	expectStatus: http.StatusUnauthorized,
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
@@ -685,27 +781,6 @@ var uploadEntityAuthorizationTests = []struct {
 	expectBody: params.Error{
 		Code:    params.ErrUnauthorized,
 		Message: `unauthorized: access denied for user "janeway"`,
-	},
-}, {
-	about:        "unauthorized: specific group and promulgated entity in development",
-	username:     "janeway",
-	groups:       []string{"group1"},
-	id:           "~charmers/development/utopic/django",
-	promulgated:  true,
-	expectStatus: http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: `unauthorized: access denied for user "janeway"`,
-	},
-}, {
-	about:                "unauthorized: published entity no development permissions",
-	username:             "picard",
-	id:                   "~picard/wily/django",
-	developmentWriteAcls: []string{"group2"},
-	expectStatus:         http.StatusUnauthorized,
-	expectBody: params.Error{
-		Code:    params.ErrUnauthorized,
-		Message: `unauthorized: access denied for user "picard"`,
 	},
 }, {
 	about:        "unauthorized: published entity no published permissions",
@@ -735,7 +810,7 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 		}
 
 		// Add a pre-existing entity if required.
-		if test.promulgated || len(test.developmentWriteAcls) != 0 || len(test.writeAcls) != 0 {
+		if test.promulgated || len(test.writeAcls) != 0 {
 			id := charm.MustParseURL(test.id).WithRevision(0)
 			revision := -1
 			if test.promulgated {
@@ -743,11 +818,8 @@ func (s *authSuite) TestUploadEntityAuthorization(c *gc.C) {
 			}
 			rurl := newResolvedURL(id.String(), revision)
 			s.store.AddCharmWithArchive(rurl, storetesting.Charms.CharmArchive(c.MkDir(), "mysql"))
-			if len(test.developmentWriteAcls) != 0 {
-				s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "write", test.developmentWriteAcls...)
-			}
 			if len(test.writeAcls) != 0 {
-				s.store.SetPerms(&rurl.URL, "write", test.writeAcls...)
+				s.store.SetPerms(&rurl.URL, "unpublished.write", test.writeAcls...)
 			}
 		}
 
@@ -838,16 +910,11 @@ func (s *authSuite) TestIsEntityCaveat(c *gc.C) {
 	}
 
 	// Add a charm to the store, used for testing.
-	err := s.store.AddCharmWithArchive(
-		newResolvedURL("~charmers/utopic/wordpress-41", 9),
-		storetesting.Charms.CharmDir("wordpress"))
-	c.Assert(err, gc.IsNil)
-	err = s.store.AddCharmWithArchive(
-		newResolvedURL("~charmers/utopic/wordpress-42", 10),
-		storetesting.Charms.CharmDir("wordpress"))
-	c.Assert(err, gc.IsNil)
-	// Change the ACLs for the testing charm.
-	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "read", "bob")
+	s.addPublicCharm(c, storetesting.NewCharm(nil), newResolvedURL("~charmers/utopic/wordpress-41", 9))
+	s.addPublicCharm(c, storetesting.NewCharm(nil), newResolvedURL("~charmers/utopic/wordpress-42", 10))
+	// Change the ACLs for charms we've just uploaded, otherwise
+	// no authorization checking will take place.
+	err := s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "stable.read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	for i, test := range isEntityCaveatTests {
@@ -932,12 +999,15 @@ func (s *authSuite) TestDelegatableMacaroon(c *gc.C) {
 	// Now check that we can use the obtained macaroon to do stuff
 	// as the declared user.
 
+	rurl := newResolvedURL("~charmers/utopic/wordpress-41", 9)
 	err = s.store.AddCharmWithArchive(
-		newResolvedURL("~charmers/utopic/wordpress-41", 9),
+		rurl,
 		storetesting.Charms.CharmDir("wordpress"))
 	c.Assert(err, gc.IsNil)
+	err = s.store.Publish(rurl, params.StableChannel)
+	c.Assert(err, gc.IsNil)
 	// Change the ACLs for the testing charm.
-	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "read", "bob")
+	err = s.store.SetPerms(charm.MustParseURL("cs:~charmers/wordpress"), "stable.read", "bob")
 	c.Assert(err, gc.IsNil)
 
 	// First check that we require authorization to access the charm.

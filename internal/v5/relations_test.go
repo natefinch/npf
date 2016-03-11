@@ -57,10 +57,6 @@ var metaCharmRelatedCharms = map[string]charm.Charm{
 	"48 ~charmers/precise/haproxy-48": storetesting.NewCharm(storetesting.RelationMeta(
 		"requires reverseproxy http",
 	)),
-	// development charms should not be included in any results.
-	"49 ~charmers/development/precise/haproxy-49": storetesting.NewCharm(storetesting.RelationMeta(
-		"requires reverseproxy http",
-	)),
 	"1 ~charmers/multi-series-20": storetesting.NewCharm(
 		storetesting.MetaWithSupportedSeries(storetesting.RelationMeta(
 			"requires reverseproxy http",
@@ -233,6 +229,7 @@ var metaCharmRelatedTests = []struct {
 				Meta: map[string]interface{}{
 					"id-name": params.IdNameResponse{"wordpress"},
 					"charm-metadata": &charm.Meta{
+						Format: 1,
 						Provides: map[string]charm.Relation{
 							"website": {
 								Name:      "website",
@@ -587,17 +584,12 @@ var metaBundlesContainingTests = []struct {
 func (s *RelationsSuite) TestMetaBundlesContaining(c *gc.C) {
 	// Add the bundles used for testing to the database.
 	for id, b := range metaBundlesContainingBundles {
-		url := mustParseResolvedURL(id)
-		s.addRequiredCharms(c, b)
-		err := s.store.AddBundleWithArchive(url, b)
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
+		s.addPublicBundle(c, b, mustParseResolvedURL(id), true)
 	}
 	for i, test := range metaBundlesContainingTests {
 		c.Logf("test %d: %s", i, test.about)
 		if test.addCharm != nil {
-			s.addPublicCharm(c, "wordpress", test.addCharm)
+			s.addPublicCharmFromRepo(c, "wordpress", test.addCharm)
 		}
 		// Perform the request and ensure the response is what we expect.
 		storeURL := storeURL(test.id + "/meta/bundles-containing" + test.querystring)
@@ -618,17 +610,12 @@ func (s *RelationsSuite) TestMetaBundlesContainingBundleACL(c *gc.C) {
 	// Add the bundles used for testing to the database.
 	for id, b := range metaBundlesContainingBundles {
 		url := mustParseResolvedURL(id)
-		s.addRequiredCharms(c, b)
-		err := s.store.AddBundleWithArchive(url, storetesting.NewBundle(b.Data()))
-		c.Assert(err, gc.IsNil)
+		s.addPublicBundle(c, storetesting.NewBundle(b.Data()), url, true)
 		if url.URL.Name == "useless" {
 			// The useless bundle is not available for "everyone".
-			err = s.store.SetPerms(&url.URL, "read", url.URL.User)
+			err := s.store.SetPerms(&url.URL, "stable.read", url.URL.User)
 			c.Assert(err, gc.IsNil)
-			continue
 		}
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
 	}
 
 	// Perform the request and ensure that the useless bundle isn't listed.
@@ -716,6 +703,5 @@ func mustParseResolvedURL(urlStr string) *router.ResolvedURL {
 	return &router.ResolvedURL{
 		URL:                 *url.WithChannel(""),
 		PromulgatedRevision: promRev,
-		Development:         url.Channel == charm.DevelopmentChannel,
 	}
 }

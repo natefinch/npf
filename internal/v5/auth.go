@@ -17,6 +17,7 @@ import (
 	"gopkg.in/macaroon.v1"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
+	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
 
@@ -191,24 +192,19 @@ func (h *ReqHandler) newDischargeRequiredError(m *macaroon.Macaroon, verr error,
 // an entry for each id with the corresponding ACL for each entity,
 // and requiredTerms holds entries for all required terms.
 func (h *ReqHandler) entityAuthInfo(entityIds []*router.ResolvedURL) (public bool, acls [][]string, requiredTerms map[string]bool, err error) {
-	// TODO use cache for entity lookup
 	acls = make([][]string, len(entityIds))
 	requiredTerms = make(map[string]bool)
 	public = true
 	for i, entityId := range entityIds {
-		entity, err := h.Store.FindEntity(entityId, nil)
+		entity, err := h.Cache.Entity(&entityId.URL, charmstore.FieldSelector("charmmeta"))
 		if err != nil {
 			return false, nil, nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
-		baseEntity, err := h.Store.FindBaseEntity(&entityId.URL, charmstore.FieldSelector("acls", "developmentacls"))
+		acl, err := h.entityACLs(entityId)
 		if err != nil {
 			return false, nil, nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 		}
-
-		acls[i] = baseEntity.ACLs.Read
-		if entityId.Development {
-			acls[i] = baseEntity.DevelopmentACLs.Read
-		}
+		acls[i] = acl.Read
 
 		if entity.CharmMeta == nil || len(entity.CharmMeta.Terms) == 0 {
 			// No need to authenticate if the ACL is open to everyone.
@@ -299,18 +295,51 @@ func areAllowedEntities(entityIds []*router.ResolvedURL, allowedEntities string)
 // AuthorizeEntity checks that the given HTTP request
 // can access the entity with the given id.
 func (h *ReqHandler) AuthorizeEntity(id *router.ResolvedURL, req *http.Request) error {
-	baseEntity, err := h.Cache.BaseEntity(id.UserOwnedURL(), charmstore.FieldSelector("acls", "developmentacls"))
+	acls, err := h.entityACLs(id)
 	if err != nil {
-		if errgo.Cause(err) == params.ErrNotFound {
-			return errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
-		}
-		return errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
-	}
-	acls := baseEntity.ACLs
-	if id.Development {
-		acls = baseEntity.DevelopmentACLs
+		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	return h.authorizeWithPerms(req, acls.Read, acls.Write, id)
+}
+
+func (h *ReqHandler) entityChannel(id *router.ResolvedURL) (params.Channel, error) {
+	if h.Store.Channel != params.NoChannel {
+		return h.Store.Channel, nil
+	}
+	entity, err := h.Cache.Entity(&id.URL, charmstore.FieldSelector("development", "stable"))
+	if err != nil {
+		if errgo.Cause(err) == params.ErrNotFound {
+			return params.NoChannel, errgo.WithCausef(nil, params.ErrNotFound, "entity %q not found", id)
+		}
+		return params.NoChannel, errgo.Notef(err, "cannot retrieve entity %q for authorization", id)
+	}
+	var ch params.Channel
+	switch {
+	case entity.Stable:
+		ch = params.StableChannel
+	case entity.Development:
+		ch = params.DevelopmentChannel
+	default:
+		ch = params.UnpublishedChannel
+	}
+	return ch, nil
+}
+
+// entityACLs calculates the ACLs for the specified entity. If the entity
+// has been published to the stable channel then the StableChannel ACLs will be
+// used; if the entity has been published to development, but not stable
+// then the StableChannel ACLs will be used; otherwise
+// the unpublished ACLs are used.
+func (h *ReqHandler) entityACLs(id *router.ResolvedURL) (mongodoc.ACL, error) {
+	ch, err := h.entityChannel(id)
+	if err != nil {
+		return mongodoc.ACL{}, errgo.Mask(err, errgo.Is(params.ErrNotFound))
+	}
+	baseEntity, err := h.Cache.BaseEntity(&id.URL, charmstore.FieldSelector("channelacls"))
+	if err != nil {
+		return mongodoc.ACL{}, errgo.Notef(err, "cannot retrieve base entity %q for authorization", id)
+	}
+	return baseEntity.ChannelACLs[ch], nil
 }
 
 func (h *ReqHandler) authorizeWithPerms(req *http.Request, read, write []string, entityId *router.ResolvedURL) error {

@@ -21,7 +21,6 @@ import (
 	jujutesting "github.com/juju/testing"
 	"github.com/juju/utils/fs"
 	"gopkg.in/errgo.v1"
-	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/macaroon-bakery.v1/bakery"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
@@ -30,7 +29,6 @@ import (
 
 	"gopkg.in/juju/charmstore.v5-unstable/config"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/blobstore"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
 
 // historicalDBName holds the name of the juju database
@@ -462,10 +460,11 @@ type uploadSpec struct {
 	usePost bool
 	// entity holds the entity to be uploaded.
 	entity ArchiverTo
-	// id holds the id to be uploaded to. If PUT is used,
-	// this must be parsable using MustParseResolvedURL;
-	// otherwise it must be a valid charm id with no revision.
+	// id holds the charm id to be uploaded to.
 	id string
+	// promulgatedId holds the promulgated id to be used,
+	// valid only when usePost is false.
+	promulgatedId string
 }
 
 // Upload uploads all the given entities to the charm store,
@@ -473,11 +472,11 @@ type uploadSpec struct {
 func (csv *charmStoreVersion) Upload(apiVersion string, specs []uploadSpec) error {
 	for _, spec := range specs {
 		if spec.usePost {
-			if err := csv.uploadWithPost(apiVersion, spec.entity, charm.MustParseURL(spec.id)); err != nil {
+			if err := csv.uploadWithPost(apiVersion, spec.entity, spec.id); err != nil {
 				return errgo.Mask(err)
 			}
 		} else {
-			if err := csv.uploadWithPut(apiVersion, spec.entity, MustParseResolvedURL(spec.id)); err != nil {
+			if err := csv.uploadWithPut(apiVersion, spec.entity, spec.id, spec.promulgatedId); err != nil {
 				return errgo.Mask(err)
 			}
 		}
@@ -485,7 +484,7 @@ func (csv *charmStoreVersion) Upload(apiVersion string, specs []uploadSpec) erro
 	return nil
 }
 
-func (csv *charmStoreVersion) uploadWithPost(apiVersion string, entity ArchiverTo, url *charm.URL) error {
+func (csv *charmStoreVersion) uploadWithPost(apiVersion string, entity ArchiverTo, url string) error {
 	var buf bytes.Buffer
 	if err := entity.ArchiveTo(&buf); err != nil {
 		return errgo.Mask(err)
@@ -493,7 +492,7 @@ func (csv *charmStoreVersion) uploadWithPost(apiVersion string, entity ArchiverT
 	hash := blobstore.NewHash()
 	hash.Write(buf.Bytes())
 	logger.Infof("archive %d bytes", len(buf.Bytes()))
-	req, err := http.NewRequest("POST", fmt.Sprintf("/%s/%s/archive?hash=%x", apiVersion, url.Path(), hash.Sum(nil)), &buf)
+	req, err := http.NewRequest("POST", fmt.Sprintf("/%s/%s/archive?hash=%x", apiVersion, url, hash.Sum(nil)), &buf)
 	if err != nil {
 		return errgo.Mask(err)
 	}
@@ -510,19 +509,19 @@ func (csv *charmStoreVersion) uploadWithPost(apiVersion string, entity ArchiverT
 	return nil
 }
 
-func (csv *charmStoreVersion) uploadWithPut(apiVersion string, entity ArchiverTo, id *router.ResolvedURL) error {
+func (csv *charmStoreVersion) uploadWithPut(apiVersion string, entity ArchiverTo, url, promulgatedURL string) error {
 	var buf bytes.Buffer
 	if err := entity.ArchiveTo(&buf); err != nil {
 		return errgo.Mask(err)
 	}
 	promulgatedParam := ""
-	if pid := id.PromulgatedURL(); pid != nil {
-		promulgatedParam = fmt.Sprintf("&promulgated=%s", pid)
+	if promulgatedURL != "" {
+		promulgatedParam = fmt.Sprintf("&promulgated=%s", promulgatedURL)
 	}
 	hash := blobstore.NewHash()
 	hash.Write(buf.Bytes())
 	logger.Infof("archive %d bytes", len(buf.Bytes()))
-	req, err := http.NewRequest("PUT", fmt.Sprintf("/%s/%s/archive?hash=%x%s", apiVersion, id.URL.Path(), hash.Sum(nil), promulgatedParam), &buf)
+	req, err := http.NewRequest("PUT", fmt.Sprintf("/%s/%s/archive?hash=%x%s", apiVersion, url, hash.Sum(nil), promulgatedParam), &buf)
 	if err != nil {
 		return errgo.Mask(err)
 	}

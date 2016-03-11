@@ -5,6 +5,8 @@ package charmstore // import "gopkg.in/juju/charmstore.v5-unstable/internal/char
 
 import (
 	"gopkg.in/errgo.v1"
+	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 
@@ -19,6 +21,7 @@ const (
 	migrationFixBogusPromulgatedURL  mongodoc.MigrationName = "fix promulgate url"
 	migrationAddPreV5CompatBlobBogus mongodoc.MigrationName = "add pre-v5 compatibility blobs"
 	migrationAddPreV5CompatBlob      mongodoc.MigrationName = "add pre-v5 compatibility blobs; second try"
+	migrationNewChannelsModel        mongodoc.MigrationName = "new channels model"
 )
 
 // migrations holds all the migration functions that are executed in the order
@@ -58,6 +61,9 @@ var migrations = []migration{{
 }, {
 	name:    migrationAddPreV5CompatBlob,
 	migrate: addPreV5CompatBlob,
+}, {
+	name:    migrationNewChannelsModel,
+	migrate: migrateToNewChannelsModel,
 }}
 
 // migration holds a migration function with its corresponding name.
@@ -172,6 +178,174 @@ func addPreV5CompatBlob(db StoreDatabase) error {
 	}
 	if err := iter.Err(); err != nil {
 		return errgo.Notef(err, "cannot iterate through entities")
+	}
+	return nil
+}
+
+func migrateToNewChannelsModel(db StoreDatabase) error {
+	if err := ncmUpdateDevelopmentAndStable(db); err != nil {
+		return errgo.Mask(err)
+	}
+	if err := ncmUpdateBaseEntities(db); err != nil {
+		return errgo.Mask(err)
+	}
+	return nil
+}
+
+// ncmUpdateDevelopmentAndStable updates the Development and Stable
+// entity fields to conform to the new channels model.
+// All entities are treated as if they're in development; entities
+// without the development field set are treated as stable.
+func ncmUpdateDevelopmentAndStable(db StoreDatabase) error {
+	entities := db.Entities()
+	iter := entities.Find(bson.D{{
+		"stable", bson.D{{"$exists", false}},
+	}}).Select(map[string]int{
+		"_id":         1,
+		"development": 1,
+	}).Iter()
+
+	// For every entity without a stable field, update
+	// its development and stable fields appropriately.
+	var entity mongodoc.Entity
+	for iter.Next(&entity) {
+		err := entities.UpdateId(entity.URL, bson.D{{
+			"$set", bson.D{
+				{"development", true},
+				{"stable", !entity.Development},
+			},
+		}})
+		if err != nil {
+			return errgo.Notef(err, "cannot update entity")
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return errgo.Notef(err, "cannot iterate through entities")
+	}
+	return nil
+}
+
+// preNCMBaseEntity holds the type of a base entity just before
+// the new channels model migration.
+type preNCMBaseEntity struct {
+	// URL holds the reference URL of of charm on bundle
+	// regardless of its revision, series or promulgation status
+	// (this omits the revision and series from URL).
+	// e.g., cs:~user/collection/foo
+	URL *charm.URL `bson:"_id"`
+
+	// User holds the user part of the entity URL (for instance, "joe").
+	User string
+
+	// Name holds the name of the entity (for instance "wordpress").
+	Name string
+
+	// Public specifies whether the charm or bundle
+	// is available to all users. If this is true, the ACLs will
+	// be ignored when reading a charm.
+	Public bool
+
+	// ACLs holds permission information relevant to the base entity.
+	// The permissions apply to all revisions.
+	ACLs mongodoc.ACL
+
+	// DevelopmentACLs is similar to ACLs but applies to all development
+	// revisions.
+	DevelopmentACLs mongodoc.ACL
+
+	// Promulgated specifies whether the charm or bundle should be
+	// promulgated.
+	Promulgated mongodoc.IntBool
+
+	// CommonInfo holds arbitrary common extra metadata associated with
+	// the base entity. Thhose data apply to all revisions.
+	// The byte slices hold JSON-encoded data.
+	CommonInfo map[string][]byte `bson:",omitempty" json:",omitempty"`
+}
+
+// ncmUpdateBaseEntities updates all the base entities to conform to
+// the new channels model. It assumes that ncmUpdateDevelopmentAndStable
+// has been run already.
+func ncmUpdateBaseEntities(db StoreDatabase) error {
+	baseEntities := db.BaseEntities()
+	iter := baseEntities.Find(bson.D{{
+		"channelentities", bson.D{{"$exists", false}},
+	}}).Iter()
+	// For every base entity without a ChannelEntities field, update
+	// its ChannelEntities and and ChannelACLs field appropriately.
+	var baseEntity preNCMBaseEntity
+	for iter.Next(&baseEntity) {
+		if err := ncmUpdateBaseEntity(db, &baseEntity); err != nil {
+			return errgo.Mask(err)
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return errgo.Notef(err, "cannot iterate through base entities")
+	}
+	return nil
+}
+
+// ncmUpdateBaseEntity updates a single base entity to conform to
+// the new channels model.
+func ncmUpdateBaseEntity(db StoreDatabase, baseEntity *preNCMBaseEntity) error {
+	channelEntities := make(map[params.Channel]map[string]*charm.URL)
+
+	updateChannelURL := func(url *charm.URL, ch params.Channel, series string) {
+		if channelEntities[ch] == nil {
+			channelEntities[ch] = make(map[string]*charm.URL)
+		}
+		if oldURL := channelEntities[ch][series]; oldURL == nil || oldURL.Revision < url.Revision {
+			channelEntities[ch][series] = url
+		}
+	}
+	// updateChannelEntity updates the series entries in channelEntities
+	// for the given entity, setting the entity URL entry if the revision
+	// is greater than any already found.
+	updateChannelEntity := func(entity *mongodoc.Entity, ch params.Channel) {
+		if entity.URL.Series == "" {
+			for _, series := range entity.SupportedSeries {
+				updateChannelURL(entity.URL, ch, series)
+			}
+		} else {
+			updateChannelURL(entity.URL, ch, entity.URL.Series)
+		}
+	}
+
+	// Iterate through all the entities associated with the base entity
+	// to find the most recent "published" entities so that we can
+	// populate the ChannelEntities field.
+	var entity mongodoc.Entity
+	iter := db.Entities().Find(bson.D{{"baseurl", baseEntity.URL}}).Iter()
+	for iter.Next(&entity) {
+		if entity.Development {
+			updateChannelEntity(&entity, params.DevelopmentChannel)
+		}
+		if entity.Stable {
+			updateChannelEntity(&entity, params.StableChannel)
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return errgo.Notef(err, "cannot iterate through entities")
+	}
+	err := db.BaseEntities().UpdateId(baseEntity.URL, bson.D{{
+		"$set", bson.D{{
+			"channelentities", channelEntities,
+		}, {
+			"channelacls", map[params.Channel]mongodoc.ACL{
+				params.UnpublishedChannel: baseEntity.DevelopmentACLs,
+				params.DevelopmentChannel: baseEntity.DevelopmentACLs,
+				params.StableChannel:      baseEntity.ACLs,
+			},
+		}},
+	}, {
+		"$unset", bson.D{{
+			"developmentacls", nil,
+		}, {
+			"acls", nil,
+		}},
+	}})
+	if err != nil {
+		return errgo.Notef(err, "cannot update base entity")
 	}
 	return nil
 }

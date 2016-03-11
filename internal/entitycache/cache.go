@@ -64,7 +64,6 @@ type Cache struct {
 var requiredEntityFields = map[string]int{
 	"_id":             1,
 	"promulgated-url": 1,
-	"development":     1,
 	"baseurl":         1,
 }
 
@@ -259,8 +258,8 @@ func (s *stash) entity(id *charm.URL, fields map[string]int) (stashEntity, error
 	e, hasEntry := s.entities[*id]
 	for {
 		if e != nil {
-			if e == notFoundEntity {
-				return nil, params.ErrNotFound
+			if e, ok := e.(*notFoundEntity); ok {
+				return nil, errgo.Mask(e.err, errgo.Is(params.ErrNotFound))
 			}
 			return e, nil
 		}
@@ -380,7 +379,7 @@ func (s *stash) fetch(url *charm.URL, fields map[string]int, version int) stashE
 			}
 			return nil
 		}
-		e = notFoundEntity
+		e = &notFoundEntity{err}
 	}
 	if s.version != version {
 		// The entity version has changed, implying the selected
@@ -408,7 +407,7 @@ func (s *stash) fetch(url *charm.URL, fields map[string]int, version int) stashE
 // Called with s.mu locked.
 func (s *stash) addEntity(e stashEntity, lookupId *charm.URL) stashEntity {
 	keys := make([]*charm.URL, 0, 3)
-	if e == notFoundEntity {
+	if _, ok := e.(*notFoundEntity); ok {
 		keys = append(keys, lookupId)
 	} else {
 		keys = append(keys, e.url())
@@ -436,20 +435,21 @@ func (s *stash) addEntity(e stashEntity, lookupId *charm.URL) stashEntity {
 	return e
 }
 
-type notFoundEntityT struct{}
+// notFoundEntity is a sentinel type that is stored
+// in the entities map when the value has been fetched
+// but was not found.
+type notFoundEntity struct {
+	// The actual not-found error encountered.
+	err error
+}
 
-func (notFoundEntityT) url() *charm.URL {
+func (*notFoundEntity) url() *charm.URL {
 	panic("url called on not-found sentinel value")
 }
 
-func (notFoundEntityT) promulgatedURL() *charm.URL {
+func (*notFoundEntity) promulgatedURL() *charm.URL {
 	panic("promulgatedURL called on not-found sentinel value")
 }
-
-// notFoundEntity is a sentinel value that is stored
-// in the entities map when the value has been fetched
-// but was not found.
-var notFoundEntity = notFoundEntityT{}
 
 // Iter returns an iterator that iterates through
 // all the entities found by the given query, which must
@@ -677,9 +677,6 @@ type entity struct {
 
 func (e entity) url() *charm.URL {
 	u := *e.URL
-	if e.Development {
-		u.Channel = charm.DevelopmentChannel
-	}
 	return &u
 }
 
@@ -688,9 +685,6 @@ func (e entity) promulgatedURL() *charm.URL {
 		return nil
 	}
 	u := *e.PromulgatedURL
-	if e.Development {
-		u.Channel = charm.DevelopmentChannel
-	}
 	return &u
 }
 

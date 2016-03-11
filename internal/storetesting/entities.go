@@ -7,6 +7,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
+	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/mgo.v2"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
@@ -110,10 +111,13 @@ func (b BaseEntityBuilder) WithPromulgated(promulgated bool) BaseEntityBuilder {
 	return b
 }
 
-// WithACLs sets the non-development ACLs field on the BaseEntity.
-func (b BaseEntityBuilder) WithACLs(acls mongodoc.ACL) BaseEntityBuilder {
+// WithACLs sets the ACLs field on the BaseEntity.
+func (b BaseEntityBuilder) WithACLs(channel params.Channel, acls mongodoc.ACL) BaseEntityBuilder {
 	b = b.copy()
-	b.baseEntity.ACLs = acls
+	if b.baseEntity.ChannelACLs == nil {
+		b.baseEntity.ChannelACLs = make(map[params.Channel]mongodoc.ACL)
+	}
+	b.baseEntity.ChannelACLs[channel] = acls
 	return b
 }
 
@@ -127,5 +131,28 @@ func AssertBaseEntity(c *gc.C, db *mgo.Collection, expect *mongodoc.BaseEntity) 
 	var baseEntity mongodoc.BaseEntity
 	err := db.FindId(expect.URL).One(&baseEntity)
 	c.Assert(err, gc.IsNil)
-	c.Assert(&baseEntity, jc.DeepEquals, expect)
+	c.Assert(NormalizeBaseEntity(&baseEntity), jc.DeepEquals, NormalizeBaseEntity(expect))
+}
+
+// NormalizeBaseEntity modifies a base entity so that it can be compared
+// with another normalized base entity using jc.DeepEquals.
+func NormalizeBaseEntity(be *mongodoc.BaseEntity) *mongodoc.BaseEntity {
+	be1 := *be
+	for c, acls := range be1.ChannelACLs {
+		if len(acls.Read) == 0 && len(acls.Write) == 0 {
+			delete(be1.ChannelACLs, c)
+		}
+	}
+	if len(be1.ChannelACLs) == 0 {
+		be1.ChannelACLs = nil
+	}
+	for c, entities := range be1.ChannelEntities {
+		if len(entities) == 0 {
+			delete(be1.ChannelEntities, c)
+		}
+	}
+	if len(be1.ChannelEntities) == 0 {
+		be1.ChannelEntities = nil
+	}
+	return &be1
 }

@@ -117,10 +117,10 @@ var routerGetTests = []struct {
 		},
 	},
 	urlStr:       "/development/trusty/wordpress-34/foo",
-	expectStatus: http.StatusOK,
-	expectBody: idHandlerTestResp{
-		Method:   "GET",
-		CharmURL: "cs:development/trusty/wordpress-34",
+	expectStatus: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: "not found",
 	},
 }, {
 	about: "id handler with invalid channel",
@@ -147,19 +147,6 @@ var routerGetTests = []struct {
 	expectBody: idHandlerTestResp{
 		Method:   "GET",
 		CharmURL: "cs:win81/visualstudio-2012",
-	},
-}, {
-	about: "windows development id handler",
-	handlers: Handlers{
-		Id: map[string]IdHandler{
-			"foo": testIdHandler,
-		},
-	},
-	urlStr:       "/development/win81/visualstudio-2012/foo",
-	expectStatus: http.StatusOK,
-	expectBody: idHandlerTestResp{
-		Method:   "GET",
-		CharmURL: "cs:development/win81/visualstudio-2012",
 	},
 }, {
 	about: "wily id handler",
@@ -208,10 +195,10 @@ var routerGetTests = []struct {
 		},
 	},
 	urlStr:       "/development/wordpress/foo",
-	expectStatus: http.StatusOK,
-	expectBody: idHandlerTestResp{
-		Method:   "GET",
-		CharmURL: "cs:development/wordpress",
+	expectStatus: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: "not found",
 	},
 }, {
 	about: "id handler with extra path",
@@ -301,11 +288,10 @@ var routerGetTests = []struct {
 		},
 	},
 	urlStr:       "/~joe/development/precise/wordpress-34/foo/blah/arble",
-	expectStatus: http.StatusOK,
-	expectBody: idHandlerTestResp{
-		Method:   "GET",
-		CharmURL: "cs:~joe/development/precise/wordpress-34",
-		Path:     "/blah/arble",
+	expectStatus: http.StatusNotFound,
+	expectBody: params.Error{
+		Code:    params.ErrNotFound,
+		Message: "not found",
 	},
 }, {
 	about: "id handler with user, invalid channel and extra path",
@@ -457,19 +443,6 @@ var routerGetTests = []struct {
 	expectStatus:              http.StatusOK,
 	expectBody: &metaHandlerTestResp{
 		CharmURL: "cs:precise/wordpress-42",
-	},
-}, {
-	about: "meta handler with development channel",
-	handlers: Handlers{
-		Meta: map[string]BulkIncludeHandler{
-			"foo": testMetaHandler(0),
-		},
-	},
-	urlStr: "/development/precise/wordpress/meta/foo",
-	expectWillIncludeMetadata: []string{"foo"},
-	expectStatus:              http.StatusOK,
-	expectBody: &metaHandlerTestResp{
-		CharmURL: "cs:development/precise/wordpress-0",
 	},
 }, {
 	about: "meta handler with additional elements",
@@ -748,21 +721,6 @@ var routerGetTests = []struct {
 		},
 	},
 }, {
-	about:  "bulk meta handler, single development id",
-	urlStr: "/meta/foo?id=~user/development/wily/wordpress-42",
-	handlers: Handlers{
-		Meta: map[string]BulkIncludeHandler{
-			"foo": testMetaHandler(0),
-		},
-	},
-	expectWillIncludeMetadata: []string{"foo"},
-	expectStatus:              http.StatusOK,
-	expectBody: map[string]metaHandlerTestResp{
-		"~user/development/wily/wordpress-42": {
-			CharmURL: "cs:~user/development/wily/wordpress-42",
-		},
-	},
-}, {
 	about:  "bulk meta handler, single id with invalid channel",
 	urlStr: "/meta/foo?id=~user/bad-wolf/wily/wordpress-42",
 	handlers: Handlers{
@@ -778,7 +736,7 @@ var routerGetTests = []struct {
 	},
 }, {
 	about:  "bulk meta handler, several ids",
-	urlStr: "/meta/foo?id=precise/wordpress-42&id=utopic/foo-32&id=development/django",
+	urlStr: "/meta/foo?id=precise/wordpress-42&id=utopic/foo-32&id=django",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
 			"foo": testMetaHandler(0),
@@ -793,13 +751,13 @@ var routerGetTests = []struct {
 		"utopic/foo-32": {
 			CharmURL: "cs:utopic/foo-32",
 		},
-		"development/django": {
-			CharmURL: "cs:development/precise/django-0",
+		"django": {
+			CharmURL: "cs:precise/django-0",
 		},
 	},
 }, {
 	about:  "bulk meta/any handler, several ids",
-	urlStr: "/meta/any?id=precise/wordpress-42&id=utopic/foo-32&id=development/django-47&include=foo&include=bar/something",
+	urlStr: "/meta/any?id=precise/wordpress-42&id=utopic/foo-32&id=django-47&include=foo&include=bar/something",
 	handlers: Handlers{
 		Meta: map[string]BulkIncludeHandler{
 			"foo":  testMetaHandler(0),
@@ -833,14 +791,14 @@ var routerGetTests = []struct {
 				},
 			},
 		},
-		"development/django-47": {
-			Id: charm.MustParseURL("cs:development/precise/django-47"),
+		"django-47": {
+			Id: charm.MustParseURL("cs:precise/django-47"),
 			Meta: map[string]interface{}{
 				"foo": metaHandlerTestResp{
-					CharmURL: "cs:development/precise/django-47",
+					CharmURL: "cs:precise/django-47",
 				},
 				"bar/something": metaHandlerTestResp{
-					CharmURL: "cs:development/precise/django-47",
+					CharmURL: "cs:precise/django-47",
 					Path:     "/something",
 				},
 			},
@@ -1494,19 +1452,13 @@ var routerPutTests = []struct {
 				"baz/ppp":  "baz/ppp-mysql-val",
 			},
 		},
-		"development/trusty/django-47": {
+		"trusty/django-47": {
 			Meta: map[string]interface{}{
 				"foo": "foo-django-val",
 			},
 		},
 	},
 	expectRecordedCalls: []interface{}{
-		metaHandlerTestPutParams{
-			NumHandlers: 1,
-			Id:          "cs:development/trusty/django-47",
-			Paths:       []string{""},
-			Values:      []interface{}{"foo-django-val"},
-		},
 		metaHandlerTestPutParams{
 			NumHandlers: 3,
 			Id:          "cs:precise/mysql-134",
@@ -1518,6 +1470,12 @@ var routerPutTests = []struct {
 			Id:          "cs:precise/wordpress-42",
 			Paths:       []string{"", ""},
 			Values:      []interface{}{"foo-wordpress-val", "bar-wordpress-val"},
+		},
+		metaHandlerTestPutParams{
+			NumHandlers: 1,
+			Id:          "cs:trusty/django-47",
+			Paths:       []string{""},
+			Values:      []interface{}{"foo-django-val"},
 		},
 	},
 }, {
@@ -2047,12 +2005,6 @@ var splitIdTests = []struct {
 	path:      "~user/wordpress",
 	expectURL: "cs:~user/wordpress",
 }, {
-	path:      "development/wordpress",
-	expectURL: "cs:development/wordpress",
-}, {
-	path:      "~user/development/wordpress",
-	expectURL: "cs:~user/development/wordpress",
-}, {
 	path:        "",
 	expectError: `URL has invalid charm or bundle name: ""`,
 }, {
@@ -2341,35 +2293,21 @@ func (s *RouterSuite) TestHandlers(c *gc.C) {
 
 var resolvedURLTests = []struct {
 	rurl                 *ResolvedURL
-	expectUserOwnedURL   *charm.URL
 	expectPreferredURL   *charm.URL
 	expectPromulgatedURL *charm.URL
 }{{
 	rurl:                 MustNewResolvedURL("~charmers/precise/wordpress-23", 4),
-	expectUserOwnedURL:   charm.MustParseURL("~charmers/precise/wordpress-23"),
 	expectPreferredURL:   charm.MustParseURL("precise/wordpress-4"),
 	expectPromulgatedURL: charm.MustParseURL("precise/wordpress-4"),
 }, {
-	rurl:               MustNewResolvedURL("~who/development/trusty/wordpress-42", -1),
-	expectUserOwnedURL: charm.MustParseURL("~who/development/trusty/wordpress-42"),
-	expectPreferredURL: charm.MustParseURL("~who/development/trusty/wordpress-42"),
-}, {
 	rurl:               MustNewResolvedURL("~charmers/precise/wordpress-23", -1),
-	expectUserOwnedURL: charm.MustParseURL("~charmers/precise/wordpress-23"),
 	expectPreferredURL: charm.MustParseURL("~charmers/precise/wordpress-23"),
 }, {
-	rurl:                 MustNewResolvedURL("~charmers/development/trusty/wordpress-42", 0),
-	expectUserOwnedURL:   charm.MustParseURL("~charmers/development/trusty/wordpress-42"),
-	expectPreferredURL:   charm.MustParseURL("development/trusty/wordpress-0"),
-	expectPromulgatedURL: charm.MustParseURL("development/trusty/wordpress-0"),
-}, {
 	rurl:                 withPreferredSeries(MustNewResolvedURL("~charmers/wordpress-42", 0), "trusty"),
-	expectUserOwnedURL:   charm.MustParseURL("~charmers/wordpress-42"),
 	expectPreferredURL:   charm.MustParseURL("trusty/wordpress-0"),
 	expectPromulgatedURL: charm.MustParseURL("wordpress-0"),
 }, {
 	rurl:               withPreferredSeries(MustNewResolvedURL("~charmers/wordpress-42", -1), "trusty"),
-	expectUserOwnedURL: charm.MustParseURL("~charmers/wordpress-42"),
 	expectPreferredURL: charm.MustParseURL("~charmers/trusty/wordpress-42"),
 }}
 
@@ -2388,9 +2326,7 @@ func (*RouterSuite) TestResolvedURL(c *gc.C) {
 	}
 	for i, test := range resolvedURLTests {
 		c.Logf("test %d: %#v", i, test.rurl)
-		testMethod("UserOwnedURL", test.rurl, test.rurl.UserOwnedURL, test.expectUserOwnedURL)
 		testMethod("PromulgatedURL", test.rurl, test.rurl.PromulgatedURL, test.expectPromulgatedURL)
-
 		testMethod("PreferredURL", test.rurl, test.rurl.PreferredURL, test.expectPreferredURL)
 	}
 }

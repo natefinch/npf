@@ -34,7 +34,7 @@ var serveDiagramErrorsTests = []struct {
 	expectStatus: http.StatusNotFound,
 	expectBody: params.Error{
 		Code:    params.ErrNotFound,
-		Message: `no matching charm or bundle for "cs:~charmers/bundle/foo-23"`,
+		Message: `no matching charm or bundle for cs:~charmers/bundle/foo-23`,
 	},
 }, {
 	about:        "diagram for a charm",
@@ -48,9 +48,9 @@ var serveDiagramErrorsTests = []struct {
 
 func (s *APISuite) TestServeDiagramErrors(c *gc.C) {
 	id := newResolvedURL("cs:~charmers/trusty/wordpress-42", 42)
-	s.addPublicCharm(c, "wordpress", id)
+	s.addPublicCharmFromRepo(c, "wordpress", id)
 	id = newResolvedURL("cs:~charmers/bundle/nopositionbundle-42", 42)
-	s.addPublicBundle(c, "wordpress-simple", id, true)
+	s.addPublicBundleFromRepo(c, "wordpress-simple", id, true)
 
 	for i, test := range serveDiagramErrorsTests {
 		c.Logf("test %d: %s", i, test.about)
@@ -88,8 +88,7 @@ func (s *APISuite) TestServeDiagram(c *gc.C) {
 	s.addRequiredCharms(c, bundle)
 	err := s.store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.setPublic(c, url)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
@@ -151,8 +150,7 @@ func (s *APISuite) TestServeDiagramNoPosition(c *gc.C) {
 	s.addRequiredCharms(c, bundle)
 	err := s.store.AddBundleWithArchive(url, bundle)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.setPublic(c, url)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
@@ -207,10 +205,7 @@ func (s *APISuite) TestServeReadMe(c *gc.C) {
 		}
 
 		url.URL.Revision = i
-		err := s.store.AddCharmWithArchive(url, wordpress)
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
+		s.addPublicCharm(c, wordpress, url)
 
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,
@@ -245,8 +240,7 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 	url := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
 	err := s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.setPublic(c, url)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
@@ -277,6 +271,7 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 	url.URL.Revision++
 	err = s.store.AddCharmWithArchive(url, wordpress)
 	c.Assert(err, gc.IsNil)
+	s.setPublic(c, url)
 
 	// Check that we still get expected svg.
 	rec = httptesting.DoRequest(c, httptesting.DoRequestParams{
@@ -289,7 +284,7 @@ func (s *APISuite) TestServeIcon(c *gc.C) {
 }
 
 func (s *APISuite) TestServeBundleIcon(c *gc.C) {
-	s.addPublicBundle(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/something-32", 32), true)
+	s.addPublicBundleFromRepo(c, "wordpress-simple", newResolvedURL("cs:~charmers/bundle/something-32", 32), true)
 
 	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
 		Handler:      s.srv,
@@ -306,10 +301,7 @@ func (s *APISuite) TestServeDefaultIcon(c *gc.C) {
 	wordpress := storetesting.Charms.ClonedDir(c.MkDir(), "wordpress")
 
 	url := newResolvedURL("cs:~charmers/precise/wordpress-0", 0)
-	err := s.store.AddCharmWithArchive(url, wordpress)
-	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-	c.Assert(err, gc.IsNil)
+	s.addPublicCharm(c, wordpress, url)
 
 	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 		Handler: s.srv,
@@ -334,10 +326,7 @@ func (s *APISuite) TestServeDefaultIconForBadXML(c *gc.C) {
 
 		url := newResolvedURL("cs:~charmers/precise/wordpress-0", -1)
 		url.URL.Revision = i
-		err := s.store.AddCharmWithArchive(url, wordpress)
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
+		s.addPublicCharm(c, wordpress, url)
 
 		rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
 			Handler: s.srv,

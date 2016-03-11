@@ -1,6 +1,7 @@
 package v4_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v4"
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/juju/loggo"
 	jujutesting "github.com/juju/testing"
+	"github.com/juju/testing/httptesting"
 	"github.com/julienschmidt/httprouter"
 	gc "gopkg.in/check.v1"
 	"gopkg.in/errgo.v1"
@@ -188,8 +190,11 @@ func (s *commonSuite) startServer(c *gc.C) {
 	s.store = s.srv.Pool().Store()
 }
 
-func (s *commonSuite) addPublicCharm(c *gc.C, charmName string, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Charm) {
-	ch := storetesting.Charms.CharmDir(charmName)
+func (s *commonSuite) addPublicCharmFromRepo(c *gc.C, charmName string, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Charm) {
+	return s.addPublicCharm(c, storetesting.Charms.CharmDir(charmName), rurl)
+}
+
+func (s *commonSuite) addPublicCharm(c *gc.C, ch charm.Charm, rurl *router.ResolvedURL) (*router.ResolvedURL, charm.Charm) {
 	err := s.store.AddCharmWithArchive(rurl, ch)
 	c.Assert(err, gc.IsNil)
 	s.setPublic(c, rurl)
@@ -197,14 +202,17 @@ func (s *commonSuite) addPublicCharm(c *gc.C, charmName string, rurl *router.Res
 }
 
 func (s *commonSuite) setPublic(c *gc.C, rurl *router.ResolvedURL) {
-	err := s.store.SetPerms(&rurl.URL, "read", params.Everyone, rurl.URL.User)
+	err := s.store.SetPerms(&rurl.URL, "stable.read", params.Everyone)
 	c.Assert(err, gc.IsNil)
-	err = s.store.SetPerms(rurl.URL.WithChannel(charm.DevelopmentChannel), "read", params.Everyone, rurl.URL.User)
+	err = s.store.Publish(rurl, params.StableChannel)
 	c.Assert(err, gc.IsNil)
 }
 
-func (s *commonSuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.ResolvedURL, addRequiredCharms bool) (*router.ResolvedURL, charm.Bundle) {
-	bundle := storetesting.Charms.BundleDir(bundleName)
+func (s *commonSuite) addPublicBundleFromRepo(c *gc.C, bundleName string, rurl *router.ResolvedURL, addRequiredCharms bool) (*router.ResolvedURL, charm.Bundle) {
+	return s.addPublicBundle(c, storetesting.Charms.BundleDir(bundleName), rurl, addRequiredCharms)
+}
+
+func (s *commonSuite) addPublicBundle(c *gc.C, bundle charm.Bundle, rurl *router.ResolvedURL, addRequiredCharms bool) (*router.ResolvedURL, charm.Bundle) {
 	if addRequiredCharms {
 		s.addRequiredCharms(c, bundle)
 	}
@@ -218,23 +226,16 @@ func (s *commonSuite) addPublicBundle(c *gc.C, bundleName string, rurl *router.R
 // map key is the id of the charm.
 func (s *commonSuite) addCharms(c *gc.C, charms map[string]charm.Charm) {
 	for id, ch := range charms {
-		url := mustParseResolvedURL(id)
-		err := s.store.AddCharmWithArchive(url, storetesting.NewCharm(ch.Meta()))
-		c.Assert(err, gc.IsNil, gc.Commentf("id %q", id))
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
-		if url.Development {
-			err = s.store.SetPerms(url.UserOwnedURL(), "read", params.Everyone, url.URL.User)
-		}
+		s.addPublicCharm(c, storetesting.NewCharm(ch.Meta()), mustParseResolvedURL(id))
 	}
 }
 
-// setPerms sets the read permissions of a set of entities.
-// The map key is the is the id of each entity; its
-// associated value is its read ACL.
+// setPerms sets the stable channel read permissions of a set of
+// entities. The map key is the is the id of each entity; its associated
+// value is its read ACL.
 func (s *commonSuite) setPerms(c *gc.C, readACLs map[string][]string) {
 	for url, acl := range readACLs {
-		err := s.store.SetPerms(charm.MustParseURL(url), "read", acl...)
+		err := s.store.SetPerms(charm.MustParseURL(url), "stable.read", acl...)
 		c.Assert(err, gc.IsNil)
 	}
 }
@@ -245,7 +246,7 @@ func (s *commonSuite) setPerms(c *gc.C, readACLs map[string][]string) {
 func (s *commonSuite) handler(c *gc.C) v4.ReqHandler {
 	h := v4.New(s.store.Pool(), s.srvParams, "")
 	defer h.Close()
-	rh, err := h.NewReqHandler()
+	rh, err := h.NewReqHandler(new(http.Request))
 	c.Assert(err, gc.IsNil)
 	// It would be nice if we could call s.AddCleanup here
 	// to call rh.Put when the test has completed, but
@@ -263,7 +264,7 @@ func storeURL(path string) string {
 func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
 	for _, svc := range bundle.Data().Services {
 		u := charm.MustParseURL(svc.Charm)
-		if _, err := s.store.FindBestEntity(u, nil); err == nil {
+		if _, err := s.store.FindBestEntity(u, params.StableChannel, nil); err == nil {
 			continue
 		}
 		if u.Revision == -1 {
@@ -287,10 +288,95 @@ func (s *commonSuite) addRequiredCharms(c *gc.C, bundle charm.Bundle) {
 			rurl.PromulgatedRevision = -1
 		}
 		c.Logf("adding charm %v %d required by bundle to fulfil %v", &rurl.URL, rurl.PromulgatedRevision, svc.Charm)
-		err = s.store.AddCharmWithArchive(&rurl, ch)
-		c.Assert(err, gc.IsNil, gc.Commentf("url: %#v", &rurl))
-		s.setPublic(c, &rurl)
+		s.addPublicCharm(c, ch, &rurl)
 	}
+}
+
+func (s *commonSuite) assertPut(c *gc.C, url string, val interface{}) {
+	s.assertPut0(c, url, val, false)
+}
+
+func (s *commonSuite) assertPutAsAdmin(c *gc.C, url string, val interface{}) {
+	s.assertPut0(c, url, val, true)
+}
+
+func (s *commonSuite) assertPut0(c *gc.C, url string, val interface{}, asAdmin bool) {
+	body, err := json.Marshal(val)
+	c.Assert(err, gc.IsNil)
+	p := httptesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL(url),
+		Method:  "PUT",
+		Do:      bakeryDo(nil),
+		Header: http.Header{
+			"Content-Type": {"application/json"},
+		},
+		Body: bytes.NewReader(body),
+	}
+	if asAdmin {
+		p.Username = testUsername
+		p.Password = testPassword
+	}
+	httptesting.AssertJSONCall(c, p)
+}
+
+func (s *commonSuite) assertGet(c *gc.C, url string, expectVal interface{}) {
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:    s.srv,
+		Do:         bakeryDo(nil),
+		URL:        storeURL(url),
+		ExpectBody: expectVal,
+	})
+}
+
+// assertGetIsUnauthorized asserts that a GET to the given URL results
+// in an ErrUnauthorized response with the given error message.
+func (s *commonSuite) assertGetIsUnauthorized(c *gc.C, url, expectMessage string) {
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler:      s.srv,
+		Do:           bakeryDo(nil),
+		Method:       "GET",
+		URL:          storeURL(url),
+		ExpectStatus: http.StatusUnauthorized,
+		ExpectBody: params.Error{
+			Code:    params.ErrUnauthorized,
+			Message: expectMessage,
+		},
+	})
+}
+
+// assertGetIsUnauthorized asserts that a PUT to the given URL with the
+// given body value results in an ErrUnauthorized response with the given
+// error message.
+func (s *commonSuite) assertPutIsUnauthorized(c *gc.C, url string, val interface{}, expectMessage string) {
+	body, err := json.Marshal(val)
+	c.Assert(err, gc.IsNil)
+	httptesting.AssertJSONCall(c, httptesting.JSONCallParams{
+		Handler: s.srv,
+		URL:     storeURL(url),
+		Method:  "PUT",
+		Do:      bakeryDo(nil),
+		Header: http.Header{
+			"Content-Type": {"application/json"},
+		},
+		Body:         bytes.NewReader(body),
+		ExpectStatus: http.StatusUnauthorized,
+		ExpectBody: params.Error{
+			Code:    params.ErrUnauthorized,
+			Message: expectMessage,
+		},
+	})
+}
+
+// doAsUser calls the given function, discharging any authorization
+// request as the given user name.
+func (s *commonSuite) doAsUser(user string, f func()) {
+	old := s.discharge
+	s.discharge = dischargeForUser(user)
+	defer func() {
+		s.discharge = old
+	}()
+	f()
 }
 
 func bakeryDo(client *http.Client) func(*http.Request) (*http.Response, error) {

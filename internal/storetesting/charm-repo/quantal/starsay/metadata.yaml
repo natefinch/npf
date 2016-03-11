@@ -1,0 +1,19 @@
+name: starsay
+summary: A dumb little test charm for resources.
+maintainer: Nate Finch <nate.finch@gmail.com>
+description: Doesn't do anything at all.
+tags:
+  - application
+resources:
+  for-store:
+    type: file
+    filename: dummy.tgz
+    description: One line that is useful when operators need to push it.
+  for-install:
+    type: file
+    filename: initial.tgz
+    description: get things started
+  for-upload:
+    type: file
+    filename: config.xml
+    description: Who uses xml anymore?

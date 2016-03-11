@@ -4,7 +4,6 @@
 package v5_test // import "gopkg.in/juju/charmstore.v5-unstable/internal/v5"
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -17,10 +16,8 @@ import (
 	gc "gopkg.in/check.v1"
 	"gopkg.in/juju/charm.v6-unstable"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
-	"gopkg.in/mgo.v2/bson"
 
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/storetesting"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/v5"
@@ -52,15 +49,7 @@ func (s *SearchSuite) SetUpSuite(c *gc.C) {
 func (s *SearchSuite) SetUpTest(c *gc.C) {
 	s.commonSuite.SetUpTest(c)
 	s.addCharmsToStore(c)
-	// hide the riak charm
-	err := s.store.DB.BaseEntities().UpdateId(
-		charm.MustParseURL("cs:~charmers/riak"),
-		bson.D{{"$set", map[string]mongodoc.ACL{
-			"acls": {
-				Read: []string{"charmers", "test-user"},
-			},
-		}}},
-	)
+	err := s.store.SetPerms(charm.MustParseURL("cs:~charmers/riak"), "stable.read", "charmers", "test-user")
 	c.Assert(err, gc.IsNil)
 	err = s.store.UpdateSearch(newResolvedURL("~charmers/trusty/riak-0", 0))
 	c.Assert(err, gc.IsNil)
@@ -70,20 +59,10 @@ func (s *SearchSuite) SetUpTest(c *gc.C) {
 
 func (s *SearchSuite) addCharmsToStore(c *gc.C) {
 	for name, id := range exportTestCharms {
-		err := s.store.AddCharmWithArchive(id, getSearchCharm(name))
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
-		c.Assert(err, gc.IsNil)
-		err = s.store.UpdateSearch(id)
-		c.Assert(err, gc.IsNil)
+		s.addPublicCharm(c, getSearchCharm(name), id)
 	}
 	for name, id := range exportTestBundles {
-		err := s.store.AddBundleWithArchive(id, getSearchBundle(name))
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&id.URL, "read", params.Everyone, id.URL.User)
-		c.Assert(err, gc.IsNil)
-		err = s.store.UpdateSearch(id)
-		c.Assert(err, gc.IsNil)
+		s.addPublicBundle(c, getSearchBundle(name), id, false)
 	}
 }
 
@@ -723,12 +702,7 @@ func (s *SearchSuite) TestDownloadsBoost(c *gc.C) {
 	for n, cnt := range charmDownloads {
 		url := newResolvedURL("cs:~downloads-test/trusty/x-1", -1)
 		url.URL.Name = n
-		err := s.store.AddCharmWithArchive(url, getSearchCharm(n))
-		c.Assert(err, gc.IsNil)
-		err = s.store.SetPerms(&url.URL, "read", params.Everyone, url.URL.User)
-		c.Assert(err, gc.IsNil)
-		err = s.store.UpdateSearch(url)
-		c.Assert(err, gc.IsNil)
+		s.addPublicCharm(c, getSearchCharm(n), url)
 		for i := 0; i < cnt; i++ {
 			err := s.store.IncrementDownloadCounts(url)
 			c.Assert(err, gc.IsNil)
@@ -755,28 +729,10 @@ func (s *SearchSuite) TestLegacyStatsUpdatesSearch(c *gc.C) {
 	doc, err := s.store.ES.GetSearchDocument(charm.MustParseURL("~openstack-charmers/trusty/mysql-7"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(doc.TotalDownloads, gc.Equals, int64(0))
-	s.assertPut(c, "~openstack-charmers/trusty/mysql-7/meta/extra-info/"+params.LegacyDownloadStats, 57)
+	s.assertPutAsAdmin(c, "~openstack-charmers/trusty/mysql-7/meta/extra-info/"+params.LegacyDownloadStats, 57)
 	doc, err = s.store.ES.GetSearchDocument(charm.MustParseURL("~openstack-charmers/trusty/mysql-7"))
 	c.Assert(err, gc.IsNil)
 	c.Assert(doc.TotalDownloads, gc.Equals, int64(57))
-}
-
-func (s *SearchSuite) assertPut(c *gc.C, url string, val interface{}) {
-	body, err := json.Marshal(val)
-	c.Assert(err, gc.IsNil)
-	rec := httptesting.DoRequest(c, httptesting.DoRequestParams{
-		Handler: s.srv,
-		URL:     storeURL(url),
-		Method:  "PUT",
-		Header: http.Header{
-			"Content-Type": {"application/json"},
-		},
-		Username: testUsername,
-		Password: testPassword,
-		Body:     bytes.NewReader(body),
-	})
-	c.Assert(rec.Code, gc.Equals, http.StatusOK, gc.Commentf("headers: %v, body: %s", rec.HeaderMap, rec.Body.String()))
-	c.Assert(rec.Body.String(), gc.HasLen, 0)
 }
 
 func (s *SearchSuite) TestSearchWithAdminCredentials(c *gc.C) {

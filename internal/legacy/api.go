@@ -123,13 +123,13 @@ func (h *Handler) Close() {
 }
 
 func (h *Handler) newReqHandler() (*reqHandler, error) {
-	v4h, err := h.v4.NewReqHandler()
+	v4h, err := h.v4.NewReqHandler(new(http.Request))
 	if err != nil {
 		return nil, errgo.Mask(err, errgo.Is(charmstore.ErrTooManySessions))
 	}
 	rh := reqHandlerPool.Get().(*reqHandler)
 	rh.v4 = v4h
-	rh.store = v4h.Store
+	rh.store = v4h.Store.Store
 	return rh, nil
 }
 
@@ -188,7 +188,7 @@ func (h *reqHandler) serveCharmInfo(_ http.Header, req *http.Request) (interface
 		}
 		var entity *mongodoc.Entity
 		if err == nil {
-			entity, err = h.store.FindBestEntity(curl, nil)
+			entity, err = h.store.FindBestEntity(curl, params.UnpublishedChannel, nil)
 			if errgo.Cause(err) == params.ErrNotFound {
 				// The old API actually returned "entry not found"
 				// on *any* error, but it seems reasonable to be
@@ -257,7 +257,7 @@ func (h *reqHandler) serveCharmEvent(_ http.Header, req *http.Request) (interfac
 		}
 
 		// Retrieve the charm.
-		entity, err := h.store.FindBestEntity(id, charmstore.FieldSelector("_id", "uploadtime", "extrainfo"))
+		entity, err := h.store.FindBestEntity(id, params.UnpublishedChannel, charmstore.FieldSelector("_id", "uploadtime", "extrainfo"))
 		if err != nil {
 			if errgo.Cause(err) == params.ErrNotFound {
 				// The old API actually returned "entry not found"

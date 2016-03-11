@@ -77,8 +77,9 @@ type ReqHandler struct {
 	Handler *Handler
 
 	// Store holds the charmstore Store instance
-	// for the request.
-	Store *charmstore.Store
+	// for the request, associated with the channel specified
+	// in the request.
+	Store *StoreWithChannel
 
 	// auth holds the results of any authorization that
 	// has been done on this request.
@@ -120,26 +121,58 @@ var (
 		"revision",
 		"series",
 		"promulgated-revision",
-		"development",
 		"promulgated-url",
+		"development",
+		"stable",
 	)
 	RequiredBaseEntityFields = charmstore.FieldSelector(
 		"user",
 		"name",
-		"acls",
-		"public",
-		"developmentacls",
+		"channelacls",
+		"channelentities",
 		"promulgated",
 	)
 )
 
+// StoreWithChannel associates a Store with a channel that will be used
+// to resolve any channel-ambiguous requests.
+type StoreWithChannel struct {
+	*charmstore.Store
+	Channel params.Channel
+}
+
+func (s *StoreWithChannel) FindBestEntity(url *charm.URL, fields map[string]int) (*mongodoc.Entity, error) {
+	return s.Store.FindBestEntity(url, s.Channel, fields)
+}
+
+func (s *StoreWithChannel) FindBaseEntity(url *charm.URL, fields map[string]int) (*mongodoc.BaseEntity, error) {
+	return s.Store.FindBaseEntity(url, fields)
+}
+
+// ValidChannels holds the set of all allowed channels
+// that can be passed as a "?channel=" parameter.
+var ValidChannels = map[params.Channel]bool{
+	params.UnpublishedChannel: true,
+	params.DevelopmentChannel: true,
+	params.StableChannel:      true,
+}
+
 // NewReqHandler returns an instance of a *ReqHandler
-// suitable for handling an HTTP request. After use, the ReqHandler.Close
+// suitable for handling the given HTTP request. After use, the ReqHandler.Close
 // method should be called to close it.
 //
 // If no handlers are available, it returns an error with
 // a charmstore.ErrTooManySessions cause.
-func (h *Handler) NewReqHandler() (*ReqHandler, error) {
+func (h *Handler) NewReqHandler(req *http.Request) (*ReqHandler, error) {
+	req.ParseForm()
+	// Validate all the values for channel, even though
+	// most endpoints will only ever use the first one.
+	// PUT to an archive is the notable exception.
+	for _, ch := range req.Form["channel"] {
+		if !ValidChannels[params.Channel(ch)] {
+			return nil, badRequestf(nil, "invalid channel %q specified in request", ch)
+		}
+	}
 	store, err := h.Pool.RequestStore()
 	if err != nil {
 		if errgo.Cause(err) == charmstore.ErrTooManySessions {
@@ -149,8 +182,11 @@ func (h *Handler) NewReqHandler() (*ReqHandler, error) {
 	}
 	rh := reqHandlerPool.Get().(*ReqHandler)
 	rh.Handler = h
-	rh.Store = store
-	rh.Cache = entitycache.New(store)
+	rh.Store = &StoreWithChannel{
+		Store:   store,
+		Channel: params.Channel(req.Form.Get("channel")),
+	}
+	rh.Cache = entitycache.New(rh.Store)
 	rh.Cache.AddEntityFields(RequiredEntityFields)
 	rh.Cache.AddBaseEntityFields(RequiredBaseEntityFields)
 	return rh, nil
@@ -188,8 +224,8 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"diagram.svg": resolveId(authId(h.serveDiagram), "bundledata"),
 			"expand-id":   resolveId(authId(h.serveExpandId)),
 			"icon.svg":    resolveId(authId(h.serveIcon), "contents", "blobname"),
+			"publish":     resolveId(h.servePublish),
 			"promulgate":  resolveId(h.serveAdminPromulgate),
-			"publish":     h.servePublish,
 			"readme":      resolveId(authId(h.serveReadMe), "contents", "blobname"),
 			"resources":   resolveId(authId(h.serveResources)),
 		},
@@ -200,20 +236,11 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"bundle-metadata":      h.EntityHandler(h.metaBundleMetadata, "bundledata"),
 			"bundles-containing":   h.EntityHandler(h.metaBundlesContaining),
 			"bundle-unit-count":    h.EntityHandler(h.metaBundleUnitCount, "bundleunitcount"),
+			"published":            h.EntityHandler(h.metaPublished, "development", "stable"),
 			"charm-actions":        h.EntityHandler(h.metaCharmActions, "charmactions"),
 			"charm-config":         h.EntityHandler(h.metaCharmConfig, "charmconfig"),
 			"charm-metadata":       h.EntityHandler(h.metaCharmMetadata, "charmmeta"),
 			"charm-related":        h.EntityHandler(h.metaCharmRelated, "charmprovidedinterfaces", "charmrequiredinterfaces"),
-			"extra-info": h.puttableEntityHandler(
-				h.metaExtraInfo,
-				h.putMetaExtraInfo,
-				"extrainfo",
-			),
-			"extra-info/": h.puttableEntityHandler(
-				h.metaExtraInfoWithKey,
-				h.putMetaExtraInfoWithKey,
-				"extrainfo",
-			),
 			"common-info": h.puttableBaseEntityHandler(
 				h.metaCommonInfo,
 				h.putMetaCommonInfo,
@@ -224,6 +251,16 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 				h.putMetaCommonInfoWithKey,
 				"commoninfo",
 			),
+			"extra-info": h.puttableEntityHandler(
+				h.metaExtraInfo,
+				h.putMetaExtraInfo,
+				"extrainfo",
+			),
+			"extra-info/": h.puttableEntityHandler(
+				h.metaExtraInfoWithKey,
+				h.putMetaExtraInfoWithKey,
+				"extrainfo",
+			),
 			"hash":             h.EntityHandler(h.metaHash, "blobhash"),
 			"hash256":          h.EntityHandler(h.metaHash256, "blobhash256"),
 			"id":               h.EntityHandler(h.metaId, "_id"),
@@ -232,9 +269,10 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"id-revision":      h.EntityHandler(h.metaIdRevision, "_id"),
 			"id-series":        h.EntityHandler(h.metaIdSeries, "_id"),
 			"manifest":         h.EntityHandler(h.metaManifest, "blobname"),
-			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "acls", "developmentacls"),
-			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "acls", "developmentacls"),
+			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "channelacls"),
+			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "channelacls"),
 			"promulgated":      h.baseEntityHandler(h.metaPromulgated, "promulgated"),
+			"resources":        h.EntityHandler(h.metaResources, "charmmeta"),
 			"revision-info":    router.SingleIncludeHandler(h.metaRevisionInfo),
 			"stats":            h.EntityHandler(h.metaStats),
 			"supported-series": h.EntityHandler(h.metaSupportedSeries, "supportedseries"),
@@ -259,7 +297,7 @@ func newReqHandler() *ReqHandler {
 // request-specific instance of ReqHandler and
 // calling ServeHTTP on that.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	rh, err := h.NewReqHandler()
+	rh, err := h.NewReqHandler(req)
 	if err != nil {
 		router.WriteError(w, err)
 		return
@@ -347,16 +385,12 @@ func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, 
 	// We've added promulgated-url as a required field, so
 	// we'll always get it from the Entity result.
 	entity, err := cache.Entity(url, nil)
-	if err != nil && errgo.Cause(err) != params.ErrNotFound {
-		return nil, errgo.Mask(err)
-	}
-	if errgo.Cause(err) == params.ErrNotFound {
-		return nil, noMatchingURLError(url)
+	if err != nil {
+		return nil, errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 	rurl := &router.ResolvedURL{
 		URL:                 *entity.URL,
 		PromulgatedRevision: -1,
-		Development:         url.Channel == charm.DevelopmentChannel,
 	}
 	if url.User == "" {
 		rurl.PromulgatedRevision = entity.PromulgatedRevision
@@ -369,10 +403,6 @@ func resolveURL(cache *entitycache.Cache, url *charm.URL) (*router.ResolvedURL, 
 	// the result.
 	cache.BaseEntity(entity.BaseURL, nil)
 	return rurl, nil
-}
-
-func noMatchingURLError(url *charm.URL) error {
-	return errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %q", url)
 }
 
 type EntityHandlerFunc func(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error)
@@ -506,7 +536,7 @@ func (h *ReqHandler) baseEntityQuery(id *router.ResolvedURL, fields map[string]i
 }
 
 func (h *ReqHandler) entityQuery(id *router.ResolvedURL, selector map[string]int, req *http.Request) (interface{}, error) {
-	val, err := h.Cache.Entity(id.UserOwnedURL(), selector)
+	val, err := h.Cache.Entity(&id.URL, selector)
 	if errgo.Cause(err) == params.ErrNotFound {
 		logger.Infof("entity %#v not found: %#v", id, err)
 		return nil, errgo.WithCausef(nil, params.ErrNotFound, "no matching charm or bundle for %s", id)
@@ -525,18 +555,6 @@ func (h *ReqHandler) serveDebug(w http.ResponseWriter, req *http.Request) {
 	router.WriteError(w, errNotImplemented)
 }
 
-// POST id/resources/name.stream
-// https://github.com/juju/charmstore/blob/v4/docs/API.md#post-idresourcesnamestream
-//
-// GET  id/resources/name.stream[-revision]/arch/filename
-// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idresourcesnamestream-revisionarchfilename
-//
-// PUT id/resources/[~user/]series/name.stream-revision/arch?sha256=hash
-// https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idresourcesuserseriesnamestream-revisionarchsha256hash
-func (h *ReqHandler) serveResources(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
-	return errNotImplemented
-}
-
 // GET id/expand-id
 // https://docs.google.com/a/canonical.com/document/d/1TgRA7jW_mmXoKH3JiwBbtPvQu7WiM6XMrz1wSrhTMXw/edit#bookmark=id.4xdnvxphb2si
 func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
@@ -550,16 +568,7 @@ func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter
 	// to return entities that match appropriately.
 
 	// Retrieve all the entities with the same base URL.
-	// Note that we don't do any permission checking of the returned URLs.
-	// This is because we know that the user is allowed to read at
-	// least the resolved URL passed into serveExpandId.
-	// If this does not specify "development", then no development
-	// revisions will be chosen, so the single ACL already checked
-	// is sufficient. If it *does* specify "development", then we assume
-	// that the development ACLs are more restrictive than the
-	// non-development ACLs, and given that, we can allow all
-	// the URLs.
-	q := h.Store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}, {"development", 1}})
+	q := h.Store.EntitiesQuery(baseURL).Select(bson.D{{"_id", 1}, {"promulgated-url", 1}})
 	if id.PromulgatedRevision != -1 {
 		q = q.Sort("-series", "-promulgated-revision")
 	} else {
@@ -574,6 +583,9 @@ func (h *ReqHandler) serveExpandId(id *router.ResolvedURL, w http.ResponseWriter
 	// Collect all the expanded identifiers for each entity.
 	response := make([]params.ExpandedId, 0, len(docs))
 	for _, doc := range docs {
+		if err := h.AuthorizeEntity(charmstore.EntityResolvedURL(doc), req); err != nil {
+			continue
+		}
 		url := doc.PreferredURL(id.PromulgatedRevision != -1)
 		response = append(response, params.ExpandedId{Id: url.String()})
 	}
@@ -779,7 +791,7 @@ func (h *ReqHandler) metaRevisionInfo(id *router.ResolvedURL, path string, flags
 		if id.PromulgatedRevision != -1 {
 			response.Revisions = append(response.Revisions, rurl.PromulgatedURL())
 		} else {
-			response.Revisions = append(response.Revisions, rurl.UserOwnedURL())
+			response.Revisions = append(response.Revisions, &rurl.URL)
 		}
 	}
 	if err := iter.Err(); err != nil {
@@ -986,10 +998,11 @@ func checkExtraInfoKey(key string, field string) error {
 // GET id/meta/perm
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetaperm
 func (h *ReqHandler) metaPerm(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	acls := entity.ACLs
-	if id.Development {
-		acls = entity.DevelopmentACLs
+	ch, err := h.entityChannel(id)
+	if err != nil {
+		return nil, errgo.Mask(err)
 	}
+	acls := entity.ChannelACLs[ch]
 	return params.PermResponse{
 		Read:  acls.Read,
 		Write: acls.Write,
@@ -1003,27 +1016,19 @@ func (h *ReqHandler) putMetaPerm(id *router.ResolvedURL, path string, val *json.
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
 	}
-	field := "acls"
-	if id.Development {
-		field = "developmentacls"
-	} else {
-		isPublic := false
-		for _, p := range perms.Read {
-			if p == params.Everyone {
-				isPublic = true
-				break
-			}
-		}
-		updater.UpdateField("public", isPublic, nil)
+	ch, err := h.entityChannel(id)
+	if err != nil {
+		return errgo.Mask(err)
 	}
-	updater.UpdateField(field+".read", perms.Read, &audit.Entry{
+	// TODO use only one UpdateField operation?
+	updater.UpdateField(string("channelacls."+ch+".read"), perms.Read, &audit.Entry{
 		Op:     audit.OpSetPerm,
 		Entity: &id.URL,
 		ACL: &audit.ACL{
 			Read: perms.Read,
 		},
 	})
-	updater.UpdateField(field+".write", perms.Write, &audit.Entry{
+	updater.UpdateField(string("channelacls."+ch+".write"), perms.Write, &audit.Entry{
 		Op:     audit.OpSetPerm,
 		Entity: &id.URL,
 		ACL: &audit.ACL{
@@ -1045,10 +1050,11 @@ func (h *ReqHandler) metaPromulgated(entity *mongodoc.BaseEntity, id *router.Res
 // GET id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapermkey
 func (h *ReqHandler) metaPermWithKey(entity *mongodoc.BaseEntity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
-	acls := entity.ACLs
-	if id.Development {
-		acls = entity.DevelopmentACLs
+	ch, err := h.entityChannel(id)
+	if err != nil {
+		return nil, errgo.Mask(err)
 	}
+	acls := entity.ChannelACLs[ch]
 	switch path {
 	case "/read":
 		return acls.Read, nil
@@ -1061,37 +1067,27 @@ func (h *ReqHandler) metaPermWithKey(entity *mongodoc.BaseEntity, id *router.Res
 // PUT id/meta/perm/key
 // https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idmetapermkey
 func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val *json.RawMessage, updater *router.FieldUpdater, req *http.Request) error {
+	ch, err := h.entityChannel(id)
+	if err != nil {
+		return errgo.Mask(err)
+	}
 	var perms []string
 	if err := json.Unmarshal(*val, &perms); err != nil {
 		return errgo.Mask(err)
 	}
-	field := "acls"
-	if id.Development {
-		field = "developmentacls"
-	}
 	switch path {
 	case "/read":
-		updater.UpdateField(field+".read", perms, &audit.Entry{
+		updater.UpdateField(string("channelacls."+ch+".read"), perms, &audit.Entry{
 			Op:     audit.OpSetPerm,
 			Entity: &id.URL,
 			ACL: &audit.ACL{
 				Read: perms,
 			},
 		})
-		if !id.Development {
-			isPublic := false
-			for _, p := range perms {
-				if p == params.Everyone {
-					isPublic = true
-					break
-				}
-			}
-			updater.UpdateField("public", isPublic, nil)
-		}
 		updater.UpdateSearch()
 		return nil
 	case "/write":
-		updater.UpdateField(field+".write", perms, &audit.Entry{
+		updater.UpdateField(string("channelacls."+ch+".write"), perms, &audit.Entry{
 			Op:     audit.OpSetPerm,
 			Entity: &id.URL,
 			ACL: &audit.ACL{
@@ -1101,6 +1097,38 @@ func (h *ReqHandler) putMetaPermWithKey(id *router.ResolvedURL, path string, val
 		return nil
 	}
 	return errgo.WithCausef(nil, params.ErrNotFound, "unknown permission")
+}
+
+// GET id/meta/published
+// https://github.com/juju/charmstore/blob/v4/docs/API.md#get-idmetapublished
+func (h *ReqHandler) metaPublished(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	baseEntity, err := h.Cache.BaseEntity(entity.URL, charmstore.FieldSelector("channelentities"))
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	info := make([]params.PublishedInfo, 0, 2)
+	if entity.Development {
+		info = append(info, params.PublishedInfo{
+			Channel: params.DevelopmentChannel,
+		})
+	}
+	if entity.Stable {
+		info = append(info, params.PublishedInfo{
+			Channel: params.StableChannel,
+		})
+	}
+	for i, pinfo := range info {
+		// The entity is current for a channel if any series within
+		// a channel refers to the entity.
+		for _, url := range baseEntity.ChannelEntities[pinfo.Channel] {
+			if *url == *entity.URL {
+				info[i].Current = true
+			}
+		}
+	}
+	return &params.PublishedResponse{
+		Info: info,
+	}, nil
 }
 
 // GET id/meta/archive-upload-time
@@ -1293,12 +1321,13 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 	}
 
 	if promulgate.Promulgated {
-		// Set write permissions for the non-development entity to promulgators
-		// only, so that the user cannot just publish newer promulgated
-		// versions of the charm or bundle. Promulgators are responsible of
-		// reviewing and publishing subsequent revisions of this entity.
+		// Set write permissions to promulgators only, so that
+		// the user cannot just publish newer promulgated
+		// versions of the charm or bundle. Promulgators are
+		// responsible of reviewing and publishing subsequent
+		// revisions of this entity.
 		if err := h.updateBaseEntity(id, map[string]interface{}{
-			"acls.write": []string{PromulgatorsGroup},
+			"channelacls.stable.write": []string{PromulgatorsGroup},
 		}, nil); err != nil {
 			return errgo.Notef(err, "cannot set permissions for %q", id)
 		}
@@ -1318,15 +1347,19 @@ func (h *ReqHandler) serveAdminPromulgate(id *router.ResolvedURL, w http.Respons
 	return nil
 }
 
+// validPublishChannels holds the set of channels that can
+// be the target of a publish request.
+var validPublishChannels = map[params.Channel]bool{
+	params.DevelopmentChannel: true,
+	params.StableChannel:      true,
+}
+
 // PUT id/publish
 // See https://github.com/juju/charmstore/blob/v4/docs/API.md#put-idpublish
-func (h *ReqHandler) servePublish(id *charm.URL, w http.ResponseWriter, req *http.Request) error {
+func (h *ReqHandler) servePublish(id *router.ResolvedURL, w http.ResponseWriter, req *http.Request) error {
 	// Perform basic validation of the request.
 	if req.Method != "PUT" {
 		return errgo.WithCausef(nil, params.ErrMethodNotAllowed, "%s not allowed", req.Method)
-	}
-	if id.Channel != "" {
-		return errgo.WithCausef(nil, params.ErrForbidden, "can only set publish on published URL, %q provided", id)
 	}
 
 	// Retrieve the requested action from the request body.
@@ -1334,40 +1367,42 @@ func (h *ReqHandler) servePublish(id *charm.URL, w http.ResponseWriter, req *htt
 		params.PublishRequest `httprequest:",body"`
 	}
 	if err := httprequest.Unmarshal(httprequest.Params{Request: req}, &publish); err != nil {
-		return errgo.WithCausef(err, params.ErrBadRequest, "cannot unmarshal publish request body")
+		return badRequestf(err, "cannot unmarshal publish request body")
+	}
+	chans := publish.Channels
+	if len(chans) == 0 {
+		return badRequestf(nil, "no channels provided")
+	}
+	for _, c := range chans {
+		if !validPublishChannels[c] {
+			return badRequestf(nil, "cannot publish to %q", c)
+		}
 	}
 
-	// Retrieve the resolved URL for the entity to update. It will be referring
-	// to the entity under development is the action is to publish a charm or
-	// bundle, or the published one otherwise.
-	url := *id
-	if publish.Published {
-		url = *id.WithChannel(charm.DevelopmentChannel)
-	}
-	rurl, err := h.Router.Context.ResolveURL(&url)
+	// Retrieve the base entity so that we can check permissions.
+	baseEntity, err := h.Cache.BaseEntity(&id.URL, charmstore.FieldSelector("channelacls"))
 	if err != nil {
 		return errgo.Mask(err, errgo.Is(params.ErrNotFound))
 	}
 
-	// Authorize the operation: users must have write permissions on the
-	// published charm or bundle.
-	prurl := *rurl
-	prurl.Development = false
-	if err := h.AuthorizeEntity(&prurl, req); err != nil {
-		return errgo.Mask(err, errgo.Any)
+	// Authorize the operation. Users must have write permissions on the ACLs
+	// on the channel being published to.
+	for _, c := range chans {
+		if _, err := h.authorize(req, baseEntity.ChannelACLs[c].Write, true, id); err != nil {
+			return errgo.Mask(err, errgo.Any)
+		}
 	}
 
-	// Update the entity.
-	if err := h.Store.SetDevelopment(rurl, !publish.Published); err != nil {
-		return errgo.NoteMask(err, "cannot publish or unpublish charm or bundle", errgo.Is(params.ErrNotFound))
+	// TODO(ericsnow) Actually handle the resources.
+	if len(publish.Resources) > 0 {
+		return errNotImplemented
 	}
 
-	// Return information on the updated charm or bundle.
-	rurl.Development = !publish.Published
-	return httprequest.WriteJSON(w, http.StatusOK, &params.PublishResponse{
-		Id:            rurl.UserOwnedURL(),
-		PromulgatedId: rurl.PromulgatedURL(),
-	})
+	if err := h.Store.Publish(id, chans...); err != nil {
+		return errgo.NoteMask(err, "cannot publish charm or bundle", errgo.Is(params.ErrNotFound))
+	}
+	// TODO add publish audit
+	return nil
 }
 
 // serveSetAuthCookie sets the provided macaroon slice as a cookie on the
