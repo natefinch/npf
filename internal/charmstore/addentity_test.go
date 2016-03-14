@@ -195,7 +195,7 @@ var uploadEntityErrorsTests = []struct {
 	url:         "~charmers/precise/wordpress-0",
 	upload:      storetesting.NewCharm(nil),
 	blobSize:    99999,
-	expectError: "cannot put archive blob: cannot calculate data checksums: EOF",
+	expectError: "cannot read charm archive: seek past end of file",
 	// It would be nice if the above error was better and
 	// the cause was:
 	// expectCause: params.ErrInvalidEntity,
