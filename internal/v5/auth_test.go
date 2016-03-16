@@ -1079,7 +1079,7 @@ func (s *authSuite) TestGroupsForUserWithInvalidIdentityURL(c *gc.C) {
 	h := s.handler(c)
 	defer h.Close()
 	groups, err := h.GroupsForUser("someone")
-	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: cannot GET \"/v1/u/someone/groups\": cannot create request for \":::::/v1/u/someone/groups\": parse :::::/v1/u/someone/groups: missing protocol scheme`)
+	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: cannot parse ":::::": parse :::::: missing protocol scheme`)
 	c.Assert(groups, gc.HasLen, 0)
 }
 
@@ -1089,7 +1089,7 @@ func (s *authSuite) TestGroupsForUserWithInvalidBody(c *gc.C) {
 	s.idM.body = "bad"
 	s.idM.contentType = "application/json"
 	groups, err := h.GroupsForUser("someone")
-	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: cannot unmarshal response: invalid character 'b' looking for beginning of value`)
+	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: GET .*: invalid character 'b' looking for beginning of value`)
 	c.Assert(groups, gc.HasLen, 0)
 }
 
@@ -1100,7 +1100,7 @@ func (s *authSuite) TestGroupsForUserWithErrorResponse(c *gc.C) {
 	s.idM.status = http.StatusUnauthorized
 	s.idM.contentType = "application/json"
 	groups, err := h.GroupsForUser("someone")
-	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: some error`)
+	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: GET .*: some error`)
 	c.Assert(groups, gc.HasLen, 0)
 }
 
@@ -1111,7 +1111,7 @@ func (s *authSuite) TestGroupsForUserWithBadErrorResponse(c *gc.C) {
 	s.idM.status = http.StatusUnauthorized
 	s.idM.contentType = "application/json"
 	groups, err := h.GroupsForUser("someone")
-	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: bad status "401 Unauthorized"`)
+	c.Assert(err, gc.ErrorMatches, `cannot get groups for someone: GET .*: cannot unmarshal error response \(status 401 Unauthorized\): unexpected EOF`)
 	c.Assert(groups, gc.HasLen, 0)
 }
 
