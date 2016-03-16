@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/juju/httprequest"
+	"github.com/juju/idmclient"
 	"github.com/juju/loggo"
 	"github.com/juju/mempool"
 	"gopkg.in/errgo.v1"
@@ -31,7 +32,6 @@ import (
 	"gopkg.in/juju/charmstore.v5-unstable/internal/cache"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/charmstore"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/entitycache"
-	"gopkg.in/juju/charmstore.v5-unstable/internal/identity"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/mongodoc"
 	"gopkg.in/juju/charmstore.v5-unstable/internal/router"
 )
@@ -54,7 +54,7 @@ type Handler struct {
 
 	config         charmstore.ServerParams
 	locator        bakery.PublicKeyLocator
-	identityClient *identity.Client
+	identityClient *idmclient.Client
 	rootPath       string
 
 	// searchCache is a cache of search results keyed on the query
@@ -101,9 +101,9 @@ func New(pool *charmstore.Pool, config charmstore.ServerParams, rootPath string)
 		rootPath:    rootPath,
 		searchCache: cache.New(config.SearchCacheMaxAge),
 		locator:     config.PublicKeyLocator,
-		identityClient: identity.NewClient(&identity.Params{
-			URL:    config.IdentityAPIURL,
-			Client: agent.NewClient(config.AgentUsername, config.AgentKey),
+		identityClient: idmclient.New(idmclient.NewParams{
+			BaseURL: config.IdentityAPIURL,
+			Client:  agent.NewClient(config.AgentUsername, config.AgentKey),
 		}),
 	}
 	return h

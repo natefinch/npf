@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	idmparams "github.com/juju/idmclient/params"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/juju/charmrepo.v2-unstable/csclient/params"
 	"gopkg.in/macaroon-bakery.v1/bakery"
@@ -375,7 +376,11 @@ func (h *ReqHandler) GroupsForUser(username string) ([]string, error) {
 		return nil, nil
 	}
 	// TODO cache groups for a user
-	return h.Handler.identityClient.GroupsForUser(username)
+	groups, err := h.Handler.identityClient.UserGroups(&idmparams.UserGroupsRequest{Username: idmparams.Username(username)})
+	if err != nil {
+		return nil, errgo.Notef(err, "cannot get groups for %s", username)
+	}
+	return groups, nil
 }
 
 func (h *ReqHandler) checkACLMembership(auth authorization, acl []string) error {
