@@ -2880,7 +2880,7 @@ var publishErrorsTests = []struct {
 	expectStatus: http.StatusBadRequest,
 	expectBody: params.Error{
 		Code:    params.ErrBadRequest,
-		Message: `cannot unmarshal publish request body: cannot unmarshal into field: unexpected content type text/invalid; want application/json; content: "{\"Channels\":[\"development\"],\"Published\":false}"`,
+		Message: `cannot unmarshal publish request body: cannot unmarshal into field: unexpected content type text/invalid; want application/json; content: "{\"Channels\":[\"development\"]}"`,
 	},
 }, {
 	about:        "invalid body",
