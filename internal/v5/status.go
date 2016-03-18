@@ -129,9 +129,9 @@ func (h *ReqHandler) findTimesInLogs(logType mongodoc.LogType, startPrefix, endP
 	var log mongodoc.Log
 	iter := h.Store.DB.Logs().
 		Find(bson.D{
-		{"level", mongodoc.InfoLevel},
-		{"type", logType},
-	}).Sort("-time", "-id").Iter()
+			{"level", mongodoc.InfoLevel},
+			{"type", logType},
+		}).Sort("-time", "-id").Iter()
 	for iter.Next(&log) {
 		var msg string
 		if err := json.Unmarshal(log.Data, &msg); err != nil {

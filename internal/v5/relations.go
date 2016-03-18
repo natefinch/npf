@@ -29,19 +29,20 @@ func (h *ReqHandler) metaCharmRelated(entity *mongodoc.Entity, id *router.Resolv
 	if len(entity.CharmProvidedInterfaces)+len(entity.CharmRequiredInterfaces) == 0 {
 		return &params.RelatedResponse{}, nil
 	}
-	q := h.Store.MatchingInterfacesQuery(entity.CharmProvidedInterfaces, entity.CharmRequiredInterfaces)
-
-	fields := bson.D{
-		{"_id", 1},
-		{"supportedseries", 1},
-		{"charmrequiredinterfaces", 1},
-		{"charmprovidedinterfaces", 1},
-		{"promulgated-url", 1},
-		{"promulgated-revision", 1},
-	}
-
+	fields := charmstore.FieldSelector(
+		"supportedseries",
+		"charmrequiredinterfaces",
+		"charmprovidedinterfaces",
+		"promulgated-url",
+		"promulgated-revision",
+	)
+	query := h.Store.MatchingInterfacesQuery(entity.CharmProvidedInterfaces, entity.CharmRequiredInterfaces)
+	iter := h.Cache.Iter(query.Sort("_id"), fields)
 	var entities []*mongodoc.Entity
-	if err := q.Select(fields).Sort("_id").All(&entities); err != nil {
+	for iter.Next() {
+		entities = append(entities, iter.Entity())
+	}
+	if err := iter.Err(); err != nil {
 		return nil, errgo.Notef(err, "cannot retrieve the related charms")
 	}
 

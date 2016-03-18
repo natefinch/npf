@@ -48,6 +48,10 @@ const (
 //
 // This method also sets h.auth to the returned authorization info.
 func (h *ReqHandler) authorize(req *http.Request, acl []string, alwaysAuth bool, entityId *router.ResolvedURL) (authorization, error) {
+	// TODO this is logging statement is actually quite costly
+	// when we're dealing with requests that need to authorize
+	// many entities (e.g. charm-related). Consider removing
+	// it or making it dependent on context.
 	logger.Infof(
 		"authorize, auth location %q, acl %q, path: %q, method: %q, entity: %#v",
 		h.Handler.config.IdentityLocation,
