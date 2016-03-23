@@ -369,10 +369,10 @@ func (h *ReqHandler) WillIncludeMetadata(includes []string) {
 		for _, f := range fi.P.Fields {
 			fields[f] = 1
 		}
-		switch fi.P.Key {
-		case entityHandlerKey{}:
+		switch fi.P.Key.(type) {
+		case entityHandlerKey:
 			h.Cache.AddEntityFields(fields)
-		case baseEntityHandlerKey{}:
+		case baseEntityHandlerKey:
 			h.Cache.AddBaseEntityFields(fields)
 		}
 	}
