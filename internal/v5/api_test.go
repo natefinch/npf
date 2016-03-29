@@ -534,6 +534,9 @@ var metaEndpoints = []metaEndpoint{{
 		if err != nil {
 			return nil, err
 		}
+		if entity.URL.Series == "bundle" {
+			return []params.Resource{}, nil
+		}
 		// TODO(ericsnow) Switch to store.ListResources() once it exists.
 		resources, err := basicListResources(entity)
 		if err != nil {

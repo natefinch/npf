@@ -18,6 +18,15 @@ import (
 // GET id/meta/resources
 // https://github.com/juju/charmstore/blob/v5/docs/API.md#get-idmetaresources
 func (h *ReqHandler) metaResources(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	if entity.URL.Series == "bundle" {
+		// Bundles do not have resources so we return an empty result.
+		return []params.Resource{}, nil
+	}
+	if entity.CharmMeta == nil {
+		// This shouldn't happen, but we'll play it safe.
+		return []params.Resource{}, nil
+	}
+
 	// TODO(ericsnow) Handle flags.
 	// TODO(ericsnow) Use h.Store.ListResources() once that exists.
 	resources, err := basicListResources(entity)
