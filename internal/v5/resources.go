@@ -23,7 +23,8 @@ func (h *ReqHandler) metaResources(entity *mongodoc.Entity, id *router.ResolvedU
 		return []params.Resource{}, nil
 	}
 	if entity.CharmMeta == nil {
-		return []params.Resource{}, nil
+		// This shouldn't happen...
+		panic("entity missing charm metadata")
 	}
 
 	// TODO(ericsnow) Handle flags.
