@@ -534,6 +534,9 @@ var metaEndpoints = []metaEndpoint{{
 		if err != nil {
 			return nil, err
 		}
+		if entity.URL.Series == "bundle" {
+			return []params.Resource{}, nil
+		}
 		// TODO(ericsnow) Switch to store.ListResources() once it exists.
 		resources, err := basicListResources(entity)
 		if err != nil {
@@ -598,9 +601,6 @@ var metaEndpoints = []metaEndpoint{{
 }}
 
 func basicListResources(entity *mongodoc.Entity) ([]resource.Resource, error) {
-	if entity.URL.Series == "bundle" {
-		return nil, errgo.Newf("bundles do not have resources")
-	}
 	var resources []resource.Resource
 	for _, meta := range entity.CharmMeta.Resources {
 		// We use an origin of "upload" since charms cannot be uploaded yet.

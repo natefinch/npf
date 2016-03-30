@@ -18,6 +18,15 @@ import (
 // GET id/meta/resources
 // https://github.com/juju/charmstore/blob/v5/docs/API.md#get-idmetaresources
 func (h *ReqHandler) metaResources(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	if entity.URL.Series == "bundle" {
+		// Bundles do not have resources so we return an empty result.
+		return []params.Resource{}, nil
+	}
+	if entity.CharmMeta == nil {
+		// This shouldn't happen...
+		panic("entity missing charm metadata")
+	}
+
 	// TODO(ericsnow) Handle flags.
 	// TODO(ericsnow) Use h.Store.ListResources() once that exists.
 	resources, err := basicListResources(entity)
@@ -33,13 +42,6 @@ func (h *ReqHandler) metaResources(entity *mongodoc.Entity, id *router.ResolvedU
 }
 
 func basicListResources(entity *mongodoc.Entity) ([]resource.Resource, error) {
-	if entity.URL.Series == "bundle" {
-		return nil, badRequestf(nil, "bundles do not have resources")
-	}
-	if entity.CharmMeta == nil {
-		return nil, errgo.Newf("entity missing charm metadata")
-	}
-
 	var resources []resource.Resource
 	for _, meta := range entity.CharmMeta.Resources {
 		// We use an origin of "upload" since resources cannot be uploaded yet.
