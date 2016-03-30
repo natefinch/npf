@@ -601,9 +601,6 @@ var metaEndpoints = []metaEndpoint{{
 }}
 
 func basicListResources(entity *mongodoc.Entity) ([]resource.Resource, error) {
-	if entity.URL.Series == "bundle" {
-		return nil, errgo.Newf("bundles do not have resources")
-	}
 	var resources []resource.Resource
 	for _, meta := range entity.CharmMeta.Resources {
 		// We use an origin of "upload" since charms cannot be uploaded yet.

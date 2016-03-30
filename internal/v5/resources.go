@@ -23,7 +23,6 @@ func (h *ReqHandler) metaResources(entity *mongodoc.Entity, id *router.ResolvedU
 		return []params.Resource{}, nil
 	}
 	if entity.CharmMeta == nil {
-		// This shouldn't happen, but we'll play it safe.
 		return []params.Resource{}, nil
 	}
 
@@ -42,13 +41,6 @@ func (h *ReqHandler) metaResources(entity *mongodoc.Entity, id *router.ResolvedU
 }
 
 func basicListResources(entity *mongodoc.Entity) ([]resource.Resource, error) {
-	if entity.URL.Series == "bundle" {
-		return nil, badRequestf(nil, "bundles do not have resources")
-	}
-	if entity.CharmMeta == nil {
-		return nil, errgo.Newf("entity missing charm metadata")
-	}
-
 	var resources []resource.Resource
 	for _, meta := range entity.CharmMeta.Resources {
 		// We use an origin of "upload" since resources cannot be uploaded yet.
