@@ -1659,6 +1659,34 @@ Example: `GET ~bob/trusty/wordpress-42/meta/id-series`
 }
 ```
 
+#### GET *id*/meta/owner
+
+The `owner` path returns information on the owner of the charm or bundle.
+This is the owner of the charm or bundle referenced by *id* irrespective
+of whether a user is included in the id.
+
+```go
+type User struct {
+        User string
+}
+```
+
+Example: `GET ~bob/trusty/wordpress-42/meta/owner`
+
+```json
+{
+    "User": "bob"
+}
+```
+
+Example: `GET trusty/wordpress-42/meta/owner`
+
+```json
+{
+    "User": "charmers"
+}
+```
+
 #### GET *id*/meta/common-info
 
 The meta/common-info path reports any common metadata recorded for the base

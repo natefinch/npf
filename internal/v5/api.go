@@ -269,6 +269,7 @@ func RouterHandlers(h *ReqHandler) *router.Handlers {
 			"id-revision":      h.EntityHandler(h.metaIdRevision, "_id"),
 			"id-series":        h.EntityHandler(h.metaIdSeries, "_id"),
 			"manifest":         h.EntityHandler(h.metaManifest, "blobname"),
+			"owner":            h.EntityHandler(h.metaOwner, "_id"),
 			"perm":             h.puttableBaseEntityHandler(h.metaPerm, h.putMetaPerm, "channelacls"),
 			"perm/":            h.puttableBaseEntityHandler(h.metaPermWithKey, h.putMetaPermWithKey, "channelacls"),
 			"promulgated":      h.baseEntityHandler(h.metaPromulgated, "promulgated"),
@@ -805,6 +806,14 @@ func (h *ReqHandler) metaRevisionInfo(id *router.ResolvedURL, path string, flags
 func (h *ReqHandler) metaIdUser(entity *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
 	return params.IdUserResponse{
 		User: id.PreferredURL().User,
+	}, nil
+}
+
+// GET id/meta/owner
+// https://github.com/juju/charmstore/blob/v5-unstable/docs/API.md#get-idmetaowner
+func (h *ReqHandler) metaOwner(_ *mongodoc.Entity, id *router.ResolvedURL, path string, flags url.Values, req *http.Request) (interface{}, error) {
+	return params.IdUserResponse{
+		User: id.URL.User,
 	}, nil
 }
 
