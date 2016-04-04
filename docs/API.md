@@ -2165,6 +2165,17 @@ type WhoAmIResponse struct {
 }
 ```
 
+#### GET /refresh-macaroon
+
+This endpoint returns a macaroon restricted for use only to read the charm
+specified by the 'id' parameter.  The caller must make the request with a
+macaroon returned from a previus call to either refresh-macaroon or
+delegatable-macaroon.
+
+Calling this endpoint with a macaroon returned from a previous call to
+refresh-macaroon will revoke that macaroon.
+
+
 ### Logs
 
 #### GET /log
