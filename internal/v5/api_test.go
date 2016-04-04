@@ -429,6 +429,15 @@ var metaEndpoints = []metaEndpoint{{
 		c.Assert(data, gc.Equals, params.IdUserResponse{"bob"})
 	},
 }, {
+	name: "owner",
+	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
+		return params.IdUserResponse{url.URL.User}, nil
+	},
+	checkURL: newResolvedURL("cs:~bob/utopic/wordpress-2", -1),
+	assertCheckData: func(c *gc.C, data interface{}) {
+		c.Assert(data, gc.Equals, params.IdUserResponse{"bob"})
+	},
+}, {
 	name: "id-series",
 	get: func(store *charmstore.Store, url *router.ResolvedURL) (interface{}, error) {
 		return params.IdSeriesResponse{url.URL.Series}, nil
