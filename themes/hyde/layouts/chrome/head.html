@@ -8,7 +8,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
 
   {{if .Params.vanity}}
-    <meta name="go-import" content="npf.io{{substr .RelPermalink 0 -1}} git {{.Params.vanity}}">
+    {{if .Params.import}}
+      <meta name="go-import" content="{{ .Params.import }} git {{.Params.vanity}}">
+    {{else}}
+      <meta name="go-import" content="npf.io{{substr .RelPermalink 0 -1}} git {{.Params.vanity}}">
+    {{end}}
   {{end}}
 
   <title> {{ .Title }} {{if ne .Title .Site.Title}} &middot; {{ .Site.Title }} {{end}}</title>
