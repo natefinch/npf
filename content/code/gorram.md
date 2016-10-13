@@ -9,13 +9,9 @@ aliases = [
 ]
 
 [[badges]]
-	alt = "godoc"
-	img = "https://godoc.org/npf.io/gorram?status.svg"
-	url = "https://godoc.org/npf.io/gorram"
-[[badges]]
 	alt = "build status"
-	img = "https://drone.io/github.com/natefinch/gorram/status.png"
-	url = "https://drone.io/github.com/natefinch/gorram/latest"
+	img = "https://img.shields.io/codeship/ba651390-71e8-0134-7f3a-1a37cb97ae34.svg?maxAge=0"
+	url = "https://app.codeship.com/projects/178461"
 
 +++
 
@@ -25,7 +21,59 @@ aliases = [
 
 It's like go run for any go function.
 
-Automagically understands how to produce an interface from the command line into a Go function.
+Automagically understands how to produce an interface from the command line into
+a Go function.
+
+*Sometimes, magic is just someone spending more time on something than anyone else might reasonably expect.* -Teller
+
+## Installation
+
+```
+go get -u npf.io/gorram
+```
+
+Note: gorram depends on having a working go environment to function, since it
+dynamically analyzes go code in the stdlib and in your GOPATH.
+
+## Usage
+
+```
+Usage: gorram [OPTION] <pkg> <func | var.method> [args...]
+
+Options:
+  -t <string>  format output with a go template
+  -h, --help   display this help
+
+Executes a go function or an method on a global variable defined in a package in
+the stdlib or a package in your GOPATH.  Package must be the full package import
+path, e.g. encoding/json.  Only exported functions, methods, and variables may
+be called.
+
+Most builtin types are supported, and streams of input (via io.Reader or []byte
+for example) may be read from stdin.  If specified as an argument, the argument
+to a stream input is expected to be a filename.
+
+Return values are printed to stdout.  If the function has an output argument,
+like io.Reader or *bytes.Buffer, it is automatically passed in and then written
+to stdout.
+
+If there's no output stream, the return value is simply written to stdout via
+fmt.Println.  If the return value is a struct that has an exported field that is
+an io.Reader (such as net/http.Request), then that will be treated as the output
+value, unless it's empty, in which case we fall back to printing the output
+value.
+
+A template specified with -t may either be a template definition (e.g.
+{{.Status}}) or a filename, in which case the contents of the file will be used
+as the template.
+
+Gorram creates a script file in $GORRAM_CACHE, or, if not set, in
+$HOME/.gorram/importpath/Name.go.  Running with -r will re-generate that script
+file, otherwise it is reused.
+
+```
+
+
 
 ## Examples
 
@@ -130,3 +178,29 @@ func (e *Encoding) EncodeToString(b []byte]) string
 ```
 Gorram understands that packages have global variables that have methods you can
 call.
+
+```
+usage: 
+$ gorram net/http Get https://google.com
+<some long html output>
+
+function:
+// net/http
+func Get(url string) (resp *Response, err error)
+```
+
+Gorram understands that if a function returns a struct, and one of the fields of
+the struct is an io.Reader, then it will output the contents of that reader.  
+(if there are no contents or it's nil, the result value will be printed with
+%v).
+
+## Development
+
+See the [project page](https://github.com/natefinch/gorram/projects/1) for what's
+being worked on now. 
+
+## Hacking
+
+Gorram requires go 1.7 to run the tests (thank you subtests!)  But only requires
+it builds with earlier versions (at least 1.6, I haven't tried earlier ones, but
+they should be fine, too).

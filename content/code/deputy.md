@@ -16,7 +16,7 @@ vanity = "https://github.com/natefinch/deputy"
 +++
 
 
-deputy is a go package that adds smarts on top of os/exec
+Deputy is a go package that adds smarts on top of os/exec.
 
 ![deputy-sm](https://cloud.githubusercontent.com/assets/3185864/8237448/6bc30102-15bd-11e5-9e87-6423197a73d6.jpg)
 
