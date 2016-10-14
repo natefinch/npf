@@ -1,0 +1,15 @@
+<!DOCTYPE html><html>
+    <head>
+    {{if .Page.Params.vanity}}
+        {{if .Page.Params.import}}
+        <meta name="go-import" content="{{ .Page.Params.import }} git {{.Params.vanity}}">
+        {{else}}
+        <meta name="go-import" content="npf.io{{substr .Page.RelPermalink 0 -1}} git {{.Page.Params.vanity}}">
+        {{end}}
+    {{end}}
+        <title>{{ .Permalink }}</title>
+        <link rel="canonical" href="{{ .Permalink }}"/>
+        <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+        <meta http-equiv="refresh" content="0; url={{ .Permalink }}" />
+    </head>
+</html>

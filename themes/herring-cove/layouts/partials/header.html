@@ -6,8 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="{{ .Description }}">
   <link href="{{ .RSSlink }}" rel="alternate" type="application/rss+xml" title="{{ .Site.Title }}" />
-  <link href="{{ .Site.BaseUrl }}/css/bootstrap.min.css" rel="stylesheet">
-  <link href="{{ .Site.BaseUrl }}/css/hc.css" rel="stylesheet">
+  <link href="{{ .Site.BaseURL }}/css/bootstrap.min.css" rel="stylesheet">
+  <link href="{{ .Site.BaseURL }}/css/hc.css" rel="stylesheet">
   <link href="//netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.css" rel="stylesheet">
 
   <link href='http://fonts.googleapis.com/css?family=Raleway:400,300' rel='stylesheet' type='text/css'>
@@ -45,8 +45,8 @@
         </div>
         <div class="navbar-collapse collapse">
           <ul class="nav navbar-nav">
-          <li><a href="{{ .Site.BaseUrl }}/lumberjack">Lumberjack</a></li>
-          <li><a href="{{ .Site.BaseUrl }}/about">About</a></li>
+          <li><a href="{{ .Site.BaseURL }}/lumberjack">Lumberjack</a></li>
+          <li><a href="{{ .Site.BaseURL }}/about">About</a></li>
           </ul>
         </div><!--/.nav-collapse -->
       </div>
@@ -57,10 +57,10 @@
        <!-- Sidebar -->
        <div id="sidebar-wrapper">
         <ul class="sidebar-nav">
-          <li class="sidebar-brand"><a href="{{ .Site.BaseUrl }}/"><h1 class="brand">{{ .Site.Title }}</h1></a><h3>{{ .Site.Params.Description }}</h3></li>
+          <li class="sidebar-brand"><a href="{{ .Site.BaseURL }}/"><h1 class="brand">{{ .Site.Title }}</h1></a><h3>{{ .Site.Params.Description }}</h3></li>
           <hr />
-          <li><a href="{{ .Site.BaseUrl }}/lumberjack">Lumberjack</a></li>
-          <li><a href="{{ .Site.BaseUrl }}/about">About</a></li>
+          <li><a href="{{ .Site.BaseURL }}/lumberjack">Lumberjack</a></li>
+          <li><a href="{{ .Site.BaseURL }}/about">About</a></li>
           <hr />
           <div id="social-wrapper">
            {{ with .Site.Params.twitter }}<li> <a href="{{.}}"><i class="fa fa-twitter-square"></i></a></li>{{end}}
