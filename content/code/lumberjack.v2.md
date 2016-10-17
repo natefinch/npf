@@ -2,7 +2,7 @@
 date = 2014-07-28T11:28:15Z
 title = "Lumberjack"
 menu = "code"
-vanity = "https://gopkg.in/natefinch/lumberjack.v2"
+vanity = "https://github.com/natefinch/lumberjack"
 
 [[badges]]
 	alt = "godoc"

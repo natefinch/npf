@@ -15,10 +15,12 @@
         <li><a href="{{.URL}}">{{ .Name }} </a></li>
       {{end}}
       <br/>
-      {{with .Site.Menus.code}}
+      {{with .Site.Pages -}}
       <li>Code:</li>
-        {{ range . }}
-          <li><a href="{{.URL}}">{{ .Name }} </a></li>
+        {{ range . -}}
+        {{if eq .Type "code" -}}
+          <li><a href="{{.Params.vanity}}">{{ .Title }} </a></li>
+        {{end}}
         {{end}}
       {{end}}
     </ul>

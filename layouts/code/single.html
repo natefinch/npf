@@ -1,22 +1,12 @@
-{{ template "theme/chrome/head.html" . }}
-<body>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en-us">
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
 
-{{ template "theme/chrome/sidebar.html" . }}
+<meta name="go-import" content="npf.io{{substr .RelPermalink 0 -1}} git {{.Params.vanity}}">
+<meta name="go-source" content="npf.io{{substr .RelPermalink 0 -1}} {{.Params.vanity}} {{.Params.vanity}}/tree/master{/dir} {{.Params.vanity}}/blob/master{/dir}/{file}#L{line}">
 
-    <div class="content container">
-  <div class="post">
-    <h1 class="post-title">{{if .Params.vanity}}<a href="{{.Params.vanity}}">{{ .Title }}</a>{{else}}{{ .Title }}{{end}}
-    {{if .Params.badges}}
-    <span class="badges">
-    {{range .Params.badges}}
-    	<a href="{{.url}}"><img class="badge" title="{{.alt}}" alt="{{.alt}}" src="{{.img}}"></a>
-    {{end}}
-    </span>
-    {{end}}
-    </h1>
-    {{ .Content }}
-  </div>
-  </div>
-
-  </body>
+<meta http-equiv="refresh" content="0; url={{.Params.vanity}}">
+</head>
 </html>
+

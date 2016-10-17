@@ -10,8 +10,10 @@
   {{if .Params.vanity}}
     {{if .Params.import}}
       <meta name="go-import" content="{{ .Params.import }} git {{.Params.vanity}}">
+        <meta name="go-source" content="{{ .Params.import }} {{.Params.vanity}} {{.Params.vanity}}/tree/master{/dir} {{.Params.vanity}}/blob/master{/dir}/{file}#L{line}">
     {{else}}
       <meta name="go-import" content="npf.io{{substr .RelPermalink 0 -1}} git {{.Params.vanity}}">
+        <meta name="go-source" content="npf.io{{substr .RelPermalink 0 -1}} {{.Params.vanity}} {{.Params.vanity}}/tree/master{/dir} {{.Params.vanity}}/blob/master{/dir}/{file}#L{line}">
     {{end}}
   {{end}}
 

@@ -1,12 +1,9 @@
 <!DOCTYPE html><html>
     <head>
-    {{if .Page.Params.vanity}}
-        {{if .Page.Params.import}}
-        <meta name="go-import" content="{{ .Page.Params.import }} git {{.Params.vanity}}">
-        {{else}}
+        {{if .Page.Params.vanity -}}
         <meta name="go-import" content="npf.io{{substr .Page.RelPermalink 0 -1}} git {{.Page.Params.vanity}}">
-        {{end}}
-    {{end}}
+        <meta name="go-source" content="npf.io{{substr .Page.RelPermalink 0 -1}} {{.Page.Params.vanity}} {{.Page.Params.vanity}}/tree/master{/dir} {{.Page.Params.vanity}}/blob/master{/dir}/{file}#L{line}">
+        {{- end}}
         <title>{{ .Permalink }}</title>
         <link rel="canonical" href="{{ .Permalink }}"/>
         <meta http-equiv="content-type" content="text/html; charset=utf-8" />

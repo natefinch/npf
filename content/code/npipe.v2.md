@@ -3,7 +3,7 @@
 date = 2014-08-01T10:15:15Z
 title = "npipe"
 menu = "code"
-vanity = "https://gopkg.in/natefinch/npipe.v2"
+vanity = "https://github.com/natefinch/npipe"
 norss = true
 
 [[badges]]
