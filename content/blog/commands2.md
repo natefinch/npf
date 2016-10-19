@@ -1,53 +1,11 @@
 +++
-date = "2016-04-22T23:08:09-04:00"
+type="post"
+title="Commands part II"
+date = "2016-10-18T23:08:09-04:00"
 draft = true
-title = "Tips for Writing Applications in Go"
-type = "post"
-
+series=["Writing Go Commands"]
 +++
 
-Writing libraries in Go is a relatively well-covered topic, I think... but I see
-a lot fewer posts about writing commands... and when it comes down to it, all Go
-code ends up in a command.  So let's talk about it!
-
-# func main()
-
-If we're going to talk about commands, might as well start by talking about func
-main().... the one function all go commands must have.  You'd think that
-everyone's func main would be different, after all, everyone's application is
-different, right?  Well, it turns out, if you really want to make your code
-testable, there's only a couple right answers to "what's in your main function?"
-
-
-
-## os.Exit
-
-I first figured this out when trying to write tests at work for one of our
-almost-top-level functions.  It was a function called from inside main, and it
-was calling os.Exit.  You can't test a function that calls os.Exit (since it
-causes the test executable to exit)... so the easiest thing to do is not to call
-os.Exit except in exactly one place with minimal other code. For us, that'll be
-good old func main in the main package of your command.  This is the most
-natural place to put it, since this is the most "exterior" portion of your code.
-It's the entry point from the outside world, so it might as well be the exit
-point as well.
-
-Let's put it to use:
-
-```go
-func main{
-    os.Exit(run())
-}
-
-func run() int {
-    // all your code
-}
-```
-
-By putting os.Exit in a function that has exactly one line, we ensure that
-there's the least amount of code untested possible.  Now, to test exit codes for
-your application, you can just test the run function, and know that whatever it
-returns will be the exit code for the application.
 
 So, we abstracted away one of the outputs of the application... what about the
 other inputs and outputs?  There's actually only a few standard ones: for input

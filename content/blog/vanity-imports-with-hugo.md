@@ -1,6 +1,6 @@
 +++
 title = "Vanity Imports with Hugo"
-date = 2016-10-26T00:01:00Z
+date = 2016-10-16T00:01:00Z
 type = "post"
 tags = ["go", "golang", "hugo"]
 +++
