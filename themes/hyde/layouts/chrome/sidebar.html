@@ -15,7 +15,7 @@
         <li><a href="{{.URL}}">{{ .Name }} </a></li>
       {{end}}
       <br/>
-      {{with .Site.Pages -}}
+      {{with .Site.Pages.ByTitle -}}
       <li>Code:</li>
         {{ range . -}}
         {{if eq .Type "code" -}}

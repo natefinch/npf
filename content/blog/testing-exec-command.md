@@ -94,7 +94,7 @@ Mocking this out in test code is now super easy:
 	}
 
 	func TestHelperProcess(t *testing.T){
-		if os.GetEnv("GO_WANT_HELPER_PROCESS") != "1" {
+		if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
 			return
 		}
 		// some code here to check arguments perhaps?

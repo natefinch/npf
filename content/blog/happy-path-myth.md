@@ -50,19 +50,20 @@ func five(b []byte]) (five, remainder []byte) {
 Ok, so which return illustrates the happy path here? Can't tell? That's because
 *both paths are equally valid*. But what is the difference between this code and
 the code above it?  Why does one have a single happy path and one have two
-equally valid paths?  **Because the happy path is a myth.**
+equally valid paths?  **Because the happy path is a myth.**  Both have two
+equally valid paths.
 
 Error handling paths are at just as valid code paths as the non-error handling
 paths.  In fact, to even call them error handling paths is a misnomer.  A
 missing file is not an error, it's just a valid state of your computer.  A
-network interruption is not an error, it's just a fact of life.  Assuming that
-any of these things won't happen, or not paying enough attention to how you
-program for them is a recipe for disaster in production.
+network interruption is not an error, it's something you need to plan for.  A
+good programmer spends at least as much time worrying about what the program
+will do when things go wrong as when they go right.
 
 ## Exceptions
 
 Languages with exceptions swallow the myth of the happy path hook, line, and
-sinker. They let you write *just* a single codepath for your "happy path" and
+sinker.  They let you write *just* the code for your "happy path" and
 obfuscate the other paths. The problem being, of course, that the happy path
 isn't special. Life isn't ideal, and your program *will* deviate from the happy
 path, probably quite often.
