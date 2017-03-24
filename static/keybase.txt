@@ -1,0 +1,68 @@
+==================================================================
+https://keybase.io/natefinch
+--------------------------------------------------------------------
+
+I hereby claim:
+
+  * I am an admin of https://npf.io
+  * I am natefinch (https://keybase.io/natefinch) on keybase.
+  * I have a public key with fingerprint 1688 3194 15AE B81E 4CC6  5B6C E636 71EC 3CE8 A736
+
+To do so, I am signing this object:
+
+{
+    "body": {
+        "key": {
+            "eldest_kid": "0101d40bc1478eca382f77a8ec7248844a3546a2d1a18c6ea7f7a02ae6ed08a25f990a",
+            "fingerprint": "1688319415aeb81e4cc65b6ce63671ec3ce8a736",
+            "host": "keybase.io",
+            "key_id": "e63671ec3ce8a736",
+            "kid": "0101d40bc1478eca382f77a8ec7248844a3546a2d1a18c6ea7f7a02ae6ed08a25f990a",
+            "uid": "5340452eb1b828e95a8f038f62e85000",
+            "username": "natefinch"
+        },
+        "service": {
+            "hostname": "npf.io",
+            "protocol": "https:"
+        },
+        "type": "web_service_binding",
+        "version": 1
+    },
+    "ctime": 1480477252,
+    "expire_in": 157680000,
+    "prev": "762401bd492aae01bc18a2ee1dc515838ee8411ccb1fe84223d9e3860259ea9d",
+    "seqno": 7,
+    "tag": "signature"
+}
+
+which yields the signature:
+
+-----BEGIN PGP MESSAGE-----
+Version: Keybase OpenPGP v2.0.58
+Comment: https://keybase.io/crypto
+
+yMIeAnicrVJtSBRRFF2zFLUsIsqKogajgiXmzefbtdYMS0uiRMUCYXvz5o47fuys
+u7OWiCZCEVEQhQiCGBUKVlAZkZF9C7lCERJpZYJEZRqYBIFi9cbqXz/79e67nHPu
+OZf7ZFG8Kznufe9YsfV4XVZc/8OzUdcB357sWk6z9BrOW8uVw9wDFTpEbH+5qXNe
+jkc80iVeo0hSMVAiYsFQVcJKVZAwliQiypJCBB0RhKkCRDVUwgsEFNB5TATZ8Hh4
+wrk5wwyWQjgUNoM2k0UKxiLySEgmoGEEEqWKrCkUFFFREVCRAiaqqDBiwIo4DGZO
+IxHYYlqsxz7+OXv/wP9n39E5OVmUeEkWQEMaFjB4ZIINXsSGIgCWeZ53gBEIB0kl
+MHSQ2MDy0gBX5+ZYu9qk4GzWifIXEjJ+RwmFLduiVgXrBWw7FPE6HLsm5IAOg+b/
+Q/drZlBnK2SMaghHTCvIeRFDUtt09JCEeUlVBVlwc3AkZIbBbzoIWVUws8c7c6Ca
+SaqKIPFI0yWPQAiwiiKWFgDpVEYyFjEAlhCiVEMGqwRB1D0gYoUXZA8Qj845gaqC
+FudVmU1SyiQjZikLHA0DV/foQcl8V1yyK2HBPOe0XMlJS/4e3KPGxNm1qVM729em
+QMtI36kvM93PKmdrV/sP7sxse5UsDtNCl64t31G/InF0vL3/elpK70xN9O6hTqvw
+yQeYyKh7PjA6nWJVzUye7Cwu2tjT8S0n62d1c87T8VORoZGu2O3Z5rKC9mUB65ic
+u+vGN/fLItOXEAhcmE5YvW9y5YaWsdeXBofTexY3JZW8uTl2L7YmN6MkVjN4bEXZ
+RN61prtdfYH4q40Xtdi9r1c6Ts/vPp+aZPiGFr4tUqaWNr2+0/B97/b8xFsZR+Oy
+vB2bdn+MbivaD9nmyuPpbZ/qsxJWbR3Is1rup3zP9m1e/87EgZ7WfN/lrrRzA2cK
+fnxuiOL8E5nFL1p/AXFgP6w=
+=QCmk
+-----END PGP MESSAGE-----
+
+And finally, I am proving ownership of this host by posting or
+appending to this document.
+
+View my publicly-auditable identity here: https://keybase.io/natefinch
+
+==================================================================
