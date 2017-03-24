@@ -53,7 +53,7 @@ the opportunity to add context to the error, and so people calling your code
 have to do some mental gymnastics (and/or look at the implementation) to
 understand what an error really means.
 
-A further problem for both these cases is that when debuging, you lose all
+A further problem for both these cases is that when debugging, you lose all
 knowledge of where an error came from.  There's no stack trace, there's not even
 a file and line number of where the error originated.  This can make debugging
 errors fairly difficult, unless you're careful to make your error messages easy
