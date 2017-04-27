@@ -22,5 +22,5 @@ copyright = "Nate Finch"
 	github = "https://github.com/natefinch"
 	gplus = "https://plus.google.com/+NateFinch"
 	disqus = "npfio"
-	mainImage = "moose.svg"
+	mainImage = "/moose.svg"
 
