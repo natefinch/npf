@@ -1,37 +1,35 @@
 <div class="sidebar">
   <div class="container sidebar-sticky">
-    <div class="sidebar-about">
+    <div class="sidebar-about" align=center>
       <h1 class="brand"><a href="{{.Site.BaseURL}}">{{ .Site.Title }}</a></h1>
+      {{with .Site.Params.mainImage}}<img src="{{.}}" width=50% />{{end}}
       <p class="lead">
-      {{ with .Site.Params.description }} {{.}} {{ else }}An elegant open source and mobile first theme for <a href="http://hugo.spf13.com">hugo</a> made by <a href="http://twitter.com/mdo">@mdo</a>. Originally made for Jekyll.{{end}}
+        {{ with .Site.Params.description }} {{.}} {{ else }}An elegant open source and mobile first theme for <a href="http://hugo.spf13.com">hugo</a>        made by <a href="http://twitter.com/mdo">@mdo</a>. Originally made for Jekyll.{{end}}
       </p>
     </div>
-
-
-
     <ul class="sidebar-nav">
       <li><a href="{{.Site.BaseURL}}/blog">Posts</a></li>
       {{ range .Site.Menus.main }}
-        <li><a href="{{.URL}}">{{ .Name }} </a></li>
+      <li><a href="{{.URL}}">{{ .Name }} </a></li>
       {{end}}
-      <br/>
+      <br/> 
       {{with .Site.Pages.ByTitle -}}
       <li>Code:</li>
-        {{ range . -}}
-        {{if eq .Type "code" -}}
-          <li><a href="{{.Params.vanity}}">{{ .Title }} </a></li>
-        {{end}}
-        {{end}}
+      {{ range . -}} 
+      {{if eq .Type "code" -}}
+      <li><a href="{{.Params.vanity}}">{{ .Title }} </a></li>
+      {{end}} 
+      {{end}} 
       {{end}}
     </ul>
-      {{ with .Site.Params.twitter }}<a href="{{.}}"><i class="fa fa-twitter-square"></i></a>&nbsp;&nbsp;{{end}}
-      {{ with .Site.Params.linkedin }}<a href="{{.}}"><i class="fa fa-linkedin-square"></i></a>&nbsp;&nbsp;{{end}}
-      {{ with .Site.Params.facebook }}<a href="{{.}}"><i class="fa fa-facebook-square"></i></a>&nbsp;&nbsp;{{end}}
-      {{ with .Site.Params.github }}<a href="{{.}}"><i class="fa fa-github-square"></i></a>&nbsp;&nbsp;{{end}}
-      {{ with .Site.Params.gplus }}<a href="{{.}}"><i class="fa fa-google-plus"></i></a>{{end}}
+    {{ with .Site.Params.twitter }}<a href="{{.}}"><i class="fa fa-twitter-square"></i></a>&nbsp;&nbsp;{{end}} 
+    {{ with .Site.Params.linkedin}}<a href="{{.}}"><i class="fa fa-linkedin-square"></i></a>&nbsp;&nbsp;{{end}}
+    {{ with .Site.Params.facebook }}<a href="{{.}}"><i class="fa fa-facebook-square"></i></a>&nbsp;&nbsp;{{end}}
+    {{ with .Site.Params.github }} <a href="{{.}}"><i class="fa fa-github-square"></i></a>&nbsp;&nbsp;{{end}} 
+    {{ with .Site.Params.gplus }}
+    <a href="{{.}}"><i class="fa fa-google-plus"></i></a>{{end}} 
 
-    <p class="footnote">powered by <a href="http://hugo.spf13.com">Hugo</a> <br/>
-    &copy; {{.Now.Format "2006"}} Nate Finch. All rights reserved.</p>
-    
+    <p class="footnote">powered by <a href="http://hugo.spf13.com">Hugo</a> <br/> &copy; {{.Now.Format "2006"}} Nate Finch. All rights reserved.</p>
+
   </div>
 </div>
