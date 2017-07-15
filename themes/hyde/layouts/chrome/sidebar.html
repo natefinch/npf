@@ -16,7 +16,7 @@
       {{with .Site.Pages.ByTitle -}}
       <li>Code:</li>
       {{ range . -}} 
-      {{if eq .Type "code" -}}
+      {{if and (ne .Kind "section") (eq .Type "code") -}}
       <li><a href="{{.Params.vanity}}">{{ .Title }} </a></li>
       {{end}} 
       {{end}} 
