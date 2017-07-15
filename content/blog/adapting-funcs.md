@@ -1,7 +1,7 @@
 +++
 title = "Adapting Functions"
 type = "post"
-date = "2017-07-15T015:55:43+01:00"
+date = "2017-07-15T15:55:43+01:00"
 
 +++
 
@@ -68,4 +68,3 @@ function that, when called, will append that suffix to the string passed to the
 Translator.  
 
 And now you can use AppendTranslator with RunTwice.
-
