@@ -7,7 +7,7 @@ series = ["Hugo 101"]
 slug="somethingelse"
 +++
 
-This blog is powered by [Hugo](http://hugo.spf13.com), a static site generator
+This blog is powered by [Hugo](http://gohugo.io), a static site generator
 written by Steve Francia (aka spf13).  It is, of course, written in Go.  It is
 pretty similar to [Jekyll](jekyllrb.com), in that you write markdown, run a
 little program (hugo) and html pages come out the other end in the form of a
@@ -39,7 +39,7 @@ things like iterate over all the entries in a menu and print them out in a ul/li
 block, or iterate over all the posts in your blog and display them on the main
 page.
 
-You can learn more about Hugo by going to [its site](http://hugo.spf13.com),
+You can learn more about Hugo by going to [its site](http://gohugo.io),
 which, of course, is built using Hugo.
 
 The static content for this site is hosted on github pages at

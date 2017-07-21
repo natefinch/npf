@@ -12,7 +12,7 @@ automatically populated with the other posts in the series.  This turned out to
 be somewhat of a challenge, but doable with some effort... hopefully someone
 else can learn from my work.
 
-This now brings us to [Taxonomies](http://hugo.spf13.com/taxonomies/overview).
+This now brings us to [Taxonomies](http://gohugo.io/taxonomies/overview).
 Taxonomies are basically just like tags, except that you can have any number of
 different types of tags.  So you might have "Tags" as a taxonomy, and thus you
 can give a content tags with values of "go" and "programming".  You can also
@@ -43,7 +43,7 @@ in the series.  This is where things get tricky, but that's also where things
 get interesting.
 
 The examples for [displaying
-Taxonomies](http://hugo.spf13.com/taxonomies/displaying) all "hard code" the
+Taxonomies](http://gohugo.io/taxonomies/displaying) all "hard code" the
 taxonomy value in the template... this works great if you know ahead of time
 what value you want to display, like "all posts with tag = 'featured'".
 However, it doesn't work if you don't know ahead of time what the taxonomy value

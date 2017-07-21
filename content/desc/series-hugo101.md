@@ -6,5 +6,5 @@ series-desc = ["Hugo 101"]
 +++
 
 Hugo 101 is a series of introductory posts about my exploration of
-[Hugo](http://hugo.spf13.com), a static site generator written in Go by Steve
+[Hugo](http://gohugo.io), a static site generator written in Go by Steve
 Francia (aka spf13).

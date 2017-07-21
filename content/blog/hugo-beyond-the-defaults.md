@@ -18,7 +18,7 @@ Next is that my posts were under npf.io/post/postname ... which is not the end
 of the world, but I really like seeing the date in post URLs, so that it's easy
 to tell if I'm looking at something really, really old.  So, I went about
 looking at how to do that.  Turns out, it's trivial.  Hugo has a feature called
-[permalinks](http://hugo.spf13.com/extras/permalinks), where you can define the
+[permalinks](http://gohugo.io/extras/permalinks), where you can define the
 format of the url for a section (a section is a top level division of your site,
 denoted by a top level folder under content/).  So, all you have to do is, in
 your site's config file, put some config that looks like this:
@@ -37,7 +37,7 @@ One note: Don't forget the slash at the end of the permalink.
 But wait, this will move my "Hugo is Friggin' Awesome" post to a different URL,
 and Steve Francia already tweeted about it with the old URL.  I don't want that
 url to send people to a 404 page!
-[Aliases](http://hugo.spf13.com/extras/aliases) to the rescue.  Aliases are just
+[Aliases](http://gohugo.io/extras/aliases) to the rescue.  Aliases are just
 a way to make redirects from old URLs to new ones.  So I just put `aliases =
 ["/post/hugo-is-awesome/"]` in the metadata at the top of that post, and now
 links to there will redirect to the new location.  Awesome.
@@ -46,7 +46,7 @@ Ok, so cool... except that I don't really want the content for my blog posts
 under content/post/ ... I'd prefer them under content/blog, but still be of type
 "post".  So let's change that too.  This is pretty easy, just rename the folder
 from post to blog, and then set up an
-[archetype](http://hugo.spf13.com/content/archetypes) to default the metadata
+[archetype](http://gohugo.io/content/archetypes) to default the metadata
 under /blog/ to type = "post".  Archetypes are default metadata for a section,
 so in this case, I make a file archetypes/blog.md and add type= "post" to the
 archetype's metadata, and now all my content created with `hugo new
@@ -55,7 +55,7 @@ is post vs. blog?  no.  But it matters to me ;)
 
 [@mlafeldt](https://twitter.com/mlafeldt) on Twitter pointed out my RSS feed was
 wonky.... wait, I have an RSS feed?  Yes, Hugo [has that
-too](http://hugo.spf13.com/templates/rss).  There are feed XML files
+too](http://gohugo.io/templates/rss).  There are feed XML files
 automatically output for most listing directories... and the base feed for the
 site is a list of recent content.  So, I looked at what Hugo had made for me
 (index.xml in the root output directory)... this is not too bad, but I don't
