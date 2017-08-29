@@ -2,7 +2,7 @@
 type = "post"
 date = "2017-08-29T12:40:19-04:00"
 title = "Code Must Never Lie"
-tags = ["go", "golang", "errors", "error handling"]
+tags = ["programming"]
 +++
 
 
@@ -79,3 +79,7 @@ that way to be consistent with some other code we had.  Unfortunately, in this
 case, being consistent was actually confusing... because it caused the reader to
 make assumptions that were ultimately incorrect.
 
+Do the poor sap that has to maintain your code 6 months or two years down the
+road a favor - don't lie. Try not to mislead.  Because even if that poor sap
+isn't you, they still don't deserve the 2am headache you'll likely be
+inflicting.
