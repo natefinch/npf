@@ -47,7 +47,7 @@ doing something else, someone down the road will read that code and
 misunderstand it, and use it or alter it in a way that causes bugs. If they're
 lucky, the bugs will be immediate and obvious. If they're unlucky, they'll be
 subtle and only be figured out after a long debugging session and much head
-banging on keyboard. That someone might be you, even if it you was your code in
+banging on keyboard. That someone might be you, even if it was your code in
 the first place.
 
 If, for some reason, you have to make code that lies (to fulfill an interface or
