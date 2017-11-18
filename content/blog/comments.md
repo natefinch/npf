@@ -24,7 +24,7 @@ better, written better, it wouldn't need that comment.
 But of course, what is clean and obvious and well-written to you, today, while
 the entire project and problem space are fully loaded in your brain... might not
 be obvious to you, six months from now, or to the poor schmuck that has to debug
-your code with their manager breathing down their neck beacuse the CTO just ran
+your code with their manager breathing down their neck because the CTO just ran
 into a critical bug in prod.  
 
 Learning to look at a piece of code that you understand, and trying to figure out
@@ -46,7 +46,7 @@ Some people claim that if you remove comments, it makes your code better,
 because you have to make your code clearer to compensate.  I call BS on this as
 well, because I don't think anyone is realistically writing sub-par code and
 then excusing it by slapping a comment on it (aside from `// TODO: this is a
-temporary hack, I'll fix it later`).  We all write the best code we know howm,
+temporary hack, I'll fix it later`).  We all write the best code we know how,
 given the various external constraints (usually time).
 
 The problem with refactoring your code to avoid needing comments is that
@@ -157,6 +157,49 @@ value of 60, Go's duration type defaults to.... nanoseconds.  Oops.  Someone had
 updated the function to take a Duration rather than an Int.  Interestingly, it
 *did* still round the duration down to the nearest second, so the comment was
 not incorrect per se, it was just misleading.
+
+## Why?
+
+The most important comments are the *why* comments.  Why is the code doing what
+it's doing?  Why must the ID be less than 24 characters?  Why are we hiding this
+option on Linux?  etc.  The reason these are important is that you can't figure
+out the why by looking at the code.  They document lessons learned by the devs,
+outside constraints imposed by the business, other systems, etc. These comments
+are invaluable, and almost impossible to capture in other ways (e.g. function
+names should document what the function does, not why).
+
+Comments that document *what* the code is doing are less useful, because you can
+generally always figure out what the code is doing, given enough time and
+effort.  The code tells you what it is doing, by definition.  Which is not to
+say that you should never write *what* comments.  Definitely strive to write the
+clearest code you can, but comments are free, so if you think someone might
+misunderstand some code or otherwise have difficulty knowing what's going on,
+throw in a comment.  At least, it may save them a half hour of puzzling through
+your code, at best it may save them from changing it or using it in incorrect
+ways that cause bugs.
+
+## Tests
+
+Some people think that tests serve as documentation for functions.  And, in a
+way, this is true.  But they're generally very low on my list of effective
+documentation.  Why?  Well, because they have to be incredibly precise, and thus
+they are verbose, and cover a narrow strip of functionality.  Every test tests
+exactly one specific input and one specific output.  For anything other than the
+most simple function, you probably need a bunch of code to set up the inputs and
+construct the outputs.  
+
+For much of programming, it's easier to describe briefly what a function does
+than to write code to test what it does.  Often times my tests will be multiple
+times as many lines of code as the function itself... whereas the doc comment on
+it may only be a few sentences.
+
+In addition, tests only explain the *what* of a function. What is it supposed to
+do?  They don't explain why, and why is often more important, as stated above.  
+
+You should definitely test your code, and tests can be useful in figuring out
+the expected behavior of code in some edge cases... but if I have to read tests
+to understand your code in general, then that's red flag that you really need to
+write more/better comments.
 
 ## Conclusion
 
