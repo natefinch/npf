@@ -1,6 +1,6 @@
-baseurl = "https://npf.io"
+baseurl = "https://rpg.npf.io"
 languageCode = "en-us"
-title = "npf.io"
+title = "rpg.npf.io"
 theme = "hyde"
 copyright = "Nate Finch"
 
@@ -9,18 +9,16 @@ copyright = "Nate Finch"
 
 [Permalinks]
 	blog = "/:year/:month/:filename/"
-	code = "/:filename/"
-
 [Taxonomies]
 	tag = "tags"
 	series = "series"
 	series-desc = "series-desc"
 
 [params]
-	description = "code by Nate Finch"
+	description = "RPGs by Nate Finch"
 	twitter = "https://twitter.com/natethefinch"
 	github = "https://github.com/natefinch"
 	gplus = "https://plus.google.com/+NateFinch"
-	disqus = "npfio"
+	disqus = "rpgnpfio"
 	mainImage = "/moose.svg"
 

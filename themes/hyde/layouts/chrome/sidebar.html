@@ -13,14 +13,6 @@
       <li><a href="{{.URL}}">{{ .Name }} </a></li>
       {{end}}
       <br/> 
-      {{with .Site.Pages.ByTitle -}}
-      <li>Code:</li>
-      {{ range . -}} 
-      {{if and (ne .Kind "section") (eq .Type "code") -}}
-      <li><a href="{{.Params.vanity}}">{{ .Title }} </a></li>
-      {{end}} 
-      {{end}} 
-      {{end}}
     </ul>
     {{ with .Site.Params.twitter }}<a href="{{.}}"><i class="fa fa-twitter-square"></i></a>&nbsp;&nbsp;{{end}} 
     {{ with .Site.Params.linkedin}}<a href="{{.}}"><i class="fa fa-linkedin-square"></i></a>&nbsp;&nbsp;{{end}}
