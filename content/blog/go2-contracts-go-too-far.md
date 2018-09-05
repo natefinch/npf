@@ -218,7 +218,7 @@ code is just too hard if we're using example code as the means of definition.
 Sure, it's a clever way to ensure that only types that can be used in that way
 are viable... but clever isn't good.
 
-One of my favorite posts about Go is Rob Napier's [Go is a Shop-Based
+One of my favorite posts about Go is Rob Napier's [Go is a Shop-Built
 Jig](http://robnapier.net/go-is-a-shop-built-jig).  In it, he argues that there
 are many ineleagant parts to the Go language, but that they exist to make the
 whole work better for actual users. This is stuff like the built-in functions
