@@ -1,7 +1,7 @@
 +++
-title: "Go2 Contracts Go Too Far"
-date: 2018-09-05T14:00:18-04:00
-draft: true
+title = "Go2 Contracts Go Too Far"
+date = 2018-09-05T14:00:18-04:00
+type = "post"
 +++
 
 So, I don't really like the contracts defined
