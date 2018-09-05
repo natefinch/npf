@@ -1,6 +1,6 @@
 +++
 title: "Go2 Contracts Go Too Far"
-date: 2018-09-03T23:06:18-04:00
+date: 2018-09-05T14:00:18-04:00
 draft: true
 +++
 
