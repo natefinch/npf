@@ -66,6 +66,26 @@ define a contract separately when we already have a way of defining an abstract
 type with capabilities.  The : tells the compiler that this is a parameterized
 type, and T is the name given that type (though it's not used anywhere).
 
+## More Complex Types 
+
+**added this section to help remove some confusion people had with the proposal**
+
+More complex functions with multiple contract types are just as easily done:
+
+```
+func Map(vals []interface{}:X, f func(x X) interface{}:Y) []Y {
+	ret := make([]Y, len(vals))
+	for i := range vals {
+		ret[i] = f(vals[i])
+	}
+	return ret
+}
+```
+
+:X defines a type in this scope which is constrained by the interface that
+precedes it (in this case, there's no constraint). Y defines a separate type...
+then inside the scope you can reference those types.
+
 
 ## Contract Definitions as Code Are Hard
 
