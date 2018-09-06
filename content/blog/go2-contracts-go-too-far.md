@@ -43,10 +43,7 @@ Are we now going to have `func(type T)(input T)(output T){}`?  That's crazy.
 
 Also, I don't like that the type parameters precede the arguments... isn't the
 whole reason that we have Go's unusual <name type> ordering that we acknowledge
-that the name is more important than the type?  Also, to call functions in this
-way, you have to tell it what type you're passing, so like you'd call Print
-above by doing `Print(int)([]int{1,2,3})`. Why can't we have type inference
-here?
+that the name is more important than the type?
 
 Here's my fix... since contracts are basically like interfaces, let's actually
 use interfaces.  And let's make the contracty part last, since it's least
