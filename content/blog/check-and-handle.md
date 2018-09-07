@@ -11,7 +11,7 @@ to errors returned from the current function:
 
 ```
 func printSum(a, b string) error {
-	handle err { return fmt.Errorf("error summing %v and %v:", a, b, err ) }
+	handle err { return fmt.Errorf("error summing %v and %v: %v", a, b, err ) }
 	x := check strconv.Atoi(a)
 	y := check strconv.Atoi(b)
 	fmt.Println("result:", x + y)
@@ -27,7 +27,7 @@ Handle, in my opinion is kind of useless. We can already do this today with func
 ```
 func printSum(a, b string) (err error) {
 	check := func(err error) error { 
-        return fmt.Errorf("error summing %v and %v: ", a, b, err )
+        return fmt.Errorf("error summing %v and %v: %v", a, b, err )
     }
 	x, err := strconv.Atoi(a)
     if err != nil {
@@ -58,13 +58,13 @@ to the error, log it, clean up, etc.  With the current code, I *always* have an
 if statement that I can easily slot more lines into, in order to make the error
 more useful and do other things on the error path.  With `check`, that space in
 the code doesn't exist.  There's a barrier to making that code handle errors
-better - now you have to remove the check call and swap in an if statement. Yes,
-you can add a new handle section, but that applies globally to any further
+better - now you have to remove `check` and swap in an if statement. Yes,
+you can add a new `handle` section, but that applies globally to any further
 errors returns in the function, not just for this one specific error.  Most of
-the time I want to add information about one specific error.
+the time I want to add information about one specific error case.
 
 So, for example, in the code above, I would want a different error message for A
-failing AtoI vs. B failing AtoI.... because in real code, which one is the
+failing Atoi vs. B failing Atoi.... because in real code, which one is the
 problem may not be obvious if the error message just says "either A or B is a
 problem".
 
