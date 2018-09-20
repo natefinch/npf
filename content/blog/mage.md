@@ -1,5 +1,5 @@
 +++
-title = "Mage"
+title = "Mage - make/rake for Go"
 date = 2018-09-19T22:50:51-04:00
 type = "post"
 +++
