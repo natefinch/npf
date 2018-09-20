@@ -4,6 +4,9 @@ date = 2018-09-19T22:50:51-04:00
 type = "post"
 +++
 
+
+## A Brief History
+
 A question came up at the Framingham Go meetup a while back about why something
 like Gradle hasn't taken hold in the Go community.  I can't say that I know for
 sure what the answer is - I don't speak for the community - but, I have some
@@ -14,26 +17,29 @@ built with `go build` is probably fine.
 For more complex builds, which may require more steps than just compile and
 link, like for bundling static assets in a web server or generating code from
 protobufs, for example, many people in the Go community reach for Make.
-Personally, I find that unfortunate.  Make is not Windows friendly, and it has
-its own language and conventions that you need to learn on top of the oddity
-that is Bash scripting.  Finally, it doesn't let you leverage the Go community's
-two greatest resources - go programmers and go code.
+Personally, I find that unfortunate.  Makefiles are clearly pretty cool for a
+number of reasons (built-in CLI, dependencies, file targets). However, Make is
+not Windows friendly, and it has its own language and conventions that you need
+to learn on top of the oddity that is Bash scripting.  Finally, it doesn't let
+you leverage the Go community's two greatest resources - go programmers and go
+code.
 
----
+## Maybe `go run`?  Maybe not
 
-The above is a blog post I've had half written for two years.  I started to go
-on to recommend using `go run make.go` with a go file that does the build for
-you.  But in practice, this is problematic.  If you want your script to be
-useful for doing more than one thing, you need to implement a CLI and
-subcommands.  This ends up being a significant amount of work that then obscures
-what the actual code is doing... and no one wants to maintain yet another CLI
-just for development tasks.  In addition, there's a lot of chaff you have to
-handle, like printing out errors, setting up logging etc.
+The above is the start of a blog post I've had half written for two years.  I
+started to go on to recommend using `go run make.go` with a go file that does
+the build for you.  But in practice, this is problematic.  If you want your
+script to be useful for doing more than one thing, you need to implement a CLI
+and subcommands.  This ends up being a significant amount of work that then
+obscures what the actual code is doing... and no one wants to maintain yet
+another CLI just for development tasks.  In addition, there's a lot of chaff you
+have to handle, like printing out errors, setting up logging etc.
+
+## The Last Straw
 
 Last summer there were a couple questions on
 [r/golang](https://reddit.com/r/golang) about best practices for using Makefiles
-with Go... and I finally decided I'd had enough.  Makefiles are clearly pretty
-cool for a number of reasons (built-in CLI, dependencies, file targets). 
+with Go... and I finally decided I'd had enough. 
 
 I looked around at what existed for alternatives -
 [rake](https://github.com/ruby/rake) was the obvious pattern to follow, being
@@ -46,10 +52,13 @@ has tasks written in Go, but I didn't really like the ergonomics... I wanted
 just a little more magic.
 
 I decided that I could write a tool that behaved pretty similarly to Make, but
-allowed you to write Go instead of Bash, and didn't need any special syntax, if
+allowed you to write Go instead of Bash, and didn't need any special syntax if
 I did a little code parsing and generation on the fly.  Thus, Mage was born.
 
 ## What is Mage?
+
+**Docs:** [magefile.org](https://magefile.org)<br/>
+**Github:** [github.com/magefile/mage](https://github.com/magefile/mage) 
 
 Mage is conceptually just like Make, except you write Go instead of Bash.  Of
 course, there's a little more to it than that. In Mage, like in Make, you write
