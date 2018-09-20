@@ -4,6 +4,7 @@ date = 2018-09-19T22:50:51-04:00
 type = "post"
 +++
 
+<p align="center"><img src="/gary.svg" width=50%/></p>
 
 ## A Brief History
 

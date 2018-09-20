@@ -21,3 +21,6 @@ _cgo_export.*
 _testmain.go
 
 *.exe
+
+# stupid MacOS
+.DS_Store
