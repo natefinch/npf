@@ -33,9 +33,21 @@ handle, like printing out errors, setting up logging etc.
 Last summer there were a couple questions on
 [r/golang](https://reddit.com/r/golang) about best practices for using Makefiles
 with Go... and I finally decided I'd had enough.  Makefiles are clearly pretty
-cool for a number of reasons (built-in CLI, dependencies, file targets).  I
-decided that I could write a tool that behaved pretty similarly to Make, but
-allowed you to write Go instead of Bash.  Thus, Mage was born.
+cool for a number of reasons (built-in CLI, dependencies, file targets). 
+
+I looked around at what existed for alternatives -
+[rake](https://github.com/ruby/rake) was the obvious pattern to follow, being
+very popular in the Ruby community. [pyinvoke](http://www.pyinvoke.org/) was the
+closest equivalent I saw in python.  Was there something similar in Go?  Well,
+sort of, but not exactly.  [go-task](https://github.com/go-task/task) is
+*written* in Go, but tasks are actually defined in YAML.  Not my
+cup of tea.  Mark Bates wrote [grift](https://github.com/markbates/grift) which
+has tasks written in Go, but I didn't really like the ergonomics... I wanted
+just a little more magic.
+
+I decided that I could write a tool that behaved pretty similarly to Make, but
+allowed you to write Go instead of Bash, and didn't need any special syntax, if
+I did a little code parsing and generation on the fly.  Thus, Mage was born.
 
 ## What is Mage?
 
@@ -93,8 +105,8 @@ func Build() error {
 }
 ```
 
-Running mage with no arguments (or `mage -l` will print out help text for the
-magefiles in the current directory.
+Running mage with no arguments (or `mage -l` if you have a default target
+declared) will print out help text for the magefiles in the current directory.
 
 ```plain
 $ mage
@@ -116,6 +128,13 @@ Builds the website.  If needed, it will compact the js as well.
 
 This makes it very easy to add a new target to your magefile with proper
 documentation so others know what it's supposed to do.
+
+You can declare a default target to run when you run mage without a target very
+easily:
+
+```go
+var Default = Build
+```
 
 And just like Make, you can run multiple targets from a single command... `mage
 build deploy clean` will do the right thing.
