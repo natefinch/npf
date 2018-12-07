@@ -90,14 +90,14 @@ And the python handle.star:
 ```
 # Globals are:
 # w: the http.ResponseWriter for the request
-# r: the *http.request
+# r: the *http.Request
 # Fprintf: fmt.Fprintf
 
 # for loops and if statements need to be in functions in starlark
 def main():
   # Query returns a map[string][]string
   
-  # this gets a value from a map, with a default it it doesn't exist
+  # this gets a value from a map, with a default if it doesn't exist
   # and then takes the first value in the list.
   repeat = r.URL.Query().get("repeat", ["1"])[0]
   name = r.URL.Query().get("name", ["starlight"])[0]
@@ -115,18 +115,24 @@ def main():
 main()
 ```
 
-You can run this example by `go get github.com/starlight-go/starlight` and using `go run main.go` in the 
-[example folder](https://github.com/starlight-go/starlight/tree/master/example).  You can then update the
-python and watch the changes the next time you hit the server.  This just uses `starlight.Eval`, which
-rereads and reparses the script every time, but in a production environment, you probably want to
-only read a script once and parse it once.  You can do that with starlight's `Cache`.  This cache
-takes a list of directories to look in for scripts, which it will read and parse on-demand, and then
-store the parsed object in memory for later use.  It also uses a cache for any `load()` calls the
-scripts use to load scripts they depend on.
+You can run this example by running `go get github.com/starlight-go/starlight` and using `go run
+main.go` in the [example folder](https://github.com/starlight-go/starlight/tree/master/example).
+You can then update the python and watch the changes the next time you hit the server.  This just
+uses `starlight.Eval`, which rereads and reparses the script every time.
 
-Starlight is still a work in progress, so don't expect the API to be stable quite yet.  But it's
-getting pretty close, and there shouldn't be any earth shattering changes, but definitely pin your
-imports.  Right now it's more about finding corner cases where the starlight wrappers don't work
-quite like you'd expect, and supporting the last few things that aren't implemented yet (like
+## Caching
+
+In a production environment, you probably want to only read a script once and parse it once.  You
+can do that with starlight's `Cache`.  This cache takes a list of directories to look in for
+scripts, which it will read and parse on-demand, and then store the parsed object in memory for
+later use.  It also uses a cache for any `load()` calls the scripts use to load scripts they depend
+on.
+
+## Work Ongoing
+
+Starlight is still a work in progress, so don't expect the API to be perfectly stable quite yet.
+But it's getting pretty close, and there shouldn't be any earth shattering changes, but definitely
+pin your imports.  Right now it's more about finding corner cases where the starlight wrappers don't
+work quite like you'd expect, and supporting the last few things that aren't implemented yet (like
 channels).
 
