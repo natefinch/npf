@@ -4,11 +4,12 @@ date = 2018-12-07T09:59:12-05:00
 type = "post"
 +++
 
-I'd like to announce [starlight](https://github.com/starlight-go/starlight) Starlight uses google's
-Go implementation of the [starlark python dialect](https://github.com/google/starlark-go) (most
-notably found in the Bazel build tool). Starlight makes it super easy for users to extend your
-application by writing simple python scripts that interact seamlessly with your current Go code...
-with no boilerplate on your part.
+I'd like to announce starlight - [https://github.com/starlight-go/starlight](https://github.com/starlight-go/starlight).
+
+Starlight wraps google's Go implementation of the [starlark python
+dialect](https://github.com/google/starlark-go) (most notably found in the Bazel build tool).
+Starlight makes it super easy for users to extend your application by writing simple python scripts
+that interact seamlessly with your current Go code... with no boilerplate on your part.
 
 ## Parser by google
 
