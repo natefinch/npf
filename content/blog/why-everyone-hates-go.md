@@ -86,7 +86,3 @@ died without them. Google is now the koolaid dispenser. The fact that they
 are otherwise generally thought of as a very talented pool of developers means
 that it is simultaneously more outrageous that they are fooling people and more
 insulting that their language flies in the face of ML-derived languages.
-
-**Update:**  I removed the "panties in a bunch" comment, since I was (correctly)
-scolded for being sexist, not to mention unprofessional.  My apologies to
-anyone I offended.

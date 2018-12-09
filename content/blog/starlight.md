@@ -8,8 +8,13 @@ I'd like to announce starlight - [https://github.com/starlight-go/starlight](htt
 
 Starlight wraps google's Go implementation of the [starlark python
 dialect](https://github.com/google/starlark-go) (most notably found in the Bazel build tool).
-Starlight makes it super easy for users to extend your application by writing simple python scripts
-that interact seamlessly with your current Go code... with no boilerplate on your part.
+Starlight makes it super easy for users to extend your application by writing simple python-like
+scripts that interact seamlessly with your current Go code... with no boilerplate on your part.
+
+## What is Starlark?
+
+Starlark is a [subset of python](https://github.com/google/starlark-go/blob/master/doc/spec.md) that removes some of the more advanced features, but keeps the easy to read-and-write feel.  For the purposes of this article, to avoid confusion between starlight (my package) and starlark (the language), I'll be referring to the code as python (since starlark code is a subset of python code), but there are some small differences (described in the previous link).
+
 
 ## Parser by google
 
