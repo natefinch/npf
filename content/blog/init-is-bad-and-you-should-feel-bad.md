@@ -53,3 +53,10 @@ either.
 Once you start writing code with structs instead of globals and init, you'll
 find your code is much easier to test, easier to use concurrently, and more
 portable between applications. So, don't use init.
+
+...[Axel Wagner](https://twitter.com/TheMerovius) mentioned on Twitter that this
+looked too dogmatic, and he's right. This is programming, there are infinite
+possible programs, and thus there will always be exceptions to every rule. I
+think it's really rare that init is the right choice, and you should only come
+to that decision after trying other options and ensuring you take into
+consideration things like startup order, concurrent access, and testing.
