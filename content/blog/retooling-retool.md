@@ -4,7 +4,7 @@ date = 2019-05-11T21:42:34-04:00
 type = "post"
 +++
 
-I was so happy when I discovered [retool](github.com/twitchtv/retool). It's a go tool that builds and caches go binaries into a local directory so that your dev tools stay in sync across your team. It fixes all those problems where slight difference in binary versions produce different output and cause code churn. We use it at Mattel for our projects, because we tend to have a large number of external tools that we use for managing code generation, database migrations, release management, etc.
+I was so happy when I discovered [retool](https://github.com/twitchtv/retool). It's a go tool that builds and caches go binaries into a local directory so that your dev tools stay in sync across your team. It fixes all those problems where slight difference in binary versions produce different output and cause code churn. We use it at Mattel for our projects, because we tend to have a large number of external tools that we use for managing code generation, database migrations, release management, etc.
 
 However, retool [doesn't work very well with modules](https://github.com/twitchtv/retool/issues/49#issuecomment-471622108), and trying to run it with modules turned off sometimes misbehaves, and some tools just fail to compile that way.
 
