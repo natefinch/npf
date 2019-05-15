@@ -31,7 +31,7 @@ When I interviewed at Mattel it was much the same, except I was brought on as a
 contractor first, which allowed me to prove myself, and then they were happy to
 just continue letting me do my thing as a full time employee 3000 miles away
 from the rest of the team. I pushed my boss to hire more remote devs, and we now
-have a team that was almost fully remote.
+have a team that is almost fully remote.
 
 Many places I've interviewed want you to come onsite after some number of
 interviews to "meet the team". While this is ok, it tends to make me think those
