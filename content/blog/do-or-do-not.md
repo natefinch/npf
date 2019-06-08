@@ -74,8 +74,8 @@ Try does exactly that, though.  It encourages you to put a call getting data int
 
 ```
 p := Person{
-    Name: try(getName()),
-    Age: try(getAge()),
+    Name: try(getUserName()),
+    Age: try(getUserAge()),
 }
 ```
 
