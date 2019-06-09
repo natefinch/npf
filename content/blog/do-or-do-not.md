@@ -5,7 +5,7 @@ type = "post"
 +++
 ## The proposal
 
-There's a new Go proposal in town - [try()](https://github.com/golang/go/issues/32437).  The gist is that it adds a builtin function `try()` that can wrap a function that returns (a, b, c, ..., error), and if the error is non-nil, it will return from the enclosing function, and if the error is not nil, it'll return the rest of the return values.
+There's a new Go proposal in town - [try()](https://github.com/golang/go/issues/32437).  The gist is that it adds a builtin function `try()` that can wrap a function that returns (a, b, c, ..., error), and if the error is non-nil, it will return from the enclosing function, and if the error is nil, it'll return the rest of the return values.
 
 This is how it looks in code:
 
