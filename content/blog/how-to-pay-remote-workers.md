@@ -2,6 +2,7 @@
 title = "How to Pay Remote Workers"
 date = 2019-07-26T12:47:11-04:00
 type = "post"
+series = ["Remote Work"]
 +++
 
 Pay remote workers the same as you'd pay local workers.  Or vice versa if your

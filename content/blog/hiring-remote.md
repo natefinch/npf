@@ -2,6 +2,8 @@
 title = "Hiring Remote"
 date = 2019-05-14T23:05:55-04:00
 type = "post"
+series = ["Remote Work"]
+
 +++
 
 I have been working remotely for about 8 years now. I've worked at companies
