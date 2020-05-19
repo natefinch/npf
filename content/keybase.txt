@@ -1,0 +1,56 @@
+==================================================================
+https://keybase.io/natefinch
+--------------------------------------------------------------------
+
+I hereby claim:
+
+  * I am an admin of https://npf.io
+  * I am natefinch (https://keybase.io/natefinch) on keybase.
+  * I have a public key ASBlPrpCMjpBHg1ew2-uHPFEGrPwEy6UKg-8ki1NVHvV2Qo
+
+To do so, I am signing this object:
+
+{
+  "body": {
+    "key": {
+      "eldest_kid": "012089e2814c77ac09ed0d4e628dbd17791202bee09b9dfe646575bd5aae798c9cf20a",
+      "host": "keybase.io",
+      "kid": "0120653eba42323a411e0d5ec36fae1cf1441ab3f0132e942a0fbc922d4d547bd5d90a",
+      "uid": "5340452eb1b828e95a8f038f62e85000",
+      "username": "natefinch"
+    },
+    "merkle_root": {
+      "ctime": 1589921495,
+      "hash": "237ddae84794dd1ca126462d0fa7531e846928e21d8a1f58f4e489eba6beff46d0e655f13642bb386a272b5366d2f3c5b5cb5195a9485622970020489de3ce3c",
+      "hash_meta": "9d4f8b7be5e6876f856f3ec05476cb0a81882df9a431e039e9ce1aef40958df7",
+      "seqno": 16349631
+    },
+    "service": {
+      "entropy": "pcxi1rOM/cGUPcAIS+zH53BL",
+      "hostname": "npf.io",
+      "protocol": "https:"
+    },
+    "type": "web_service_binding",
+    "version": 2
+  },
+  "client": {
+    "name": "keybase.io go client",
+    "version": "5.4.2"
+  },
+  "ctime": 1589921551,
+  "expire_in": 504576000,
+  "prev": "c31fb10d35d5ef26062d4470bfcc5500fa0090bdad768f127a6cfa1e6782e090",
+  "seqno": 25,
+  "tag": "signature"
+}
+
+which yields the signature:
+
+hKRib2R5hqhkZXRhY2hlZMOpaGFzaF90eXBlCqNrZXnEIwEgZT66QjI6QR4NXsNvrhzxRBqz8BMulCoPvJItTVR71dkKp3BheWxvYWTESpcCGcQgwx+xDTXV7yYGLURwv8xVAPoAkL2tdo8Semz6HmeC4JDEIKbWPbAokb2JAZ7T7V36fq3kX6IbDZpB1CPTn7KWpRmsAgHCo3NpZ8RAUOJUTcLMMqQU/Xje7bfcjepM1B4uZ2ymLgceBfx2zUm7IKtWqsB1+mAEvUu5gLmayMxzrMS4kDAou35o4gwbA6hzaWdfdHlwZSCkaGFzaIKkdHlwZQildmFsdWXEIPscU4cdYGbNRB7THKR0Y9iqnhTUwB2V4j2j25bGg+HRo3RhZ80CAqd2ZXJzaW9uAQ==
+
+And finally, I am proving ownership of this host by posting or
+appending to this document.
+
+View my publicly-auditable identity here: https://keybase.io/natefinch
+
+==================================================================
