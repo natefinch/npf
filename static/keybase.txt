@@ -6,59 +6,47 @@ I hereby claim:
 
   * I am an admin of https://npf.io
   * I am natefinch (https://keybase.io/natefinch) on keybase.
-  * I have a public key with fingerprint 1688 3194 15AE B81E 4CC6  5B6C E636 71EC 3CE8 A736
+  * I have a public key ASBlPrpCMjpBHg1ew2-uHPFEGrPwEy6UKg-8ki1NVHvV2Qo
 
 To do so, I am signing this object:
 
 {
-    "body": {
-        "key": {
-            "eldest_kid": "0101d40bc1478eca382f77a8ec7248844a3546a2d1a18c6ea7f7a02ae6ed08a25f990a",
-            "fingerprint": "1688319415aeb81e4cc65b6ce63671ec3ce8a736",
-            "host": "keybase.io",
-            "key_id": "e63671ec3ce8a736",
-            "kid": "0101d40bc1478eca382f77a8ec7248844a3546a2d1a18c6ea7f7a02ae6ed08a25f990a",
-            "uid": "5340452eb1b828e95a8f038f62e85000",
-            "username": "natefinch"
-        },
-        "service": {
-            "hostname": "npf.io",
-            "protocol": "https:"
-        },
-        "type": "web_service_binding",
-        "version": 1
+  "body": {
+    "key": {
+      "eldest_kid": "012089e2814c77ac09ed0d4e628dbd17791202bee09b9dfe646575bd5aae798c9cf20a",
+      "host": "keybase.io",
+      "kid": "0120653eba42323a411e0d5ec36fae1cf1441ab3f0132e942a0fbc922d4d547bd5d90a",
+      "uid": "5340452eb1b828e95a8f038f62e85000",
+      "username": "natefinch"
     },
-    "ctime": 1480477252,
-    "expire_in": 157680000,
-    "prev": "762401bd492aae01bc18a2ee1dc515838ee8411ccb1fe84223d9e3860259ea9d",
-    "seqno": 7,
-    "tag": "signature"
+    "merkle_root": {
+      "ctime": 1589921495,
+      "hash": "237ddae84794dd1ca126462d0fa7531e846928e21d8a1f58f4e489eba6beff46d0e655f13642bb386a272b5366d2f3c5b5cb5195a9485622970020489de3ce3c",
+      "hash_meta": "9d4f8b7be5e6876f856f3ec05476cb0a81882df9a431e039e9ce1aef40958df7",
+      "seqno": 16349631
+    },
+    "service": {
+      "entropy": "pcxi1rOM/cGUPcAIS+zH53BL",
+      "hostname": "npf.io",
+      "protocol": "https:"
+    },
+    "type": "web_service_binding",
+    "version": 2
+  },
+  "client": {
+    "name": "keybase.io go client",
+    "version": "5.4.2"
+  },
+  "ctime": 1589921551,
+  "expire_in": 504576000,
+  "prev": "c31fb10d35d5ef26062d4470bfcc5500fa0090bdad768f127a6cfa1e6782e090",
+  "seqno": 25,
+  "tag": "signature"
 }
 
 which yields the signature:
 
------BEGIN PGP MESSAGE-----
-Version: Keybase OpenPGP v2.0.58
-Comment: https://keybase.io/crypto
-
-yMIeAnicrVJtSBRRFF2zFLUsIsqKogajgiXmzefbtdYMS0uiRMUCYXvz5o47fuys
-u7OWiCZCEVEQhQiCGBUKVlAZkZF9C7lCERJpZYJEZRqYBIFi9cbqXz/79e67nHPu
-OZf7ZFG8Kznufe9YsfV4XVZc/8OzUdcB357sWk6z9BrOW8uVw9wDFTpEbH+5qXNe
-jkc80iVeo0hSMVAiYsFQVcJKVZAwliQiypJCBB0RhKkCRDVUwgsEFNB5TATZ8Hh4
-wrk5wwyWQjgUNoM2k0UKxiLySEgmoGEEEqWKrCkUFFFREVCRAiaqqDBiwIo4DGZO
-IxHYYlqsxz7+OXv/wP9n39E5OVmUeEkWQEMaFjB4ZIINXsSGIgCWeZ53gBEIB0kl
-MHSQ2MDy0gBX5+ZYu9qk4GzWifIXEjJ+RwmFLduiVgXrBWw7FPE6HLsm5IAOg+b/
-Q/drZlBnK2SMaghHTCvIeRFDUtt09JCEeUlVBVlwc3AkZIbBbzoIWVUws8c7c6Ca
-SaqKIPFI0yWPQAiwiiKWFgDpVEYyFjEAlhCiVEMGqwRB1D0gYoUXZA8Qj845gaqC
-FudVmU1SyiQjZikLHA0DV/foQcl8V1yyK2HBPOe0XMlJS/4e3KPGxNm1qVM729em
-QMtI36kvM93PKmdrV/sP7sxse5UsDtNCl64t31G/InF0vL3/elpK70xN9O6hTqvw
-yQeYyKh7PjA6nWJVzUye7Cwu2tjT8S0n62d1c87T8VORoZGu2O3Z5rKC9mUB65ic
-u+vGN/fLItOXEAhcmE5YvW9y5YaWsdeXBofTexY3JZW8uTl2L7YmN6MkVjN4bEXZ
-RN61prtdfYH4q40Xtdi9r1c6Ts/vPp+aZPiGFr4tUqaWNr2+0/B97/b8xFsZR+Oy
-vB2bdn+MbivaD9nmyuPpbZ/qsxJWbR3Is1rup3zP9m1e/87EgZ7WfN/lrrRzA2cK
-fnxuiOL8E5nFL1p/AXFgP6w=
-=QCmk
------END PGP MESSAGE-----
+hKRib2R5hqhkZXRhY2hlZMOpaGFzaF90eXBlCqNrZXnEIwEgZT66QjI6QR4NXsNvrhzxRBqz8BMulCoPvJItTVR71dkKp3BheWxvYWTESpcCGcQgwx+xDTXV7yYGLURwv8xVAPoAkL2tdo8Semz6HmeC4JDEIKbWPbAokb2JAZ7T7V36fq3kX6IbDZpB1CPTn7KWpRmsAgHCo3NpZ8RAUOJUTcLMMqQU/Xje7bfcjepM1B4uZ2ymLgceBfx2zUm7IKtWqsB1+mAEvUu5gLmayMxzrMS4kDAou35o4gwbA6hzaWdfdHlwZSCkaGFzaIKkdHlwZQildmFsdWXEIPscU4cdYGbNRB7THKR0Y9iqnhTUwB2V4j2j25bGg+HRo3RhZ80CAqd2ZXJzaW9uAQ==
 
 And finally, I am proving ownership of this host by posting or
 appending to this document.
