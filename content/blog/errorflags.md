@@ -8,7 +8,7 @@ tags = ["go", "golang", "errors", "error handling"]
 
 Error wrapping in go 1.13 solved a major problem gophers have struggled with since v1: how to add context to errors without obscuring the original error, so that code above could programmatically inspect the original error. However, this did not – by itself – solve the other common problems with errors: implementation leakage and (more generally) error handling.
 
-# Fragile Error Handling
+## Fragile Error Handling
 
 In 2016, Dave Cheney wrote [a blog post](https://dave.cheney.net/2016/04/27/dont-just-check-errors-handle-them-gracefully) that includes a section titled “Assert errors for behaviour, not type”. The gist of the section is that you don’t want code to depend on implementation-specific error types that are returned from a package’s API, because then, if the implementation ever changes, the error handling code will break. Even four and a half years later, and with 1.13’s new wrapping, this can still happen very easily.
 
@@ -16,7 +16,7 @@ For example, say you’re in an HTTP handler, far down the stack in your data la
 
 Right there, your web handler is now tied to the implementation details of how your backend, maybe 4 levels deep in the stack, stores data. If you decide to change your backend to store data in S3, and it starts returning `s3.ObjectNotFound` errors, your web handler won’t recognize that error, and won’t know to return 404. This is barely better than matching on the error string.
 
-# Dave’s Solution - Interfaces
+## Dave’s Solution - Interfaces
 
 Dave proposes creating errors that fulfill interfaces the code can check for, like this:
 ```
@@ -63,10 +63,10 @@ func (n notFoundErr) Unwrap() error {
 ```
 
 So now we’re at 28 lines of code and two exported functions. Now what if you want the same for NotAuthorized or ? 28 more lines and two more exported functions. Each just to add one boolean of information onto an error. And that’s the thing… this is purely used for flow control - all it needs to be is booleans.
-A Better Way
-At Mattel, we had been following Dave’s method for quite some time, and our errors.go file was growing large and unwieldy. I wanted to make a generic version that didn’t require so much boilerplate, but was still strongly typed, to avoid typos and differences of convention.
 
-# Error Flags
+## A Better Way - Flags
+
+At Mattel, we had been following Dave’s method for quite some time, and our errors.go file was growing large and unwieldy. I wanted to make a generic version that didn’t require so much boilerplate, but was still strongly typed, to avoid typos and differences of convention.
 
 After thinking it over for a while, I realized it only took a slight modification of the above code to allow for the functions to take the flag they were looking for, instead of baking it into the name of the function and method. It’s of similar size and complexity to IsNotFound above, and can support expansion of the flags to check, with almost no additional work. 
 Here’s the code:
@@ -120,7 +120,7 @@ if errors.HasFlag(err, errors.NotFound) {
 ```
 If the storage code changes what it’s doing and returns a different underlying error, it can still flag it with that with the NotFound flag, and the consuming code can go on its way without knowing or caring about the difference.
 
-# Indirect Coupling
+## Indirect Coupling
 
 Isn’t this just sentinel errors again? Well, yes, but that’s ok. In 2016, we didn’t have error wrapping, so anyone who wanted to add info to the error would obscure the original error, and then your check for err == os.ErrNotExist would fail. I believe that was the major impetus for Dave’s post. Error wrapping in Go 1.13 fixes that problem. The main problem left is tying error checks to a specific implementation, which this solves.  
 
@@ -128,11 +128,11 @@ This solution does require both the producer and the consumer of the error to im
 
 In theory, Dave’s proposal doesn’t require this coordination of importing the same package. However, in practice, you’d want to agree on the definition of IsNotFound, and the only way to do that with compile-time safety is to define it in a common package. This way you know no one’s going to go off and make their own IsMissing() interface that gets overlooked by your check for IsNotFound().
 
-# Choosing Flags
+## Choosing Flags
 
 In my experience, there are a limited number of possible bits of data your code could care about coming back about an error. Remember, flags are only useful if you want to change the application’s behavior when you detect them. In practice, it’s not a big deal to just make a list of a handful of flags you need, and add more if you find something is missing. Chances are, you’ll think of more flags than you actually end up using in real code. 
 
-# Conclusion
+## Conclusion
 
 This solution has worked wonders for us, and really cleaned up our code of messy, leaky error handling code. Now our code that calls the database can parse those inscrutable postgres error codes right next to where they’re generated, flag the returned errors, and the http handlers way up the stack can happily just check for the NotFound flag, and return a 404 appropriately, without having to know anything about the database.
 
