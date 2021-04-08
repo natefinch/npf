@@ -83,8 +83,8 @@ NotAuthorized
 // Flag wraps err with an error that will return true from HasFlag(err, flag).
 func Flag(err error, flag ErrorFlag) error {
 	if err == nil {
-return nil
-}
+		return nil
+	}
 	return flagged{error: err, flag: flag}
 }
 
@@ -95,7 +95,7 @@ func HasFlag(err error, flag ErrorFlag) bool {
 			return true
 		}
 		if err = errors.Unwrap(err); err == nil {
-		return false
+			return false
 		}
 	}
 }
