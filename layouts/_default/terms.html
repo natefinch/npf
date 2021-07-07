@@ -17,9 +17,15 @@
 
     {{ range $name, $pages := .Data.Terms }}
       {{ $page := index $pages 0 }}
-      {{ $friendly := index $page.Page.Params $taxname 0 }}
       {{ $pageCount := len $pages }}
-      <a href="{{$base}}/{{$data.Plural}}/{{$name}}"> {{ $friendly }} </a> &nbsp;({{ $pageCount }} {{ if eq $pageCount 1 }}entry{{ else }}entries{{ end }})
+      {{ range $page.Page.Params.tags }}
+        {{ $urlized_term := . | lower | urlize }}
+        {{ if eq $urlized_term $name }}
+          <a href="{{$base}}/{{$data.Plural}}/{{$name}}">{{ . }} </a>
+          &nbsp;({{ $pageCount }} {{ if eq $pageCount 1 }}entry{{ else }}entries{{ end }})
+        {{end}}
+      {{end}}
+
 
 
       {{ $descpages := index $desctax $name }}
