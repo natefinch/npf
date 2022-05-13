@@ -35,11 +35,11 @@ const (
 func IsEnabled(id FlagID) bool {
 ```
 
-This is nice, because it would be pretty odd to see code like IsEnabled(4).
+This is nice, because it would be pretty odd to see code like `IsEnabled(4)`.
 But the problem then becomes that you can't easily print out the name of the
 enum in logs or errors.
 
-To fix this, someone \((Rob Pike?)[https://go.dev/blog/generate]) wrote
+To fix this, someone ([Rob Pike?](https://go.dev/blog/generate)) wrote
 [stringer](https://pkg.go.dev/golang.org/x/tools/cmd/stringer), which generates
 code to print out the name of the flags... but then you have to remember to run
 stringer, and it's a bunch of (really) ugly code.  
@@ -62,9 +62,9 @@ var (
 func IsEnabled(id FlagID) bool {
 ```
 
-Now, you can’t call IsEnabled(“nope”), because the constant string can’t be
+Now, you can’t call `IsEnabled(“nope”)`, because the constant string can’t be
 converted into a struct, so the compiler would complain. You *could* still call
-IsEnabled(FlagID{“nope”}) … but that’s not likely to happen by accident.
+`IsEnabled(FlagID{“nope”})` … but that’s not likely to happen by accident.
 
 There’s no size difference between a `string` and a `struct{ string }` and it's
 just as easy to read as a straight string. Because of the String() method, you
