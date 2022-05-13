@@ -63,8 +63,7 @@ func IsEnabled(id FlagID) bool {
 ```
 
 Now, you can’t call `IsEnabled(“nope”)`, because the constant string can’t be
-converted into a struct, so the compiler would complain. You *could* still call
-`IsEnabled(FlagID{“nope”})` … but that’s not likely to happen by accident.
+converted into a struct, so the compiler would complain.
 
 There’s no size difference between a `string` and a `struct{ string }` and it's
 just as easy to read as a straight string. Because of the String() method, you
