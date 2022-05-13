@@ -1,7 +1,7 @@
 +++
 date = "2022-05-13T09:03:00-04:00"
 draft = false
-title = "Bite Size Go: Safer Enums"
+title = "Safer Enums"
 type = "post"
 tags = ["go", "golang", "enums", "bite-sized-go"]
 series = ["Bite Sized Go"]
