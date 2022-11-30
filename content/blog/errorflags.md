@@ -120,6 +120,20 @@ if errors.HasFlag(err, errors.NotFound) {
 ```
 If the storage code changes what it’s doing and returns a different underlying error, it can still flag it with that with the NotFound flag, and the consuming code can go on its way without knowing or caring about the difference.
 
+## Supporting Errors.Is and Errors.As
+
+This is an update in 2022, and I realized that there's an easier way to do this that properly supports errors.Is and errors.As. In go 1.20, there will be an errors.Join method that can let you combine two errors into one where either one will be found by errors.Is and errors.As.  Until then, you can use [github.com/natefinch/wrap](https://github.com/natefinch/wrap). Then you can just define the flags as straight errors.
+
+```
+package flags
+
+var (
+	NotFound = errors.New("not found")
+	AlreadyExists = errors.New("already exists")
+	// etc
+)
+```
+
 ## Indirect Coupling
 
 Isn’t this just sentinel errors again? Well, yes, but that’s ok. In 2016, we didn’t have error wrapping, so anyone who wanted to add info to the error would obscure the original error, and then your check for err == os.ErrNotExist would fail. I believe that was the major impetus for Dave’s post. Error wrapping in Go 1.13 fixes that problem. The main problem left is tying error checks to a specific implementation, which this solves.  

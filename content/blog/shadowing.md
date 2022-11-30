@@ -7,7 +7,8 @@ tags = ["go", "golang", "shadowing", "bite-sized-go"]
 series = ["Bite Sized Go"]
 +++
 
-Today, let's talk about error variables - their names and how they get assigned. In a recent PR I reviewed, I saw some code that looked something like this:
+Today, let's talk about error variables - their names and how they get assigned.
+In a recent PR I reviewed, I saw some code that looked something like this:
 
 ```
 func Foo() error {
