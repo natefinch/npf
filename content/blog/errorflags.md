@@ -122,7 +122,7 @@ If the storage code changes what it’s doing and returns a different underlying
 
 ## Supporting Errors.Is and Errors.As
 
-This is an update in 2022, and I realized that there's an easier way to do this that properly supports errors.Is and errors.As. In go 1.20, there will be an errors.Join method that can let you combine two errors into one where either one will be found by errors.Is and errors.As.  Until then, you can use [github.com/natefinch/wrap](https://github.com/natefinch/wrap). Then you can just define the flags as straight errors.
+This is an update in 2022, and I realized that there's an easier way to do this that properly supports errors.Is and errors.As. In go 1.20, there will be an [errors.Join](https://github.com/golang/go/issues/53435) method that can let you combine two errors into one where either one will be found by `errors.Is` and `errors.As`.  Until then, you can use [github.com/natefinch/wrap](https://github.com/natefinch/wrap). Then you can just define the flags as straight errors.
 
 ```
 package flags
@@ -133,6 +133,17 @@ var (
 	// etc
 )
 ```
+
+Then, as long as the package wraps its errors with those flags (using a package like [Wrap](https://github.com/natefinch/wrap) or the upcoming [errors.Join](https://github.com/golang/go/issues/53435)), you can check for the flag with the normal functions:
+
+```
+    user, err := store.FindUser(id)
+	if errors.Is(err, flags.NotFound) {
+		// return 404
+	}
+```
+
+The nice thing is that you can still get the behavior of the original error because this is non-destructive wrapping. So if you need some low level detail of the underlying error, you can get it.
 
 ## Indirect Coupling
 
