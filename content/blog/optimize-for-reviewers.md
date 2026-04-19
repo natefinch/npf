@@ -1,5 +1,5 @@
 +++
-title = "The Three Step AI Dev Loop"
+title = "Optimizing for Reviewers: The Three Step AI Dev Loop"
 date = 2026-04-19T12:01:33-04:00
 type = "post"
 +++
