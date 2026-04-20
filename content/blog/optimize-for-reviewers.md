@@ -19,15 +19,15 @@ The best way to optimize for reviews is to break changes into three steps, each 
 
 ## The Three Step AI Dev Loop
 
-1. Ensure tests validate current behavior, add tests if needed.
+**1. Ensure tests validate current behavior, add tests if needed.**
   - Change the production code as little as possible here.
   - Write your tests to be as broadly as possible, to make it easier to refactor later. 
 
-2. Refactor the code so that it's easier to add the feature you want.
+**2. Refactor the code so that it's easier to add the feature you want.**
   - Refactor as much as you can without changing tests at all, or with minimal, easy to verify changes.
   - If you need to change the tests significantly to support a refactor, go back to #1.
 
-3. Write the feature/bugfix. 
+**3. Write the feature/bugfix.**
   - Have the AI write the failing test for the new code first.
   - Have tha AI then implement the feature/bugfix in a way that minimizes the diff from the old production code.
 
