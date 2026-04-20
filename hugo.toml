@@ -4,14 +4,14 @@ title = "npf.io"
 theme = "hyde"
 copyright = "Nate Finch"
 
-[Author]
+[author]
 	name = "Nate Finch"
 
-[Permalinks]
-	blog = "/:year/:month/:filename/"
-	code = "/:filename/"
+[permalinks]
+	blog = "/:year/:month/:contentbasename/"
+	code = "/:contentbasename/"
 
-[Taxonomies]
+[taxonomies]
 	tag = "tags"
 	series = "series"
 	series-desc = "series-desc"
@@ -21,6 +21,10 @@ copyright = "Nate Finch"
 	twitter = "https://twitter.com/natethefinch"
 	github = "https://github.com/natefinch"
 	gplus = "https://plus.google.com/+NateFinch"
-	disqus = "npfio"
 	mainImage = "/moose.svg"
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
 

@@ -4,20 +4,18 @@
       <generator uri="https://gohugo.io">Hugo</generator>
     <link>{{ .Permalink }}</link>
     {{ with .Site.LanguageCode }}<language>{{.}}</language>{{end}}
-    {{ with .Site.Author.name }}<author>{{.}}</author>{{end}}
+    {{ with .Site.Params.Author.name }}<author>{{.}}</author>{{end}}
     {{ if .Site.Copyright }}<copyright>{{ .Date.Format "2006"}} {{.Site.Copyright}}</copyright>{{end}}
     <updated>{{ .Date.Format "Mon, 02 Jan 2006 15:04:05 MST" }}</updated>
-    {{ range first 15 .Data.Pages }}
-    {{if eq .Type "post" }}
+    {{ range first 15 (where .Site.RegularPages "Type" "post") }}
     <item>
       <title>{{ .Title }}</title>
       <link>{{ .Permalink }}</link>
       <pubDate>{{ .Date.Format "Mon, 02 Jan 2006 15:04:05 MST" }}</pubDate>
-      {{with .Site.Author.name}}<author>{{.}}</author>{{end}}
+      {{with .Site.Params.Author.name}}<author>{{.}}</author>{{end}}
       <guid>{{ .Permalink }}</guid>
       <description>{{ .Content | html }}</description>
     </item>
-    {{end}}
     {{ end }}
   </channel>
 </rss>
