@@ -24,3 +24,6 @@ _testmain.go
 
 # stupid MacOS
 .DS_Store
+
+// Hugo lock file
+.hugo_build.lock
