@@ -21,7 +21,7 @@ The best way to optimize for reviews is to break changes into three steps, each 
 
 **1. Ensure tests validate current behavior, add tests if needed.**
   - Change the production code as little as possible here.
-  - Write your tests to be as broadly as possible, to make it easier to refactor later. 
+  - Write your tests to be as broad as possible, to make it easier to refactor later. 
 
 **2. Refactor the code so that it's easier to add the feature you want.**
   - Refactor as much as you can without changing tests at all, or with minimal, easy to verify changes.
@@ -29,11 +29,11 @@ The best way to optimize for reviews is to break changes into three steps, each 
 
 **3. Write the feature/bugfix.**
   - Have the AI write the failing test for the new code first.
-  - Have tha AI then implement the feature/bugfix in a way that minimizes the diff from the old production code.
+  - Have the AI then implement the feature/bugfix in a way that minimizes the diff from the old production code.
 
 For #1, You want as close to zero production code changes as possible so that you know you're just validating what already exists. You want tests that are likely to survive a refactor, or that will only need to change in minimal, easily verifiable ways.
 
-For #2 we refactor to make the code cleaer, more maintainable, more performant, and/or easier for the AI and humans to understand. It's imporant not to change the tests so that humans know the behavior of the production code hasn't changed. If small changes are needed and can be done in a way that is easy for AI and humans to verify, that's fine (replacing a concrete type with an interface, for example).
+For #2 we refactor to make the code cleaner, more maintainable, more performant, and/or easier for the AI and humans to understand. It's important not to change the tests so that humans know the behavior of the production code hasn't changed. If small changes are needed and can be done in a way that is easy for AI and humans to verify, that's fine (replacing a concrete type with an interface, for example).
 
 For #3, this is really just TDD, but the point is to minimize the diff, even to the point of suboptimal code with respect to performance, maintainability, etc. Since we're changing behavior, we have to change both the tests and the production code at the same time, and this is where bugs can slip in. So we optimize for changes that are *most obviously correct* beyond all other metrics. You want simple, straight-forward changes that are easy for a human to verify. 
 
