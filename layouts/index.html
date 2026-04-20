@@ -6,7 +6,7 @@
     <div class="content container">
 <div class="posts">
 
-      {{ range where .Site.RegularPages "Type" "post" }}
+      {{ range first 3 (where .Site.RegularPages "Type" "post") }}
   <div class="post">
     <h1 class="post-title">
       <a href="{{ .Permalink }}">
@@ -22,7 +22,10 @@
     {{end}}
 
 
-    {{ .Content }}
+    {{ .Summary }}
+    {{ if .Truncated }}
+      <p><a class="read-more" href="{{ .Permalink }}">Read more &rarr;</a></p>
+    {{ end }}
   </div>
   {{ end }}
 </div>
